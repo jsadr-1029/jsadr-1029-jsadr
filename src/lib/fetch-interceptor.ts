@@ -8,6 +8,13 @@ const TOKEN_KEY = 'access_token'
 const REFRESH_KEY = 'refresh_token'
 const USER_KEY = 'user_data'
 
+// FIX-LOGIN-LOOP: prefijo que se usa cuando el "access_token" en realidad
+// es un token de portal de cliente (no es un JWT). Lo setea /api/portal/login
+// en login/page.tsx con: setTokens('portal_cliente_' + token, ...).
+// Estos tokens NO son JWT, no se pueden parsear, no se pueden refrescar con
+// /api/auth/refresh, y NO deben ser añadidos como Authorization: Bearer.
+const PORTAL_TOKEN_PREFIX = 'portal_cliente_'
+
 let interceptorInstalled = false
 let isRefreshing = false
 let refreshPromise: Promise<string | null> | null = null
@@ -32,8 +39,41 @@ export function installFetchInterceptor() {
       return originalFetch.call(window, input, init)
     }
 
+    // FIX-LOGIN-LOOP: no interceptar llamadas del portal de cliente.
+    // Estas llamadas usan el header `x-portal-token` y NO usan Authorization: Bearer.
+    // Si las interceptamos, el intento de añadir Authorization con un token
+    // `portal_cliente_...` (que no es JWT) rompe la llamada y dispara refresh
+    // fallido → clearAuth() → redirect a /login → bucle.
+    const existingHeaders = new Headers(init?.headers || {})
+    if (existingHeaders.has('x-portal-token')) {
+      return originalFetch.call(window, input, init)
+    }
+
+    // FIX-LOGIN-LOOP: tampoco interceptar endpoints del portal de cliente,
+    // porque siempre se llaman con x-portal-token (seteado por PortalClienteModal).
+    if (url.includes('/api/portal/') || url.startsWith('/api/portal')) {
+      return originalFetch.call(window, input, init)
+    }
+
     // Obtener token del localStorage
     let token = localStorage.getItem(TOKEN_KEY)
+
+    // FIX-LOGIN-LOOP: si el "token" almacenado en realidad es un token de portal
+    // de cliente (empieza con 'portal_cliente_'), NO es un JWT válido. No se
+    // puede parsear, no se puede refrescar, y no se debe añadir como
+    // Authorization: Bearer. En este caso, mejor NO tocar la petición.
+    const isPortalToken = !!token && token.startsWith(PORTAL_TOKEN_PREFIX)
+    if (isPortalToken) {
+      // No añadir Authorization, no intentar refresh, no redirigir.
+      // Simplemente pasar la petición tal cual al backend.
+      const newInit: RequestInit = { ...init }
+      const headers = new Headers(init?.headers || {})
+      if (init?.body && !headers.has('Content-Type') && typeof init.body === 'string') {
+        headers.set('Content-Type', 'application/json')
+      }
+      newInit.headers = headers
+      return originalFetch.call(window, input, newInit)
+    }
 
     // Verificar si el token está expirado antes de usarlo
     if (token && isTokenExpired(token)) {
@@ -156,6 +196,7 @@ function clearAuth() {
   localStorage.removeItem('portal_cliente_token')
   localStorage.removeItem('portal_cliente_id')
   localStorage.removeItem('portal_cliente_nombre')
+  localStorage.removeItem('portal_cliente_cedula')
   localStorage.removeItem('juridico_token')
   localStorage.removeItem('juridico_user')
 }

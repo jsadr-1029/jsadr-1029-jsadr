@@ -79,11 +79,17 @@ export default function Home() {
     const u = getUserData()
     if (u?.rol === 'CLIENTE' || u?.esPortalCliente) {
       setEsPortalCliente(true)
-      // Precargar cédula/token del localStorage (seteados por el login de cliente)
+      // Precargar cédula/token del localStorage (seteados por el login de cliente).
+      // FIX-LOGIN-LOOP: antes se usaba `portal_cliente_id` como cédula, pero
+      // ese valor contiene el ID interno del cliente (p.ej. "cmrskum2..."),
+      // no la cédula. El endpoint /api/portal/[cedula] espera una cédula, así
+      // que devolvía 404 y el portal quedaba cargando indefinidamente.
+      // Usamos u.username (que en el login de cliente se setea a la cédula)
+      // o u.cedula si está disponible.
       try {
-        const cid = localStorage.getItem('portal_cliente_id')
         const tk = localStorage.getItem('portal_cliente_token')
-        if (cid) setPortalCedula(cid)
+        const cedula = u.cedula || u.username || localStorage.getItem('portal_cliente_cedula')
+        if (cedula) setPortalCedula(cedula)
         if (tk) setPortalToken(tk)
       } catch {}
       setView('portal')

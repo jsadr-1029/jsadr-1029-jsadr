@@ -48,6 +48,7 @@ export function clearAuth(): void {
   localStorage.removeItem('portal_cliente_token')
   localStorage.removeItem('portal_cliente_id')
   localStorage.removeItem('portal_cliente_nombre')
+  localStorage.removeItem('portal_cliente_cedula')
   localStorage.removeItem('juridico_token')
   localStorage.removeItem('juridico_user')
 }
@@ -71,15 +72,20 @@ export async function apiFetch(url: string, options: RequestInit = {}): Promise<
     headers['Content-Type'] = 'application/json'
   }
 
-  // Añadir Authorization header si hay token
-  if (token) {
+  // FIX-LOGIN-LOOP: si el "token" almacenado es en realidad un token de portal
+  // de cliente (empieza con 'portal_cliente_'), NO es un JWT. No se puede
+  // añadir como Authorization: Bearer (rompería las llamadas), y no se puede
+  // refrescar con /api/auth/refresh. En este caso, no tocamos Authorization.
+  const isPortalToken = !!token && token.startsWith('portal_cliente_')
+  if (token && !isPortalToken && !headers['Authorization']) {
     headers['Authorization'] = `Bearer ${token}`
   }
 
   const response = await fetch(url, { ...options, headers })
 
-  // Si el token expiró, intentar refresh
-  if (response.status === 401 && token) {
+  // Si el token expiró, intentar refresh — pero solo para tokens JWT reales
+  // (no para tokens de portal de cliente).
+  if (response.status === 401 && token && !isPortalToken) {
     const refreshed = await tryRefreshToken()
     if (refreshed) {
       // Reintentar con nuevo token

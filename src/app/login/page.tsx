@@ -151,12 +151,17 @@ export default function LoginPage() {
               localStorage.setItem('portal_cliente_token', data.token)
               localStorage.setItem('portal_cliente_id', data.clienteId)
               localStorage.setItem('portal_cliente_nombre', data.nombre)
+              // FIX-LOGIN-LOOP: guardar también la cédula explícitamente,
+              // porque portal_cliente_id contiene el ID interno (no la cédula)
+              // y el portal necesita la cédula para llamar a /api/portal/[cedula].
+              localStorage.setItem('portal_cliente_cedula', idTrim)
             } catch {}
             setTokens('portal_cliente_' + data.token, 'portal_cliente_' + data.token)
             setUserData({
               id: data.clienteId,
               nombre: data.nombre,
               username: idTrim,
+              cedula: idTrim,
               rol: 'CLIENTE',
               esPortalCliente: true,
             })
