@@ -169,7 +169,83 @@ export async function login(username: string, password: string): Promise<{ succe
  */
 export function logout(): void {
   clearAuth()
+  clearImpersonation()
   if (typeof window !== 'undefined') {
     window.location.href = '/login'
+  }
+}
+
+// =====================================================
+// IMPERSONACIÓN (solo ADMIN)
+// -----------------------------------------------------
+// Cuando un ADMIN cambia de cuenta desde el menú de
+// usuario, guardamos quién era el admin original en
+// localStorage para poder "volver" sin contraseña.
+// =====================================================
+
+const IMPERSONATION_KEY = 'impersonation_admin'
+
+interface ImpersonationInfo {
+  id: string
+  nombre: string
+  username: string
+}
+
+export function setImpersonation(admin: ImpersonationInfo): void {
+  if (typeof window === 'undefined') return
+  localStorage.setItem(IMPERSONATION_KEY, JSON.stringify(admin))
+}
+
+export function getImpersonation(): ImpersonationInfo | null {
+  if (typeof window === 'undefined') return null
+  const raw = localStorage.getItem(IMPERSONATION_KEY)
+  if (!raw) return null
+  try {
+    return JSON.parse(raw) as ImpersonationInfo
+  } catch {
+    return null
+  }
+}
+
+export function clearImpersonation(): void {
+  if (typeof window === 'undefined') return
+  localStorage.removeItem(IMPERSONATION_KEY)
+}
+
+/**
+ * Cambia de cuenta a otro usuario interno sin contraseña.
+ * Requiere que la sesión actual sea ADMIN.
+ *
+ * @param targetUserId  ID del usuario destino (GESTOR, CONSULTOR o ADMIN)
+ * @param volverA        true cuando se está volviendo a la cuenta original del admin
+ *                       desde una sesión impersonada — usa /api/auth/switch-back
+ *                       que valida el claim `impersonatedBy` del JWT.
+ */
+export async function switchUser(
+  targetUserId: string,
+  volverA: boolean = false
+): Promise<{ success: boolean; error?: string; data?: any }> {
+  try {
+    const url = volverA ? '/api/auth/switch-back' : '/api/auth/switch-user'
+    const res = await apiFetch(url, {
+      method: 'POST',
+      body: JSON.stringify({ targetUserId }),
+    })
+    const data = await res.json()
+    if (!data.success) {
+      return { success: false, error: data.error || 'No se pudo cambiar de cuenta' }
+    }
+    // Guardar nuevos tokens y datos del usuario destino
+    setTokens(data.data.access_token, data.data.refresh_token)
+    setUserData(data.data.usuario)
+    // Guardar (o limpiar) la información del admin original
+    if (data.data.impersonatedBy && data.data.adminOriginal) {
+      setImpersonation(data.data.adminOriginal)
+    } else {
+      clearImpersonation()
+    }
+    return { success: true, data: data.data }
+  } catch (e: any) {
+    return { success: false, error: e.message || 'Error de conexión' }
   }
 }

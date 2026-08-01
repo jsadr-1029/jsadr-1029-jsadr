@@ -30,7 +30,7 @@
 
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
-import { getUserData, logout } from '@/lib/api-client'
+import { getUserData, logout, switchUser, getImpersonation, apiJson } from '@/lib/api-client'
 import { vistasPermitidas, ROLE_LABELS as PERM_ROLE_LABELS, ROLE_COLORS as PERM_ROLE_COLORS } from '@/lib/permisos'
 import {
   LogOut,
@@ -60,6 +60,10 @@ import {
   BarChart3,
   Megaphone,
   Calculator,
+  Repeat,
+  ArrowLeftRight,
+  Loader2,
+  AlertTriangle,
 } from 'lucide-react'
 
 interface UserMenuProps {
@@ -148,6 +152,15 @@ function getInitials(nombre?: string): string {
   return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
 }
 
+interface UsuarioCambio {
+  id: string
+  nombre: string
+  username: string
+  email: string | null
+  rol: string
+  activo: boolean
+}
+
 export function UserMenu({ currentView, onNavigate }: UserMenuProps) {
   const [user, setUser] = useState<UserData | null>(null)
   const [mounted, setMounted] = useState(false)
@@ -155,6 +168,13 @@ export function UserMenu({ currentView, onNavigate }: UserMenuProps) {
   const [dropdownOpen, setDropdownOpen] = useState(false)
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [confirmLogout, setConfirmLogout] = useState(false)
+  // --- Impersonación (solo ADMIN) ---
+  const [switchModalOpen, setSwitchModalOpen] = useState(false)
+  const [usuariosCambio, setUsuariosCambio] = useState<UsuarioCambio[]>([])
+  const [loadingUsuarios, setLoadingUsuarios] = useState(false)
+  const [cambiandoA, setCambiandoA] = useState<string | null>(null)
+  const [switchError, setSwitchError] = useState<string | null>(null)
+  const [adminOriginal, setAdminOriginal] = useState<{ id: string; nombre: string; username: string } | null>(null)
   const dropdownRef = useRef<HTMLDivElement>(null)
   const router = useRouter()
   const { QUICK_NAV, FULL_NAV } = useFilteredNav()
@@ -163,6 +183,7 @@ export function UserMenu({ currentView, onNavigate }: UserMenuProps) {
   useEffect(() => {
     setMounted(true)
     setUser(getUserData())
+    setAdminOriginal(getImpersonation())
 
     // Detectar móvil/desktop con matchMedia
     const mq = window.matchMedia('(max-width: 1023px)')
@@ -171,6 +192,86 @@ export function UserMenu({ currentView, onNavigate }: UserMenuProps) {
     mq.addEventListener('change', update)
     return () => mq.removeEventListener('change', update)
   }, [])
+
+  // --- Cerrar sesión: limpiar impersonación también ---
+  const handleLogout = useCallback(() => {
+    setConfirmLogout(false)
+    setDropdownOpen(false)
+    setDrawerOpen(false)
+    logout()
+  }, [])
+
+  // --- Abrir modal de cambio de cuenta ---
+  const abrirModalCambio = useCallback(async () => {
+    setSwitchError(null)
+    setDropdownOpen(false)
+    setDrawerOpen(false)
+    setSwitchModalOpen(true)
+    // Cargar usuarios solo si no estaban ya cargados
+    if (usuariosCambio.length === 0) {
+      setLoadingUsuarios(true)
+      try {
+        const data = await apiJson<{ success: boolean; data: UsuarioCambio[] }>('/api/usuarios?rol=all')
+        if (data.success && Array.isArray(data.data)) {
+          // Filtrar: solo GESTOR, CONSULTOR, ADMIN (excluyendo el propio admin actual)
+          // Excluir ABOGADO (no tiene vistas en el menú principal) y CLIENTE (no existe en tabla Usuario)
+          const yo = getUserData()
+          const filtrados = data.data.filter(
+            (u) =>
+              u.activo &&
+              ['GESTOR', 'CONSULTOR', 'ADMIN'].includes(u.rol) &&
+              u.id !== yo?.id
+          )
+          setUsuariosCambio(filtrados)
+        }
+      } catch (e: any) {
+        setSwitchError(e.message || 'Error al cargar usuarios')
+      } finally {
+        setLoadingUsuarios(false)
+      }
+    }
+  }, [usuariosCambio.length])
+
+  // --- Ejecutar el cambio de cuenta ---
+  const ejecutarCambio = useCallback(
+    async (target: UsuarioCambio) => {
+      setSwitchError(null)
+      setCambiandoA(target.id)
+      try {
+        const result = await switchUser(target.id, false)
+        if (!result.success) {
+          setSwitchError(result.error || 'No se pudo cambiar de cuenta')
+          setCambiandoA(null)
+          return
+        }
+        // Recargar para que toda la UI se reinicialice con el nuevo rol
+        window.location.href = '/'
+      } catch (e: any) {
+        setSwitchError(e.message || 'Error inesperado')
+        setCambiandoA(null)
+      }
+    },
+    []
+  )
+
+  // --- Volver a la cuenta original del admin ---
+  const volverAAdmin = useCallback(async () => {
+    if (!adminOriginal) return
+    setSwitchError(null)
+    setCambiandoA(adminOriginal.id)
+    try {
+      const result = await switchUser(adminOriginal.id, true)
+      if (!result.success) {
+        setSwitchError(result.error || 'No se pudo volver a la cuenta de administrador')
+        setCambiandoA(null)
+        return
+      }
+      window.location.href = '/'
+    } catch (e: any) {
+      setSwitchError(e.message || 'Error inesperado')
+      setCambiandoA(null)
+    }
+  }, [adminOriginal])
 
   // Inyectar meta viewport robusto + safe-area CSS
   useEffect(() => {
@@ -279,13 +380,6 @@ export function UserMenu({ currentView, onNavigate }: UserMenuProps) {
     return () => document.removeEventListener('keydown', handler)
   }, [])
 
-  const handleLogout = useCallback(() => {
-    setConfirmLogout(false)
-    setDropdownOpen(false)
-    setDrawerOpen(false)
-    logout()
-  }, [])
-
   const handleNavigate = (key: string) => {
     setDropdownOpen(false)
     setDrawerOpen(false)
@@ -372,6 +466,35 @@ export function UserMenu({ currentView, onNavigate }: UserMenuProps) {
                     </span>
                   </div>
                 </div>
+
+                {/* Banner de impersonación — visible solo cuando el admin original está guardado */}
+                {adminOriginal && (
+                  <div className="mt-3 p-3 rounded-xl border border-amber-400/30 bg-amber-500/10">
+                    <div className="flex items-start gap-2 mb-2">
+                      <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-[11px] font-semibold text-amber-300">
+                          Sesión impersonada
+                        </p>
+                        <p className="text-[10px] text-amber-200/80 leading-snug">
+                          Estás actuando como <b>{roleLabel}</b>. Volvé a tu cuenta de admin para recuperar el control total.
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      onClick={volverAAdmin}
+                      disabled={!!cambiandoA}
+                      className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-xs font-bold text-white bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700 transition-all disabled:opacity-60 disabled:cursor-not-allowed"
+                    >
+                      {cambiandoA === adminOriginal.id ? (
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      ) : (
+                        <ArrowLeftRight className="w-3.5 h-3.5" />
+                      )}
+                      Volver a {adminOriginal.nombre.split(' ')[0]}
+                    </button>
+                  </div>
+                )}
               </div>
 
               {/* Navegación agrupada */}
@@ -411,6 +534,16 @@ export function UserMenu({ currentView, onNavigate }: UserMenuProps) {
 
               {/* Footer con logout */}
               <div className="p-3 border-t border-white/10">
+                {/* Cambiar de cuenta — SOLO ADMIN */}
+                {user?.rol === 'ADMIN' && (
+                  <button
+                    onClick={abrirModalCambio}
+                    className="w-full flex items-center gap-3 px-3 py-3 mb-1 rounded-lg text-sm font-semibold text-fuchsia-200 hover:text-white hover:bg-fuchsia-500/20 transition-all"
+                  >
+                    <Repeat className="w-4 h-4" />
+                    Cambiar de cuenta
+                  </button>
+                )}
                 <button
                   onClick={() => setConfirmLogout(true)}
                   className="w-full flex items-center gap-3 px-3 py-3 rounded-lg text-sm font-semibold text-red-300 hover:text-white hover:bg-red-500/20 transition-all"
@@ -452,6 +585,20 @@ export function UserMenu({ currentView, onNavigate }: UserMenuProps) {
               </div>
             )}
           </>
+        )}
+
+        {/* === MODAL CAMBIO DE CUENTA (solo ADMIN) === */}
+        {switchModalOpen && (
+          <ModalCambioCuenta
+            usuarios={usuariosCambio}
+            loading={loadingUsuarios}
+            error={switchError}
+            cambiandoA={cambiandoA}
+            onSelect={ejecutarCambio}
+            onClose={() => {
+              if (!cambiandoA) setSwitchModalOpen(false)
+            }}
+          />
         )}
       </>
     )
@@ -510,6 +657,35 @@ export function UserMenu({ currentView, onNavigate }: UserMenuProps) {
                 </span>
               </div>
             </div>
+
+            {/* Banner de impersonación */}
+            {adminOriginal && (
+              <div className="mt-3 p-2.5 rounded-xl border border-amber-400/30 bg-amber-500/10">
+                <div className="flex items-start gap-2 mb-2">
+                  <AlertTriangle className="w-3.5 h-3.5 text-amber-400 shrink-0 mt-0.5" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[11px] font-semibold text-amber-300">
+                      Sesión impersonada
+                    </p>
+                    <p className="text-[10px] text-amber-200/80 leading-snug">
+                      Estás actuando como <b>{roleLabel}</b>. Volvé a tu cuenta de admin para recuperar el control total.
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={volverAAdmin}
+                  disabled={!!cambiandoA}
+                  className="w-full flex items-center justify-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold text-white bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700 transition-all disabled:opacity-60 disabled:cursor-not-allowed"
+                >
+                  {cambiandoA === adminOriginal.id ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <ArrowLeftRight className="w-3.5 h-3.5" />
+                  )}
+                  Volver a {adminOriginal.nombre.split(' ')[0]}
+                </button>
+              </div>
+            )}
           </div>
 
           {/* Navegación rápida */}
@@ -542,6 +718,16 @@ export function UserMenu({ currentView, onNavigate }: UserMenuProps) {
 
           {/* Footer con logout */}
           <div className="p-2">
+            {/* Cambiar de cuenta — SOLO ADMIN */}
+            {user?.rol === 'ADMIN' && (
+              <button
+                onClick={abrirModalCambio}
+                className="w-full flex items-center gap-3 px-3 py-2.5 mb-1 rounded-lg text-sm font-semibold text-fuchsia-200 hover:text-white hover:bg-fuchsia-500/20 transition-all"
+              >
+                <Repeat className="w-4 h-4" />
+                Cambiar de cuenta
+              </button>
+            )}
             <button
               onClick={() => setConfirmLogout(true)}
               className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-semibold text-red-300 hover:text-white hover:bg-red-500/20 transition-all"
@@ -583,8 +769,178 @@ export function UserMenu({ currentView, onNavigate }: UserMenuProps) {
           </div>
         </div>
       )}
+
+      {/* === MODAL CAMBIO DE CUENTA (solo ADMIN) === */}
+      {switchModalOpen && (
+        <ModalCambioCuenta
+          usuarios={usuariosCambio}
+          loading={loadingUsuarios}
+          error={switchError}
+          cambiandoA={cambiandoA}
+          onSelect={ejecutarCambio}
+          onClose={() => {
+            if (!cambiandoA) setSwitchModalOpen(false)
+          }}
+        />
+      )}
     </div>
   )
 }
 
 export default UserMenu
+
+// =====================================================
+// ModalCambioCuenta — Modal para que el ADMIN seleccione
+// a qué usuario interno quiere cambiar sin contraseña.
+// =====================================================
+
+interface ModalCambioCuentaProps {
+  usuarios: UsuarioCambio[]
+  loading: boolean
+  error: string | null
+  cambiandoA: string | null
+  onSelect: (u: UsuarioCambio) => void
+  onClose: () => void
+}
+
+const ROLE_LABELS_MODAL: Record<string, string> = {
+  ADMIN: 'Administrador',
+  GESTOR: 'Gestor',
+  CONSULTOR: 'Consultor',
+  ABOGADO: 'Abogado',
+}
+
+const ROLE_COLORS_MODAL: Record<string, string> = {
+  ADMIN: 'from-fuchsia-500 to-purple-600',
+  GESTOR: 'from-indigo-500 to-blue-600',
+  CONSULTOR: 'from-cyan-500 to-teal-600',
+  ABOGADO: 'from-amber-500 to-orange-600',
+}
+
+function ModalCambioCuenta({
+  usuarios,
+  loading,
+  error,
+  cambiandoA,
+  onSelect,
+  onClose,
+}: ModalCambioCuentaProps) {
+  return (
+    <div
+      className="fixed inset-0 z-[10001] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm"
+      onClick={onClose}
+    >
+      <div
+        className="glass-card-strong rounded-2xl p-6 max-w-md w-full max-h-[85vh] flex flex-col"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-fuchsia-500 to-purple-600 flex items-center justify-center shadow-lg">
+              <Repeat className="w-5 h-5 text-white" />
+            </div>
+            <div>
+              <h3 className="text-base font-bold text-white">Cambiar de cuenta</h3>
+              <p className="text-[11px] text-white/50">
+                Solo disponible para el administrador
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            disabled={!!cambiandoA}
+            className="p-2 rounded-lg text-white/60 hover:text-white hover:bg-white/10 transition-colors disabled:opacity-50"
+            aria-label="Cerrar"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        {/* Descripción */}
+        <p className="text-xs text-white/60 mb-3 leading-relaxed">
+          Seleccioná el usuario al que querés cambiarte. No vas a necesitar
+          contraseña: se emitirá un token de sesión temporal con los permisos
+          del rol destino. Para volver a tu cuenta de admin usá el botón
+          <b className="text-amber-300"> &quot;Volver a&quot;</b> que aparecerá en este mismo menú.
+        </p>
+
+        {/* Lista de usuarios */}
+        <div className="flex-1 overflow-y-auto -mx-1 px-1">
+          {loading && (
+            <div className="flex flex-col items-center justify-center py-10 text-white/60">
+              <Loader2 className="w-6 h-6 animate-spin mb-2" />
+              <p className="text-xs">Cargando usuarios…</p>
+            </div>
+          )}
+
+          {!loading && error && (
+            <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/30 text-red-300 text-xs">
+              {error}
+            </div>
+          )}
+
+          {!loading && !error && usuarios.length === 0 && (
+            <div className="p-6 text-center text-white/50 text-sm">
+              No hay otros usuarios disponibles para impersonar.
+            </div>
+          )}
+
+          {!loading && !error && usuarios.length > 0 && (
+            <div className="space-y-1.5">
+              {usuarios.map((u) => {
+                const color = ROLE_COLORS_MODAL[u.rol] || 'from-slate-500 to-slate-700'
+                const initials = (u.nombre || '?')
+                  .trim()
+                  .split(/\s+/)
+                  .slice(0, 2)
+                  .map((p) => p[0])
+                  .join('')
+                  .toUpperCase()
+                const estaCambiando = cambiandoA === u.id
+                return (
+                  <button
+                    key={u.id}
+                    onClick={() => onSelect(u)}
+                    disabled={!!cambiandoA}
+                    className="w-full flex items-center gap-3 p-3 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 hover:border-white/20 transition-all text-left disabled:opacity-60 disabled:cursor-not-allowed"
+                  >
+                    <div
+                      className={`w-10 h-10 rounded-full bg-gradient-to-br ${color} flex items-center justify-center text-xs font-bold text-white shadow-md shrink-0`}
+                    >
+                      {initials}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold text-white truncate">
+                        {u.nombre}
+                      </p>
+                      <p className="text-[11px] text-white/50 truncate">
+                        @{u.username} · {ROLE_LABELS_MODAL[u.rol] || u.rol}
+                      </p>
+                    </div>
+                    {estaCambiando ? (
+                      <Loader2 className="w-4 h-4 animate-spin text-fuchsia-300 shrink-0" />
+                    ) : (
+                      <ArrowLeftRight className="w-4 h-4 text-white/40 shrink-0" />
+                    )}
+                  </button>
+                )
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="mt-4 pt-3 border-t border-white/10">
+          <button
+            onClick={onClose}
+            disabled={!!cambiandoA}
+            className="w-full px-4 py-2 rounded-lg text-sm font-medium text-white/80 bg-white/5 hover:bg-white/10 transition-colors disabled:opacity-50"
+          >
+            Cancelar
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
