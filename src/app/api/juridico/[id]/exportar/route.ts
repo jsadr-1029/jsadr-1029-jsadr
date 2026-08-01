@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { formatearMoneda, formatearFecha, formatearFechaHora } from '@/lib/finanzas'
 import { sanitizeError } from '@/lib/error-handler'
+import { requireRole } from '@/lib/auth-guard'
 
 // GET - exportar historial completo de caso jurídico en HTML imprimible (PDF/Word)
 export async function GET(
@@ -9,6 +10,9 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const auth = requireRole(req, ['ADMIN', 'GESTOR', 'CONSULTOR'])
+    if (auth instanceof NextResponse) return auth
+
     const { id } = await params
     const { searchParams } = new URL(req.url)
     const formato = searchParams.get('formato') || 'pdf' // pdf | word

@@ -1,10 +1,14 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { calcularPrestamo, calcularDiasMora, getTasaMoraAnual, calcularMoraCompuesta, debeIrAJuridico } from '@/lib/finanzas'
 import { sanitizeError } from '@/lib/error-handler'
+import { requireRole } from '@/lib/auth-guard'
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   try {
+    const auth = requireRole(req, ['ADMIN', 'GESTOR', 'CONSULTOR'])
+    if (auth instanceof NextResponse) return auth
+
     const hoy = new Date()
     hoy.setHours(0, 0, 0, 0)
     const finHoy = new Date()

@@ -17,7 +17,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { encryptSensitive, decryptSensitive, encryptBackup, decryptBackup, getClientInfo } from '@/lib/security'
-import { requireAuth } from '@/lib/auth-guard'
+import { requireRole } from '@/lib/auth-guard'
 import { errorResponse, logError, AppError, AppErrors } from '@/lib/error-handler'
 
 // === SECCIONES VÁLIDAS ===
@@ -218,7 +218,7 @@ async function cargarSeccion(seccion: Seccion, req: NextRequest) {
 // === GET ===
 export async function GET(req: NextRequest) {
   try {
-    const auth = requireAuth(req)
+    const auth = requireRole(req, ['ADMIN'])
     if (auth instanceof NextResponse) return auth
 
     await inicializarSiVacio()
@@ -255,7 +255,7 @@ export async function GET(req: NextRequest) {
 // === PATCH (actualizar sección) ===
 export async function PATCH(req: NextRequest) {
   try {
-    const auth = requireAuth(req)
+    const auth = requireRole(req, ['ADMIN'])
     if (auth instanceof NextResponse) return auth
 
     await inicializarSiVacio()
@@ -540,7 +540,7 @@ export async function PATCH(req: NextRequest) {
 // === POST (acciones) ===
 export async function POST(req: NextRequest) {
   try {
-    const auth = requireAuth(req)
+    const auth = requireRole(req, ['ADMIN'])
     if (auth instanceof NextResponse) return auth
 
     await inicializarSiVacio()

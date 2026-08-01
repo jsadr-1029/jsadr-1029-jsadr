@@ -2,6 +2,8 @@
 
 import { ViewKey } from '@/app/page'
 import { cn } from '@/lib/utils'
+import { getUserData } from '@/lib/api-client'
+import { vistasPermitidas } from '@/lib/permisos'
 import {
   FileText,
   DollarSign,
@@ -16,29 +18,61 @@ import {
   Settings2,
   Inbox,
   Crown,
+  LayoutDashboard,
+  Users,
+  Plug,
+  Code2,
+  BookOpen,
+  Bell,
+  BarChart3,
+  Landmark as CajasIcon,
+  Calculator,
+  Megaphone,
 } from 'lucide-react'
+import { useMemo } from 'react'
 
 interface SidebarProps {
   view: ViewKey
   onChange: (view: ViewKey) => void
 }
 
-const menuItems: { key: ViewKey; label: string; icon: any; description: string }[] = [
+// Catálogo completo de items (todos los posibles)
+const ALL_ITEMS: { key: ViewKey; label: string; icon: any; description: string }[] = [
+  { key: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, description: 'KPIs y resumen' },
   { key: 'prestamos', label: 'Préstamos', icon: FileText, description: 'Solicitudes y créditos' },
   { key: 'pagos', label: 'Pagos', icon: DollarSign, description: 'Recaudo y registro' },
+  { key: 'clientes', label: 'Clientes', icon: Users, description: 'Empleados y clientes' },
   { key: 'juridico', label: 'Jurídico', icon: Scale, description: 'Casos legales' },
+  { key: 'cajas', label: 'Cajas', icon: CajasIcon, description: 'Cajas menores y movimientos' },
+  { key: 'campanas', label: 'Campañas', icon: Megaphone, description: 'Campañas y promociones' },
+  { key: 'simulador', label: 'Simulador', icon: Calculator, description: 'Simulador de préstamos' },
   { key: 'buzon-solicitudes', label: 'Buzón Solicitudes', icon: Inbox, description: 'Solicitudes web del portal' },
   { key: 'portal', label: 'Portal Cliente', icon: Search, description: 'Consulta por cédula' },
   { key: 'comunicaciones', label: 'Comunicaciones', icon: MessageSquare, description: 'Chat con clientes' },
+  { key: 'notificaciones', label: 'Notificaciones', icon: Bell, description: 'Centro de avisos' },
   { key: 'automatizacion', label: 'Automatización', icon: Zap, description: 'Reglas y bots' },
   { key: 'seguridad', label: 'Seguridad', icon: Shield, description: 'Auditoría y claves' },
   { key: 'auditoria', label: 'Auditoría Seguridad', icon: ShieldAlert, description: 'Auditoría técnica de seguridad' },
-  { key: 'admin', label: 'Administración', icon: Settings, description: 'Cuentas y categorías' },
+  { key: 'usuarios', label: 'Usuarios', icon: Users, description: 'Gestión de usuarios y roles' },
+  { key: 'conexiones', label: 'Conexiones API', icon: Plug, description: 'Integraciones externas' },
+  { key: 'admin', label: 'Administración', icon: Settings, description: 'Cuentas, categorías, contabilidad' },
   { key: 'portal-admin', label: 'Portal Admin', icon: Crown, description: 'Portal del administrador' },
   { key: 'configuracion', label: 'Configuración Global', icon: Settings2, description: 'Centro de configuración' },
+  { key: 'exportar', label: 'Reportes', icon: BarChart3, description: 'Exportación de datos' },
+  { key: 'codigo-fuente', label: 'Código Fuente', icon: Code2, description: 'Inspección y backup del código' },
+  { key: 'manual', label: 'Manual', icon: BookOpen, description: 'Manual del sistema' },
 ]
 
 export function Sidebar({ view, onChange }: SidebarProps) {
+  const user = getUserData()
+  const rol = user?.rol || ''
+
+  // Filtrar items según rol
+  const menuItems = useMemo(() => {
+    const permitidas = vistasPermitidas(rol)
+    return ALL_ITEMS.filter((item) => permitidas.includes(item.key))
+  }, [rol])
+
   return (
     <aside data-sidebar className="w-64 hidden lg:flex flex-col h-screen sticky top-0 text-sidebar-foreground border-r border-sidebar-border bg-sidebar backdrop-blur-xl">
       <div className="p-6 border-b border-sidebar-border">
@@ -99,6 +133,11 @@ export function Sidebar({ view, onChange }: SidebarProps) {
             </button>
           )
         })}
+        {menuItems.length === 0 && (
+          <div className="p-4 text-xs text-sidebar-foreground/50">
+            No tienes módulos disponibles para tu rol ({rol}).
+          </div>
+        )}
       </nav>
 
       <div className="p-4 border-t border-sidebar-border text-[11px] text-sidebar-foreground/50">

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { sanitizeError } from '@/lib/error-handler'
+import { requireRole } from '@/lib/auth-guard'
 
 // GET - detalle de un caso jurídico
 export async function GET(
@@ -8,6 +9,9 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const auth = requireRole(req, ['ADMIN', 'GESTOR', 'CONSULTOR'])
+    if (auth instanceof NextResponse) return auth
+
     const { id } = await params
     const caso = await db.casoJuridico.findUnique({
       where: { id },

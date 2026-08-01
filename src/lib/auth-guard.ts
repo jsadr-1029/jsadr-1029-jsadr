@@ -77,31 +77,12 @@ export function getAuthUser(req: NextRequest | Request): AuthUser | null {
       }
     }
 
-    // === Modo compatibilidad ===
-    // Si no hay token, permitir acceso como ADMIN del sistema
-    // Esto mantiene el frontend funcionando sin cambios
-    // En producción (NODE_ENV=production), esto debería bloquearse
-    if (process.env.NODE_ENV !== 'production') {
-      return {
-        id: 'system',
-        rol: 'ADMIN',
-        username: 'system',
-        nombre: 'Administrador',
-      }
-    }
-
-    // En producción sin token, denegar
+    // === Sin token = sin acceso ===
+    // Antes: en desarrollo se devolvía un ADMIN fake ("modo compatibilidad").
+    // Esto permitía que cualquier request sin token tuviera acceso total, lo
+    // cual rompía el RBAC real. Ahora denegamos siempre sin token.
     return null
   } catch (error) {
-    // En caso de error de verificación, permitir en desarrollo
-    if (process.env.NODE_ENV !== 'production') {
-      return {
-        id: 'system',
-        rol: 'ADMIN',
-        username: 'system',
-        nombre: 'Administrador',
-      }
-    }
     return null
   }
 }

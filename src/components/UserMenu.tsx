@@ -31,6 +31,7 @@
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { getUserData, logout } from '@/lib/api-client'
+import { vistasPermitidas, ROLE_LABELS as PERM_ROLE_LABELS, ROLE_COLORS as PERM_ROLE_COLORS } from '@/lib/permisos'
 import {
   LogOut,
   Menu,
@@ -51,6 +52,14 @@ import {
   ShieldAlert,
   Settings2,
   Landmark,
+  Users,
+  Plug,
+  Code2,
+  BookOpen,
+  Bell,
+  BarChart3,
+  Megaphone,
+  Calculator,
 } from 'lucide-react'
 
 interface UserMenuProps {
@@ -82,7 +91,9 @@ const ROLE_COLORS: Record<string, string> = {
   CLIENTE: 'from-emerald-500 to-green-600',
 }
 
-const QUICK_NAV = [
+// Catálogo completo de navegación (se filtra dinámicamente según rol del usuario)
+const QUICK_NAV_ALL = [
+  { key: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { key: 'prestamos', label: 'Préstamos', icon: FileText },
   { key: 'pagos', label: 'Pagos', icon: DollarSign },
   { key: 'buzon-solicitudes', label: 'Buzón Solicitudes', icon: Inbox },
@@ -91,21 +102,44 @@ const QUICK_NAV = [
   { key: 'configuracion', label: 'Configuración', icon: Settings2 },
 ]
 
-const FULL_NAV = [
+const FULL_NAV_ALL = [
   { key: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, group: 'Principal' },
   { key: 'prestamos', label: 'Préstamos', icon: FileText, group: 'Operación' },
   { key: 'pagos', label: 'Pagos', icon: DollarSign, group: 'Operación' },
+  { key: 'clientes', label: 'Clientes', icon: Users, group: 'Operación' },
   { key: 'juridico', label: 'Jurídico', icon: Scale, group: 'Operación' },
+  { key: 'cajas', label: 'Cajas', icon: Landmark, group: 'Operación' },
+  { key: 'campanas', label: 'Campañas', icon: Megaphone, group: 'Operación' },
+  { key: 'simulador', label: 'Simulador', icon: Calculator, group: 'Operación' },
   { key: 'buzon-solicitudes', label: 'Buzón Solicitudes Web', icon: Inbox, group: 'Operación' },
   { key: 'portal', label: 'Portal Cliente', icon: Search, group: 'Consulta' },
   { key: 'comunicaciones', label: 'Comunicaciones', icon: MessageSquare, group: 'Consulta' },
+  { key: 'notificaciones', label: 'Notificaciones', icon: Bell, group: 'Consulta' },
+  { key: 'exportar', label: 'Reportes', icon: BarChart3, group: 'Consulta' },
   { key: 'automatizacion', label: 'Automatización', icon: Zap, group: 'Sistema' },
   { key: 'seguridad', label: 'Seguridad', icon: Shield, group: 'Sistema' },
   { key: 'auditoria', label: 'Auditoría Seguridad', icon: ShieldAlert, group: 'Sistema' },
+  { key: 'usuarios', label: 'Usuarios', icon: Users, group: 'Sistema' },
+  { key: 'conexiones', label: 'Conexiones API', icon: Plug, group: 'Sistema' },
   { key: 'admin', label: 'Administración', icon: Settings, group: 'Sistema' },
   { key: 'portal-admin', label: 'Portal Admin', icon: Crown, group: 'Sistema' },
   { key: 'configuracion', label: 'Configuración Global', icon: Settings2, group: 'Sistema' },
+  { key: 'codigo-fuente', label: 'Código Fuente', icon: Code2, group: 'Sistema' },
+  { key: 'manual', label: 'Manual', icon: BookOpen, group: 'Sistema' },
 ]
+
+// Hooks utilitarios
+function useFilteredNav() {
+  const [rol, setRol] = useState<string | undefined>(undefined)
+  useEffect(() => {
+    setRol(getUserData()?.rol)
+  }, [])
+  const permitidas = vistasPermitidas(rol)
+  return {
+    QUICK_NAV: QUICK_NAV_ALL.filter((i) => permitidas.includes(i.key as any)),
+    FULL_NAV: FULL_NAV_ALL.filter((i) => permitidas.includes(i.key as any)),
+  }
+}
 
 function getInitials(nombre?: string): string {
   if (!nombre) return '?'
@@ -123,6 +157,7 @@ export function UserMenu({ currentView, onNavigate }: UserMenuProps) {
   const [confirmLogout, setConfirmLogout] = useState(false)
   const dropdownRef = useRef<HTMLDivElement>(null)
   const router = useRouter()
+  const { QUICK_NAV, FULL_NAV } = useFilteredNav()
 
   // Cargar datos del usuario y detectar dispositivo
   useEffect(() => {
@@ -342,11 +377,11 @@ export function UserMenu({ currentView, onNavigate }: UserMenuProps) {
               {/* Navegación agrupada */}
               <nav className="flex-1 p-3 overflow-y-auto">
                 {Object.entries(
-                  FULL_NAV.reduce((acc, item) => {
+                  FULL_NAV.reduce((acc: Record<string, typeof FULL_NAV_ALL>, item) => {
                     if (!acc[item.group]) acc[item.group] = []
                     acc[item.group].push(item)
                     return acc
-                  }, {} as Record<string, typeof FULL_NAV>)
+                  }, {})
                 ).map(([group, items]) => (
                   <div key={group} className="mb-4">
                     <p className="px-2 mb-1 text-[10px] uppercase tracking-wider text-white/40 font-semibold">
