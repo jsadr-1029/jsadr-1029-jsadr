@@ -64,7 +64,7 @@ import {
 interface AbogadoSesion {
   token: string
   expira: string
-  abogado: { id: string; cedula: string; nombre: string }
+  abogado: { id: string; cedula: string; nombre: string; username?: string; rol?: string }
 }
 
 interface CasoJuridico {
@@ -121,16 +121,25 @@ export function PortalAbogadoView() {
     if (guardada) {
       try {
         const parsed = JSON.parse(guardada) as AbogadoSesion
-        // Verificar sesión
-        fetch('/api/juridico/portal/auth', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ accion: 'verificar_sesion', token: parsed.token }),
-        })
+        // Verificar sesión vía GET ?token=...
+        fetch(`/api/juridico/portal/auth?token=${encodeURIComponent(parsed.token)}`)
           .then((r) => r.json())
           .then((json) => {
-            if (json.success) {
-              setSesion(parsed)
+            if (json.success && json.data?.usuario) {
+              // Reutilizar los datos frescos del servidor
+              const sesionActualizada: AbogadoSesion = {
+                token: parsed.token,
+                expira: json.data.expira || parsed.expira,
+                abogado: {
+                  id: json.data.usuario.id,
+                  cedula: json.data.usuario.cedula || '',
+                  nombre: json.data.usuario.nombre,
+                  username: json.data.usuario.username,
+                  rol: json.data.usuario.rol,
+                },
+              }
+              setSesion(sesionActualizada)
+              sessionStorage.setItem('portal_abogado_sesion', JSON.stringify(sesionActualizada))
             } else {
               sessionStorage.removeItem('portal_abogado_sesion')
             }
@@ -145,10 +154,8 @@ export function PortalAbogadoView() {
   const cerrarSesion = async () => {
     if (sesion) {
       try {
-        await fetch('/api/juridico/portal/auth', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ accion: 'logout', token: sesion.token }),
+        await fetch(`/api/juridico/portal/auth?token=${encodeURIComponent(sesion.token)}`, {
+          method: 'DELETE',
         })
       } catch (e) {
         // ignore
@@ -166,19 +173,31 @@ export function PortalAbogadoView() {
       const res = await fetch('/api/juridico/portal/auth', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ accion: 'login', cedula, clave }),
+        body: JSON.stringify({ cedula, clave }),
       })
       const json = await res.json()
-      if (json.success) {
-        setSesion(json.data)
-        sessionStorage.setItem('portal_abogado_sesion', JSON.stringify(json.data))
-        toast({ title: `Bienvenido, ${json.data.abogado.nombre}` })
+      if (json.success && json.data?.usuario) {
+        // Mapear respuesta API (data.usuario) → estructura frontend (data.abogado)
+        const sesionData: AbogadoSesion = {
+          token: json.data.token,
+          expira: json.data.expira,
+          abogado: {
+            id: json.data.usuario.id,
+            cedula: json.data.usuario.cedula || '',
+            nombre: json.data.usuario.nombre,
+            username: json.data.usuario.username,
+            rol: json.data.usuario.rol,
+          },
+        }
+        setSesion(sesionData)
+        sessionStorage.setItem('portal_abogado_sesion', JSON.stringify(sesionData))
+        toast({ title: `Bienvenido, ${sesionData.abogado.nombre}` })
         setCedula('')
         setClave('')
       } else {
         toast({
           title: 'No se pudo iniciar sesión',
-          description: json.error,
+          description: json.error || 'Respuesta inesperada del servidor',
           variant: 'destructive',
         })
       }
@@ -265,6 +284,76 @@ export function PortalAbogadoView() {
   }
 
   // === Panel principal ===
+  // Defensive: si por algún motivo sesion.abogado falta (p.ej. sesión legacy en storage),
+  // mostrar el formulario de login en vez de crashear.
+  if (!sesion?.abogado) {
+    sessionStorage.removeItem('portal_abogado_sesion')
+    return (
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <Card className="w-full max-w-md">
+          <CardHeader className="text-center">
+            <div className="mx-auto w-14 h-14 rounded-2xl gradient-primary flex items-center justify-center text-white shadow-lg mb-2">
+              <Scale className="w-7 h-7" />
+            </div>
+            <CardTitle className="text-xl">Portal de Abogado</CardTitle>
+            <p className="text-sm text-muted-foreground">
+              Tu sesión expiró. Ingresa nuevamente con tu cédula y clave.
+            </p>
+          </CardHeader>
+          <CardContent>
+            <form onSubmit={iniciarSesion} className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="cedula-abogado">Cédula</Label>
+                <Input
+                  id="cedula-abogado"
+                  value={cedula}
+                  onChange={(e) => setCedula(e.target.value)}
+                  required
+                  placeholder="Ej: 1234567890"
+                  autoComplete="username"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="clave-abogado">Clave</Label>
+                <div className="relative">
+                  <Input
+                    id="clave-abogado"
+                    type={showClave ? 'text' : 'password'}
+                    value={clave}
+                    onChange={(e) => setClave(e.target.value)}
+                    required
+                    placeholder="Tu clave de acceso"
+                    autoComplete="current-password"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowClave(!showClave)}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                  >
+                    {showClave ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+              </div>
+              <Button type="submit" className="w-full" disabled={cargandoLogin}>
+                {cargandoLogin ? (
+                  <>
+                    <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                    Verificando...
+                  </>
+                ) : (
+                  <>
+                    <Lock className="w-4 h-4 mr-2" />
+                    Ingresar
+                  </>
+                )}
+              </Button>
+            </form>
+          </CardContent>
+        </Card>
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-6">
       <PageHeader
