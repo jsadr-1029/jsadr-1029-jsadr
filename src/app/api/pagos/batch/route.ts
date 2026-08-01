@@ -88,10 +88,10 @@ async function enviarWhatsAppMasivo(body: any, user: any) {
       prestamoId: p.id,
       cliente: p.cliente.nombre,
       telefono: p.cliente.telefono,
-      enviado: envio.success !== false,
-      error: envio.success === false ? envio.error : undefined,
+      enviado: envio.exito,
+      error: !envio.exito ? envio.error : undefined,
     })
-    if (envio.success !== false) enviados++
+    if (envio.exito) enviados++
     else fallidos++
     // Pequeño delay para no saturar WhatsApp API
     await new Promise((r) => setTimeout(r, 200))
@@ -142,10 +142,10 @@ async function enviarRecordatorios(body: any, user: any) {
       prestamoId: p.id,
       cliente: p.cliente.nombre,
       telefono: p.cliente.telefono,
-      enviado: envio.success !== false,
-      error: envio.success === false ? envio.error : undefined,
+      enviado: envio.exito,
+      error: !envio.exito ? envio.error : undefined,
     })
-    if (envio.success !== false) enviados++
+    if (envio.exito) enviados++
     else fallidos++
     await new Promise((r) => setTimeout(r, 200))
   }
@@ -181,10 +181,10 @@ async function enviarAvisosMora(body: any, user: any) {
       prestamoId: p.id,
       cliente: p.cliente.nombre,
       telefono: p.cliente.telefono,
-      enviado: envio.success !== false,
-      error: envio.success === false ? envio.error : undefined,
+      enviado: envio.exito,
+      error: !envio.exito ? envio.error : undefined,
     })
-    if (envio.success !== false) enviados++
+    if (envio.exito) enviados++
     else fallidos++
     await new Promise((r) => setTimeout(r, 200))
   }

@@ -681,11 +681,11 @@ export async function POST(req: NextRequest) {
               // requireTLS obliga al cliente a upgrade-ar a TLS antes de AUTH.
               const requireTLS = !secure && (correo.starttls || port === 587 || port === 25)
               const transporter = nodemailer.createTransport({
-                host: correo.smtpHost,
+                host: correo.smtpHost || '',
                 port,
                 secure,
                 requireTLS,
-                auth: { user: correo.smtpUser, pass: smtpPass },
+                auth: { user: correo.smtpUser || '', pass: smtpPass },
                 tls: { rejectUnauthorized: false },
                 connectionTimeout: 15000,
                 greetingTimeout: 10000,

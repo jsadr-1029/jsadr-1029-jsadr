@@ -125,7 +125,7 @@ export async function POST(req: NextRequest) {
           accion: 'FIRMA_COMPLETADA',
           exito: true,
           detalle: `OTP validado, firma completada para préstamo ${firma.prestamo?.codigo || 'N/A'}`,
-          prestamoId: firma.prestamoId || undefined,
+          metadata: firma.prestamoId ? JSON.stringify({ prestamoId: firma.prestamoId }) : null,
         },
       })
     }

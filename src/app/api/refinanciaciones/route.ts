@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { sanitizeError } from '@/lib/error-handler'
 import { requireRole } from '@/lib/auth-guard'
-import { calcularPrestamo, formatearMoneda } from '@/lib/finanzas'
+import { calcularPrestamo, formatearMoneda, getTasaMoraAnual } from '@/lib/finanzas'
 import { registrarAuditLog, getClientInfo } from '@/lib/security'
 
 // =====================================================

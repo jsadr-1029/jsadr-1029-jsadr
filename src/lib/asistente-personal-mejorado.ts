@@ -94,6 +94,7 @@ interface MemoriaConversacion {
   ultimoMovimientoCategoria?: string
   ultimoComando?: string
   ultimoResultado?: string
+  ambitoPreferido?: 'NEGOCIO' | 'PERSONAL'
   // === Sistema de confirmación de ámbito ===
   pendienteConfirmarAmbito?: {
     tipo: 'GASTO' | 'INGRESO'

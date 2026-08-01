@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { formatearMoneda, formatearFecha, formatearFechaHora } from '@/lib/finanzas'
+import { formatearMoneda, formatearFecha, formatearFechaHora, getTasaMoraAnual } from '@/lib/finanzas'
 import { sanitizeError } from '@/lib/error-handler'
 
 // GET - exportar historial completo de caso jurídico en HTML imprimible (PDF/Word)

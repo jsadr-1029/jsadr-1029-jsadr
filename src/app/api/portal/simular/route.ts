@@ -14,9 +14,9 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Sesión expirada' }, { status: 401 })
     }
 
-    let categoria = null
+    let categoria: Awaited<ReturnType<typeof db.categoriaCliente.findUnique>> = null
     if (categoriaId) {
-      categoria = await db.categoria.findUnique({ where: { id: categoriaId } })
+      categoria = await db.categoriaCliente.findUnique({ where: { id: categoriaId } })
     }
     if (!categoria) {
       // Si no hay categoría, usar valores por defecto

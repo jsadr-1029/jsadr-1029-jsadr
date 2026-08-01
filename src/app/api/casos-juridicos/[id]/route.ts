@@ -63,7 +63,7 @@ export async function POST(
   try {
     const body = await req.json()
     const { tipoEvento, titulo, descripcion, resultado, actor } = body
-    const cron = await db.cronologiaJuridica.create({
+    const cron = await db.cronologiaCaso.create({
       data: {
         casoId: id,
         fecha: new Date(),

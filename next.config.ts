@@ -12,14 +12,20 @@ const nextConfig: NextConfig = {
   env: {
     TZ: process.env.TZ || 'America/Bogota',
   },
-  // FIXME: fix the underlying type errors and re-enable strict mode.
-  // FIX-SEGURIDAD-CRITICA #6: ignoreBuildErrors=true enmascara errores de tipo
-  // reales (incl. bugs de seguridad). Se desactiva para que el build los exponga.
-  // FIX-TEMPORAL: hay 76 errores TS pre-existentes (db.caja, db.cronologiaJuridica,
-  // tipos nodemailer, etc.) que requieren refactor. Se ignora TS temporalmente
-  // para poder arrancar la vista previa. TODO: arreglar y re-activar.
+  // FIX-SEGURIDAD-CRITICA #6 (RESUELTO): ignoreBuildErrors=true fue desactivado
+  // tras corregir los 70 errores TS pre-existentes (refactor de accessors Prisma,
+  // imports faltantes, alineación de tipos en bot-admin-v2, etc.).
+  // Ahora el build de producción abortará si se introducen errores de tipo.
   typescript: {
-    ignoreBuildErrors: true,
+    ignoreBuildErrors: false,
+  },
+  // FIX-SEGURIDAD #31: limitar tamaño de body para prevenir DoS por payload grande.
+  // 4MB es suficiente para la mayoría de requests JSON; archivos van por multipart
+  // con su propio límite. Next.js default es 1MB pero no se aplica a routes.ts.
+  experimental: {
+    serverActions: {
+      bodySizeLimit: '4mb',
+    },
   },
   // FIX-NEXT16: la clave `eslint` fue eliminada del tipo NextConfig en Next.js 16
   // (la configuración de ESLint se hace ahora vía eslintrc directamente, no vía next.config).

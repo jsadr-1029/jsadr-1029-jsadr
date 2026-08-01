@@ -61,7 +61,7 @@ export async function POST(req: NextRequest) {
         accion: 'FIRMA_INICIADA',
         exito: true,
         detalle: `Inicio firma TyC préstamo ${prestamo.codigo}`,
-        prestamoId,
+        metadata: JSON.stringify({ prestamoId }),
       },
     })
 

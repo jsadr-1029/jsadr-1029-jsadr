@@ -345,9 +345,10 @@ export const COMANDOS: ComandoBot[] = [
     descripcion: 'Muestra ingresos, egresos y balance neto del mes',
     ejemplo: '3',
     ejecutar: async () => {
-      const dash = await obtenerDashboard()
+      const dash = await obtenerDashboard('AMBOS', 30)
+      const k = dash.kpis
       return {
-        texto: `📊 **BALANCE DEL MES**\n\n💰 Ingresos: ${formatearMoneda(dash.ingresosMes)}\n💸 Egresos: ${formatearMoneda(dash.egresosMes)}\n📈 Balance neto: ${formatearMoneda(dash.balanceMes)}\n\nCaja actual: ${formatearMoneda(dash.balance)}\nMovimientos del mes: ${dash.movimientosMes}`,
+        texto: `📊 **BALANCE DEL MES**\n\n💰 Ingresos: ${formatearMoneda(k.ingresos)}\n💸 Egresos: ${formatearMoneda(k.gastos)}\n📈 Balance neto: ${formatearMoneda(k.balance)}\n\nCaja actual: ${formatearMoneda(k.balance)}\nMovimientos del mes: ${k.totalMovimientos}`,
         tipo: 'REPORTE',
       }
     },
@@ -362,8 +363,8 @@ export const COMANDOS: ComandoBot[] = [
       const inicio = new Date()
       inicio.setDate(1)
       const movs = await db.movimientoCaja.findMany({
-        where: { tipo: 'EGRESO', fecha: { gte: inicio } },
-        select: { monto: true, concepto: true, categoria: true },
+        where: { tipo: 'EGRESO', fechaMovimiento: { gte: inicio } },
+        select: { monto: true, concepto: true, ambito: true },
       })
       if (movs.length === 0) {
         return { texto: 'No hay gastos registrados este mes.', tipo: 'TEXTO' }
@@ -371,7 +372,7 @@ export const COMANDOS: ComandoBot[] = [
       const porCategoria: Record<string, number> = {}
       let total = 0
       for (const m of movs) {
-        const cat = m.categoria || 'SIN_CATEGORIA'
+        const cat = m.ambito || m.concepto || 'SIN_CATEGORIA'
         porCategoria[cat] = (porCategoria[cat] || 0) + m.monto
         total += m.monto
       }
@@ -400,17 +401,24 @@ export const COMANDOS: ComandoBot[] = [
           tipo: 'TEXTO',
         }
       }
-      const resultado = await crearPresupuesto({
-        categoria,
-        monto,
-        periodo: 'MENSUAL',
-      })
-      return {
-        texto: resultado.success
-          ? `✅ Presupuesto creado\n\n🏷️ Categoría: ${categoria}\n💰 Límite mensual: ${formatearMoneda(monto)}`
-          : `❌ ${resultado.mensaje}`,
-        tipo: 'ACCION',
-        accionEjecutada: resultado.success,
+      try {
+        await crearPresupuesto({
+          nombre: categoria,
+          ambito: 'NEGOCIO',
+          montoLimite: monto,
+          periodo: 'MENSUAL',
+        })
+        return {
+          texto: `✅ Presupuesto creado\n\n🏷️ Categoría: ${categoria}\n💰 Límite mensual: ${formatearMoneda(monto)}`,
+          tipo: 'ACCION',
+          accionEjecutada: true,
+        }
+      } catch (e: any) {
+        return {
+          texto: `❌ ${e.message || 'Error al crear presupuesto'}`,
+          tipo: 'ACCION',
+          accionEjecutada: false,
+        }
       }
     },
   },
@@ -429,16 +437,24 @@ export const COMANDOS: ComandoBot[] = [
         }
       }
       const concepto = ctx.args.concepto || 'Meta de ahorro'
-      const resultado = await crearMeta({
-        nombre: concepto,
-        montoObjetivo: monto,
-      })
-      return {
-        texto: resultado.success
-          ? `✅ Meta creada\n\n🎯 ${concepto}\n💰 Objetivo: ${formatearMoneda(monto)}`
-          : `❌ ${resultado.mensaje}`,
-        tipo: 'ACCION',
-        accionEjecutada: resultado.success,
+      try {
+        await crearMeta({
+          nombre: concepto,
+          tipo: 'AHORRO',
+          ambito: 'NEGOCIO',
+          montoObjetivo: monto,
+        })
+        return {
+          texto: `✅ Meta creada\n\n🎯 ${concepto}\n💰 Objetivo: ${formatearMoneda(monto)}`,
+          tipo: 'ACCION',
+          accionEjecutada: true,
+        }
+      } catch (e: any) {
+        return {
+          texto: `❌ ${e.message || 'Error al crear meta'}`,
+          tipo: 'ACCION',
+          accionEjecutada: false,
+        }
       }
     },
   },
@@ -449,9 +465,9 @@ export const COMANDOS: ComandoBot[] = [
     descripcion: 'Genera un reporte completo del mes',
     ejemplo: '7',
     ejecutar: async () => {
-      const reporte = await generarReporte()
+      const reporte = await generarReporte('AMBOS', 'MENSUAL')
       return {
-        texto: `📋 **REPORTE MENSUAL**\n\n${reporte.contenido || 'Generando reporte...'}\n\nGenerado: ${fechaHoraTextoColombia()}`,
+        texto: `📋 **REPORTE MENSUAL**\n\n${reporte || 'Generando reporte...'}\n\nGenerado: ${fechaHoraTextoColombia()}`,
         tipo: 'REPORTE',
       }
     },
@@ -467,7 +483,7 @@ export const COMANDOS: ComandoBot[] = [
     ejecutar: async () => {
       const estado = await obtenerEstadoModuloPrestamos()
       return {
-        texto: `🏦 **ESTADO DE PRÉSTAMOS**\n\n${estado.resumen || estado.contenido || JSON.stringify(estado, null, 2)}`,
+        texto: `🏦 **ESTADO DE PRÉSTAMOS**\n\n${typeof estado.resumen === 'string' ? estado.resumen : JSON.stringify(estado.resumen || estado, null, 2)}`,
         tipo: 'REPORTE',
       }
     },
@@ -564,11 +580,11 @@ export const COMANDOS: ComandoBot[] = [
     descripcion: 'Alertas del sistema y del negocio',
     ejemplo: '12',
     ejecutar: async () => {
-      const alertas = await detectarAlertas()
+      const alertas = await detectarAlertas('AMBOS')
       if (!alertas || alertas.length === 0) {
         return { texto: '✅ No hay alertas activas.', tipo: 'REPORTE' }
       }
-      const lineas = alertas.map((a, i) => `${i + 1}. ${a.tipo || 'ALERTA'}: ${a.mensaje || a.descripcion || JSON.stringify(a)}`).join('\n')
+      const lineas = alertas.map((a, i) => `${i + 1}. ${a.tipo || 'ALERTA'}: ${a.titulo || a.descripcion || JSON.stringify(a)}`).join('\n')
       return {
         texto: `🔔 **ALERTAS ACTIVAS (${alertas.length})**\n\n${lineas}`,
         tipo: 'REPORTE',
@@ -595,7 +611,7 @@ export const COMANDOS: ComandoBot[] = [
       const fecha = new Date()
       fecha.setDate(dia)
       try {
-        await db.eventoCalendario.create({
+        await (db as any).eventoCalendario.create({
           data: {
             titulo: concepto,
             fecha,
@@ -623,7 +639,7 @@ export const COMANDOS: ComandoBot[] = [
     ejecutar: async () => {
       const resumen = await generarResumenJuridico()
       return {
-        texto: `⚖️ **RESUMEN JURÍDICO**\n\n${resumen.contenido || resumen.resumen || JSON.stringify(resumen, null, 2)}`,
+        texto: `⚖️ **RESUMEN JURÍDICO**\n\n${resumen || 'Generando resumen...'}`,
         tipo: 'REPORTE',
       }
     },
@@ -637,9 +653,9 @@ export const COMANDOS: ComandoBot[] = [
     descripcion: 'Consejos personalizados basados en tu actividad',
     ejemplo: '15',
     ejecutar: async () => {
-      const consejos = await generarConsejosAhorro()
+      const consejos = await generarConsejosAhorro('AMBOS')
       return {
-        texto: `💡 **RECOMENDACIONES FINANCIERAS**\n\n${consejos.contenido || consejos.consejos || 'Generando recomendaciones...'}`,
+        texto: `💡 **RECOMENDACIONES FINANCIERAS**\n\n${consejos || 'Generando recomendaciones...'}`,
         tipo: 'REPORTE',
       }
     },
@@ -651,9 +667,9 @@ export const COMANDOS: ComandoBot[] = [
     descripcion: 'Proyección de caja y flujo a 90 días',
     ejemplo: '16',
     ejecutar: async () => {
-      const analisis = await generarAnalisisPredictivo(90)
+      const analisis = await generarAnalisisPredictivo('AMBOS')
       return {
-        texto: `🔮 **ANÁLISIS PREDICTIVO (90 días)**\n\n${analisis.contenido || analisis.prediccion || 'Generando análisis...'}`,
+        texto: `🔮 **ANÁLISIS PREDICTIVO (90 días)**\n\n${analisis || 'Generando análisis...'}`,
         tipo: 'REPORTE',
       }
     },
@@ -665,9 +681,9 @@ export const COMANDOS: ComandoBot[] = [
     descripcion: 'Compara este mes con el mes pasado',
     ejemplo: '17',
     ejecutar: async () => {
-      const comp = await generarComparativoMes()
+      const comp = await generarComparativoMes('AMBOS')
       return {
-        texto: `📊 **COMPARATIVO MES ANTERIOR**\n\n${comp.contenido || comp.comparativa || 'Generando comparativo...'}`,
+        texto: `📊 **COMPARATIVO MES ANTERIOR**\n\n${comp || 'Generando comparativo...'}`,
         tipo: 'REPORTE',
       }
     },
@@ -681,7 +697,7 @@ export const COMANDOS: ComandoBot[] = [
     ejecutar: async () => {
       const dash = await generarDashboardEjecutivoConsolidado()
       return {
-        texto: `🎯 **DASHBOARD EJECUTIVO CONSOLIDADO**\n\n${dash.contenido || dash.resumen || 'Generando dashboard...'}`,
+        texto: `🎯 **DASHBOARD EJECUTIVO CONSOLIDADO**\n\n${dash || 'Generando dashboard...'}`,
         tipo: 'REPORTE',
       }
     },
@@ -697,7 +713,7 @@ export const COMANDOS: ComandoBot[] = [
     ejecutar: async () => {
       const informe = await generarInformeSeguridad()
       return {
-        texto: `🛡️ **INFORME DE SEGURIDAD**\n\n${informe.contenido || informe.resumen || 'Generando informe...'}`,
+        texto: `🛡️ **INFORME DE SEGURIDAD**\n\n${informe || 'Generando informe...'}`,
         tipo: 'REPORTE',
       }
     },

@@ -848,7 +848,7 @@ export async function POST(req: NextRequest) {
 async function responderSegunBot(botTipo: string, botNombre: string, mensaje: string, clienteId?: string, sessionId: string = 'admin-session'): Promise<NextResponse> {
   let mensajeLower = mensaje.toLowerCase().trim()
   let respuesta = ''
-  let tipo: 'TEXTO' | 'ACCION' | 'REPORTE' = 'TEXTO'
+  let tipo: 'TEXTO' | 'ACCION' | 'REPORTE' | 'CONFIRMACION' = 'TEXTO'
   let accionEjecutada = false
   let detalleAccion = ''
 

@@ -43,7 +43,7 @@ export async function POST(
     const { tipo, monto, concepto, referencia, prestamoId } = body
     const montoNum = Number(monto)
 
-    const caja = await db.caja.findUnique({ where: { id } })
+    const caja = await db.cajaMenor.findUnique({ where: { id } })
     if (!caja) return NextResponse.json({ error: 'Caja no encontrada' }, { status: 404 })
 
     const movimiento = await db.movimientoCaja.create({
@@ -60,7 +60,7 @@ export async function POST(
 
     // Actualizar saldo de la caja
     if (tipo === 'EGRESO') {
-      await db.caja.update({
+      await db.cajaMenor.update({
         where: { id },
         data: {
           saldoActual: { decrement: montoNum },
@@ -68,7 +68,7 @@ export async function POST(
         },
       })
     } else {
-      await db.caja.update({
+      await db.cajaMenor.update({
         where: { id },
         data: {
           saldoActual: { increment: montoNum },

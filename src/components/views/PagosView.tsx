@@ -138,6 +138,7 @@ interface ProximoPago {
   totalCuotaConMora: number
   montoPendiente: number
   estado: 'VENCIDO' | 'HOY' | 'PROXIMO'
+  esAplazada?: boolean
 }
 
 interface InformeData {

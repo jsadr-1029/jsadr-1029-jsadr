@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { calcularPrestamo, formatearFecha, formatearMoneda } from '@/lib/finanzas'
+import { calcularPrestamo, formatearFecha, formatearMoneda, getTasaMoraAnual } from '@/lib/finanzas'
 import { enviarWhatsApp, guardarNotificacion, mensajeLinkPago } from '@/lib/whatsapp'
 import { sanitizeError } from '@/lib/error-handler'
 import { requireRole } from '@/lib/auth-guard'

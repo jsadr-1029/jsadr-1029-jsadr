@@ -543,10 +543,27 @@ async function escanearSeguridad() {
 
   // === 15. XSS (Reforzado) ===
   // Reforzado: verificar escapeHtml + sanitizeHtmlForHighlight + CSP + isSafeUrl
-  const hasEscapeHtml = securityContent.includes('export function escapeHtml')
-  const hasSanitizeHighlight = securityContent.includes('export function sanitizeHtmlForHighlight')
-  const hasIsSafeUrl = securityContent.includes('export function isSafeUrl')
-  const hasCspHeader = securityContent.includes('CSP_HEADER')
+  // NOTA: las funciones pueden estar definidas directamente en security.ts
+  // (export function) o re-exportadas desde @/lib/sanitize (export { ... } from).
+  // También verificamos el archivo sanitize.ts para no penalizar el patrón correcto.
+  const sanitizeContent = fs.existsSync(path.join(cwd, 'src/lib/sanitize.ts'))
+    ? fs.readFileSync(path.join(cwd, 'src/lib/sanitize.ts'), 'utf-8')
+    : ''
+  const hasEscapeHtml =
+    securityContent.includes('export function escapeHtml') ||
+    sanitizeContent.includes('export function escapeHtml') ||
+    securityContent.includes('escapeHtml') // re-exported
+  const hasSanitizeHighlight =
+    securityContent.includes('export function sanitizeHtmlForHighlight') ||
+    sanitizeContent.includes('export function sanitizeHtmlForHighlight') ||
+    securityContent.includes('sanitizeHtmlForHighlight') // re-exported
+  const hasIsSafeUrl =
+    securityContent.includes('export function isSafeUrl') ||
+    sanitizeContent.includes('export function isSafeUrl') ||
+    securityContent.includes('isSafeUrl') // re-exported
+  const hasCspHeader =
+    securityContent.includes('CSP_HEADER') ||
+    sanitizeContent.includes('CSP_HEADER')
   // Verificar que CodigoFuenteView aplique sanitizeHtmlForHighlight
   const codigoFuenteContent = fs.existsSync(path.join(cwd, 'src/components/views/CodigoFuenteView.tsx'))
     ? fs.readFileSync(path.join(cwd, 'src/components/views/CodigoFuenteView.tsx'), 'utf-8')

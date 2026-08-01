@@ -45,7 +45,7 @@ export async function POST(req: NextRequest) {
     })
 
     // Cronología inicial
-    await db.cronologiaJuridica.create({
+    await db.cronologiaCaso.create({
       data: {
         casoId: caso.id,
         fecha: new Date(),
