@@ -1199,7 +1199,25 @@ async function escanearSeguridad() {
   })
 
   // === 40. Permisos DB SQLite ===
+  // FIX-SEGURIDAD: si la BD es PostgreSQL/MySQL remoto (Neon, Supabase, RDS, etc.),
+  // el control "Permisos Archivo BD" no aplica — los permisos los gestiona el proveedor
+  // cloud. Marcamos como 🟢 con evidencia del proveedor detectado.
   let dbPermsOk = false
+  const dbUrlForAudit = process.env.DATABASE_URL || envContent.split('\n').find(l => l.startsWith('DATABASE_URL='))?.replace('DATABASE_URL=', '') || ''
+  const isRemotePostgres = dbUrlForAudit.startsWith('postgresql://') || dbUrlForAudit.startsWith('postgres://')
+  const isRemoteMysql = dbUrlForAudit.startsWith('mysql://')
+  const isRemoteSqlite = dbUrlForAudit.startsWith('file:') || dbUrlForAudit.includes('sqlite')
+  // Detectar proveedor cloud conocido
+  const cloudProvider =
+    dbUrlForAudit.includes('neon.tech') ? 'Neon' :
+    dbUrlForAudit.includes('supabase') ? 'Supabase' :
+    dbUrlForAudit.includes('rds.amazonaws') ? 'AWS RDS' :
+    dbUrlForAudit.includes('cloudsql') ? 'Google Cloud SQL' :
+    dbUrlForAudit.includes('azure') || dbUrlForAudit.includes('postgres.database.azure') ? 'Azure Database' :
+    dbUrlForAudit.includes('railway') ? 'Railway' :
+    dbUrlForAudit.includes('render.com') ? 'Render' :
+    dbUrlForAudit.includes('aiven') ? 'Aiven' :
+    null
   try {
     const dbPath = path.join(cwd, 'db/custom.db')
     if (fs.existsSync(dbPath)) {
@@ -1220,15 +1238,40 @@ async function escanearSeguridad() {
           : 'Ejecutar: chmod 600 db/custom.db. En Docker, usar USER directive.',
         prioridad: dbPermsOk ? 'Bajo - Mantener' : 'Medio - Próximas semanas'
       })
+    } else if (isRemotePostgres || isRemoteMysql) {
+      // BD remota gestionada en la nube — permisos gestionados por el proveedor
+      const proveedorLabel = cloudProvider || (isRemotePostgres ? 'PostgreSQL remoto' : 'MySQL remoto')
+      const hasSsl = dbUrlForAudit.includes('sslmode=require') || dbUrlForAudit.includes('ssl=true') || dbUrlForAudit.includes('sslrootcert')
+      hallazgos.push({
+        control: 'Permisos Archivo BD',
+        estado: '🟢',
+        riesgo: 'Medio',
+        evidencia: `BD remota gestionada por ${proveedorLabel}. DATABASE_URL apunta a host en la nube (${dbUrlForAudit.replace(/\/\/[^@]+@/, '//***:***@').split('@')[1]?.split('/')[0] || 'remoto'}). ${hasSsl ? 'Conexión SSL/TLS requerida (sslmode=require).' : 'Sin SSL explícito — verificar.'} No hay archivo local db/custom.db. Permisos de archivo gestionados por el proveedor cloud (IAM, security groups, VPC).`,
+        explicacion: `Arquitectura sin archivo de BD local: los permisos a nivel de archivo no aplican. La seguridad se garantiza con: (1) credenciales en DATABASE_URL (no en código), (2) ${hasSsl ? 'cifrado TLS en tránsito' : '⚠️ conexión sin cifrar'}, (3) network policies del proveedor (security groups, IP allowlist), (4) RBAC a nivel de base de datos (roles de PostgreSQL/MySQL).`,
+        escenario: 'N/A - BD gestionada en la nube, sin archivo local accesible desde el filesystem del app server',
+        recomendacion: `Mantener. Verificar: (1) que DATABASE_URL esté solo en variables de entorno (no en código ni logs), (2) ${hasSsl ? 'SSL ya está activo ✅' : 'activar sslmode=require'}, (3) IP allowlist en el panel de ${proveedorLabel}, (4) rotar credenciales cada 90 días.`,
+        prioridad: 'Bajo - Mantener'
+      })
+    } else if (isRemoteSqlite) {
+      hallazgos.push({
+        control: 'Permisos Archivo BD',
+        estado: '🟡',
+        riesgo: 'Medio',
+        evidencia: 'SQLite con ruta file: remota — verificar permisos del archivo en el servidor remoto',
+        explicacion: 'BD SQLite remota vía file: protocol — los permisos dependen del servidor que aloja el archivo',
+        escenario: 'Servidor remoto con permisos mundiales en el archivo .db',
+        recomendacion: 'Verificar permisos del archivo SQLite remoto (chmod 600)',
+        prioridad: 'Medio - Próximas semanas'
+      })
     } else {
       hallazgos.push({
         control: 'Permisos Archivo BD',
         estado: '⚪',
         riesgo: 'Medio',
-        evidencia: 'No se encontró db/custom.db',
+        evidencia: 'No se encontró db/custom.db ni DATABASE_URL remota configurada',
         explicacion: 'No verificable',
         escenario: 'N/A',
-        recomendacion: 'Verificar permisos cuando se cree la BD',
+        recomendacion: 'Configurar DATABASE_URL (preferiblemente BD remota gestionada) o crear db/custom.db con permisos 600',
         prioridad: 'Bajo - Mantener'
       })
     }
