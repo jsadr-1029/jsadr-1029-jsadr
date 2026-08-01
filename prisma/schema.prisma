@@ -1,0 +1,1810 @@
+// =====================================================
+// Sistema de Gestión de Préstamos v3.0 - Aurora Bancaria
+// Modelo bancario con intereses fijos sobre capital inicial
+// Mora compuesta diaria + cajas menores + portal cliente
+// Usuarios con roles (Admin/Gestor/Consultor) + Bitácora + Reversar pagos
+// v3.0: Automatizaciones + Versiones + Backups + Acceso Portal
+// =====================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// =====================================================
+// Datasource:
+//  - Desarrollo local (actual): SQLite
+//    DATABASE_URL="file:./db/custom.db"
+//  - Producción (Vercel + Neon): cambiar provider a "postgresql" y usar:
+//    DATABASE_URL="postgresql://USER:PASS@HOST/DB?sslmode=require&schema=public"
+//    Ver DEPLOYMENT_GUIDE.md sección "Migración a Neon" para pasos detallados.
+// =====================================================
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// -----------------------------------------------------
+// USUARIO DEL SISTEMA (con roles, permisos y seguridad)
+// -----------------------------------------------------
+model Usuario {
+  id              String   @id @default(cuid())
+  nombre          String
+  email           String   @unique
+  username        String   @unique
+  passwordHash    String   // Bcrypt rounds=12
+  rol             String   // ADMIN | GESTOR | CONSULTOR | ABOGADO
+  activo          Boolean  @default(true)
+  ultimoAcceso    DateTime?
+  permisos        String?  // JSON con permisos específicos
+  // === Identidad del portal jurídico (abogados/gestores) ===
+  cedula          String?  @unique // Cédula del abogado para login del portal jurídico
+  claveHash       String?  // Hash bcrypt de la clave del portal jurídico (independiente del passwordHash del admin)
+  tokenSesion     String?  // Token de sesión del portal jurídico (randomBytes)
+  tokenExpira     DateTime? // Expiración del token de sesión del portal jurídico
+  // Seguridad
+  intentosFallidos Int    @default(0)
+  bloqueadoHasta   DateTime?
+  mfaEnabled       Boolean @default(false)
+  mfaSecret        String?  // TOTP secret (base32)
+  sessionToken     String?  // JWT refresh token hash
+  mustChangePassword Boolean @default(false)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  bitacoras       BitacoraPrestamo[]
+  pagosReversados Pago[]
+  pagosAnulados   Pago[] @relation("PagoAnuladoPor")
+  movimientosCaja MovimientoCaja[]
+  auditLogs       AuditLog[]
+  conversacionesAsesor ConversacionChat[] @relation("AsesorConversaciones")
+  notasInternasChat NotaInterna[] @relation("AutorNotasInternas")
+}
+
+// -----------------------------------------------------
+// CLIENTE / EMPLEADO
+// -----------------------------------------------------
+model Cliente {
+  id              String   @id @default(cuid())
+  nombre          String
+  cedula          String   @unique
+  telefono        String
+  email           String?
+  // "Cargo" fue reemplazado por "Referido por" (relación a otro Cliente)
+  departamento    String?
+  municipio       String?
+  salario         Float?
+  fechaIngreso    DateTime?
+  direccion       String?
+  ciudad          String?
+  barrio          String?
+  notas           String?
+  // Datos bancarios del cliente (para pagos/descuentos)
+  bancoCliente        String?
+  tipoCuentaCliente   String?  // AHORROS | CORRIENTE
+  numeroCuentaCliente String?
+  // Estado del cliente (activo/inactivo)
+  activo          Boolean  @default(true)
+  // === Autenticación del portal (PIN de 4 dígitos) ===
+  pinHash            String?
+  pinCreatedAt       DateTime?
+  pinIntentos        Int      @default(0)
+  pinBloqueadoHasta  DateTime?
+  ultimoAccesoPortal DateTime?
+  // === Clave alfanumérica del cliente (más robusta que el PIN) ===
+  // Permite al cliente iniciar sesión con cédula + clave en el portal.
+  // El gestor puede regenerarla desde el módulo de Seguridad cuando el cliente olvida.
+  claveHash             String?
+  claveCreatedAt        DateTime?
+  claveIntentos         Int      @default(0)
+  claveBloqueadoHasta   DateTime?
+  claveResetToken       String?  // token temporal para resetear desde un enlace
+  claveResetExpira      DateTime?
+  // Tasa personalizada (si el cliente tiene una tasa especial acordada)
+  tieneTasaPersonalizada Boolean @default(false)
+  tasaPersonalizada      Float?  // % mensual fija aplicada sobre capital inicial
+  // Sesión del portal (token + expiración persistidos para validar solicitudes web)
+  tokenSesion     String?
+  tokenExpira     DateTime?
+  // === TOTP para chat interno del portal (reemplaza OTP WhatsApp) ===
+  // Solo aplica al chat de comunicaciones internas. Los demás OTP (firma de pagaré,
+  // código de aprobación de préstamo, MFA de admin, recuperación de clave) siguen intactos.
+  totpSecret       String?   // secreto base32 (160 bits)
+  totpEnabled      Boolean   @default(false)
+  totpCreatedAt    DateTime?
+  totpLastUsed     DateTime?
+  // Referido por (otro cliente)
+  referidoPorId   String?
+  referidoPor     Cliente?  @relation("ClienteReferido", fields: [referidoPorId], references: [id])
+  referidos       Cliente[] @relation("ClienteReferido")
+  categoriaId     String?
+  categoria       CategoriaCliente? @relation(fields: [categoriaId], references: [id])
+  // === Cuenta de recaudo asignada al cliente ===
+  // El cliente debe pagar ÚNICAMENTE a esta cuenta salvo instrucción explícita del gestor.
+  // Si no se asigna, se usa la cuenta asociada a su categoría (categoría.cuentaRecaudoId).
+  cuentaRecaudoId String?
+  cuentaRecaudo   CuentaRecaudo? @relation("ClienteCuentaRecaudo", fields: [cuentaRecaudoId], references: [id])
+  // === Instrucción de pago temporal (cuando el gestor cambia la cuenta para uno o más pagos) ===
+  instruccionCuentaId   String?  // ID de cuenta temporal sobreescrita por el gestor
+  instruccionCuentaNota String?  // explicación del cambio (ej: "Pago puntual a CTA-3 por cierre mes")
+  instruccionCuentaExpira DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  prestamos       Prestamo[]
+  campañasVistas  CampañaVista[]
+  firmas          FirmaElectronica[]
+  tokensFirma     TokenFirma[] @relation("ClienteTokenFirma")
+  documentosGestor DocumentoGestor[] @relation("DocumentosCliente")
+  accesosPortal   AccesoPortal[] @relation("ClienteAccesosPortal")
+  solicitudesWeb  SolicitudWeb[]
+  conversacionesChat ConversacionChat[]
+  otpsChat        OtpChat[]
+  otpRegistros    OtpRegistro[] @relation("ClienteOtpRegistro")
+}
+
+// -----------------------------------------------------
+// CATEGORÍA DE CLIENTE (Admin)
+// Define valores máximos y tasa por categoría (1-4)
+// -----------------------------------------------------
+model CategoriaCliente {
+  id              String   @id @default(cuid())
+  codigo          String   @unique  // CAT-1, CAT-2, CAT-3, CAT-4
+  nombre          String
+  montoMinimo     Float
+  montoMaximo     Float
+  tasaInteresAnual Float
+  tasaMoraAnual   Float
+  descripcion     String?
+  activa          Boolean  @default(true)
+  cuentaRecaudoId String?
+  cuentaRecaudo   CuentaRecaudo? @relation(fields: [cuentaRecaudoId], references: [id])
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  clientes        Cliente[]
+  prestamos       Prestamo[]
+}
+
+// -----------------------------------------------------
+// CUENTAS DE RECAUDO (Admin)
+// 4 cuentas bancarias donde los clientes pagan según categoría
+// -----------------------------------------------------
+model CuentaRecaudo {
+  id              String   @id @default(cuid())
+  codigo          String   @unique  // CTA-1, CTA-2, CTA-3, CTA-4
+  nombre          String
+  banco           String
+  tipoCuenta      String   // AHORROS | CORRIENTE
+  numeroCuenta    String
+  titular         String
+  activa          Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  categorias      CategoriaCliente[]
+  clientes        Cliente[] @relation("ClienteCuentaRecaudo")
+  pagos           Pago[]
+}
+
+// -----------------------------------------------------
+// PRÉSTAMO
+// Interés FIJO calculado sobre capital inicial (no varía)
+// Mora compuesta diaria calculada sobre saldo de cuota vencida
+// -----------------------------------------------------
+model Prestamo {
+  id                  String   @id @default(cuid())
+  codigo              String   @unique
+  clienteId           String
+  cliente             Cliente  @relation(fields: [clienteId], references: [id])
+  categoriaId         String?
+  categoria           CategoriaCliente? @relation(fields: [categoriaId], references: [id])
+
+  // Variables bancarias
+  montoPrincipal      Float    // CAPITAL INICIAL (base fija para intereses)
+  tasaInteresAnual    Float    // % anual asignable (fijo de inicio a fin)
+  tasaInteresMensual  Float    @default(0) // % mensual calculado automáticamente
+  tasaMoraDiaria      Float    // % moratorio DIARIO (ej: 1 = 1% diario)
+  plazoMeses          Int
+  frecuencia          String   // MENSUAL | QUINCENAL | SEMANAL
+  numeroCuotas        Int
+  montoCuota          Float    // cuota FIJA
+  totalInteres        Float    // interés total calculado sobre capital inicial
+  totalPagar          Float
+  tasaAplicada        Float
+
+  // Mora configurable
+  tasaMoraPersonalizada Float?  // si el admin la modifica para este préstamo
+  moraCompuestaDiaria Boolean @default(true)  // mora compuesta diaria
+  montoMoraAcumulado  Float   @default(0)
+
+  // === Mora renegociada / anulada (acuerdo con el cliente) ===
+  // Si está seteada, reemplaza la mora calculada automáticamente en el módulo de pagos.
+  // El gestor puede: ANULAR (fija en 0) o NEGOCIAR (fija en un valor acordado).
+  moraRenegociada             Float?    // valor acordado que reemplaza la mora calculada
+  moraRenegociadaAccion       String?   // ANULADA | NEGOCIADA
+  moraRenegociadaFecha        DateTime?
+  moraRenegociadaPorId        String?   // usuarioId que renegoció
+  moraRenegociadaPorNombre    String?
+  moraRenegociadaObservacion  String?   // explicación del acuerdo tomado con el cliente
+  moraRenegociadaMoraOriginal Float?    // snapshot de la mora calculada al momento de renegociar
+
+  // Fechas y estado
+  fechaSolicitud      DateTime @default(now())
+  fechaAprobacion     DateTime?
+  fechaDesembolso     DateTime?
+  fechaVencimiento    DateTime?
+  estado              String   @default("SOLICITUD")
+  // SOLICITUD | PENDIENTE_ACEPTACION | ACTIVO | EN_MORA | JURIDICO | CANCELADO | RECHAZADO
+
+  // Aceptación T&C
+  tycEnviado          Boolean  @default(false)
+  tycAceptado         Boolean  @default(false)
+  tycFechaAceptacion  DateTime?
+  tycToken            String?  // token único para validar desde WhatsApp
+  metodoConfirmacion  String?  // LINK | CORREO | WHATSAPP_API (método elegido por el gestor)
+
+  // Documentos
+  requiereDocumentos  Boolean  @default(true)
+  generarPagare       Boolean  @default(true)
+  generarCarta        Boolean  @default(true)
+  docsDatosAdicionales String? // JSON con datos completos pagare/carta
+
+  // Codeudor (respaldo del préstamo)
+  tieneCodeudor       Boolean  @default(false)
+  codeudorId          String?  // ID del cliente que es codeudor (de la matriz de clientes)
+  codeudorNombre      String?
+  codeudorCedula      String?
+  codeudorTelefono    String?
+  codeudorEmail       String?
+  codeudorDireccion   String?
+  codeudorFirmaId     String?  // ID de la firma electrónica del codeudor
+
+  // Firma
+  firmaId             String?  // referencia a firma electrónica
+
+  // Saldo
+  saldoCapital        Float    @default(0)
+  saldoInteres        Float    @default(0)
+  saldoTotal          Float    @default(0)
+  cuotasPagadas       Int      @default(0)
+  montoPagado         Float    @default(0)
+  montoMora           Float    @default(0)
+  diasMora            Int      @default(0)
+
+  // Fondo de garantía (5% primer préstamo)
+  fondoGarantiaCargado Boolean @default(false)
+  fondoGarantiaMonto  Float    @default(0)
+
+  notas               String?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  pagos               Pago[]
+  pagosProgramados    PagoProgramado[]
+  refinanciaciones    Refinanciacion[]
+  casoJuridico        CasoJuridico?
+  notificaciones      NotificacionLog[]
+  documentos      DocumentoGestor[] @relation("DocumentosPrestamo")
+  firmas              FirmaElectronica[]
+  tokensFirma         TokenFirma[] @relation("PrestamoTokenFirma")
+  movimientosCaja     MovimientoCaja[]
+}
+
+// -----------------------------------------------------
+// PAGO
+// -----------------------------------------------------
+model Pago {
+  id              String   @id @default(cuid())
+  codigo          String?  // código único para link de pago
+  prestamoId      String
+  prestamo        Prestamo @relation(fields: [prestamoId], references: [id])
+  numeroCuota     Int
+  montoCapital    Float
+  montoInteres    Float
+  montoMora       Float    @default(0)
+  montoTotal      Float
+  fechaPago       DateTime?
+  fechaVencimiento DateTime
+  metodoPago      String   @default("EFECTIVO")
+  referencia      String?
+  cuentaRecaudoId String?
+  cuentaRecaudo   CuentaRecaudo? @relation(fields: [cuentaRecaudoId], references: [id])
+  estado          String   @default("PENDIENTE")
+  // PENDIENTE | APLICADO | ANULADO | REVERSADO | VENCIDO | PAGO_PARCIAL
+  linkPago        String?
+  linkExpira      DateTime?
+  notas           String?
+
+  // === Modo "Solo Intereses" (v4.0) ===
+  // Cuando el cliente solo abona intereses, el capital de esa cuota
+  // se difiere (no se paga ahora), la cuota "se corre" a la siguiente
+  // fecha de vencimiento, y no se genera mora sobre esa cuota.
+  esSoloIntereses Boolean  @default(false)
+  cuotaAplazadaDe Int?     // si este pago aplazó una cuota, indica cuál (snapshot)
+  fechaOriginalVencimiento DateTime? // vencimiento original antes del aplazamiento
+
+  // === Anulación (soft-delete v4.0) ===
+  // El hard-delete quedó deprecado. Anular marca estado='ANULADO' y conserva el registro.
+  motivoAnulacion String?
+  anuladoPorId    String?
+  anuladoPor      Usuario? @relation("PagoAnuladoPor", fields: [anuladoPorId], references: [id])
+  fechaAnulacion  DateTime?
+
+  // Reversión
+  reversadoPorId  String?
+  reversadoPor    Usuario? @relation(fields: [reversadoPorId], references: [id])
+  fechaReversion  DateTime?
+  motivoReversion String?
+
+  // === Comprobante de pago (v4.0) ===
+  // El cliente puede subir foto/scan de la transferencia.
+  comprobanteUrl  String?
+  comprobanteHash String?
+  comprobanteValidado Boolean @default(false)
+  comprobanteValidadoPorId String?
+  comprobanteFechaValidacion DateTime?
+
+  // === Recibo digital firmado (v4.0) ===
+  reciboHash      String?  // SHA-256 del contenido del recibo (verificación pública)
+  reciboFechaEmision DateTime?
+
+  createdAt       DateTime @default(now())
+
+  @@index([estado, fechaPago])
+  @@index([prestamoId, numeroCuota])
+  @@index([esSoloIntereses])
+}
+
+// -----------------------------------------------------
+// PAGO PROGRAMADO (v4.0 — OLA 3)
+// Materialización de la tabla de amortización.
+// Cron nocturno regenera esta tabla para escalar consultas
+// de "próximos pagos" sin recalcular en cada request.
+// -----------------------------------------------------
+model PagoProgramado {
+  id              String   @id @default(cuid())
+  prestamoId      String
+  prestamo        Prestamo @relation(fields: [prestamoId], references: [id])
+  numeroCuota     Int
+  fechaVencimiento DateTime
+  montoCapital    Float
+  montoInteres    Float
+  montoCuota      Float
+  saldoCapitalDespues Float
+  // Estado calculado del cron
+  estado          String   @default("PROGRAMADO")
+  // PROGRAMADO | PAGADO | PARCIAL | VENCIDO | APLAZADO
+  montoPagado     Float    @default(0)
+  moraCalculada  Float    @default(0)  // snapshot de mora al momento del cron
+  diasMora       Int      @default(0)
+  fechaUltimaActualizacion DateTime @default(now())
+  // Aplazamiento por "solo intereses"
+  fechaOriginalVencimiento DateTime?
+  aplazado       Boolean  @default(false)
+
+  @@unique([prestamoId, numeroCuota])
+  @@index([fechaVencimiento, estado])
+  @@index([prestamoId, estado])
+}
+
+// -----------------------------------------------------
+// REFINANCIACIÓN (v4.0 — OLA 3)
+// Acuerdo de refinanciación: genera nueva tabla de amortización
+// a partir del saldo pendiente, opcionalmente capitalizando mora.
+// -----------------------------------------------------
+model Refinanciacion {
+  id              String   @id @default(cuid())
+  prestamoId      String
+  prestamo        Prestamo @relation(fields: [prestamoId], references: [id])
+  tipo            String   // REFINANCIACION | REESTRUCTURACION | ACUERDO_PAGO
+  estado          String   @default("PENDIENTE")
+  // PENDIENTE | ACEPTADA | RECHAZADA | FIRMADA | ANULADA
+
+  // Snapshot del préstamo al momento de la refinanciación
+  saldoCapitalAntes   Float
+  saldoInteresAntes   Float
+  moraAntes           Float
+  totalAntes          Float
+
+  // Nueva propuesta
+  nuevoMontoPrincipal Float  // saldo + mora capitalizada (si aplica)
+  nuevaTasaInteresAnual Float
+  nuevoPlazoMeses     Int
+  nuevaFrecuencia     String
+  nuevasCuotas        Int
+  nuevoMontoCuota     Float
+
+  // Capitalización
+  capitalizaMora      Boolean @default(false)
+  capitalizaInteres   Boolean @default(false)
+
+  // Auditoría
+  solicitadoPorId     String?
+  aprobadoPorId       String?
+  fechaSolicitud      DateTime @default(now())
+  fechaAprobacion     DateTime?
+  fechaFirma          DateTime?
+  observaciones       String?
+
+  // Firma
+  firmaId             String?
+
+  // Nueva tabla de amortización (JSON serializado)
+  nuevaTablaAmortizacion String?
+
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@index([prestamoId, estado])
+}
+
+
+// -----------------------------------------------------
+// CASO JURÍDICO
+// Reforzado: documentación paso a paso + exportación Word/PDF
+// -----------------------------------------------------
+model CasoJuridico {
+  id              String   @id @default(cuid())
+  prestamoId      String   @unique
+  prestamo        Prestamo @relation(fields: [prestamoId], references: [id])
+
+  estado          String   @default("PRE_JUDICIAL")
+  // PRE_JUDICIAL | DEMANDA | EJECUCION | COBRO_JUDICIAL | CONCILIACION | SENTENCIA | CERRADO
+
+  abogadoNombre   String?
+  abogadoTelefono String?
+  abogadoEmail    String?
+  abogadoAsignado Boolean @default(false)
+  honorarios      Float    @default(0)
+  honorariosPagados Float @default(0)
+
+  juzgado         String?
+  radicado        String?
+  tipoProceso     String? // EJECUTIVO | VERBAL | EJECUTIVO_HIPOTECARIO
+  valorReclamado  Float?
+  fechaPresentacionDemanda DateTime?
+  fechaAdmision   DateTime?
+  fechaEmbargo    DateTime?
+  fechaAudiencia  DateTime?
+  descripcion     String?
+  fechaApertura   DateTime @default(now())
+  fechaCierre     DateTime?
+  resultadoFinal  String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  cronologias     CronologiaCaso[]
+  documentos      DocumentoLegal[]
+  alertas         AlertaLegal[]
+}
+
+// -----------------------------------------------------
+// CRONOLOGÍA DEL CASO (reforzada - paso a paso)
+// -----------------------------------------------------
+model CronologiaCaso {
+  id              String   @id @default(cuid())
+  casoId          String
+  caso            CasoJuridico @relation(fields: [casoId], references: [id])
+  fecha           DateTime @default(now())
+  tipoEvento      String
+  // AUDIENCIA | ESCRITO | RESOLUCION | NOTIFICACION | REUNION | PAGO | EMBARGO | OTRO
+  titulo          String
+  descripcion     String?
+  resultado       String?
+  actor           String?  // quien hizo la acción
+  documentoAnexo  String?  // nombre de archivo si se adjuntó
+  monto           Float?   // si aplica (honorarios, pagos parciales)
+  createdAt       DateTime @default(now())
+}
+
+// -----------------------------------------------------
+// DOCUMENTOS LEGALES
+// -----------------------------------------------------
+model DocumentoLegal {
+  id              String   @id @default(cuid())
+  casoId          String
+  caso            CasoJuridico @relation(fields: [casoId], references: [id])
+  tipo            String
+  // CONTRATO | PAGARE | DEMANDA | NOTIFICACION | ANEXO | SENTENCIA | ACUERDO_PAGO | OTRO
+  nombre          String
+  descripcion     String?
+  contenido       String?
+  fechaSubida     DateTime @default(now())
+}
+
+// -----------------------------------------------------
+// ALERTAS LEGALES
+// -----------------------------------------------------
+model AlertaLegal {
+  id              String   @id @default(cuid())
+  casoId          String
+  caso            CasoJuridico @relation(fields: [casoId], references: [id])
+  fechaAlerta     DateTime
+  tipo            String
+  descripcion     String
+  atendida        Boolean  @default(false)
+  fechaAtencion   DateTime?
+  createdAt       DateTime @default(now())
+}
+
+// -----------------------------------------------------
+// CAJAS MENORES - Contabilidad de ingresos/egresos
+// -----------------------------------------------------
+model CajaMenor {
+  id              String   @id @default(cuid())
+  codigo          String   @unique  // CAJA-MORA | CAJA-GARANTIA
+  nombre          String
+  descripcion     String?
+  saldoActual     Float    @default(0)
+  totalIngresos   Float    @default(0)
+  totalEgresos    Float    @default(0)
+  activa          Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  movimientos     MovimientoCaja[]
+}
+
+// -----------------------------------------------------
+// MOVIMIENTOS DE CAJA (ingresos y egresos)
+// -----------------------------------------------------
+model MovimientoCaja {
+  id              String   @id @default(cuid())
+  cajaId          String
+  caja            CajaMenor @relation(fields: [cajaId], references: [id])
+  tipo            String   // INGRESO | EGRESO
+  monto           Float
+  concepto        String
+  referencia      String?  // código del préstamo, pago, etc.
+  prestamoId      String?
+  fechaMovimiento DateTime @default(now())
+  creadoPor       String?
+  ambito          String   @default("NEGOCIO") // NEGOCIO | PERSONAL
+  usuarioId       String?
+  usuario         Usuario? @relation(fields: [usuarioId], references: [id])
+  prestamo        Prestamo? @relation(fields: [prestamoId], references: [id])
+  createdAt       DateTime @default(now())
+  movimientoCajaExtendido MovimientoCajaExtendido?
+
+  @@index([ambito, fechaMovimiento])
+  @@index([tipo])
+}
+
+// -----------------------------------------------------
+// FIRMA ELECTRÓNICA - dibujada + OTP
+// -----------------------------------------------------
+model FirmaElectronica {
+  id              String   @id @default(cuid())
+  prestamoId      String?
+  prestamo        Prestamo? @relation(fields: [prestamoId], references: [id])
+  clienteId       String?
+  cliente         Cliente?  @relation(fields: [clienteId], references: [id])
+  tipo            String   // PAGARE | CONTRATO | ACUERDO_PAGO | TYC
+  imagenFirma     String   // base64 de la firma dibujada
+  otpEnviado      Boolean  @default(false)
+  otpValidado     Boolean  @default(false)
+  otpCodigo       String?
+  otpCanal        String?  // WHATSAPP | EMAIL | AMBOS
+  otpFechaEnvio   DateTime?
+  otpFechaValidacion DateTime?
+  documentoFirmado String? // base64 del PDF firmado
+
+  // === Verificación de identidad con fotos ===
+  fotoDocumento   String?  // base64 foto del documento de identidad (frente)
+  fotoSelfie      String?  // base64 foto selfie sosteniendo la cédula
+  fotoDocumentoHash String? // hash SHA-256 de la foto del documento
+  fotoSelfieHash  String?  // hash SHA-256 del selfie
+  ipFirma         String?  // IP desde donde se firmó
+  userAgent       String?  // navegador/dispositivo usado
+  geoUbicacion    String?  // coordenadas GPS si están disponibles (JSON)
+  fechaSubidaFotos DateTime?
+  fechaFirmaCompleta DateTime?
+
+  // Estado del proceso de firma
+  estadoFirma     String   @default("PENDIENTE") // PENDIENTE | FOTOS_SUBIDAS | FIRMA_DIBUJADA | OTP_ENVIADO | COMPLETADA | RECHAZADA | EXPIRADA
+  intentosOTP     Int      @default(0)
+  maxIntentos     Int      @default(5)
+
+  // === Firma de codeudor (si aplica) ===
+  esFirmaCodeudor Boolean  @default(false) // true = esta firma es del codeudor
+  firmanteRol     String?  // DEUDOR | CODEUDOR
+  firmanteNombre  String?  // nombre de quien firma
+  firmanteCedula  String?  // cédula de quien firma
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  tokens          TokenFirma[]
+}
+
+// -----------------------------------------------------
+// TOKEN DE FIRMA PÚBLICA (acceso sin login)
+// Permite al cliente firmar desde un link seguro
+// -----------------------------------------------------
+model TokenFirma {
+  id              String   @id @default(cuid())
+  token           String   @unique
+  firmaId         String
+  firma           FirmaElectronica @relation(fields: [firmaId], references: [id])
+  prestamoId      String?
+  prestamo        Prestamo? @relation("PrestamoTokenFirma", fields: [prestamoId], references: [id])
+  clienteId       String?
+  cliente         Cliente?  @relation("ClienteTokenFirma", fields: [clienteId], references: [id])
+  usado           Boolean  @default(false)
+  fechaExpiracion DateTime
+  fechaUsado      DateTime?
+  createdAt       DateTime @default(now())
+}
+
+// -----------------------------------------------------
+// NOTIFICACIONES WHATSAPP
+// -----------------------------------------------------
+model NotificacionLog {
+  id              String   @id @default(cuid())
+  prestamoId      String?
+  prestamo        Prestamo? @relation(fields: [prestamoId], references: [id])
+  clienteTelefono String
+  tipo            String
+  // SOLICITUD | APROBACION | PAGO | CANCELACION | RECORDATORIO | MORA | LEGAL | TYC | OTP | CAMPANA
+  mensaje         String
+  estado          String   @default("PENDIENTE")
+  // PENDIENTE | ENVIADO | FALLIDO | PENDIENTE_MANUAL
+  error           String?
+  linkWaMe        String?  // enlace wa.me para envío manual
+  fechaEnvio      DateTime @default(now())
+}
+
+// -----------------------------------------------------
+// CAMPAÑAS (publicadas para clientes)
+// -----------------------------------------------------
+model Campaña {
+  id              String   @id @default(cuid())
+  titulo          String
+  descripcion     String
+  contenido       String?  // HTML o texto enriquecido
+  imagenUrl       String?
+  tipo            String   // PROMOCION | INFORMATIVO | RECORDATORIO | OFERTA
+  fechaInicio     DateTime @default(now())
+  fechaFin        DateTime?
+  activa          Boolean  @default(true)
+  destinatarios   String   @default("TODOS") // TODOS | CATEGORIA-1 | CATEGORIA-2...
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  vistas          CampañaVista[]
+}
+
+model CampañaVista {
+  id              String   @id @default(cuid())
+  campañaId       String
+  campaña         Campaña  @relation(fields: [campañaId], references: [id])
+  clienteId       String?
+  cliente         Cliente? @relation(fields: [clienteId], references: [id])
+  fechaVista      DateTime @default(now())
+}
+
+// -----------------------------------------------------
+// CONFIGURACIÓN DEL SISTEMA (Control General)
+// -----------------------------------------------------
+model Configuracion {
+  id              String   @id @default(cuid())
+  clave           String   @unique
+  valor           String
+  descripcion     String?
+  updatedAt       DateTime @updatedAt
+}
+
+// -----------------------------------------------------
+// BITÁCORA DE PRÉSTAMO (trazabilidad por código de préstamo)
+// Se puede usar desde la sección Jurídica o desde el detalle del préstamo
+// -----------------------------------------------------
+model BitacoraPrestamo {
+  id              String   @id @default(cuid())
+  prestamoId      String
+  prestamoCodigo  String   // código del préstamo para trazabilidad
+  usuarioId       String?
+  usuario         Usuario? @relation(fields: [usuarioId], references: [id])
+  usuarioNombre   String   // nombre del usuario que registra (snapshot)
+  tipo            String   // NOTA | LLAMADA | VISITA | EMAIL | WHATSAPP | REUNION | PAGO | JURIDICO | OTRO
+  titulo          String
+  descripcion     String
+  resultado       String?
+  fechaEvento     DateTime @default(now())
+  createdAt       DateTime @default(now())
+}
+
+// -----------------------------------------------------
+// AUDIT LOG - Registro inmutable de todas las acciones sensibles
+// Append-only: nunca se borra, nunca se edita
+// -----------------------------------------------------
+model AuditLog {
+  id              String   @id @default(cuid())
+  usuarioId       String?
+  usuario         Usuario? @relation(fields: [usuarioId], references: [id])
+  usuarioNombre   String   // snapshot del nombre
+  accion          String   // LOGIN | LOGOUT | CREATE | UPDATE | DELETE | REVERSAR | ELIMINAR | APROBAR | etc.
+  modulo          String   // clientes | prestamos | pagos | juridico | cajas | usuarios | etc.
+  entidadId       String?  // ID de la entidad afectada
+  entidadNombre   String?  // nombre/descripción de la entidad
+  detalles        String?  // JSON con cambios detalles
+  ipOrigen        String?  // IP desde donde se hizo la acción
+  userAgent       String?  // navegador/dispositivo
+  exito           Boolean  @default(true)
+  errorMessage    String?
+  fecha           DateTime @default(now())
+}
+
+// -----------------------------------------------------
+// CÓDIGO DE CONFIRMACIÓN POR CORREO
+// Reemplaza el link de WhatsApp por un código que el cliente
+// recibe en su email y debe compartir con el gestor para aprobar
+// -----------------------------------------------------
+model CodigoConfirmacion {
+  id              String   @id @default(cuid())
+  prestamoId      String
+  // Rol del destinatario del código:
+  //   'DEUDOR'     → obligatorio, siempre se genera uno para el titular del préstamo.
+  //   'CODEUDOR'   → se genera adicionalmente solo si prestamo.tieneCodeudor=true.
+  // Cuando el préstamo NO tiene codeudor, basta con verificar el rol 'DEUDOR'
+  // para activarlo. Cuando SÍ tiene codeudor, AMBOS roles deben verificarse
+  // antes de que el sistema pueda aprobar/activar el préstamo.
+  rol             String   @default("DEUDOR")
+  codigo          String   // código alfanumérico de 6 caracteres
+  emailCliente    String   // email al que se envió
+  usado           Boolean  @default(false)
+  verificado      Boolean  @default(false)
+  fechaGeneracion DateTime @default(now())
+  fechaExpiracion DateTime
+  fechaVerificacion DateTime?
+  intentos        Int      @default(0)
+  createdAt       DateTime @default(now())
+
+  // Solo puede existir un código activo por (préstamo + rol).
+  @@unique([prestamoId, rol])
+}
+
+// -----------------------------------------------------
+// CONEXIONES DE API EXTERNAS
+// -----------------------------------------------------
+model ConexionAPI {
+  id              String   @id @default(cuid())
+  nombre          String
+  tipo            String   // WHATSAPP_BUSINESS | TWILIO | EMAIL_SMTP | BANCOLOMBIA | BANCOLOMBIA_BOTON_PAGO | DAVIVIENDA | PSE | WEBHOOK | OTRO
+  descripcion     String?
+  url             String?
+  apiKey          String?
+  apiSecret       String?
+  usuario         String?
+  password        String?
+  accountId       String?
+  telefonoOrigen String?
+  configuracionExtra String?
+  activa          Boolean  @default(false)
+  probada         Boolean  @default(false)
+  fechaUltimaPrueba DateTime?
+  resultadoUltimaPrueba String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+// -----------------------------------------------------
+// AUTOMATIZACIONES v3.0
+// Tareas programadas y reglas automáticas del sistema
+// -----------------------------------------------------
+model Automatizacion {
+  id              String   @id @default(cuid())
+  nombre          String
+  descripcion     String?
+  tipo            String   // RECORDATORIO_PAGO | ESCALACION_MORA | COBRO_AUTOMATICO | WHATSAPP_AUTO | REPORTES_PROGRAMADOS | SINCRONIZACION_BANCARIA
+  modulo          String   @default("general") // pagos | prestamos | juridico | clientes | general
+  condicion       String?  // JSON con la condición (ej: diasMora > 5)
+  accion          String?  // JSON con la acción a ejecutar
+  activa          Boolean  @default(true)
+  intervaloMinutos Int     @default(60)
+  ultimaEjecucion DateTime?
+  proximaEjecucion DateTime?
+  ejecucionesTotales Int   @default(0)
+  ejecucionesExitosas Int  @default(0)
+  ejecucionesFallidas Int  @default(0)
+  creadorId       String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  ejecuciones     EjecucionAutomatizacion[]
+}
+
+model EjecucionAutomatizacion {
+  id              String   @id @default(cuid())
+  automatizacionId String
+  automatizacion  Automatizacion @relation(fields: [automatizacionId], references: [id], onDelete: Cascade)
+  fechaInicio     DateTime @default(now())
+  fechaFin        DateTime?
+  estado          String   @default("PENDIENTE") // PENDIENTE | EJECUTANDO | COMPLETADA | FALLIDA
+  resultado       String?
+  error           String?
+  entidadesAfectadas Int   @default(0)
+  metadata        String?
+  createdAt       DateTime @default(now())
+}
+
+// -----------------------------------------------------
+// VERSIONES DEL SISTEMA v3.0
+// Permite cambiar entre versiones del sistema (configuración/esquema)
+// -----------------------------------------------------
+model VersionSistema {
+  id              String   @id @default(cuid())
+  numero          String   @unique  // ej: 3.0.0
+  nombre          String
+  descripcion     String?
+  cambios         String?  // JSON con changelog
+  tipo            String   @default("MAYOR") // MAYOR | MENOR | PATCH | HOTFIX | RESTAURACION
+  activa          Boolean  @default(false)
+  creadorId       String?
+  fechaActivacion DateTime?
+  backupId        String?  // backup generado antes de activar
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+// -----------------------------------------------------
+// BACKUPS v3.0
+// Backups manuales / automáticos / pre-activación de versión
+// -----------------------------------------------------
+model Backup {
+  id              String   @id @default(cuid())
+  nombre          String
+  tipo            String   @default("MANUAL") // MANUAL | AUTOMATICO | PRE_ACTIVACION
+  tamano          Int      @default(0)  // bytes
+  rutaArchivo     String   // ruta relativa en /backups
+  checksum        String?  // SHA-256
+  entidadTipo     String?  // TODOS | SOLO_CLIENTES | SOLO_PRESTAMOS...
+  estado          String   @default("COMPLETADO") // COMPLETADO | FALLIDO | RESTAURADO
+  generadoPor     String?
+  restauradoEn    DateTime?
+  metadata        String?  // JSON con info detallada
+  createdAt       DateTime @default(now())
+}
+
+// -----------------------------------------------------
+// ACCESO PORTAL v3.0
+// Trazabilidad de accesos al portal del cliente
+// -----------------------------------------------------
+model AccesoPortal {
+  id              String   @id @default(cuid())
+  clienteId       String?
+  cliente         Cliente?  @relation("ClienteAccesosPortal", fields: [clienteId], references: [id])
+  clienteCedula   String?
+  clienteNombre   String?
+  ipOrigen        String?
+  userAgent       String?
+  accion          String   // LOGIN | CONSULTA | INTENTO_FALLIDO | LOGOUT | CAMBIO_PIN | VERIFICAR_CEDULA
+  exito           Boolean  @default(true)
+  detalle         String?
+  metadata        String?  // JSON con info adicional
+  createdAt       DateTime @default(now())
+}
+
+// -----------------------------------------------------
+// SEGURIDAD DE MÓDULOS
+// -----------------------------------------------------
+model SeguridadModulo {
+  id              String   @id @default(cuid())
+  moduloKey       String   @unique
+  moduloNombre    String
+  protegido       Boolean  @default(false)
+  claveHash       String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+// -----------------------------------------------------
+// SINCRONIZACIÓN DE PLATAFORMAS (GitHub / Vercel / Neon)
+// Permite activar/desactivar sincronización en tiempo real
+// desde el Módulo de Seguridad.
+// -----------------------------------------------------
+model PlataformaSync {
+  id                String   @id @default(cuid())
+  plataforma        String   @unique               // "GITHUB" | "VERCEL" | "NEON"
+  nombreMostrar     String                          // "GitHub" | "Vercel" | "Neon Database"
+  descripcion       String?
+  // Estado de sincronización
+  sincronizado      Boolean  @default(false)        // toggle principal: ON/OFF
+  tiempoReal        Boolean  @default(false)        // sincronización en tiempo real (webhooks)
+  // Configuración de conexión
+  endpoint          String?                          // URL base de la API de la plataforma
+  proyectoRef       String?                          // owner/repo (GitHub), project-id (Vercel), project-id (Neon)
+  region            String?                          // región del recurso (Neon/Vercel)
+  ramaPrincipal     String?  @default("main")        // rama GitHub a sincronizar
+  // Credenciales cifradas (PAT / API Token) — almacenados cifrados con API_ENCRYPTION_KEY
+  tokenCifrado      String?
+  webhookSecret     String?                          // secreto compartido para validar webhooks entrantes
+  webhookUrl        String?                          // URL pública que recibirá eventos de la plataforma
+  // Estado y diagnóstico
+  ultimoSync        DateTime?
+  ultimoEstado      String?                          // "OK" | "ERROR" | "PENDIENTE" | "NO_CONFIGURADO"
+  ultimoError       String?
+  eventosRecibidos  Int      @default(0)             // contador de webhooks procesados
+  // Metadatos
+  configJson        String?                          // JSON con configuración adicional específica por plataforma
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+}
+
+// -----------------------------------------------------
+// PRÉSTAMOS BANCARIOS (Contabilidad)
+// -----------------------------------------------------
+model PrestamoBancario {
+  id              String   @id @default(cuid())
+  nombre          String
+  banco           String
+  tipo            String   @default("PRESTAMO")
+  montoPrincipal  Float
+  tasaAnual       Float
+  plazoMeses      Int      @default(0)
+  seguroMensual   Float    @default(0)
+  fechaDesembolso DateTime @default(now())
+  estado          String   @default("ACTIVO")
+  descripcion     String?
+  cupoTotal       Float    @default(0)
+  saldoUtilizado  Float    @default(0)
+  cupoDisponible  Float    @default(0)
+  diaCorte        Int      @default(1)
+  diaPago         Int      @default(15)
+  pagoMinimo      Float    @default(0)
+  pagoTotalSin    Float    @default(0)
+  fechaCorteActual DateTime?
+  fechaPagoProximo DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+// -----------------------------------------------------
+// GESTOR DOCUMENTAL
+// -----------------------------------------------------
+model DocumentoGestor {
+  id              String   @id @default(cuid())
+  prestamoId      String?
+  prestamo        Prestamo? @relation("DocumentosPrestamo", fields: [prestamoId], references: [id])
+  clienteId       String?
+  cliente         Cliente?  @relation("DocumentosCliente", fields: [clienteId], references: [id])
+  tipo            String
+  titulo          String
+  descripcion     String?
+  archivoBase64   String
+  archivoNombre   String
+  archivoTipo     String
+  archivoTamano   Int
+  subidoPor       String?
+  fechaSubida     DateTime @default(now())
+  createdAt       DateTime @default(now())
+}
+
+// -----------------------------------------------------
+// SOLICITUD WEB (v3.2)
+// -----------------------------------------------------
+model SolicitudWeb {
+  id              String   @id @default(cuid())
+  codigo          String   @unique
+  clienteId       String
+  cliente         Cliente  @relation(fields: [clienteId], references: [id])
+  clienteNombre   String
+  clienteCedula   String
+  clienteTelefono String
+  clienteEmail    String?
+  valorSolicitado     Float
+  numeroCuotas        Int
+  frecuencia          String
+  tasaUtilizada       Float
+  tasaOrigen          String
+  cuotaEstimada       Float
+  totalIntereses      Float
+  totalPagar          Float
+  primerPagoFecha     DateTime?
+  tablaAmortizacion   String?
+  fechaCreacion    DateTime @default(now())
+  ipOrigen         String?
+  dispositivo      String?
+  navegador        String?
+  canalOrigen      String   @default("PORTAL_CLIENTE")
+  estado           String   @default("PENDIENTE")
+  observaciones    String?
+  revisadoPor      String?
+  fechaRevision    DateTime?
+  prestamoCreadoId String?
+  fechaConversion  DateTime?
+  historialEstados String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  @@index([estado])
+  @@index([clienteId])
+}
+
+// -----------------------------------------------------
+// CENTRO DE COMUNICACIONES (v3.5)
+// -----------------------------------------------------
+model ConversacionChat {
+  id              String   @id @default(cuid())
+  codigo          String   @unique
+  clienteId       String
+  cliente         Cliente  @relation(fields: [clienteId], references: [id])
+  asesorId        String?
+  asesor          Usuario? @relation("AsesorConversaciones", fields: [asesorId], references: [id])
+  asunto          String   @default("Conversación general")
+  moduloReferencia String?
+  entidadRefId    String?
+  estado          String   @default("ACTIVA")
+  otpVerificado       Boolean  @default(false)
+  otpMetodo           String?
+  otpFechaVerificacion DateTime?
+  otpSessionId        String?
+  otpIpVerificacion   String?
+  otpUserAgent        String?
+  ultimaActividad DateTime @default(now())
+  fechaCierre     DateTime?
+  motivoCierre    String?
+  pdfHistorialUrl String?
+  resumenIA       String?
+  permiteArchivos Boolean @default(true)
+  permiteNotasInternas Boolean @default(true)
+  metadata        String?
+  mensajes        MensajeChat[]
+  notasInternas   NotaInterna[]
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  @@index([clienteId])
+  @@index([estado])
+}
+
+model MensajeChat {
+  id              String   @id @default(cuid())
+  conversacionId  String
+  conversacion    ConversacionChat @relation(fields: [conversacionId], references: [id])
+  remitenteTipo   String
+  remitenteId     String?
+  remitenteNombre String
+  contenido       String
+  tipoMensaje     String   @default("TEXTO")
+  archivoUrl      String?
+  archivoNombre   String?
+  archivoTamano   Int?
+  archivoMimeType String?
+  fechaEnvio      DateTime @default(now())
+  fechaEntregado  DateTime?
+  fechaLeido      DateTime?
+  estado          String   @default("ENVIADO")
+  metadata        String?
+  createdAt       DateTime @default(now())
+  @@index([conversacionId])
+  @@index([fechaEnvio])
+}
+
+model NotaInterna {
+  id              String   @id @default(cuid())
+  conversacionId  String
+  conversacion    ConversacionChat @relation(fields: [conversacionId], references: [id])
+  autorId         String
+  autor           Usuario  @relation("AutorNotasInternas", fields: [autorId], references: [id])
+  contenido       String
+  esImportante    Boolean  @default(false)
+  createdAt       DateTime @default(now())
+  @@index([conversacionId])
+}
+
+model OtpChat {
+  id              String   @id @default(cuid())
+  clienteId       String
+  cliente         Cliente  @relation(fields: [clienteId], references: [id])
+  codigoHash      String
+  metodo          String
+  destinatario    String
+  intentos        Int      @default(0)
+  maxIntentos     Int      @default(3)
+  usado           Boolean  @default(false)
+  bloqueado       Boolean  @default(false)
+  fechaBloqueo    DateTime?
+  expiraEn        DateTime
+  ipSolicitud     String?
+  userAgent       String?
+  fechaVerificacion DateTime?
+  verificado      Boolean  @default(false)
+  sessionIdGenerado String?
+  createdAt       DateTime @default(now())
+  @@index([clienteId])
+}
+
+// -----------------------------------------------------
+// CONFIGURACIÓN GLOBAL (v3.6)
+// -----------------------------------------------------
+model ConfiguracionEmpresa {
+  id              String   @id @default(cuid())
+  nombre          String   @default("Aurora Bancaria")
+  razonSocial     String?
+  nit             String?
+  direccion       String?
+  ciudad          String?
+  pais            String   @default("Colombia")
+  telefono        String?
+  emailPrincipal  String?
+  sitioWeb        String?
+  logoUrl         String?
+  logoDarkUrl     String?
+  faviconUrl      String?
+  colorPrimario   String   @default("#6366f1")
+  colorSecundario String   @default("#a855f7")
+  idioma          String   @default("es-CO")
+  zonaHoraria     String   @default("America/Bogota")
+  moneda          String   @default("COP")
+  formatoFecha    String   @default("DD/MM/YYYY")
+  formatoHora     String   @default("HH:mm")
+  updatedAt       DateTime @updatedAt
+  updatedBy       String?
+}
+
+model Dominio {
+  id              String   @id @default(cuid())
+  nombre          String
+  url             String
+  tipo            String
+  estado          String   @default("activo")
+  ambiente        String   @default("produccion")
+  sslValido       Boolean  @default(false)
+  sslVence        DateTime?
+  ultimoCheck     DateTime?
+  usuarioResp     String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+model CorreoInstitucional {
+  id              String   @id @default(cuid())
+  nombre          String
+  email           String
+  tipo            String
+  responsable     String?
+  estado          String   @default("activo")
+  prioridad       Int      @default(0)
+  esPrincipal     Boolean  @default(false)
+  esRespaldo      Boolean  @default(false)
+  esNoReply       Boolean  @default(false)
+  smtpHost        String?
+  smtpPort        Int?
+  smtpUser        String?
+  smtpPass        String?
+  // Backup de la contraseña SMTP cifrado con llave HARDCODED en src/lib/security.ts
+  // (encryptBackup/decryptBackup). Sobrevive a pérdida de API_ENCRYPTION_KEY en .env.
+  // Permite recuperar credenciales vía "Restaurar desde backup" en Configuración Global → Correo.
+  smtpPassBackup  String?
+  smtpAuthType    String?
+  ssl             Boolean  @default(true)
+  tls             Boolean  @default(true)
+  starttls        Boolean  @default(false)
+  timeout         Int      @default(30)
+  maxReintentos   Int      @default(3)
+  limitePorMinuto Int      @default(60)
+  aliasRemitente  String?
+  nombreRemitente String?
+  ultimoTest      DateTime?
+  ultimoTestOk    Boolean?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  envios          EnvioCorreo[]
+}
+
+// -----------------------------------------------------
+// ENVIOS DE CORREO (v3.7)
+// Registro de cada correo enviado desde la plataforma
+// a través de un CorreoInstitucional configurado.
+// -----------------------------------------------------
+model EnvioCorreo {
+  id              String   @id @default(cuid())
+  correoInstitucionalId String?
+  correo          CorreoInstitucional? @relation(fields: [correoInstitucionalId], references: [id])
+  remitenteEmail  String   // email del remitente (snapshot)
+  destinatario    String   // email del destinatario (puede ser "a,b,c")
+  asunto          String
+  cuerpo          String
+  formato         String   @default("texto") // texto | html
+  adjuntos        String?  // JSON con nombres de adjuntos
+  estado          String   @default("PENDIENTE") // PENDIENTE | ENVIADO | FALLIDO | REINTENTANDO
+  intentos        Int      @default(0)
+  mensajeError    String?
+  fechaEnvio      DateTime?
+  enviadoPorId    String?
+  enviadoPorNombre String?
+  metadata        String?  // JSON adicional
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  @@index([estado])
+  @@index([correoInstitucionalId])
+}
+
+model Integracion {
+  id              String   @id @default(cuid())
+  nombre          String
+  proveedor       String
+  endpoint        String?
+  apiKey          String?
+  apiSecret       String?
+  metodoAuth      String   @default("bearer")
+  estado          String   @default("activa")
+  timeout         Int      @default(30)
+  reintentos      Int      @default(3)
+  observaciones   String?
+  ambiente        String   @default("produccion")
+  ultimoCheck     DateTime?
+  ultimoCheckOk   Boolean?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+model VariableGlobal {
+  id              String   @id @default(cuid())
+  clave           String   @unique
+  valor           String
+  tipo            String   @default("string")
+  descripcion     String?
+  categoria       String   @default("general")
+  editable        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  updatedBy       String?
+}
+
+model Ambiente {
+  id              String   @id @default(cuid())
+  nombre          String   @unique
+  descripcion     String?
+  activo          Boolean  @default(false)
+  configJson      String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+model CertificadoSSL {
+  id              String   @id @default(cuid())
+  dominio         String
+  fechaEmision    DateTime?
+  fechaVencimiento DateTime?
+  estado          String   @default("activo")
+  emisor          String?
+  diasRestantes   Int?
+  alertaEnviada   Boolean  @default(false)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+model ConfigAlmacenamiento {
+  id              String   @id @default(cuid())
+  proveedor       String   @default("local")
+  bucket          String?
+  region          String?
+  accessKey       String?
+  secretKey       String?
+  endpoint        String?
+  activo          Boolean  @default(true)
+  rutaDocumentos     String @default("/upload/documentos")
+  rutaFotos          String @default("/upload/fotos")
+  rutaContratos      String @default("/upload/contratos")
+  rutaFirmas         String @default("/upload/firmas")
+  rutaHistoriales    String @default("/upload/historiales")
+  rutaPortalCliente  String @default("/upload/portal")
+  updatedAt       DateTime @updatedAt
+  updatedBy       String?
+}
+
+model EstadoServicio {
+  id              String   @id @default(cuid())
+  servicio        String   @unique
+  estado          String   @default("operativo")
+  ultimoCheck     DateTime @default(now())
+  detalle         String?
+  latenciaMs      Int?
+}
+
+model ConfigMantenimiento {
+  id              String   @id @default(cuid())
+  activo          Boolean  @default(false)
+  mensaje         String   @default("El sistema se encuentra en mantenimiento. Volveremos pronto.")
+  inicio          DateTime?
+  fin             DateTime?
+  permitirAdmin   Boolean  @default(true)
+  updatedAt       DateTime @updatedAt
+  updatedBy       String?
+}
+
+model VersionConfiguracion {
+  id              String   @id @default(cuid())
+  numero          Int      @default(1)
+  seccion         String
+  descripcion     String?
+  configJson      String
+  usuarioId       String?
+  usuarioNombre   String?
+  ipOrigen        String?
+  userAgent       String?
+  motivo          String?
+  createdAt       DateTime @default(now())
+}
+
+model AuditoriaConfiguracion {
+  id              String   @id @default(cuid())
+  seccion         String
+  campo           String
+  valorAnterior   String?
+  valorNuevo      String?
+  usuarioId       String?
+  usuarioNombre   String?
+  ipOrigen        String?
+  userAgent       String?
+  motivo          String?
+  createdAt       DateTime @default(now())
+}
+
+// -----------------------------------------------------
+// AUDITORÍA DE SEGURIDAD — Tracking de hallazgos
+// -----------------------------------------------------
+model AuditoriaHallazgo {
+  id              String   @id @default(cuid())
+  control         String   @unique
+  estado          String   @default("pendiente")
+  nivelRiesgo     String   @default("Alto")
+  asignadoA       String?
+  fechaAsignacion DateTime?
+  fechaResolucion DateTime?
+  notasTrabajo    String?
+  ultimaAuditoria DateTime @default(now())
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+// -----------------------------------------------------
+// PLAN ESTRATÉGICO FINANCIERO (Contabilidad)
+// Planificación de estrategias con propósito financiero
+// -----------------------------------------------------
+model PlanEstrategicoFinanciero {
+  id              String   @id @default(cuid())
+  codigo          String   @unique
+  nombre          String
+  descripcion     String?
+  tipo            String   @default("CRECIMIENTO") // CRECIMIENTO | OPTIMIZACION | REDUCCION_RIESGO | LIQUIDEZ | EXPANSION
+  estado          String   @default("BORRADOR") // BORRADOR | ACTIVO | EN_REVISION | COMPLETADO | CANCELADO
+  prioridad       String   @default("MEDIA") // BAJA | MEDIA | ALTA | CRITICA
+
+  // Fechas del plan
+  fechaInicio     DateTime
+  fechaFin        DateTime
+  fechaAprobacion DateTime?
+
+  // Métricas financieras (COP)
+  presupuestoInversion  Float  @default(0)
+  metaIngresos          Float  @default(0)
+  metaAhorroCostos      Float  @default(0)
+  roiEsperado           Float  @default(0) // %
+
+  // Métricas reales (se actualizan con reportes)
+  ingresoReal           Float  @default(0)
+  costoReal             Float  @default(0)
+  roiReal               Float  @default(0)
+
+  // Responsables
+  responsableId         String?
+  responsableNombre     String?
+  creadoPor             String?
+  aprobadoPor           String?
+
+  // KPIs y seguimiento
+  progreso              Float  @default(0) // 0-100
+  indicadores           String? // JSON con KPIs personalizados
+  notasSeguimiento      String?
+
+  // Vinculación con reportes
+  reporteVinculadoId    String?
+
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  @@index([estado])
+  @@index([tipo])
+  @@index([fechaInicio])
+}
+
+// -----------------------------------------------------
+// PLAN CLIENTE (Préstamos)
+// Planificación de planes personalizados para clientes
+// -----------------------------------------------------
+model PlanCliente {
+  id              String   @id @default(cuid())
+  codigo          String   @unique
+  clienteId       String
+  clienteCedula   String
+  clienteNombre   String
+
+  nombre          String
+  descripcion     String?
+  tipo            String   @default("PERSONALIZADO") // PERSONALIZADO | REESTRUCTURACION | REFINANCIACION | EXPANSION_CREDITO | FIDELIZACION
+  estado          String   @default("BORRADOR") // BORRADOR | PROPUESTO | ACEPTADO | EN_EJECUCION | COMPLETADO | CANCELADO
+
+  // Fechas
+  fechaInicio     DateTime
+  fechaFin        DateTime
+  fechaAceptacion DateTime?
+
+  // Configuración financiera del plan
+  montoObjetivo       Float  @default(0)
+  tasaPersonalizada   Float?  // tasa mensual fija si aplica
+  plazoMeses          Int    @default(12)
+  cuotaObjetivo        Float  @default(0)
+
+  // Métricas reales
+  montoAprobado       Float  @default(0)
+  cuotaActual         Float  @default(0)
+  pagosRealizados     Int    @default(0)
+  saldoPendiente      Float  @default(0)
+
+  // Objetivos comerciales
+  objetivoComercial   String? // ej: "Aumentar línea de crédito 30%"
+  metricasExito       String? // JSON con métricas de éxito
+  progreso            Float  @default(0) // 0-100
+
+  // Vinculación con préstamos
+  prestamoVinculadoId String?
+
+  // Responsables
+  gestorAsignado      String?
+  creadoPor           String?
+  notasSeguimiento    String?
+
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@index([clienteId])
+  @@index([estado])
+  @@index([tipo])
+}
+
+// -----------------------------------------------------
+// CONTROL DE VERSIONES Y SNAPSHOTS DEL PROYECTO
+// Snapshots completos del código fuente para recuperación
+// -----------------------------------------------------
+model SnapshotProyecto {
+  id               String   @id @default(cuid())
+  uuid             String   @unique  // UUID v4 único
+  version          String   // ej: 1.0.25
+  nombre           String
+  descripcion      String?
+  estado           String   @default("COMPLETADO") // COMPLETADO | FALLIDO | RESTAURADO
+  tamano           Int      @default(0)  // bytes del archivo
+  rutaArchivo      String   // ruta relativa en download/snapshots/
+  checksum         String?  // SHA-256 del archivo
+  archivosTotal    Int      @default(0)  // número de archivos capturados
+  modulosAfectados String?  // JSON con lista de módulos
+  tipo             String   @default("MANUAL") // MANUAL | AUTO_PRE_CAMBIO | AUTO_PRE_REFACTOR
+  usuarioId        String?
+  usuarioNombre    String?
+  motivo           String?  // motivo del snapshot
+  metadata         String?  // JSON con info detallada
+  createdAt        DateTime @default(now())
+
+  @@index([tipo])
+  @@index([createdAt])
+}
+
+// -----------------------------------------------------
+// SOLICITUD DE NUEVOS CLIENTES (desde el portal público)
+// Persona que quiere iniciar el proceso de crédito
+// -----------------------------------------------------
+model SolicitudNuevoCliente {
+  id                String   @id @default(cuid())
+  codigo            String   @unique
+  
+  // Datos personales
+  nombre            String
+  apellido          String
+  tipoDocumento     String   @default("CC") // CC | CE | TI
+  cedula            String
+  fechaNacimiento   DateTime?
+  telefono          String
+  email             String?
+  ciudad            String?
+  municipio         String?
+  direccion         String?
+  
+  // Datos financieros
+  ocupacion         String?
+  ingresoMensual    Float?
+  valorSolicitado   Float
+  plazoDeseado      Int?     // meses
+  destinoCredito    String?  // para qué necesita el crédito
+  
+  // Referido
+  referidoPorNombre String?
+  referidoPorApellido String?
+  referidoPorTelefono String?
+  referidoPorParentesco String? // parentesco o relación
+  
+  // Aceptaciones
+  aceptaTyC         Boolean  @default(false)
+  aceptaTratamientoDatos Boolean @default(false)
+  fechaAceptacion    DateTime?
+  
+  // Estado
+  estado            String   @default("PENDIENTE") // PENDIENTE | REVISADA | APROBADA | RECHAZADA | CONVERTIDA
+  observaciones     String?
+  
+  // Trazabilidad
+  ipOrigen          String?
+  userAgent         String?
+  
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  
+  @@index([estado])
+  @@index([cedula])
+}
+
+// -----------------------------------------------------
+// REGISTRO CENTRALIZADO DE OTPs DE CLIENTES
+// Consolida todos los códigos OTP generados para un cliente
+// (firma electrónica, chat, portal, login, etc.)
+// -----------------------------------------------------
+model OtpRegistro {
+  id              String   @id @default(cuid())
+  clienteId       String?
+  cliente         Cliente? @relation("ClienteOtpRegistro", fields: [clienteId], references: [id])
+  clienteCedula   String?
+  clienteNombre   String?
+  
+  codigoHash      String   // hash SHA-256 del código OTP (no el código en claro)
+  codigoPlano     String?  // sólo en desarrollo/auditoría interna (NUNCA exponer en producción)
+  metodo          String   // WHATSAPP | EMAIL | AMBOS | SMS
+  destinatario    String   // número de teléfono o email al que se envió
+  tipo            String   // FIRMA_ELECTRONICA | CHAT | PORTAL_LOGIN | CAMBIO_CLAVE | OTRO
+  entidadRefId    String?  // ID de la entidad relacionada (firmaId, conversacionId, etc.)
+  descripcion     String?
+  
+  intentos        Int      @default(0)
+  maxIntentos     Int      @default(3)
+  usado           Boolean  @default(false)
+  bloqueado       Boolean  @default(false)
+  fechaBloqueo    DateTime?
+  expiraEn        DateTime
+  ipSolicitud     String?
+  userAgent       String?
+  fechaVerificacion DateTime?
+  verificado      Boolean  @default(false)
+  sessionIdGenerado String?
+  
+  createdAt       DateTime @default(now())
+  
+  @@index([clienteId])
+  @@index([tipo])
+  @@index([createdAt])
+}
+
+// =====================================================
+// Bot — Asistentes virtuales del sistema
+// =====================================================
+model Bot {
+  id             String   @id @default(cuid())
+  nombre         String
+  descripcion    String?
+  tipo           String   // CHAT_CLIENTES | ADMIN_SISTEMA | CONTABILIDAD | PAGOS | PRESTAMOS | JURIDICO | SEGURIDAD | ADMIN_GENERAL | CONFIGURACION
+  instrucciones  String?  // system prompt del bot
+  aprendizajes   String?  // memoria/entrenamiento adicional
+  activo         Boolean  @default(true)
+  auto           Boolean  @default(false)
+  ultimaActividad DateTime?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([tipo])
+  @@index([activo])
+}
+
+// =====================================================
+// FaqBot — Preguntas frecuentes del bot de clientes
+// =====================================================
+model FaqBot {
+  id          String   @id @default(cuid())
+  pregunta    String   // texto de la pregunta (ej: "¿Cómo solicito un préstamo?")
+  respuesta   String   // respuesta que el bot debe dar
+  categoria   String?  // ej: "PRESTAMOS", "PAGOS", "REQUISITOS"
+  palabrasClave String? // ej: "solicitar,credito,requisitos" (separadas por coma)
+  activa      Boolean  @default(true)
+  vecesUsada  Int      @default(0)
+  creadaPor   String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([activa])
+  @@index([categoria])
+}
+
+// =====================================================
+// ConfigBot — Configuración del bot de clientes
+// (interruptor ON/OFF del modo automático, etc.)
+// =====================================================
+model ConfigBot {
+  id          String   @id @default(cuid())
+  clave       String   @unique // ej: "asistente_ia_automatico", "horario_atencion"
+  valor       String   // ej: "true", "false", "08:00-18:00"
+  descripcion String?
+  actualizadoPor String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+// =====================================================
+// CategoriaFinanciera — Categorías para clasificar movimientos
+// =====================================================
+model CategoriaFinanciera {
+  id          String   @id @default(cuid())
+  nombre      String   // ej: "Alimentación", "Salarios", "Transporte"
+  tipo        String   // INGRESO | GASTO
+  ambito      String   // NEGOCIO | PERSONAL | AMBOS
+  icono       String?  // emoji opcional
+  color       String?  // hex opcional
+  keywords    String?  // palabras clave para clasificación automática (coma-separadas)
+  activa      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  movimientos MovimientoCajaExtendido[]
+
+  @@index([tipo, ambito])
+  @@unique([nombre, ambito])
+}
+
+// =====================================================
+// MovimientoCajaExtendido — Extiende MovimientoCaja con ámbito + categoría
+// =====================================================
+model MovimientoCajaExtendido {
+  id              String   @id @default(cuid())
+  movimientoId    String   @unique // FK al MovimientoCaja original
+  movimiento      MovimientoCaja @relation(fields: [movimientoId], references: [id])
+  ambito          String   @default("NEGOCIO") // NEGOCIO | PERSONAL
+  categoriaId     String?
+  categoria       CategoriaFinanciera? @relation(fields: [categoriaId], references: [id])
+  subcategoria    String?  // ej: "Almuerzo", "Gasolina"
+  esRecurrente    Boolean  @default(false)
+  notasAnalisis   String?  // análisis generado por el bot
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([ambito])
+  @@index([categoriaId])
+}
+
+// =====================================================
+// Presupuesto — Presupuestos por categoría y período
+// =====================================================
+model Presupuesto {
+  id              String   @id @default(cuid())
+  nombre          String   // ej: "Presupuesto Hogar Marzo"
+  ambito          String   // NEGOCIO | PERSONAL
+  categoriaId     String?
+  montoLimite     Float
+  periodo         String   // MENSUAL | SEMANAL | ANUAL
+  fechaInicio     DateTime
+  fechaFin        DateTime?
+  activo          Boolean  @default(true)
+  alertaEnPorcentaje Int  @default(80) // alertar al 80% del límite
+  creadoPor       String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([ambito, activo])
+  @@index([categoriaId])
+}
+
+// =====================================================
+// MetaFinanciera — Metas de ahorro / pago de deudas / etc.
+// =====================================================
+model MetaFinanciera {
+  id              String   @id @default(cuid())
+  nombre          String   // ej: "Ahorrar para vehículo"
+  descripcion     String?
+  tipo            String   // AHORRO | PAGAR_DEUDA | COMPRAR_BIEN | CREAR_EMPRESA | FONDO_EMERGENCIAS | JUBILACION | OTRO
+  ambito          String   // NEGOCIO | PERSONAL
+  montoObjetivo   Float
+  montoActual     Float    @default(0)
+  fechaObjetivo   DateTime?
+  plazo           String?  // CORTO | MEDIANO | LARGO
+  estado          String   @default("ACTIVA") // ACTIVA | COMPLETADA | CANCELADA | PAUSADA
+  creadoPor       String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([ambito, estado])
+}
+
+// =====================================================
+// EventoFinanciero — Calendario / Agenda financiera (Módulo 6)
+// =====================================================
+model EventoFinanciero {
+  id           String   @id @default(cuid())
+  titulo       String
+  descripcion  String?
+  fecha        DateTime
+  tipo         String   @default("OTRO") // PAGO | RECORDATORIO | REPORTE | OTRO
+  monto        Float?
+  categoria    String?
+  origen       String   @default("MANUAL") // MANUAL | BOT | PAGO | SISTEMA
+  completado   Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([fecha])
+  @@index([tipo])
+  @@index([completado])
+}
+
+// =====================================================
+// MovimientoFinanciero — Movimientos del módulo Contabilidad
+// =====================================================
+model MovimientoFinanciero {
+  id              String   @id @default(cuid())
+  tipo            String   // INGRESO | GASTO
+  categoria       String
+  descripcion     String
+  monto           Float
+  fecha           DateTime @default(now())
+  metodoPago      String?
+  responsable     String?
+  notas           String?
+  ambito          String   @default("NEGOCIO") // NEGOCIO | PERSONAL
+  planFinancieroId String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([ambito, fecha])
+  @@index([tipo])
+  @@index([categoria])
+}
+
+// =====================================================
+// RenovacionPrestamo — Histórico de renovaciones de préstamos
+// =====================================================
+model RenovacionPrestamo {
+  id                      String   @id @default(cuid())
+  prestamoOriginalId      String
+  prestamoNuevoId         String
+  saldoAnterior           Float
+  nuevoMontoPrestado      Float
+  nuevaTasaInteresAnual   Float
+  nuevoPlazoMeses         Int
+  nuevaFrecuencia         String
+  nuevoNumeroCuotas       Int
+  nuevaMontoCuota         Float
+  nuevoTotalInteres       Float
+  nuevoTotalPagar         Float
+  fechaInicioPago         DateTime
+  motivoRenovacion        String?
+  usuarioNombre           String
+  createdAt               DateTime @default(now())
+
+  @@index([prestamoOriginalId])
+  @@index([prestamoNuevoId])
+}
+
+// =====================================================
+// AlertaFinanciera — Alertas inteligentes detectadas por el bot
+// =====================================================
+model AlertaFinanciera {
+  id              String   @id @default(cuid())
+  tipo            String   // GASTO_EXCESIVO | ENDEUDAMIENTO_ALTO | RIESGO_LIQUIDEZ | VENCIMIENTO_PROXIMO | PAGO_OLVIDADO | PRESUPUESTO_EXCEDIDO | OPORTUNIDAD_AHORRO
+  ambito          String   // NEGOCIO | PERSONAL | AMBOS
+  severidad       String   // INFO | WARNING | CRITICAL
+  titulo          String
+  descripcion     String
+  montoInvolucrado Float?
+  entidadRefId    String?  // ej: presupuestoId, metaId, prestamoId
+  atendida        Boolean  @default(false)
+  atendidaPor     String?
+  atendidaAt      DateTime?
+  createdAt       DateTime @default(now())
+
+  @@index([ambito, atendida])
+  @@index([createdAt])
+}

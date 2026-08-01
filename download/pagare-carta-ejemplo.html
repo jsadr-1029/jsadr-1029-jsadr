@@ -1,0 +1,443 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Pagaré + Carta de Instrucciones - JA-CC-1214731649-20260730-05</title>
+<style>
+  @page { size: letter; margin: 3.5cm 2.2cm 3cm 2.2cm; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    font-family: 'Times New Roman', 'Liberation Serif', serif;
+    line-height: 1.8;
+    color: #1a1a1a;
+    font-size: 12.5px;
+    position: relative;
+    background: #fff;
+  }
+  /* === MARCA DE AGUA (Lady Justice) — se repite en cada página impresa === */
+  .watermark {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 62%;
+    opacity: 0.10;
+    z-index: -1;
+    pointer-events: none;
+  }
+  .watermark img { width: 100%; height: auto; }
+  /* === CABECERA FIJA (logo + datos acreedor) — se repite en cada página === */
+  .doc-header {
+    position: fixed;
+    top: 0; left: 0; right: 0;
+    height: 2.6cm;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.3cm 1.2cm 0.3cm 1.2cm;
+    border-bottom: 1.5px solid #1e3a5f;
+    background: #fff;
+    z-index: 10;
+  }
+  .doc-header .logo { max-height: 1.9cm; width: auto; }
+  .doc-header .acreedor-info { text-align: right; font-family: 'Constantia', 'Times New Roman', serif; line-height: 1.3; }
+  .doc-header .acreedor-info .nombre { font-weight: bold; font-size: 11px; color: #1e3a5f; letter-spacing: 0.5px; }
+  .doc-header .acreedor-info .cc { font-size: 10px; color: #444; font-family: 'Bahnschrift SemiCondensed', 'Arial Narrow', sans-serif; }
+  /* === PIE FIJO (dirección + teléfono + correo) — se repite en cada página === */
+  .doc-footer {
+    position: fixed;
+    bottom: 0; left: 0; right: 0;
+    min-height: 1.8cm;
+    padding: 0.3cm 1.2cm;
+    border-top: 1.5px solid #1e3a5f;
+    background: #fff;
+    text-align: center;
+    font-size: 9.5px;
+    color: #1e3a5f;
+    line-height: 1.5;
+    z-index: 10;
+    font-family: 'Constantia', 'Times New Roman', serif;
+  }
+  .doc-footer .line { display: block; }
+  .doc-footer .label { font-weight: bold; letter-spacing: 0.5px; }
+  /* === CONTENIDO PRINCIPAL — deja espacio para cabecera y pie fijos === */
+  .contenido {
+    position: relative;
+    z-index: 1;
+    padding: 0.3cm 0.4cm;
+    max-width: 100%;
+  }
+  .titulo { text-align: center; font-size: 17px; font-weight: bold; margin: 14px 0 10px 0; letter-spacing: 2px; }
+  .center { text-align: center; }
+  .cuerpo { text-align: justify; margin: 12px 0; }
+  .campo { display: inline-block; border-bottom: 1px solid #000; min-width: 200px; padding: 0 4px; }
+  .campo-larga { display: inline-block; border-bottom: 1px solid #000; min-width: 380px; padding: 0 4px; }
+  .campo-corta { display: inline-block; border-bottom: 1px solid #000; min-width: 120px; padding: 0 4px; }
+  .seccion { margin: 15px 0; font-weight: bold; }
+  .checklist { background: #fff8e1; border-left: 4px solid #ffa000; padding: 12px; margin: 18px 0; font-size: 11.5px; }
+  .bloque-firma { margin-top: 36px; }
+  .bloque-firma h4 { font-size: 12.5px; font-weight: bold; margin: 16px 0 4px 0; }
+  .bloque-firma .linea { border-bottom: 1px solid #000; min-height: 22px; margin-bottom: 10px; word-wrap: break-word; }
+  .bloque-firma .firma-linea { border-bottom: 1px solid #000; min-height: 58px; margin: 8px 0; }
+  .rol-block {
+    border: 1px solid #1e3a5f;
+    border-radius: 6px;
+    padding: 10px 14px;
+    margin: 14px 0;
+    background: #fbfcfe;
+  }
+  .rol-block.deudor { border-color: #1e3a5f; }
+  .rol-block.codeudor { border-color: #6b4f1d; background: #fffdf5; }
+  .rol-block .rol-tag {
+    display: inline-block;
+    padding: 2px 10px;
+    background: #1e3a5f;
+    color: #fff;
+    font-size: 10px;
+    font-weight: bold;
+    letter-spacing: 1px;
+    border-radius: 3px;
+    margin-bottom: 8px;
+  }
+  .rol-block.codeudor .rol-tag { background: #6b4f1d; }
+  .page-break { page-break-after: always; }
+  .doc-separator { text-align:center; padding:8px; background:#1e3a5f; color:#fff; font-size:11px; letter-spacing:2px; margin:0 0 16px 0; border-radius:4px; }
+  .print-btn { display: block; margin: 20px auto; padding: 10px 30px; background: #1e3a5f; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; }
+  @media print {
+    .no-print { display: none; }
+    .doc-header, .doc-footer { position: fixed; }
+    .watermark { position: fixed; }
+  }
+  @media screen {
+    body { background: #e8eaf0; padding: 20px 0; }
+    .page-wrap {
+      background: #fff;
+      max-width: 21cm;
+      min-height: 29.7cm;
+      margin: 0 auto;
+      box-shadow: 0 0 12px rgba(0,0,0,0.18);
+      position: relative;
+      overflow: hidden;
+    }
+  }
+</style>
+</head>
+<body>
+<div class="page-wrap">
+
+  <div class="watermark"><img src="/documentos/marca-agua-justicia.png" alt="" /></div>
+
+
+  <div class="doc-header">
+    <img src="/documentos/logo-jsadr.png" alt="Logo Jsadr Aurora Bancaria" class="logo" />
+    <div class="acreedor-info">
+      <div class="nombre">JOHAN SEBASTIAN ALVAREZ DEL RIO</div>
+      <div class="cc">C.C 1.214.731.649</div>
+    </div>
+  </div>
+
+<div class="contenido">
+
+<!-- ===================================================== -->
+<!-- DOCUMENTO 1: PAGARÉ                                    -->
+<!-- ===================================================== -->
+<div class="doc-separator">DOCUMENTO 1 DE 2 · PAGARÉ</div>
+
+<div class="titulo">PAGARÉ No. JA-CC-1214731649-20260730-05</div>
+
+<div class="cuerpo">
+<p>Yo(Nosotros),</p>
+<p><strong>JOHAN ALVAREZ</strong> mayor(es) de edad, con domicilio en el municipio de Medellín Antioquia</p>
+<p>Domicilio: <span class="campo-larga">CALLE 92 #44A 34 APTO 401 · Aranjuez · Medellin</span></p>
+<p>identificado(s) como aparece(mos) al pie de mi(nuestras) firma(s), actuando en mi (nuestro) propio nombre, o en la condición indicada al píe de mi(nuestras) firma(s), declaro(amos):</p>
+
+<p><strong>PRIMERO:</strong> Que me(nos) obligo(amos) a pagar solidaria, indivisible, irrevocable e incondicionalmente a la orden de <strong>Johan Sebastian Alvarez Del Rio</strong>. en adelante EL ACREEDOR, o a quien represente sus derechos, el día ( <span class="campo-corta">30</span> ) del mes de <span class="campo">julio</span> del año <span class="campo-corta">2026</span> , en sus oficinas del país o en los puntos de pago autorizados expresamente para el efecto, las siguientes sumas de dinero:</p>
+
+<p><strong>POR CAPITAL:</strong></p>
+<p><span class="campo-larga" style="min-width:520px;">___________________________________________________________________________________________________________</span></p>
+<p>($ <span class="campo-larga" style="min-width:480px;">__________________________________________________</span>) M.C.</p>
+
+<p><strong>POR INTERESES CAUSADOS Y NO PAGADOS:</strong></p>
+<p>($ <span class="campo-larga" style="min-width:480px;">__________________________________________________</span>) M.C.</p>
+<p><span class="campo-larga" style="min-width:520px;">___________________________________________________________________________</span></p>
+
+<p><strong>POR OTROS CONCEPTOS:</strong></p>
+<p>($ <span class="campo-larga" style="min-width:480px;">__________________________________________________</span>) M.C.</p>
+<p><span class="campo-larga" style="min-width:520px;">_______________________________________________</span></p>
+
+<p><strong>SEGUNDO:</strong> Que pagare(mos) intereses moratorios a la tasa máxima legalmente autorizada sobre la suma de capital insoluto.</p>
+
+<p><strong>TERCERO: CLÁUSULA ACELERATORIA, VENCIMIENTO ANTICIPADO E INTERESES DE MORA</strong></p>
+
+
+<p>El(los) suscriptor(es) del presente pagaré reconoce(n), acepta(n) y declara(n) expresamente que el plazo concedido para el pago de la obligación se ha otorgado en beneficio exclusivo del acreedor. En consecuencia, el acreedor podrá declarar vencido anticipadamente el plazo pactado y exigir de forma inmediata la totalidad de la obligación, sin necesidad de requerimiento judicial o extrajudicial previo, constitución en mora, interpelación o notificación adicional alguna, cuando se presente cualquiera de los siguientes eventos:</p>
+
+<p>a) El incumplimiento en el pago de dos (2) cuotas, consecutivas o no, derivadas del presente pagaré, del plan de amortización, acuerdo de pago o cualquier documento que haga parte integral de la obligación.</p>
+
+<p>b) El incumplimiento de cualquiera de las obligaciones, condiciones, garantías o compromisos asumidos por el deudor con ocasión del otorgamiento del crédito.</p>
+
+<p>Configurado cualquiera de los eventos anteriores, el acreedor podrá declarar de pleno derecho terminado el acuerdo de pago y exigir inmediatamente la totalidad del saldo insoluto de la obligación, incluyendo, sin limitación alguna:</p>
+
+<p>El capital pendiente de pago.<br>
+Los intereses corrientes causados y no pagados.<br>
+Los intereses de mora causados.<br>
+Los gastos de cobranza prejudicial.<br>
+Los honorarios de abogados y gestores de cobro.<br>
+Las costas y agencias en derecho que se generen con ocasión de las acciones de recuperación de la cartera.<br>
+Cualquier otro concepto derivado directa o indirectamente de la presente obligación.</p>
+
+<p>A partir de la fecha en que se configure el incumplimiento y hasta el pago total de la obligación, las sumas adeudadas causarán intereses moratorios liquidados a la tasa máxima legal permitida y certificada para cada período por la autoridad competente en Colombia, equivalente al límite máximo autorizado por la ley y vigente al momento de hacerse exigible la obligación, o a la tasa máxima de mora que legalmente pueda cobrarse durante el tiempo que subsista el incumplimiento, sin exceder en ningún caso los límites establecidos por las normas sobre usura y demás disposiciones aplicables.</p>
+
+<p>El deudor acepta expresamente que la tasa de interés moratorio aplicable podrá variar en el tiempo conforme a las certificaciones expedidas por la Superintendencia Financiera de Colombia o la entidad que haga sus veces, aplicándose en cada período la tasa máxima legal vigente al momento de la liquidación de los intereses.</p>
+
+<p>La declaratoria de vencimiento anticipado facultará al acreedor para iniciar de manera inmediata las acciones de cobro prejudicial, ejecutivo, judicial o cualquier otro mecanismo legal tendiente a la recuperación de la totalidad de las sumas adeudadas, sin necesidad de requerimiento adicional alguno.</p>
+
+<p>El deudor o deudores renuncia (mos) expresamente a cualquier requerimiento previo para constituirse en mora y acepta que la sola ocurrencia de cualquiera de los eventos de incumplimiento aquí previstos hará exigible de inmediato la totalidad de la obligación, de conformidad con las disposiciones del Código Civil, el Código de Comercio y demás normas concordantes y aplicables.</p>
+
+
+<p><strong>CUARTO:</strong> Que acepto(amos) expresamente cualquier endoso o cesión que de este pagaré haga EL ACREEDOR reconozco(emos) desde ya al endosatario o cesionario dentro de cualquier proceso judicial.</p>
+
+<p><strong>QUINTO:</strong> EL ACREEDOR se podrá acoger a los términos del artículo 886 del Código de Comercio para el cobro de intereses. El presente pagaré no está sujeto a la presentación para su pago, ni al aviso de rechazo, ni al protesto para todos los efectos legales y se suscribe para ser llenado por EL ACREEDOR o su representante según las instrucciones impartidas por mi(nosotros), las cuales están contenidas en la carta de autorizaciones e instrucciones adjunta al presente documento, de conformidad con lo dispuesto en el artículo 622 del Código de Comercio.</p>
+
+<p>El suscriptor declara haber suministrado voluntariamente al acreedor copia de su documento de identidad, la cual hace parte de los soportes de identificación de la presente obligación.</p>
+
+<p>Para constancia se firma en un (1) original, con destino a <strong>Johan Sebastian Alvarez Del Rio</strong> quien presta el dinero a los ( <span class="campo-corta">30</span> ) días del mes de <span class="campo">julio</span> del año <span class="campo-corta">2026</span>.</p>
+</div>
+
+
+<div class="rol-block deudor">
+  <span class="rol-tag">DEUDOR</span>
+  <h4>Nombre Deudor:</h4>
+  <div class="linea">JOHAN ALVAREZ</div>
+
+  <h4>Identificación (C.C.):</h4>
+  <div class="linea">1214731649</div>
+
+  <h4>Dirección, municipio y barrio:</h4>
+  <div class="linea">CALLE 92 #44A 34 APTO 401 · Aranjuez · Medellin</div>
+
+  <h4>Teléfono:</h4>
+  <div class="linea">3235949510</div>
+
+  <h4>Correo:</h4>
+  <div class="linea">jsadr23@gmail.com</div>
+
+  <h4>Firma:</h4>
+  <div class="firma-linea"></div>
+</div>
+
+<div class="rol-block codeudor">
+  <span class="rol-tag">CODEUDOR</span>
+  <h4>Nombre Codeudor:</h4>
+  <div class="linea">CAROLINA ALVAREZ</div>
+
+  <h4>Identificación (C.C.):</h4>
+  <div class="linea">1214726347</div>
+
+  <h4>Dirección, municipio y barrio:</h4>
+  <div class="linea">CL 92 44A 34</div>
+
+  <h4>Teléfonos:</h4>
+  <div class="linea">3103674546</div>
+
+  <h4>correo:</h4>
+  <div class="linea">JSADR23@GMAIL.COM</div>
+
+  <h4>Firma:</h4>
+  <div class="firma-linea"></div>
+</div>
+
+
+
+
+  <!-- === SELLO DE AUTENTICIDAD Y VERIFICACIÓN === -->
+  <div style="margin-top:30px; padding:15px; border:2px dashed #1e3a5f; border-radius:8px; background:#fafbff;">
+    <div style="display:flex; gap:20px; align-items:flex-start; flex-wrap:wrap;">
+      <div style="text-align:center; flex-shrink:0;">
+        <img src="data:image/png;base64,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" alt="Código QR de verificación" style="width:120px; height:120px; border:1px solid #ccc; border-radius:4px;" />
+        <p style="font-size:8px; color:#666; margin-top:4px;">Escanea para verificar</p>
+      </div>
+      <div style="flex:1; min-width:250px;">
+        <h4 style="color:#1e3a5f; margin:0 0 8px 0; font-size:13px;">🔐 SELLO DE AUTENTICIDAD DIGITAL</h4>
+        <table style="width:100%; font-size:9px; border-collapse:collapse;">
+          <tr>
+            <td style="padding:3px; border:1px solid #ddd; background:#f0f4ff; font-weight:bold;">Tipo documento:</td>
+            <td style="padding:3px; border:1px solid #ddd;">Pagaré Diligenciado</td>
+          </tr>
+          <tr>
+            <td style="padding:3px; border:1px solid #ddd; background:#f0f4ff; font-weight:bold;">Código verificación:</td>
+            <td style="padding:3px; border:1px solid #ddd; font-family:monospace; font-weight:bold; letter-spacing:1px;">3d32-bdcb-88fa-67c4</td>
+          </tr>
+          <tr>
+            <td style="padding:3px; border:1px solid #ddd; background:#f0f4ff; font-weight:bold;">Generado:</td>
+            <td style="padding:3px; border:1px solid #ddd;">30 de julio de 2026 a las 10:49 p. m.</td>
+          </tr>
+          <tr>
+            <td style="padding:3px; border:1px solid #ddd; background:#f0f4ff; font-weight:bold;">Sello digital:</td>
+            <td style="padding:3px; border:1px solid #ddd; font-family:monospace; font-size:8px; word-break:break-all;">c9e3f9f90c9d6477cb63937f79341a82<br>c6d576d7445aa90fb5047c16829a28b0...</td>
+          </tr>
+        </table>
+        <p style="font-size:8px; color:#666; margin-top:8px; text-align:justify;">
+          <strong>⚠️ Documento protegido contra alteración.</strong> Cualquier modificación a este documento
+          invalidará el sello digital SHA-256. Para verificar la autenticidad, escanee el código QR o visite
+          el sistema con el código de verificación. Este documento fue generado electrónicamente por Jsadr
+          y tiene plena validez legal conforme a la Ley 527 de 1999.
+        </p>
+      </div>
+    </div>
+  </div>
+
+<!-- ===================================================== -->
+<!-- SALTO DE PÁGINA                                        -->
+<!-- ===================================================== -->
+<div class="page-break"></div>
+
+<!-- ===================================================== -->
+<!-- DOCUMENTO 2: CARTA DE INSTRUCCIONES                    -->
+<!-- ===================================================== -->
+<div class="doc-separator">DOCUMENTO 2 DE 2 · CARTA DE INSTRUCCIONES</div>
+
+<div class="titulo">CARTA DE INSTRUCCIONES</div>
+
+<p>Señores</p>
+
+<p><strong>AUTORIZACION E INSTRUCCIONES PERMANENTES PARA EL DILIGENCIAMIENTO DEL PAGARÉ No.</strong></p>
+<p class="center">JA-CC-1214731649-20260730-05</p>
+
+<div class="cuerpo">
+<p>Yo(Nosotros),</p>
+<p><span class="campo-larga"><strong>JOHAN ALVAREZ</strong></span> mayor(es) de edad, con domicilio en el Municipio de Medellín Antioquia Domicilio <span class="campo-larga">CALLE 92 #44A 34 APTO 401 · Aranjuez · Medellin</span></p>
+<p>identificado(s) como aparece(mos) al pie mi(nuestras) firma(s), actuando en mi(nuestro) propio nombre, o en la condición indicada al píe de mi(nuestras) firma(s), declaro(amos):</p>
+
+<p>Que de conformidad con lo dispuesto en el artículo 622 del Código de Comercio, por medio del presente documento autorizo(amos) irrevocablemente y de manera permanente al quien presta el dinero en adelante el ACREEDOR o a quien represente sus derechos, para llenar sin previo aviso los espacios en blanco y demás aspectos generales y particulares del pagaré indicado en la referencia, el cual he(mos) otorgado a su orden con espacios en blanco y del que hago(hacemos) entrega con efectos negociables, teniendo en cuenta las siguientes instrucciones:</p>
+
+<p><strong>1.</strong> El pagaré podrá ser llenado cuando exista incumplimiento o mora en el pago de cualquier obligación a mí (nuestro) cargo, individual o conjuntamente, en los casos estipulados en la ley, en el pagaré mismo y demás documentos suscritos por mi (nosotros). Podrá también ser endosado, previo a su diligenciamiento, en razón de ser negociado cualquier derecho de crédito a mi (nuestro) cargo, individual, conjunta y solidariamente.</p>
+
+<p><strong>2.</strong> La fecha de vencimiento del título valor será aquella que corresponda al día en que sea llenado el pagaré. El ACREEDOR determinará la fecha de vencimiento del Pagaré y esta corresponderá a un día cierto, de tal manera que a partir de la misma serán exigibles de inmediato todas las obligaciones contenidas en el Pagaré materia de estas instrucciones.</p>
+
+<p><strong>3.</strong> El espacio relacionado con el valor de capital se llenará con el monto de todas las sumas que por concepto de saldo insoluto de capital deba (mos) al ACREEDOR, en forma separada, conjunta y solidaria, el día en que sean diligenciados los espacios en blanco, conforme a la liquidación que el ACREEDOR efectúe, derivadas de todas las obligaciones exigibles a mí(nuestro) cargo y a favor del ACREEDOR, en especial la correspondiente al mutuo que hemos recibido de parte del ACREEDOR.</p>
+
+<p><strong>4.</strong> El espacio relacionado con los intereses causados y no pagados será el que corresponda por este concepto, tanto de intereses de plazo como de mora, derivados de las obligaciones a mi(nuestro) cargo, conforme a la liquidación que el ACREEDOR efectúe.</p>
+
+<p><strong>5.</strong> El espacio relacionado con el valor de otros conceptos se llenará con el monto de todas las sumas que por cualquier otro concepto yo(nosotros) deba(amos) al ACREEDOR sin atención a su naturaleza o fuente, en especial las relacionadas con los siguientes rubros: (i) Los valores que por mí(nuestra) cuenta haya cancelado el ACREEDOR, por concepto de prima(s) de los seguros que se hayan contratado por mí(nuestra) cuenta. (ii) El monto de cualquier gasto pagado por el ACREEDOR por mi(nuestra) cuenta, especialmente impuestos, timbre, honorarios de abogados, comisiones, gastos administrativos y de cobranzas, así como cualquier otra suma que se deba por concepto distinto de intereses, salvo aquellos intereses que sea permitido capitalizar.</p>
+
+<p><strong>6.</strong> En el evento de que en desarrollo de esta facultad se cometieren errores involuntarios en el diligenciamiento del pagaré, el ACREEDOR queda expresamente facultado para aclararlos, enmendarlos y corregirlos de manera tal que el mismo responda a sus exigencias legales.</p>
+
+<p><strong>7.</strong> En caso de incumplimiento, retardo o existencia de cualquier causal de aceleración contemplada en los pagarés, contratos y reglamentos, frente a cualquiera de las obligaciones a mi(nuestro) cargo, el ACREEDOR queda autorizado para acelerar el vencimiento y exigir anticipadamente el valor de las demás obligaciones de las que sea (amos) deudor(es), garante(s) o avalista(s), individual, conjunta o solidariamente, sin necesidad de requerimiento judicial o extrajudicial para constituir en mora, así como para incorporarlas al Pagaré.</p>
+
+<p><strong>8.</strong> Así mismo, autorizo(amos) diligenciar los espacios en blanco correspondientes al número del pagaré, el cual corresponderá a aquel que le asigne el Banco y que identifique cualquiera de las obligaciones a mi(nuestro) cargo; así como al de mi(nuestro) domicilio, mi(nuestro) nombre y dirección. Declaro(amos) expresamente haber recibido copia del presente documento para todos los efectos legales.</p>
+
+<p><strong>9. CLÁUSULA DE ACEPTACIÓN DE FIRMA ELECTRÓNICA Y TRATAMIENTO DE DATOS BIOMÉTRICOS:</strong> El DEUDOR (y el CODEUDOR, si aplica) acepta, manifiesta y reconoce de manera expresa y voluntaria que el presente Pagaré y su respectiva Carta de Instrucciones son suscritos mediante el mecanismo de firma electrónica de la plataforma <strong>Jsadr Aurora Bancaria</strong>. Las partes acuerdan que dicho mecanismo sustituye la firma manuscrita, otorgándole plena validez, autenticidad, integridad y fuerza ejecutiva al título valor aquí constituido, de conformidad con el artículo 7 de la Ley 527 de 1999 y el Decreto 1074 de 2015. Asimismo, el DEUDOR autoriza de forma previa, explícita e informada al ACREEDOR para la captura, almacenamiento y tratamiento de su dato personal sensible consistente en el registro fotográfico de su rostro sosteniendo su documento de identidad (Cédula de Ciudadanía). Esta validación biométrica se realiza con la única finalidad de verificar la identidad del firmante, mitigar riesgos de suplantación y servir como prueba de autoría de la firma electrónica, garantizando en todo momento los derechos de confidencialidad y hábeas data consagrados en la Ley 1581 de 2012.</p>
+
+<p><strong>10.</strong> El deudor autoriza expresa e irrevocablemente al acreedor para exigir, custodiar y conservar copia de su documento de identidad firmada y con impresión de huella dactilar, la cual hará parte integral de los documentos soporte de la obligación. El deudor reconoce que dichos documentos podrán ser utilizados como medio probatorio en procesos de cobro prejudicial, judicial, ejecutivo o cualquier actuación encaminada a la recuperación de la cartera derivada del presente pagaré, sin perjuicio de los demás medios de prueba legalmente admisibles.</p>
+
+<div class="checklist">
+<strong>En el expediente del crédito se debe soportar con:</strong><br>
+☐ Copia de cédula al 150%<br>
+☐ Firma sobre la copia de la cédula<br>
+☐ Huella índice derecho o selfie sosteniendo la cédula (de ser firma digital)<br>
+☐ Fecha de entrega<br>
+☐ Firma de recibido del asesor o responsable
+</div>
+
+<p>El pagaré llenado conforme a estas instrucciones, será exigible inmediatamente y prestará mérito ejecutivo sin más requisitos y requerimientos. Declaro(amos) que conozco(cemos) y acepto(amos) los Reglamentos y/o Contratos de los productos, así como que he(mos) recibida copia de esta carta de instrucciones.</p>
+
+<p>Para constancia se firma a los ( 30 ) días del mes de julio del año 2026</p>
+</div>
+
+
+<div class="rol-block deudor">
+  <span class="rol-tag">DEUDOR</span>
+  <h4>Nombre Deudor:</h4>
+  <div class="linea">JOHAN ALVAREZ</div>
+
+  <h4>Identificación (C.C.):</h4>
+  <div class="linea">1214731649</div>
+
+  <h4>Dirección, municipio y barrio:</h4>
+  <div class="linea">CALLE 92 #44A 34 APTO 401 · Aranjuez · Medellin</div>
+
+  <h4>Teléfono:</h4>
+  <div class="linea">3235949510</div>
+
+  <h4>Correo:</h4>
+  <div class="linea">jsadr23@gmail.com</div>
+
+  <h4>Firma:</h4>
+  <div class="firma-linea"></div>
+</div>
+
+<div class="rol-block codeudor">
+  <span class="rol-tag">CODEUDOR</span>
+  <h4>Nombre Codeudor:</h4>
+  <div class="linea">CAROLINA ALVAREZ</div>
+
+  <h4>Identificación (C.C.):</h4>
+  <div class="linea">1214726347</div>
+
+  <h4>Dirección, municipio y barrio:</h4>
+  <div class="linea">CL 92 44A 34</div>
+
+  <h4>Teléfonos:</h4>
+  <div class="linea">3103674546</div>
+
+  <h4>correo:</h4>
+  <div class="linea">JSADR23@GMAIL.COM</div>
+
+  <h4>Firma:</h4>
+  <div class="firma-linea"></div>
+</div>
+
+
+
+
+  <!-- === SELLO DE AUTENTICIDAD Y VERIFICACIÓN === -->
+  <div style="margin-top:30px; padding:15px; border:2px dashed #1e3a5f; border-radius:8px; background:#fafbff;">
+    <div style="display:flex; gap:20px; align-items:flex-start; flex-wrap:wrap;">
+      <div style="text-align:center; flex-shrink:0;">
+        <img src="data:image/png;base64,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" alt="Código QR de verificación" style="width:120px; height:120px; border:1px solid #ccc; border-radius:4px;" />
+        <p style="font-size:8px; color:#666; margin-top:4px;">Escanea para verificar</p>
+      </div>
+      <div style="flex:1; min-width:250px;">
+        <h4 style="color:#1e3a5f; margin:0 0 8px 0; font-size:13px;">🔐 SELLO DE AUTENTICIDAD DIGITAL</h4>
+        <table style="width:100%; font-size:9px; border-collapse:collapse;">
+          <tr>
+            <td style="padding:3px; border:1px solid #ddd; background:#f0f4ff; font-weight:bold;">Tipo documento:</td>
+            <td style="padding:3px; border:1px solid #ddd;">Carta de Instrucciones</td>
+          </tr>
+          <tr>
+            <td style="padding:3px; border:1px solid #ddd; background:#f0f4ff; font-weight:bold;">Código verificación:</td>
+            <td style="padding:3px; border:1px solid #ddd; font-family:monospace; font-weight:bold; letter-spacing:1px;">1154-09cd-3656-36fd</td>
+          </tr>
+          <tr>
+            <td style="padding:3px; border:1px solid #ddd; background:#f0f4ff; font-weight:bold;">Generado:</td>
+            <td style="padding:3px; border:1px solid #ddd;">30 de julio de 2026 a las 10:49 p. m.</td>
+          </tr>
+          <tr>
+            <td style="padding:3px; border:1px solid #ddd; background:#f0f4ff; font-weight:bold;">Sello digital:</td>
+            <td style="padding:3px; border:1px solid #ddd; font-family:monospace; font-size:8px; word-break:break-all;">9a1c4172703ae0a6be40828fa8c52043<br>2f7d48d7626f6e08a31526bdd9201347...</td>
+          </tr>
+        </table>
+        <p style="font-size:8px; color:#666; margin-top:8px; text-align:justify;">
+          <strong>⚠️ Documento protegido contra alteración.</strong> Cualquier modificación a este documento
+          invalidará el sello digital SHA-256. Para verificar la autenticidad, escanee el código QR o visite
+          el sistema con el código de verificación. Este documento fue generado electrónicamente por Jsadr
+          y tiene plena validez legal conforme a la Ley 527 de 1999.
+        </p>
+      </div>
+    </div>
+  </div>
+
+<button class="print-btn no-print" onclick="window.print()">🖨️ Imprimir / Guardar como PDF (Pagaré + Carta)</button>
+
+</div>
+
+  <div class="doc-footer">
+    <span class="line"><span class="label">DIRECCION:</span> CALLE 92 44A 34 · ARANJUEZ · MEDELLÍN ANTIOQUIA</span>
+    <span class="line"><span class="label">TELEFONO:</span> 3103674546 - 3235949510 &nbsp;&nbsp;|&nbsp;&nbsp; <span class="label">CORREO:</span> jsadr23@outlook.com</span>
+  </div>
+
+</div>
+</body>
+</html>

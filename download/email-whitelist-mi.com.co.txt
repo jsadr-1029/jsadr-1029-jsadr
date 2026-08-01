@@ -1,0 +1,94 @@
+Para: soporte@mi.com.co
+Asunto: Solicitud de whitelist IP 47.57.232.232 — envío SMTP legítimo desde aplicación web
+
+---------------------------------------------------------------------------
+Mensaje:
+---------------------------------------------------------------------------
+
+Estimado equipo de soporte de mi.com.co,
+
+Espero se encuentren muy bien.
+
+Me dirijo a ustedes como administrador del dominio jsadr.com.co, hospedado
+en sus servidores de correo. Actualmente tenemos configurada una aplicación
+web corporativa (Aurora Bancaria — sistema de gestión de créditos) que envía
+correos transaccionales a través del buzón jsa@jsadr.com.co usando el
+servidor SMTP de ustedes (smtp.mi.com.co:587 con STARTTLS).
+
+PROBLEMA:
+Al intentar enviar correos desde la aplicación, el servidor SMTP de mi.com.co
+responde con el siguiente error:
+
+    554 5.7.1 <jsa@jsadr.com.co>: Sender address rejected: This connection
+    was blocked because was detected as SPAM source by our security system.
+
+Verificamos que NO se trata de un problema de credenciales (la autenticación
+SMTP se completa correctamente). El bloqueo ocurre en la fase RCPT TO, es
+decir, después de autenticarnos exitosamente.
+
+DATOS TÉCNICOS DE LA CONEXIÓN:
+
+  • Dominio emisor:        jsadr.com.co
+  • Buzón emisor:          jsa@jsadr.com.co
+  • Servidor SMTP:         smtp.mi.com.co
+  • Puerto:                587 (STARTTLS)
+  • IP pública de origen:  47.57.232.232
+  • IP pública alternativa: 47.57.242.119
+  • Proveedor de cloud:    Alibaba Cloud (Hong Kong)
+  • Aplicación:            Aurora Bancaria (sistema interno, no masivo)
+  • Volumen estimado:      máximo 50 correos/día, todos transaccionales
+                           (pagarés, cartas de instrucciones, OTP de firma,
+                           notificaciones internas del sistema)
+
+VERIFICACIONES REALIZADAS:
+
+  ✓ La IP 47.57.232.232 NO aparece en listas negras públicas. La consultamos
+    contra Spamhaus (ZEN), SpamCop, SORBS, Barracuda Central, UCEPROTECT
+    (1/2/3) y Surriel PSBL — limpia en todas.
+  ✓ La autenticación SMTP con usuario y contraseña funciona correctamente.
+  ✓ El protocolo STARTTLS se negocia sin problema.
+  ✗ La IP 47.57.232.232 NO tiene registro PTR (reverse DNS) configurado,
+    porque Alibaba Cloud no permite configurar PTR a IPs dedicadas compartidas
+    en este plan. Entendemos que esto puede estar disparando su filtro
+    anti-spam interno, ya que el PTR ausente es uno de los indicadores
+    clásicos de spam.
+
+PETICIÓN:
+
+Solicitamos amablemente que la(s) IP(s) 47.57.232.232 y 47.57.242.119 sean
+agregadas a la whitelist de su sistema anti-spam para permitir el envío SMTP
+legítimo desde nuestra aplicación, dado que:
+
+  1. Somos clientes legítimos del dominio jsadr.com.co hospedado con ustedes.
+  2. El buzón jsa@jsadr.com.co nos pertenece y está debidamente autenticado
+     con credenciales válidas.
+  3. El tráfico es estrictamente transaccional (no marketing, no masivo),
+     con un volumen muy bajo.
+  4. La IP no aparece en listas negras públicas reconocidas.
+
+COMPROMISO DE BUENAS PRÁCTICAS:
+
+  • Todos los correos incluyen encabezados RFC compliant (Message-ID, Date,
+    From, To, Subject).
+  • Solo enviamos a destinatarios que han sido previamente validados.
+  • No usamos la cuenta para campañas masivas ni marketing.
+  • Mantendremos el volumen por debajo de 50 correos/día.
+  • Estamos abiertos a implementar cualquier política adicional (DKIM, SPF,
+    DMARC) que ustedes recomienden.
+
+¿Podrían indicarnos:
+
+  (a) Si es posible whitelistear las dos IPs listadas, y
+  (b) En caso de no ser posible, qué alternativas recomiendan
+      (¿relay SMTP dedicado?, ¿configurar PTR?, ¿plan de correo superior?).
+
+Quedo atento a su respuesta y agradezco mucho la colaboración.
+
+Cordialmente,
+
+  _________________________________
+  [Tu nombre completo]
+  Administrador del sistema — Jsadr
+  Correo: jsa@jsadr.com.co
+  Teléfono: [tu teléfono]
+  Dominio: jsadr.com.co

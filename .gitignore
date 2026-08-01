@@ -1,0 +1,95 @@
+# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
+
+# dependencies
+node_modules
+/.pnp
+.pnp.*
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/versions
+
+# testing
+/coverage
+
+# next.js
+/.next/
+/out/
+
+# production
+/build
+
+# misc
+.DS_Store
+*.pem
+
+# debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# env files (NO commitear secretos)
+.env
+.env.local
+.env.production
+.env.*.local
+# .env.example SÍ se commitea
+!.env.example
+
+# vercel
+.vercel
+
+
+# typescript
+*.tsbuildinfo
+next-env.d.ts
+local-*
+.claude
+.z-ai-config
+*.log
+dev.log
+dev.out.log
+test
+prompt
+
+server.log
+# Skills directory
+/skills/
+
+# === Archivos sensibles del sistema ===
+# Base de datos SQLite
+/db/*.db
+/db/*.db-journal
+/db/*.db-wal
+/db/*.db-shm
+# Backups del sistema
+/backups/
+/upload/
+# Snapshots exportados
+/snapshots/
+# Claves y certificados
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+# Configuración de despliegue con secretos
+docker-compose.prod.yml
+
+# === Sensitive output files (added 2026-08-01) ===
+/download/snapshots/
+/tool-results/
+/worklog.md
+/.zscripts/
+/test
+/download/
+
+# Scripts con claves en plaintext
+scripts/reset-admin-clave-acceso.js
+
+# GitHub Actions workflows (token actual no tiene scope 'workflow')
+.github/workflows/
+.env.bak.1785538124
+*.env.bak.*

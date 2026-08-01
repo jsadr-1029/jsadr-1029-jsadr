@@ -1,0 +1,234 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+}
+
+/* =====================================================
+   JSADR v3.0 — Tema oscuro por defecto
+   Fondo: gradiente azul oscuro → violeta
+   Primario: gradiente indigo → violeta
+   ===================================================== */
+
+:root {
+  --radius: 0.75rem;
+
+  /* Fondo con gradiente Aurora (azul oscuro → violeta) */
+  --background: oklch(0.18 0.04 265);
+  --foreground: oklch(0.96 0.01 250);
+
+  /* Tarjetas translúcidas (se combinan con .glass-card) */
+  --card: oklch(0.22 0.04 268 / 60%);
+  --card-foreground: oklch(0.96 0.01 250);
+
+  --popover: oklch(0.22 0.05 268 / 90%);
+  --popover-foreground: oklch(0.96 0.01 250);
+
+  /* Primario con gradiente indigo → violeta (definido via color sólido, el gradiente se aplica en utilidades) */
+  --primary: oklch(0.55 0.22 280);
+  --primary-foreground: oklch(0.98 0.005 250);
+
+  --secondary: oklch(0.26 0.04 268 / 60%);
+  --secondary-foreground: oklch(0.92 0.02 270);
+
+  --muted: oklch(0.26 0.03 268 / 50%);
+  --muted-foreground: oklch(0.72 0.03 265);
+
+  --accent: oklch(0.30 0.06 275 / 70%);
+  --accent-foreground: oklch(0.96 0.01 250);
+
+  --destructive: oklch(0.62 0.24 22);
+  --border: oklch(0.30 0.04 268 / 40%);
+  --input: oklch(0.26 0.03 268 / 60%);
+  --ring: oklch(0.58 0.20 280);
+
+  /* Charts — paleta Aurora */
+  --chart-1: oklch(0.62 0.22 280);  /* indigo/violeta */
+  --chart-2: oklch(0.70 0.20 200);  /* cyan */
+  --chart-3: oklch(0.72 0.20 150);  /* verde menta */
+  --chart-4: oklch(0.75 0.20 60);   /* ámbar */
+  --chart-5: oklch(0.65 0.24 340);  /* magenta */
+
+  /* Sidebar glassmorphism */
+  --sidebar: oklch(0.20 0.04 268 / 70%);
+  --sidebar-foreground: oklch(0.96 0.01 250);
+  --sidebar-primary: oklch(0.55 0.22 280);
+  --sidebar-primary-foreground: oklch(0.98 0.005 250);
+  --sidebar-accent: oklch(0.30 0.06 275 / 70%);
+  --sidebar-accent-foreground: oklch(0.96 0.01 250);
+  --sidebar-border: oklch(0.30 0.04 268 / 40%);
+  --sidebar-ring: oklch(0.58 0.20 280);
+}
+
+/* El tema Aurora es oscuro por defecto; .dark repite los mismos valores
+   para que los componentes que usan dark: funcionen igualmente */
+.dark {
+  --background: oklch(0.18 0.04 265);
+  --foreground: oklch(0.96 0.01 250);
+  --card: oklch(0.22 0.04 268 / 60%);
+  --card-foreground: oklch(0.96 0.01 250);
+  --popover: oklch(0.22 0.05 268 / 90%);
+  --popover-foreground: oklch(0.96 0.01 250);
+  --primary: oklch(0.55 0.22 280);
+  --primary-foreground: oklch(0.98 0.005 250);
+  --secondary: oklch(0.26 0.04 268 / 60%);
+  --secondary-foreground: oklch(0.92 0.02 270);
+  --muted: oklch(0.26 0.03 268 / 50%);
+  --muted-foreground: oklch(0.72 0.03 265);
+  --accent: oklch(0.30 0.06 275 / 70%);
+  --accent-foreground: oklch(0.96 0.01 250);
+  --destructive: oklch(0.62 0.24 22);
+  --border: oklch(0.30 0.04 268 / 40%);
+  --input: oklch(0.26 0.03 268 / 60%);
+  --ring: oklch(0.58 0.20 280);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply text-foreground;
+    /* Fondo Aurora con gradiente azul oscuro → violeta */
+    background-color: oklch(0.18 0.04 265);
+    background-image:
+      radial-gradient(at 20% 0%, oklch(0.30 0.12 280 / 0.45) 0px, transparent 50%),
+      radial-gradient(at 80% 10%, oklch(0.28 0.14 250 / 0.40) 0px, transparent 50%),
+      radial-gradient(at 60% 90%, oklch(0.25 0.13 300 / 0.35) 0px, transparent 55%),
+      linear-gradient(160deg, oklch(0.16 0.04 260) 0%, oklch(0.19 0.05 275) 60%, oklch(0.17 0.05 290) 100%);
+    background-attachment: fixed;
+    min-height: 100vh;
+  }
+}
+
+/* =====================================================
+   UTILIDADES AURORA
+   ===================================================== */
+
+/* Tarjeta glassmorphism: fondo translúcido + blur + borde sutil */
+@utility glass-card {
+  background-color: oklch(0.22 0.04 268 / 55%);
+  backdrop-filter: blur(16px) saturate(140%);
+  -webkit-backdrop-filter: blur(16px) saturate(140%);
+  border: 1px solid oklch(0.35 0.05 275 / 30%);
+  box-shadow:
+    0 8px 32px -8px oklch(0.10 0.04 270 / 0.6),
+    inset 0 1px 0 0 oklch(1 0 0 / 0.05);
+}
+
+/* Variante más oscura para modales/dropdowns */
+@utility glass-card-strong {
+  background-color: oklch(0.20 0.04 268 / 85%);
+  backdrop-filter: blur(20px) saturate(150%);
+  -webkit-backdrop-filter: blur(20px) saturate(150%);
+  border: 1px solid oklch(0.35 0.05 275 / 35%);
+  box-shadow:
+    0 16px 48px -12px oklch(0.08 0.04 270 / 0.7),
+    inset 0 1px 0 0 oklch(1 0 0 / 0.06);
+}
+
+/* Botón con gradiente primario indigo → violeta */
+@utility gradient-primary {
+  background-image: linear-gradient(135deg, oklch(0.58 0.22 275) 0%, oklch(0.55 0.24 300) 100%);
+}
+
+/* Logo con gradiente indigo → violeta */
+@utility gradient-logo {
+  background-image: linear-gradient(135deg, oklch(0.58 0.22 275) 0%, oklch(0.62 0.24 295) 100%);
+}
+
+/* Glow / sombra resplandor para elementos activos */
+@utility glow-primary {
+  box-shadow:
+    0 0 0 1px oklch(0.55 0.22 280 / 0.4),
+    0 6px 24px -4px oklch(0.55 0.22 285 / 0.55);
+}
+
+/* =====================================================
+   SCROLLBAR AURORA (con gradiente)
+   ===================================================== */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: oklch(0.16 0.03 268 / 60%);
+  border-radius: 8px;
+}
+::-webkit-scrollbar-thumb {
+  background-image: linear-gradient(180deg, oklch(0.55 0.22 275) 0%, oklch(0.55 0.24 300) 100%);
+  border-radius: 8px;
+  border: 2px solid oklch(0.16 0.03 268 / 60%);
+}
+::-webkit-scrollbar-thumb:hover {
+  background-image: linear-gradient(180deg, oklch(0.62 0.22 275) 0%, oklch(0.62 0.24 300) 100%);
+}
+
+/* Scrollbar Firefox */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: oklch(0.55 0.22 280) oklch(0.16 0.03 268 / 60%);
+}
+
+/* =====================================================
+   ANIMACIONES
+   ===================================================== */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.fade-in {
+  animation: fadeIn 0.3s ease-out;
+}
+
+@keyframes auroraPulse {
+  0%, 100% { opacity: 0.55; }
+  50% { opacity: 0.85; }
+}
+.aurora-pulse {
+  animation: auroraPulse 4s ease-in-out infinite;
+}
+
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}

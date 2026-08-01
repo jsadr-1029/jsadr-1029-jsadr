@@ -1,0 +1,547 @@
+'use client'
+
+import { useState, useEffect } from 'react'
+import { apiPost } from '@/hooks/use-fetch'
+import { Card, PageHeader, Badge, EmptyState, LoadingState } from '@/components/shared/ui'
+import { formatCOP, formatDate, formatPercent, getInitials, estadoPrestamoColor } from '@/lib/format'
+import { calcularPrestamo, generarCronograma } from '@/lib/finance'
+import { LogIn, ArrowLeft, Phone, Lock, Calculator, FileCheck, Send, KeyRound, ShieldCheck, Eye, EyeOff } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { toast } from 'sonner'
+
+type View = { name: string; id?: string }
+
+type PortalSession = {
+  token: string
+  clienteId: string
+  nombre: string
+}
+
+export function PortalCliente({ navigate }: { navigate: (v: any) => void }) {
+  const [session, setSession] = useState<PortalSession | null>(null)
+  const [step, setStep] = useState<'cedula' | 'pin' | 'logged'>('cedula')
+  const [cedulaData, setCedulaData] = useState<{ clienteId: string; nombre: string; tienePin: boolean; telefono: string } | null>(null)
+  const [cedula, setCedula] = useState('')
+  const [pin, setPin] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [showPin, setShowPin] = useState(false)
+
+  useEffect(() => {
+    const saved = localStorage.getItem('portalSession')
+    if (saved) {
+      try {
+        const s = JSON.parse(saved)
+        setSession(s)
+        setStep('logged')
+      } catch {}
+    }
+  }, [])
+
+  const verificarCedula = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setLoading(true)
+    try {
+      const res = await apiPost('/api/portal/verificar-cedula', { cedula })
+      setCedulaData(res)
+      setStep('pin')
+    } catch (e) {
+      toast.error((e as Error).message)
+    } finally { setLoading(false) }
+  }
+
+  const login = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setLoading(true)
+    try {
+      const res = await apiPost('/api/portal/login', { clienteId: cedulaData?.clienteId, pin })
+      setSession(res)
+      localStorage.setItem('portalSession', JSON.stringify(res))
+      setStep('logged')
+      toast.success(res.nuevoPin ? 'PIN creado correctamente' : 'Sesión iniciada')
+    } catch (e) {
+      toast.error((e as Error).message)
+    } finally { setLoading(false) }
+  }
+
+  const logout = () => {
+    setSession(null)
+    setCedulaData(null)
+    setCedula('')
+    setPin('')
+    setStep('cedula')
+    localStorage.removeItem('portalSession')
+  }
+
+  return (
+    <div className="min-h-[calc(100vh-200px)] flex items-center justify-center">
+      <div className="w-full max-w-4xl">
+        <Button variant="ghost" size="sm" onClick={() => navigate({ name: 'dashboard' })} className="mb-4">
+          <ArrowLeft className="w-4 h-4 mr-1" /> Volver al panel
+        </Button>
+
+        {step === 'cedula' && (
+          <Card className="max-w-md mx-auto p-6">
+            <div className="text-center mb-6">
+              <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-emerald-500 to-emerald-700 text-white flex items-center justify-center mx-auto mb-3">
+                <LogIn className="w-8 h-8" />
+              </div>
+              <h2 className="text-xl font-bold text-slate-900">Portal del Cliente</h2>
+              <p className="text-sm text-slate-500 mt-1">Ingresa con tu cédula para continuar</p>
+            </div>
+            <form onSubmit={verificarCedula} className="space-y-3">
+              <div>
+                <Label>Cédula de ciudadanía</Label>
+                <Input
+                  value={cedula}
+                  onChange={(e) => setCedula(e.target.value.replace(/\D/g, ''))}
+                  placeholder="1234567890"
+                  required
+                  autoFocus
+                />
+              </div>
+              <Button type="submit" className="w-full" disabled={loading}>
+                {loading ? 'Verificando...' : 'Continuar'}
+              </Button>
+            </form>
+          </Card>
+        )}
+
+        {step === 'pin' && cedulaData && (
+          <Card className="max-w-md mx-auto p-6">
+            <div className="text-center mb-6">
+              <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-emerald-500 to-emerald-700 text-white flex items-center justify-center mx-auto mb-3">
+                <Lock className="w-8 h-8" />
+              </div>
+              <h2 className="text-xl font-bold text-slate-900">Hola, {cedulaData.nombre.split(' ')[0]}</h2>
+              <p className="text-sm text-slate-500 mt-1">
+                {cedulaData.tienePin ? 'Ingresa tu PIN de 4 dígitos' : 'Crea tu PIN de 4 dígitos (primer acceso)'}
+              </p>
+              <p className="text-xs text-slate-400 mt-1">Teléfono: {cedulaData.telefono}****</p>
+            </div>
+            <form onSubmit={login} className="space-y-3">
+              <div>
+                <Label>PIN (4 dígitos)</Label>
+                <div className="relative">
+                  <Input
+                    type={showPin ? 'text' : 'password'}
+                    value={pin}
+                    onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0, 4))}
+                    placeholder="••••"
+                    required
+                    autoFocus
+                    inputMode="numeric"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPin(!showPin)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400"
+                  >
+                    {showPin ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+              </div>
+              <Button type="submit" className="w-full" disabled={loading || pin.length !== 4}>
+                {loading ? 'Ingresando...' : cedulaData.tienePin ? 'Ingresar' : 'Crear PIN y continuar'}
+              </Button>
+              <Button type="button" variant="ghost" className="w-full" onClick={() => { setStep('cedula'); setCedulaData(null); setPin('') }}>
+                Cambiar cédula
+              </Button>
+            </form>
+          </Card>
+        )}
+
+        {step === 'logged' && session && (
+          <PortalHome session={session} onLogout={logout} navigate={navigate} />
+        )}
+      </div>
+    </div>
+  )
+}
+
+function PortalHome({ session, onLogout, navigate }: { session: PortalSession; onLogout: () => void; navigate: (v: any) => void }) {
+  const [data, setData] = useState<any>(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    fetch(`/api/portal/prestamos?token=${session.token}`)
+      .then(r => r.json())
+      .then(d => setData(d))
+      .catch(e => toast.error('Error: ' + e.message))
+      .finally(() => setLoading(false))
+  }, [session.token])
+
+  if (loading) return <LoadingState />
+  if (!data) return <EmptyState icon={LogIn} title="Sin datos" />
+
+  return (
+    <div className="space-y-4">
+      <Card className="bg-gradient-to-r from-emerald-50 to-emerald-100 border-emerald-200">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-12 h-12 rounded-full bg-gradient-to-br from-emerald-500 to-emerald-700 text-white flex items-center justify-center text-lg font-bold">
+              {getInitials(session.nombre)}
+            </div>
+            <div>
+              <p className="font-bold text-slate-900">{session.nombre}</p>
+              <p className="text-xs text-slate-600">CC {data.cliente.cedula}</p>
+            </div>
+          </div>
+          <Button variant="outline" size="sm" onClick={onLogout}>Cerrar sesión</Button>
+        </div>
+      </Card>
+
+      <Tabs defaultValue="prestamos">
+        <TabsList className="grid w-full grid-cols-3">
+          <TabsTrigger value="prestamos">Mis Préstamos</TabsTrigger>
+          <TabsTrigger value="simular">Simular</TabsTrigger>
+          <TabsTrigger value="perfil">Mi Perfil</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="prestamos">
+          <Card title="Préstamos Activos" subtitle={`${data.prestamos?.length || 0} préstamos`}>
+            {!data.prestamos?.length ? (
+              <EmptyState icon={FileCheck} title="Sin préstamos" description="No tienes préstamos registrados." />
+            ) : (
+              <div className="space-y-3">
+                {data.prestamos.map((p: any) => (
+                  <PrestamoCard key={p.id} prestamo={p} token={session.token} navigate={navigate} />
+                ))}
+              </div>
+            )}
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="simular">
+          <SimuladorPrestamo token={session.token} />
+        </TabsContent>
+
+        <TabsContent value="perfil">
+          <Card title="Mis Datos">
+            <div className="grid grid-cols-2 gap-3 text-sm">
+              <div><p className="text-xs text-slate-500">Nombre</p><p className="font-medium">{data.cliente.nombre}</p></div>
+              <div><p className="text-xs text-slate-500">Cédula</p><p className="font-medium">{data.cliente.cedula}</p></div>
+              <div><p className="text-xs text-slate-500">Teléfono</p><p className="font-medium">{data.cliente.telefono}</p></div>
+              <div><p className="text-xs text-slate-500">Email</p><p className="font-medium">{data.cliente.email || '—'}</p></div>
+            </div>
+          </Card>
+        </TabsContent>
+      </Tabs>
+    </div>
+  )
+}
+
+function PrestamoCard({ prestamo, token, navigate }: any) {
+  const [firmarOpen, setFirmarOpen] = useState(false)
+  const progreso = prestamo.numeroCuotas > 0 ? (prestamo.cuotasPagadas / prestamo.numeroCuotas) * 100 : 0
+
+  return (
+    <div className="p-3 rounded-lg border border-slate-200">
+      <div className="flex items-center justify-between mb-2">
+        <div>
+          <p className="font-mono text-xs text-slate-700">{prestamo.codigo}</p>
+          <Badge className={estadoPrestamoColor(prestamo.estado)}>{prestamo.estado}</Badge>
+        </div>
+        <div className="text-right">
+          <p className="font-bold text-slate-900">{formatCOP(prestamo.saldoTotal)}</p>
+          <p className="text-xs text-slate-500">Saldo pendiente</p>
+        </div>
+      </div>
+      <div className="grid grid-cols-4 gap-2 text-xs mb-2">
+        <div><p className="text-slate-500">Principal</p><p className="font-semibold">{formatCOP(prestamo.montoPrincipal)}</p></div>
+        <div><p className="text-slate-500">Cuota</p><p className="font-semibold">{formatCOP(prestamo.montoCuota)}</p></div>
+        <div><p className="text-slate-500">Tasa</p><p className="font-semibold">{formatPercent(prestamo.tasaInteresMensual)}/m</p></div>
+        <div><p className="text-slate-500">Pagado</p><p className="font-semibold">{formatCOP(prestamo.montoPagado)}</p></div>
+      </div>
+      <div className="mb-2">
+        <div className="flex justify-between text-xs mb-1">
+          <span className="text-slate-500">Progreso: {prestamo.cuotasPagadas}/{prestamo.numeroCuotas} cuotas</span>
+          <span className="font-medium">{progreso.toFixed(0)}%</span>
+        </div>
+        <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
+          <div className="h-full bg-gradient-to-r from-emerald-500 to-emerald-600" style={{ width: `${progreso}%` }} />
+        </div>
+      </div>
+      {!prestamo.tycAceptado && (
+        <Button size="sm" className="w-full" onClick={() => setFirmarOpen(true)}>
+          <FileCheck className="w-4 h-4 mr-1" /> Firmar TyC
+        </Button>
+      )}
+      {prestamo.tycAceptado && prestamo.pagos?.length > 0 && (
+        <div className="mt-2 pt-2 border-t border-slate-100">
+          <p className="text-xs font-semibold text-slate-700 mb-1">Últimos pagos</p>
+          {prestamo.pagos.slice(0, 3).map((p: any) => (
+            <div key={p.id} className="flex justify-between text-xs">
+              <span className="text-slate-600">{formatDate(p.fechaPago)}</span>
+              <span className="font-medium text-emerald-700">{formatCOP(p.montoTotal)}</span>
+            </div>
+          ))}
+        </div>
+      )}
+      {firmarOpen && <FirmarModal prestamo={prestamo} token={token} onClose={() => setFirmarOpen(false)} navigate={navigate} />}
+    </div>
+  )
+}
+
+function FirmarModal({ prestamo, token, onClose, navigate }: any) {
+  const [step, setStep] = useState<'resumen' | 'otp' | 'validar' | 'done'>('resumen')
+  const [firmaId, setFirmaId] = useState('')
+  const [otpInput, setOtpInput] = useState('')
+  const [loading, setLoading] = useState(false)
+
+  const iniciarFirma = async () => {
+    setLoading(true)
+    try {
+      const res = await apiPost('/api/portal/firmar', { prestamoId: prestamo.id, token })
+      setFirmaId(res.firmaId)
+      setStep('otp')
+    } catch (e) { toast.error((e as Error).message) }
+    finally { setLoading(false) }
+  }
+
+  const solicitarOtp = async () => {
+    setLoading(true)
+    try {
+      const res = await apiPost('/api/portal/solicitar-otp', { firmaId, canal: 'EMAIL' })
+      // FIX-SEGURIDAD: ya no exponemos otpDemo. Solo mostramos canal y expiración.
+      setStep('validar')
+      const canalMsg = res.canal === 'EMAIL' ? 'correo electrónico' : res.canal === 'WHATSAPP' ? 'WhatsApp' : 'WhatsApp y correo'
+      toast.success(`OTP enviado por ${canalMsg}. Expira en 5 minutos.`)
+    } catch (e) { toast.error((e as Error).message) }
+    finally { setLoading(false) }
+  }
+
+  const validarOtp = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setLoading(true)
+    try {
+      await apiPost('/api/portal/validar-otp', { firmaId, otp: otpInput })
+      setStep('done')
+      toast.success('TyC firmados correctamente')
+    } catch (e) { toast.error((e as Error).message) }
+    finally { setLoading(false) }
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={onClose}>
+      <div className="bg-white rounded-xl max-w-lg w-full max-h-[90vh] overflow-y-auto p-6" onClick={e => e.stopPropagation()}>
+        {step === 'resumen' && (
+          <div>
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center">
+                <FileCheck className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="font-bold text-slate-900">Firmar TyC del Préstamo</h3>
+                <p className="text-xs text-slate-500">{prestamo.codigo}</p>
+              </div>
+            </div>
+            <div className="bg-slate-50 rounded-lg p-3 space-y-2 text-sm mb-4">
+              <div className="flex justify-between"><span className="text-slate-600">Monto principal</span><span className="font-semibold">{formatCOP(prestamo.montoPrincipal)}</span></div>
+              <div className="flex justify-between"><span className="text-slate-600">Total a pagar</span><span className="font-semibold">{formatCOP(prestamo.totalPagar)}</span></div>
+              <div className="flex justify-between"><span className="text-slate-600">Cuota</span><span className="font-semibold">{formatCOP(prestamo.montoCuota)}</span></div>
+              <div className="flex justify-between"><span className="text-slate-600">Cuotas</span><span className="font-semibold">{prestamo.numeroCuotas}</span></div>
+              <div className="flex justify-between"><span className="text-slate-600">Tasa mensual</span><span className="font-semibold">{formatPercent(prestamo.tasaInteresMensual)}</span></div>
+              <div className="flex justify-between"><span className="text-slate-600">Plazo</span><span className="font-semibold">{prestamo.plazoMeses} meses ({prestamo.frecuencia})</span></div>
+            </div>
+            <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 mb-4">
+              <p className="text-xs text-amber-800">
+                Al firmar, aceptas los términos y condiciones del préstamo. La firma se realizará mediante OTP por WhatsApp.
+              </p>
+            </div>
+            <div className="flex gap-2">
+              <Button variant="outline" className="flex-1" onClick={onClose}>Cancelar</Button>
+              <Button className="flex-1" onClick={iniciarFirma} disabled={loading}>{loading ? 'Procesando...' : 'Iniciar firma'}</Button>
+            </div>
+          </div>
+        )}
+
+        {step === 'otp' && (
+          <div className="text-center">
+            <div className="w-16 h-16 rounded-2xl bg-emerald-100 text-emerald-700 flex items-center justify-center mx-auto mb-4">
+              <Send className="w-8 h-8" />
+            </div>
+            <h3 className="font-bold text-slate-900 mb-2">Enviar código OTP</h3>
+            <p className="text-sm text-slate-500 mb-4">
+              Te enviaremos un código de verificación por WhatsApp al número registrado.
+            </p>
+            <div className="flex gap-2">
+              <Button variant="outline" className="flex-1" onClick={() => setStep('resumen')}>Volver</Button>
+              <Button className="flex-1" onClick={solicitarOtp} disabled={loading}>{loading ? 'Enviando...' : 'Enviar OTP'}</Button>
+            </div>
+          </div>
+        )}
+
+        {step === 'validar' && (
+          <form onSubmit={validarOtp}>
+            <div className="text-center mb-4">
+              <div className="w-16 h-16 rounded-2xl bg-blue-100 text-blue-700 flex items-center justify-center mx-auto mb-4">
+                <KeyRound className="w-8 h-8" />
+              </div>
+              <h3 className="font-bold text-slate-900 mb-2">Ingresa el código OTP</h3>
+              <p className="text-sm text-slate-500">Te enviamos un código de 6 dígitos por correo electrónico. Expira en 5 minutos.</p>
+            </div>
+            <Input
+              value={otpInput}
+              onChange={(e) => setOtpInput(e.target.value.replace(/\D/g, '').slice(0, 6))}
+              placeholder="000000"
+              className="text-center text-2xl font-mono tracking-widest"
+              maxLength={6}
+              autoFocus
+              inputMode="numeric"
+              pattern="\d{6}"
+            />
+            <Button type="submit" className="w-full mt-4" disabled={loading || otpInput.length !== 6}>
+              {loading ? 'Validando...' : 'Validar y Firmar'}
+            </Button>
+            <Button type="button" variant="ghost" className="w-full mt-2" onClick={solicitarOtp}>
+              Reenviar OTP
+            </Button>
+          </form>
+        )}
+
+        {step === 'done' && (
+          <div className="text-center">
+            <div className="w-20 h-20 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center mx-auto mb-4">
+              <ShieldCheck className="w-10 h-10" />
+            </div>
+            <h3 className="font-bold text-slate-900 text-lg mb-2">¡Firma completada!</h3>
+            <p className="text-sm text-slate-500 mb-4">
+              Has firmado correctamente los términos y condiciones del préstamo {prestamo.codigo}.
+              El administrador será notificado para continuar con el proceso.
+            </p>
+            <Button className="w-full" onClick={onClose}>Cerrar</Button>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function SimuladorPrestamo({ token }: { token: string }) {
+  const [form, setForm] = useState({
+    monto: '500000',
+    categoriaId: '',
+    plazoMeses: '3',
+    frecuencia: 'MENSUAL',
+  })
+  const [categorias, setCategorias] = useState<any[]>([])
+  const [resultado, setResultado] = useState<any>(null)
+
+  useEffect(() => {
+    fetch('/api/categorias').then(r => r.json()).then(d => setCategorias(d.categorias || []))
+  }, [])
+
+  const simular = async (e: React.FormEvent) => {
+    e.preventDefault()
+    try {
+      const res = await apiPost('/api/portal/simular', {
+        ...form,
+        monto: Number(form.monto),
+        plazoMeses: Number(form.plazoMeses),
+        token,
+      })
+      setResultado(res)
+    } catch (e) { toast.error((e as Error).message) }
+  }
+
+  return (
+    <Card title="Simulador de Préstamo">
+      <form onSubmit={simular} className="space-y-3 mb-4">
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <Label>Monto a solicitar</Label>
+            <Input type="number" value={form.monto} onChange={(e) => setForm({ ...form, monto: e.target.value })} required />
+          </div>
+          <div>
+            <Label>Plazo (meses)</Label>
+            <Input type="number" value={form.plazoMeses} onChange={(e) => setForm({ ...form, plazoMeses: e.target.value })} required />
+          </div>
+          <div>
+            <Label>Categoría</Label>
+            <Select value={form.categoriaId} onValueChange={(v) => setForm({ ...form, categoriaId: v })}>
+              <SelectTrigger><SelectValue placeholder="Sin categoría..." /></SelectTrigger>
+              <SelectContent>
+                {categorias.map((c) => <SelectItem key={c.id} value={c.id}>{c.nombre}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+          <div>
+            <Label>Frecuencia</Label>
+            <Select value={form.frecuencia} onValueChange={(v) => setForm({ ...form, frecuencia: v })}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="MENSUAL">Mensual</SelectItem>
+                <SelectItem value="QUINCENAL">Quincenal</SelectItem>
+                <SelectItem value="SEMANAL">Semanal</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+        <Button type="submit"><Calculator className="w-4 h-4 mr-1" />Simular</Button>
+      </form>
+
+      {resultado && (
+        <div className="space-y-4">
+          <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-4">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <div>
+                <p className="text-xs text-emerald-700">Cuotas</p>
+                <p className="text-xl font-bold text-emerald-900">{resultado.simulacion.numeroCuotas}</p>
+              </div>
+              <div>
+                <p className="text-xs text-emerald-700">Valor cuota</p>
+                <p className="text-xl font-bold text-emerald-900">{formatCOP(resultado.simulacion.montoCuota)}</p>
+              </div>
+              <div>
+                <p className="text-xs text-emerald-700">Interés total</p>
+                <p className="text-xl font-bold text-emerald-900">{formatCOP(resultado.simulacion.totalInteres)}</p>
+              </div>
+              <div>
+                <p className="text-xs text-emerald-700">Total a pagar</p>
+                <p className="text-xl font-bold text-emerald-900">{formatCOP(resultado.simulacion.totalPagar)}</p>
+              </div>
+            </div>
+          </div>
+
+          {resultado.cronograma && (
+            <div>
+              <p className="text-sm font-semibold text-slate-700 mb-2">Cronograma de cuotas</p>
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead className="bg-slate-50">
+                    <tr>
+                      <th className="text-left px-3 py-2 font-semibold text-slate-600">#</th>
+                      <th className="text-left px-3 py-2 font-semibold text-slate-600">Vencimiento</th>
+                      <th className="text-right px-3 py-2 font-semibold text-slate-600">Capital</th>
+                      <th className="text-right px-3 py-2 font-semibold text-slate-600">Interés</th>
+                      <th className="text-right px-3 py-2 font-semibold text-slate-600">Total</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {resultado.cronograma.map((c: any) => (
+                      <tr key={c.numero}>
+                        <td className="px-3 py-2 font-medium">{c.numero}</td>
+                        <td className="px-3 py-2">{formatDate(c.fechaVencimiento)}</td>
+                        <td className="px-3 py-2 text-right">{formatCOP(c.capital)}</td>
+                        <td className="px-3 py-2 text-right">{formatCOP(c.interes)}</td>
+                        <td className="px-3 py-2 text-right font-semibold">{formatCOP(c.montoTotal)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          <div className="text-xs text-slate-500 bg-slate-50 p-3 rounded">
+            <p>* Esta es una simulación. El préstamo final está sujeto a aprobación y verificación de capacidad de pago.</p>
+          </div>
+        </div>
+      )}
+    </Card>
+  )
+}
