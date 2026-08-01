@@ -64,8 +64,8 @@ export const VISTAS_POR_ROL: Record<Rol, ViewKey[]> = {
     'comunicaciones',
     'buzon-solicitudes',
     'notificaciones',
-    'exportar',
-    'manual',
+    // 'exportar'  → Reportes: oculto para GESTOR (información sensible)
+    // 'manual'    → Manual: oculto para GESTOR (información sensible)
   ],
 
   CONSULTOR: [
