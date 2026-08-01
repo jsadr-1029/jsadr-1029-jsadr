@@ -455,7 +455,7 @@ ${await (async () => {
     crypto.createHash('sha256').update(firma.id + '|' + firma.createdAt.toISOString() + '|certificado').digest('hex').substring(8, 12) + '-' +
     crypto.createHash('sha256').update(firma.id + '|' + firma.createdAt.toISOString() + '|certificado').digest('hex').substring(12, 16)
   const selloDig = crypto.createHash('sha256').update(JSON.stringify({ firmaId: firma.id, cliente: cliente.cedula, codigo: codigoVer, timestamp: new Date().toISOString() })).digest('hex')
-  const urlVerif = (process.env.NEXT_PUBLIC_BASE_URL || 'https://preview-chat-c04df402-049e-4406-b5d2-c8e07f801c50.space-z.ai') + '/api/documentos/verificar?codigo=' + codigoVer
+  const urlVerif = (process.env.NEXT_PUBLIC_BASE_URL || 'https://preview-chat-c04df402-049e-4406-b5d2-c8e07f801c50.space-z.ai') + '/api/verificar?codigo=' + codigoVer
   let qrB64 = ''
   try { qrB64 = await QRCode.toDataURL(urlVerif, { width: 130, margin: 1, color: { dark: '#1e3a5f', light: '#ffffff' } }) } catch {}
   return `
