@@ -1,31 +1,29 @@
 #!/bin/bash
+# Watchdog persistente para next dev
 cd /home/z/my-project
-LOG=/tmp/next-prod.log
+LOG=/tmp/next-dev.log
+
+# Matar instancias previas
+pkill -9 -f "next/dist/bin/next" 2>/dev/null
+pkill -9 -f "next-server" 2>/dev/null
+sleep 2
 
 while true; do
-  pkill -9 -f "next-server" 2>/dev/null
-  pkill -9 -f "next/dist/bin/next" 2>/dev/null
-  sleep 2
+  # Lanzar sin DATABASE_URL heredada (dotenv la carga desde .env)
+  env -u DATABASE_URL -u NO_COLOR \
+    NODE_OPTIONS="--max-old-space-size=768" \
+    node node_modules/next/dist/bin/next dev -p 3000 > $LOG 2>&1 &
+  PID=$!
+  echo "[$(date '+%H:%M:%S')] next dev lanzado (PID $PID)"
 
-  NODE_OPTIONS="--max-old-space-size=512" setsid nohup node node_modules/next/dist/bin/next start -p 3000 > $LOG 2>&1 < /dev/null &
-  echo "[$(date '+%H:%M:%S')] Lanzado next start"
+  # Esperar 8s para que arranque
+  sleep 8
 
-  # Esperar 6s
-  sleep 6
-
-  FAIL=0
-  while true; do
-    CODE=$(curl -s -o /dev/null -w "%{http_code}" --max-time 5 http://localhost:3000/login 2>/dev/null)
-    if [ "$CODE" = "000" ]; then
-      FAIL=$((FAIL+1))
-      if [ $FAIL -ge 2 ]; then
-        echo "[$(date '+%H:%M:%S')] ⚠ Caído. Reiniciando..."
-        break
-      fi
-      sleep 3
-    else
-      FAIL=0
-      sleep 15
-    fi
+  # Monitorear: si el proceso muere, reiniciar
+  while kill -0 $PID 2>/dev/null; do
+    sleep 5
   done
+
+  echo "[$(date '+%H:%M:%S')] next dev murió (PID $PID), reiniciando en 3s..."
+  sleep 3
 done
