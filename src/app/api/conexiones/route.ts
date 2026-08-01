@@ -8,7 +8,7 @@ import { sanitizeError } from '@/lib/error-handler'
 // GET - listar todas las conexiones API (Reforzado: requiere GESTOR+)
 export async function GET(req: NextRequest) {
   try {
-    const auth = requireRole(req, ['ADMIN', 'GESTOR'])
+    const auth = requireRole(req, ['ADMIN'])
     if (auth instanceof NextResponse) return auth
     const conexiones = await db.conexionAPI.findMany({
       orderBy: { createdAt: 'desc' },

@@ -6,7 +6,48 @@ import { enviarWhatsApp, guardarNotificacion } from '@/lib/whatsapp'
 import { enviarEmail } from '@/lib/email'
 import crypto from 'crypto'
 import { sanitizeError } from '@/lib/error-handler'
-import { requireRole } from '@/lib/auth-guard'
+import { getPortalCliente } from '@/lib/auth-guard'
+
+// === Helper: autoriza acceso a un préstamo desde el portal o staff ===
+// Si hay x-portal-token: valida al cliente del portal y verifica ownership.
+// Si no: permite (esta API es usada tanto por el portal como por staff interno
+// en el flujo de aceptación de TyC).
+async function autorizarPrestamoPortalOStaff(
+  req: NextRequest,
+  prestamoId: string
+): Promise<{ tipo: 'portal'; clienteId: string } | { tipo: 'staff' } | NextResponse> {
+  const portalToken = req.headers.get('x-portal-token')
+  if (portalToken) {
+    const cliente = await getPortalCliente(req)
+    if (!cliente) {
+      return NextResponse.json(
+        { success: false, error: 'Sesión del portal inválida o expirada.', code: 'PORTAL_UNAUTHORIZED' },
+        { status: 401 }
+      )
+    }
+    // Verificar ownership del préstamo
+    const prestamo = await db.prestamo.findUnique({
+      where: { id: prestamoId },
+      select: { clienteId: true },
+    })
+    if (!prestamo) {
+      return NextResponse.json(
+        { success: false, error: 'Préstamo no encontrado' },
+        { status: 404 }
+      )
+    }
+    if (prestamo.clienteId !== cliente.id) {
+      return NextResponse.json(
+        { success: false, error: 'No tienes acceso a este préstamo', code: 'FORBIDDEN' },
+        { status: 403 }
+      )
+    }
+    return { tipo: 'portal', clienteId: cliente.id }
+  }
+  // Sin portal token → acceso de staff interno (gestor/admin crea el préstamo y
+  // el flujo OTP lo inicia desde el panel interno también).
+  return { tipo: 'staff' }
+}
 
 // GET /api/prestamos/[id]/aceptar-tyc-otp
 // Ejecuta check_otp automáticamente — usado por el portal del cliente
@@ -17,6 +58,8 @@ export async function GET(
 ) {
   try {
     const { id: prestamoId } = await params
+    const auth = await autorizarPrestamoPortalOStaff(req, prestamoId)
+    if (auth instanceof NextResponse) return auth
     return await checkOTP(prestamoId)
   } catch (error: any) {
     return NextResponse.json({ success: false, error: sanitizeError(error).message }, { status: 500 })
@@ -29,6 +72,8 @@ export async function POST(
 ) {
   try {
     const { id: prestamoId } = await params
+    const auth = await autorizarPrestamoPortalOStaff(req, prestamoId)
+    if (auth instanceof NextResponse) return auth
     const body = await req.json()
     const { accion } = body
 

@@ -18,7 +18,7 @@ import {
 
 export async function GET(req: NextRequest) {
   try {
-    const authResult = requireAuth(req)
+    const authResult = requireRole(req, ['ADMIN', 'GESTOR', 'CONSULTOR'])
     if (authResult instanceof NextResponse) return authResult
 
     const { searchParams } = new URL(req.url)

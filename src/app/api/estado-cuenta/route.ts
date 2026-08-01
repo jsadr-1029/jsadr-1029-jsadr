@@ -8,7 +8,7 @@ import {
   formatearFecha,
 } from '@/lib/finanzas'
 import { sanitizeError } from '@/lib/error-handler'
-import { requireAuth } from '@/lib/auth-guard'
+import { requireRole } from '@/lib/auth-guard'
 import { safeCompare } from '@/lib/security'
 
 // GET - estado de cuenta del cliente por cédula (HTML imprimible)
@@ -72,7 +72,7 @@ export async function GET(req: NextRequest) {
       }
     } else {
       // Sin token de portal → debe ser staff autenticado
-      const auth = requireAuth(req)
+      const auth = requireRole(req, ['ADMIN', 'GESTOR', 'CONSULTOR'])
       if (auth instanceof NextResponse) return auth
     }
 

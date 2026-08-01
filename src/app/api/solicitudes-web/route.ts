@@ -93,7 +93,7 @@ function plazoMesesDesdeCuotas(numeroCuotas: number, frecuencia: Frecuencia): nu
 // =====================================================
 export async function GET(req: NextRequest) {
   try {
-    const auth = requireAuth(req)
+    const auth = requireRole(req, ['ADMIN', 'GESTOR', 'CONSULTOR'])
     if (auth instanceof NextResponse) return auth
 
     const { searchParams } = new URL(req.url)
@@ -376,7 +376,7 @@ export async function POST(req: NextRequest) {
 // =====================================================
 export async function PATCH(req: NextRequest) {
   try {
-    const auth = requireAuth(req)
+    const auth = requireRole(req, ['ADMIN', 'GESTOR'])
     if (auth instanceof NextResponse) return auth
 
     const body = await req.json()

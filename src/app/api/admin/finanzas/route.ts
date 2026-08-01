@@ -19,7 +19,7 @@ import { sanitizeError } from '@/lib/error-handler'
 // =====================================================
 export async function GET(req: NextRequest) {
   try {
-    const auth = requireRole(req, ['ADMIN', 'GESTOR', 'CONSULTOR'])
+    const auth = requireRole(req, ['ADMIN'])
     if (auth instanceof NextResponse) return auth
 
     const { searchParams } = new URL(req.url)
@@ -355,7 +355,7 @@ function formatCOP(valor: number): string {
 // =====================================================
 export async function POST(req: NextRequest) {
   try {
-    const auth = requireRole(req, ['ADMIN', 'GESTOR'])
+    const auth = requireRole(req, ['ADMIN'])
     if (auth instanceof NextResponse) return auth
 
     const body = await req.json()
@@ -404,7 +404,7 @@ export async function POST(req: NextRequest) {
 // =====================================================
 export async function PATCH(req: NextRequest) {
   try {
-    const auth = requireRole(req, ['ADMIN', 'GESTOR'])
+    const auth = requireRole(req, ['ADMIN'])
     if (auth instanceof NextResponse) return auth
 
     const body = await req.json()

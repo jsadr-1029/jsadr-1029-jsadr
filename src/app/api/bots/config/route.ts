@@ -27,7 +27,7 @@ export async function GET() {
 
 export async function PATCH(req: NextRequest) {
   try {
-    const auth = requireRole(req, ['ADMIN'])
+    const auth = requireRole(req, ['ADMIN', 'GESTOR', 'CONSULTOR'])
     if (auth instanceof NextResponse) return auth
 
     const body = await req.json()

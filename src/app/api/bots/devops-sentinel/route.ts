@@ -44,7 +44,7 @@ export async function GET(req: NextRequest) {
 // =====================================================
 export async function POST(req: NextRequest) {
   try {
-    const auth = requireRole(req, ['ADMIN'])
+    const auth = requireRole(req, ['ADMIN', 'GESTOR', 'CONSULTOR'])
     if (auth instanceof NextResponse) return auth
 
     const clientInfo = getClientInfo(req)

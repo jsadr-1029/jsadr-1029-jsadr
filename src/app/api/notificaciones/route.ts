@@ -36,7 +36,7 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     // FIX-SEGURIDAD-CRITICA #1: RBAC — solo ADMIN puede disparar notificaciones masivas
-    const authResult = requireRole(req, ['ADMIN'])
+    const authResult = requireRole(req, ['ADMIN', 'GESTOR'])
     if (authResult instanceof NextResponse) return authResult
     const body = await req.json()
     const { accion } = body
@@ -154,7 +154,7 @@ export async function POST(req: NextRequest) {
 export async function PATCH(req: NextRequest) {
   try {
     // FIX-SEGURIDAD-CRITICA #1: RBAC — solo ADMIN puede modificar estado de notificaciones
-    const authResult = requireRole(req, ['ADMIN'])
+    const authResult = requireRole(req, ['ADMIN', 'GESTOR'])
     if (authResult instanceof NextResponse) return authResult
     const body = await req.json()
     const { id, estado } = body

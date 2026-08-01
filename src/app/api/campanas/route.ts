@@ -107,7 +107,7 @@ export async function PATCH(req: NextRequest) {
 // DELETE - eliminar campaña
 export async function DELETE(req: NextRequest) {
   try {
-    const auth = requireRole(req, ['ADMIN'])
+    const auth = requireRole(req, ['ADMIN', 'GESTOR'])
     if (auth instanceof NextResponse) return auth
 
     const { searchParams } = new URL(req.url)

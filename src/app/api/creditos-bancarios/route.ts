@@ -12,7 +12,7 @@ import { errorResponse, logError } from '@/lib/error-handler'
 // GET - listar todos los créditos bancarios (con filtro opcional por tipo)
 export async function GET(req: NextRequest) {
   try {
-    const authResult = requireAuth(req)
+    const authResult = requireRole(req, ['ADMIN', 'GESTOR', 'CONSULTOR'])
     if (authResult instanceof NextResponse) return authResult
 
     const { searchParams } = new URL(req.url)
@@ -195,7 +195,7 @@ export async function PATCH(req: NextRequest) {
 // DELETE - eliminar préstamo bancario
 export async function DELETE(req: NextRequest) {
   try {
-    const authResult = requireRole(req, ['ADMIN'])
+    const authResult = requireRole(req, ['ADMIN', 'GESTOR'])
     if (authResult instanceof NextResponse) return authResult
 
     const { searchParams } = new URL(req.url)

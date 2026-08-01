@@ -12,7 +12,7 @@ import { errorResponse, logError } from '@/lib/error-handler'
 
 export async function GET(req: NextRequest) {
   try {
-    const authResult = requireRole(req, ['ADMIN', 'GESTOR', 'CONSULTOR'])
+    const authResult = requireRole(req, ['ADMIN'])
     if (authResult instanceof NextResponse) return authResult
 
     const { searchParams } = new URL(req.url)
