@@ -71,7 +71,14 @@ export default function LoginPage() {
   }, [])
 
   useEffect(() => {
-    // Si ya está autenticado, redirigir al dashboard correspondiente
+    // Si ya está autenticado (con access_token válido), redirigir al dashboard correspondiente.
+    // FIX-LOGIN-LOOP: antes había aquí un redirect basado SOLO en portal_cliente_token,
+    // que causaba un bucle infinito cuando el access_token había sido borrado pero el
+    // portal_cliente_token seguía en localStorage (residuo de una sesión anterior):
+    //   /login → ve portal_cliente_token → /?portal=1
+    //   /     → no hay access_token      → /login
+    //   (loop)
+    // Ahora solo redirigimos si hay un access_token real en localStorage.
     if (isAuthenticated()) {
       const u = getUserData()
       if (u?.rol === 'CLIENTE' || u?.esPortalCliente) {
@@ -81,11 +88,15 @@ export default function LoginPage() {
       }
       return
     }
-    // Si ya hay token de portal cliente, ir al portal cliente
+    // Limpieza preventiva: si quedó un portal_cliente_token huérfano (sin access_token),
+    // lo borramos para evitar residuos de sesiones anteriores.
     try {
       const tk = localStorage.getItem('portal_cliente_token')
-      if (tk) {
-        router.replace('/?portal=1')
+      const at = localStorage.getItem('access_token')
+      if (tk && !at) {
+        localStorage.removeItem('portal_cliente_token')
+        localStorage.removeItem('portal_cliente_id')
+        localStorage.removeItem('portal_cliente_nombre')
       }
     } catch {}
   }, [router])

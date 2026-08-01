@@ -51,7 +51,13 @@ if (typeof setInterval !== 'undefined') {
 }
 
 // === CONFIGURACIÓN CORS ESTRICTA ===
-const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || 'https://localhost:3000,https://preview-*.space-z.ai')
+// FIX-LOGIN-LOOP: antes solo se permitía https://localhost:3000, pero el dev
+// server usa http://localhost:3000 → el navegador enviaba Origin: http://...
+// y el check CSRF bloqueaba el POST /api/auth/login con 403 CSRF_DENIED.
+// Añadimos http://localhost en cualquier puerto para dev, además de los
+// dominios de preview de z.ai y los dominios de producción Vercel.
+const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS ||
+  'http://localhost:3000,http://localhost:3001,http://127.0.0.1:3000,https://localhost:3000,https://preview-*.space-z.ai,https://*.vercel.app')
   .split(',')
   .map(o => o.trim())
   .filter(Boolean)

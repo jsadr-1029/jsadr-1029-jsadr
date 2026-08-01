@@ -43,6 +43,13 @@ export function clearAuth(): void {
   localStorage.removeItem(TOKEN_KEY)
   localStorage.removeItem(REFRESH_KEY)
   localStorage.removeItem(USER_KEY)
+  // FIX-LOGIN-LOOP: limpiar también tokens de portal cliente y jurídico,
+  // que antes quedaban huérfanos y provocaban bucles de redirección.
+  localStorage.removeItem('portal_cliente_token')
+  localStorage.removeItem('portal_cliente_id')
+  localStorage.removeItem('portal_cliente_nombre')
+  localStorage.removeItem('juridico_token')
+  localStorage.removeItem('juridico_user')
 }
 
 export function isAuthenticated(): boolean {
