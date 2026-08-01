@@ -26,7 +26,7 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
-    const auth = requireRole(req, ['ADMIN', 'GESTOR', 'CONSULTOR'])
+    const auth = requireRole(req, ['ADMIN'])
     if (auth instanceof NextResponse) return auth
 
     const body = await req.json()

@@ -1,17 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { sanitizeError } from '@/lib/error-handler'
-import { requireRole } from '@/lib/auth-guard'
 
 // GET - obtener un cliente por id (incluye referidor y referidos)
 export async function GET(
-  req: NextRequest,
+  _req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const auth = requireRole(req, ['ADMIN', 'GESTOR', 'CONSULTOR'])
-    if (auth instanceof NextResponse) return auth
-
     const { id } = await params
     const cliente = await db.cliente.findUnique({
       where: { id },
@@ -69,9 +65,6 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const auth = requireRole(req, ['ADMIN', 'GESTOR'])
-    if (auth instanceof NextResponse) return auth
-
     const { id } = await params
     const body = await req.json()
     const {
@@ -217,9 +210,6 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const auth = requireRole(req, ['ADMIN', 'GESTOR'])
-    if (auth instanceof NextResponse) return auth
-
     const { id } = await params
     const body = await req.json()
     const { activo } = body

@@ -54,7 +54,7 @@ export async function GET(req: NextRequest) {
 // =====================================================
 export async function POST(req: NextRequest) {
   try {
-    const auth = requireRole(req, ['ADMIN', 'GESTOR', 'CONSULTOR'])
+    const auth = requireRole(req, ['ADMIN'])
     if (auth instanceof NextResponse) return auth
 
     const clientInfo = getClientInfo(req)
@@ -112,7 +112,7 @@ export async function POST(req: NextRequest) {
 // =====================================================
 export async function PATCH(req: NextRequest) {
   try {
-    const auth = requireRole(req, ['ADMIN', 'GESTOR', 'CONSULTOR'])
+    const auth = requireRole(req, ['ADMIN'])
     if (auth instanceof NextResponse) return auth
 
     const clientInfo = getClientInfo(req)
@@ -181,7 +181,7 @@ export async function PATCH(req: NextRequest) {
 // =====================================================
 export async function DELETE(req: NextRequest) {
   try {
-    const auth = requireRole(req, ['ADMIN', 'GESTOR', 'CONSULTOR'])
+    const auth = requireRole(req, ['ADMIN'])
     if (auth instanceof NextResponse) return auth
 
     const { searchParams } = new URL(req.url)

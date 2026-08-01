@@ -11,7 +11,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { errorResponse, logError } from '@/lib/error-handler'
 import { formatearMoneda, formatearFecha } from '@/lib/finanzas'
-import { requireRole } from '@/lib/auth-guard'
+import { requireAuth } from '@/lib/auth-guard'
 import { safeCompare } from '@/lib/security'
 
 export async function GET(req: NextRequest) {
@@ -71,7 +71,7 @@ export async function GET(req: NextRequest) {
       }
     } else {
       // Sin token de portal → debe ser staff autenticado
-      const auth = requireRole(req, ['ADMIN', 'GESTOR', 'CONSULTOR'])
+      const auth = requireAuth(req)
       if (auth instanceof NextResponse) return auth
     }
 

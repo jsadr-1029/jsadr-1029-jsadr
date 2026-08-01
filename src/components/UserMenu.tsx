@@ -31,7 +31,7 @@
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { getUserData, logout, switchUser, getImpersonation, apiJson } from '@/lib/api-client'
-import { vistasPermitidas, ROLE_LABELS as PERM_ROLE_LABELS, ROLE_COLORS as PERM_ROLE_COLORS } from '@/lib/permisos'
+import { vistasPermitidas } from '@/lib/permisos'
 import {
   LogOut,
   Menu,
@@ -58,8 +58,8 @@ import {
   BookOpen,
   Bell,
   BarChart3,
-  Megaphone,
   Calculator,
+  Megaphone,
   Repeat,
   ArrowLeftRight,
   Loader2,
@@ -95,11 +95,11 @@ const ROLE_COLORS: Record<string, string> = {
   CLIENTE: 'from-emerald-500 to-green-600',
 }
 
-// Catálogo completo de navegación (se filtra dinámicamente según rol del usuario)
 const QUICK_NAV_ALL = [
   { key: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { key: 'prestamos', label: 'Préstamos', icon: FileText },
   { key: 'pagos', label: 'Pagos', icon: DollarSign },
+  { key: 'clientes', label: 'Clientes', icon: Users },
   { key: 'buzon-solicitudes', label: 'Buzón Solicitudes', icon: Inbox },
   { key: 'comunicaciones', label: 'Comunicaciones', icon: MessageSquare },
   { key: 'seguridad', label: 'Seguridad', icon: Shield },
@@ -120,6 +120,7 @@ const FULL_NAV_ALL = [
   { key: 'comunicaciones', label: 'Comunicaciones', icon: MessageSquare, group: 'Consulta' },
   { key: 'notificaciones', label: 'Notificaciones', icon: Bell, group: 'Consulta' },
   { key: 'exportar', label: 'Reportes', icon: BarChart3, group: 'Consulta' },
+  { key: 'manual', label: 'Manual', icon: BookOpen, group: 'Consulta' },
   { key: 'automatizacion', label: 'Automatización', icon: Zap, group: 'Sistema' },
   { key: 'seguridad', label: 'Seguridad', icon: Shield, group: 'Sistema' },
   { key: 'auditoria', label: 'Auditoría Seguridad', icon: ShieldAlert, group: 'Sistema' },
@@ -129,10 +130,9 @@ const FULL_NAV_ALL = [
   { key: 'portal-admin', label: 'Portal Admin', icon: Crown, group: 'Sistema' },
   { key: 'configuracion', label: 'Configuración Global', icon: Settings2, group: 'Sistema' },
   { key: 'codigo-fuente', label: 'Código Fuente', icon: Code2, group: 'Sistema' },
-  { key: 'manual', label: 'Manual', icon: BookOpen, group: 'Sistema' },
 ]
 
-// Hooks utilitarios
+// Hook utilitario — filtra QUICK_NAV y FULL_NAV según el rol del usuario
 function useFilteredNav() {
   const [rol, setRol] = useState<string | undefined>(undefined)
   useEffect(() => {
@@ -168,7 +168,7 @@ export function UserMenu({ currentView, onNavigate }: UserMenuProps) {
   const [dropdownOpen, setDropdownOpen] = useState(false)
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [confirmLogout, setConfirmLogout] = useState(false)
-  // --- Impersonación (solo ADMIN) ---
+  // --- Cambio de cuenta (solo ADMIN) ---
   const [switchModalOpen, setSwitchModalOpen] = useState(false)
   const [usuariosCambio, setUsuariosCambio] = useState<UsuarioCambio[]>([])
   const [loadingUsuarios, setLoadingUsuarios] = useState(false)
@@ -193,28 +193,17 @@ export function UserMenu({ currentView, onNavigate }: UserMenuProps) {
     return () => mq.removeEventListener('change', update)
   }, [])
 
-  // --- Cerrar sesión: limpiar impersonación también ---
-  const handleLogout = useCallback(() => {
-    setConfirmLogout(false)
-    setDropdownOpen(false)
-    setDrawerOpen(false)
-    logout()
-  }, [])
-
   // --- Abrir modal de cambio de cuenta ---
   const abrirModalCambio = useCallback(async () => {
     setSwitchError(null)
     setDropdownOpen(false)
     setDrawerOpen(false)
     setSwitchModalOpen(true)
-    // Cargar usuarios solo si no estaban ya cargados
     if (usuariosCambio.length === 0) {
       setLoadingUsuarios(true)
       try {
         const data = await apiJson<{ success: boolean; data: UsuarioCambio[] }>('/api/usuarios?rol=all')
         if (data.success && Array.isArray(data.data)) {
-          // Filtrar: solo GESTOR, CONSULTOR, ADMIN (excluyendo el propio admin actual)
-          // Excluir ABOGADO (no tiene vistas en el menú principal) y CLIENTE (no existe en tabla Usuario)
           const yo = getUserData()
           const filtrados = data.data.filter(
             (u) =>
@@ -233,26 +222,22 @@ export function UserMenu({ currentView, onNavigate }: UserMenuProps) {
   }, [usuariosCambio.length])
 
   // --- Ejecutar el cambio de cuenta ---
-  const ejecutarCambio = useCallback(
-    async (target: UsuarioCambio) => {
-      setSwitchError(null)
-      setCambiandoA(target.id)
-      try {
-        const result = await switchUser(target.id, false)
-        if (!result.success) {
-          setSwitchError(result.error || 'No se pudo cambiar de cuenta')
-          setCambiandoA(null)
-          return
-        }
-        // Recargar para que toda la UI se reinicialice con el nuevo rol
-        window.location.href = '/'
-      } catch (e: any) {
-        setSwitchError(e.message || 'Error inesperado')
+  const ejecutarCambio = useCallback(async (target: UsuarioCambio) => {
+    setSwitchError(null)
+    setCambiandoA(target.id)
+    try {
+      const result = await switchUser(target.id, false)
+      if (!result.success) {
+        setSwitchError(result.error || 'No se pudo cambiar de cuenta')
         setCambiandoA(null)
+        return
       }
-    },
-    []
-  )
+      window.location.href = '/'
+    } catch (e: any) {
+      setSwitchError(e.message || 'Error inesperado')
+      setCambiandoA(null)
+    }
+  }, [])
 
   // --- Volver a la cuenta original del admin ---
   const volverAAdmin = useCallback(async () => {
@@ -380,6 +365,13 @@ export function UserMenu({ currentView, onNavigate }: UserMenuProps) {
     return () => document.removeEventListener('keydown', handler)
   }, [])
 
+  const handleLogout = useCallback(() => {
+    setConfirmLogout(false)
+    setDropdownOpen(false)
+    setDrawerOpen(false)
+    logout()
+  }, [])
+
   const handleNavigate = (key: string) => {
     setDropdownOpen(false)
     setDrawerOpen(false)
@@ -466,45 +458,16 @@ export function UserMenu({ currentView, onNavigate }: UserMenuProps) {
                     </span>
                   </div>
                 </div>
-
-                {/* Banner de impersonación — visible solo cuando el admin original está guardado */}
-                {adminOriginal && (
-                  <div className="mt-3 p-3 rounded-xl border border-amber-400/30 bg-amber-500/10">
-                    <div className="flex items-start gap-2 mb-2">
-                      <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
-                      <div className="flex-1 min-w-0">
-                        <p className="text-[11px] font-semibold text-amber-300">
-                          Sesión impersonada
-                        </p>
-                        <p className="text-[10px] text-amber-200/80 leading-snug">
-                          Estás actuando como <b>{roleLabel}</b>. Volvé a tu cuenta de admin para recuperar el control total.
-                        </p>
-                      </div>
-                    </div>
-                    <button
-                      onClick={volverAAdmin}
-                      disabled={!!cambiandoA}
-                      className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-xs font-bold text-white bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700 transition-all disabled:opacity-60 disabled:cursor-not-allowed"
-                    >
-                      {cambiandoA === adminOriginal.id ? (
-                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                      ) : (
-                        <ArrowLeftRight className="w-3.5 h-3.5" />
-                      )}
-                      Volver a {adminOriginal.nombre.split(' ')[0]}
-                    </button>
-                  </div>
-                )}
               </div>
 
               {/* Navegación agrupada */}
               <nav className="flex-1 p-3 overflow-y-auto">
                 {Object.entries(
-                  FULL_NAV.reduce((acc: Record<string, typeof FULL_NAV_ALL>, item) => {
+                  FULL_NAV.reduce((acc, item) => {
                     if (!acc[item.group]) acc[item.group] = []
                     acc[item.group].push(item)
                     return acc
-                  }, {})
+                  }, {} as Record<string, typeof FULL_NAV_ALL>)
                 ).map(([group, items]) => (
                   <div key={group} className="mb-4">
                     <p className="px-2 mb-1 text-[10px] uppercase tracking-wider text-white/40 font-semibold">
@@ -542,6 +505,21 @@ export function UserMenu({ currentView, onNavigate }: UserMenuProps) {
                   >
                     <Repeat className="w-4 h-4" />
                     Cambiar de cuenta
+                  </button>
+                )}
+                {/* Volver a admin — si está impersonando */}
+                {adminOriginal && (
+                  <button
+                    onClick={volverAAdmin}
+                    disabled={!!cambiandoA}
+                    className="w-full flex items-center gap-3 px-3 py-3 mb-1 rounded-lg text-sm font-semibold text-amber-200 hover:text-white hover:bg-amber-500/20 transition-all disabled:opacity-60"
+                  >
+                    {cambiandoA === adminOriginal.id ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <ArrowLeftRight className="w-4 h-4" />
+                    )}
+                    Volver a {adminOriginal.nombre.split(' ')[0]}
                   </button>
                 )}
                 <button
@@ -587,7 +565,7 @@ export function UserMenu({ currentView, onNavigate }: UserMenuProps) {
           </>
         )}
 
-        {/* === MODAL CAMBIO DE CUENTA (solo ADMIN) === */}
+        {/* Modal de cambio de cuenta (compartido mobile/desktop) */}
         {switchModalOpen && (
           <ModalCambioCuenta
             usuarios={usuariosCambio}
@@ -657,35 +635,6 @@ export function UserMenu({ currentView, onNavigate }: UserMenuProps) {
                 </span>
               </div>
             </div>
-
-            {/* Banner de impersonación */}
-            {adminOriginal && (
-              <div className="mt-3 p-2.5 rounded-xl border border-amber-400/30 bg-amber-500/10">
-                <div className="flex items-start gap-2 mb-2">
-                  <AlertTriangle className="w-3.5 h-3.5 text-amber-400 shrink-0 mt-0.5" />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-[11px] font-semibold text-amber-300">
-                      Sesión impersonada
-                    </p>
-                    <p className="text-[10px] text-amber-200/80 leading-snug">
-                      Estás actuando como <b>{roleLabel}</b>. Volvé a tu cuenta de admin para recuperar el control total.
-                    </p>
-                  </div>
-                </div>
-                <button
-                  onClick={volverAAdmin}
-                  disabled={!!cambiandoA}
-                  className="w-full flex items-center justify-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold text-white bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700 transition-all disabled:opacity-60 disabled:cursor-not-allowed"
-                >
-                  {cambiandoA === adminOriginal.id ? (
-                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                  ) : (
-                    <ArrowLeftRight className="w-3.5 h-3.5" />
-                  )}
-                  Volver a {adminOriginal.nombre.split(' ')[0]}
-                </button>
-              </div>
-            )}
           </div>
 
           {/* Navegación rápida */}
@@ -726,6 +675,21 @@ export function UserMenu({ currentView, onNavigate }: UserMenuProps) {
               >
                 <Repeat className="w-4 h-4" />
                 Cambiar de cuenta
+              </button>
+            )}
+            {/* Volver a admin — si está impersonando */}
+            {adminOriginal && (
+              <button
+                onClick={volverAAdmin}
+                disabled={!!cambiandoA}
+                className="w-full flex items-center gap-3 px-3 py-2.5 mb-1 rounded-lg text-sm font-semibold text-amber-200 hover:text-white hover:bg-amber-500/20 transition-all disabled:opacity-60"
+              >
+                {cambiandoA === adminOriginal.id ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <ArrowLeftRight className="w-4 h-4" />
+                )}
+                Volver a {adminOriginal.nombre.split(' ')[0]}
               </button>
             )}
             <button
@@ -770,7 +734,7 @@ export function UserMenu({ currentView, onNavigate }: UserMenuProps) {
         </div>
       )}
 
-      {/* === MODAL CAMBIO DE CUENTA (solo ADMIN) === */}
+      {/* Modal de cambio de cuenta (compartido mobile/desktop) */}
       {switchModalOpen && (
         <ModalCambioCuenta
           usuarios={usuariosCambio}
@@ -791,7 +755,7 @@ export default UserMenu
 
 // =====================================================
 // ModalCambioCuenta — Modal para que el ADMIN seleccione
-// a qué usuario interno quiere cambiar sin contraseña.
+// a qué usuario interno cambiar sin contraseña.
 // =====================================================
 
 interface ModalCambioCuentaProps {
@@ -807,14 +771,12 @@ const ROLE_LABELS_MODAL: Record<string, string> = {
   ADMIN: 'Administrador',
   GESTOR: 'Gestor',
   CONSULTOR: 'Consultor',
-  ABOGADO: 'Abogado',
 }
 
 const ROLE_COLORS_MODAL: Record<string, string> = {
   ADMIN: 'from-fuchsia-500 to-purple-600',
   GESTOR: 'from-indigo-500 to-blue-600',
   CONSULTOR: 'from-cyan-500 to-teal-600',
-  ABOGADO: 'from-amber-500 to-orange-600',
 }
 
 function ModalCambioCuenta({

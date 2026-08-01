@@ -114,7 +114,7 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const auth = requireRole(req, ['ADMIN', 'GESTOR', 'CONSULTOR'])
+    const auth = requireRole(req, ['ADMIN'])
     if (auth instanceof NextResponse) return auth
 
     const clientInfo = getClientInfo(req)

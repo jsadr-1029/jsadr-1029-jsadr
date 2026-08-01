@@ -6,7 +6,7 @@ import { sanitizeError } from '@/lib/error-handler'
 
 export async function GET(req: NextRequest) {
   try {
-    const auth = requireRole(req, ['ADMIN', 'GESTOR', 'CONSULTOR'])
+    const auth = requireRole(req, ['ADMIN'])
     if (auth instanceof NextResponse) return auth
 
     const texto = await generarPlanOptimizacion()

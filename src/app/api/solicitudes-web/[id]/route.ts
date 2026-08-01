@@ -14,7 +14,7 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const auth = requireRole(req, ['ADMIN', 'GESTOR', 'CONSULTOR'])
+    const auth = requireAuth(req)
     if (auth instanceof NextResponse) return auth
 
     const { id } = await params

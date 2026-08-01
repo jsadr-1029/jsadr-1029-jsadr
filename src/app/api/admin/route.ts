@@ -6,7 +6,7 @@ import { sanitizeError } from '@/lib/error-handler'
 // GET - configuración general del sistema (Reforzado: requiere CONSULTOR+)
 export async function GET(req: NextRequest) {
   try {
-    const auth = requireRole(req, ['ADMIN'])
+    const auth = requireRole(req, ['ADMIN', 'GESTOR', 'CONSULTOR'])
     if (auth instanceof NextResponse) return auth
 
     const configuraciones = await db.configuracion.findMany({ orderBy: { clave: 'asc' } })

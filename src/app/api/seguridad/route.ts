@@ -20,7 +20,7 @@ import { sanitizeError } from '@/lib/error-handler'
 // GET - estado de seguridad del sistema (Reforzado: requiere CONSULTOR+)
 export async function GET(req: NextRequest) {
   try {
-    const auth = requireRole(req, ['ADMIN'])
+    const auth = requireRole(req, ['ADMIN', 'GESTOR', 'CONSULTOR'])
     if (auth instanceof NextResponse) return auth
 
     const { searchParams } = new URL(req.url)
@@ -101,7 +101,7 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     // Reforzado: requiere GESTOR+ para acciones de seguridad
-    const auth = requireRole(req, ['ADMIN'])
+    const auth = requireRole(req, ['ADMIN', 'GESTOR'])
     if (auth instanceof NextResponse) return auth
 
     // Rate limiting

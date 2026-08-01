@@ -2,18 +2,30 @@
 // PERMISOS POR ROL — JSADR Aurora Bancaria
 // -----------------------------------------------------
 // Matriz centralizada de permisos para vistas del frontend.
-// Cada rol ve y puede navegar únicamente a las vistas aquí listadas.
-// Cualquier vista NO listada para el rol se bloquea en page.tsx
-// con un mensaje de "Acceso denegado".
+// Cada rol ve y puede navegar únicamente a las vistas aquí
+// listadas. Cualquier vista NO listada para el rol se bloquea
+// en page.tsx con un mensaje de "Acceso denegado".
 //
 // Matriz:
-//   ADMIN     → acceso total (operación + sistema + configuración)
-//   GESTOR    → operación diaria (préstamos, pagos, clientes, jurídico, cajas,
-//               campañas, comunicaciones, buzones, portal, exportar, notif)
-//   CONSULTOR → solo lectura (dashboard, préstamos, pagos, jurídico, portal,
-//               comunicaciones, clientes en modo lectura)
-//   ABOGADO   → NO usa este menú; ingresa por /juridico (portal aparte)
-//   CLIENTE   → NO usa este menú; ingresa por /portal (modal aparte)
+//   ADMIN     → acceso total (operación + sistema + config)
+//   GESTOR    → operación diaria (préstamos, pagos, clientes,
+//               jurídico, cajas, campañas, comunicaciones,
+//               buzones, portal, notificaciones, exportar,
+//               simulador, manual-sin-config)
+//   CONSULTOR → solo lectura (dashboard, préstamos, pagos,
+//               clientes, jurídico, portal, comunicaciones,
+//               exportar, manual-sin-config)
+//   ABOGADO   → NO usa este menú; ingresa por /juridico
+//   CLIENTE   → NO usa este menú; ingresa por /portal
+//
+// REGLA DEL MANUAL:
+//   El módulo 'manual' incluye dos pestañas:
+//     1. Manual de uso (cómo se usan los módulos)
+//     2. Configuración del sistema (cómo está compuesto)
+//   GESTOR y CONSULTOR solo pueden ver la pestaña de "uso".
+//   Solo ADMIN ve ambas pestañas.
+//   Esto se controla dentro del propio ManualView con el
+//   flag `puedeVerConfigManual(rol)`.
 // =====================================================
 
 import type { ViewKey } from '@/app/page'
@@ -65,7 +77,12 @@ export const VISTAS_POR_ROL: Record<Rol, ViewKey[]> = {
     'buzon-solicitudes',
     'notificaciones',
     'exportar',
+    // 'manual' se incluye abajo — GESTOR ve solo la pestaña de uso
     'manual',
+    // Ocultos para GESTOR (solo ADMIN):
+    //   usuarios, conexiones, seguridad (parcial), auditoria,
+    //   admin, portal-admin, configuracion, codigo-fuente,
+    //   automatizacion
   ],
 
   CONSULTOR: [
@@ -77,7 +94,13 @@ export const VISTAS_POR_ROL: Record<Rol, ViewKey[]> = {
     'portal',
     'comunicaciones',
     'exportar',
+    // 'manual' se incluye abajo — CONSULTOR ve solo la pestaña de uso
     'manual',
+    // Ocultos para CONSULTOR:
+    //   cajas, simulador, campanas, buzon-solicitudes,
+    //   notificaciones, usuarios, conexiones, seguridad,
+    //   auditoria, admin, portal-admin, configuracion,
+    //   codigo-fuente, automatizacion
   ],
 
   // ABOGADO y CLIENTE no usan el Sidebar (usan portales propios)
@@ -106,14 +129,23 @@ export function vistasPermitidas(rol: string | undefined | null): ViewKey[] {
 
 /**
  * Vista por defecto al iniciar sesión según rol.
- * (Cuándo el usuario entra a / sin ?view=...)
  */
 export function vistaPorDefecto(rol: string | undefined | null): ViewKey {
   const permitidas = vistasPermitidas(rol)
   if (permitidas.length === 0) return 'prestamos'
-  // Siempre preferir 'dashboard' si está permitido, sino la primera
   if (permitidas.includes('dashboard')) return 'dashboard'
   return permitidas[0]
+}
+
+/**
+ * REGLA DEL MANUAL:
+ * Indica si el rol puede ver la pestaña "Configuración del
+ * sistema" dentro del módulo Manual. Solo ADMIN la ve.
+ * GESTOR y CONSULTOR solo ven la pestaña "Uso de los módulos".
+ */
+export function puedeVerConfigManual(rol: string | undefined | null): boolean {
+  if (!rol) return false
+  return rol.toUpperCase() === 'ADMIN'
 }
 
 /**

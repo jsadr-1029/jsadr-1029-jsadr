@@ -18,7 +18,6 @@ import {
   Settings2,
   Inbox,
   Crown,
-  LayoutDashboard,
   Users,
   Plug,
   Code2,
@@ -28,6 +27,7 @@ import {
   Landmark as CajasIcon,
   Calculator,
   Megaphone,
+  LayoutDashboard,
 } from 'lucide-react'
 import { useMemo } from 'react'
 
@@ -67,7 +67,7 @@ export function Sidebar({ view, onChange }: SidebarProps) {
   const user = getUserData()
   const rol = user?.rol || ''
 
-  // Filtrar items según rol
+  // Filtrar items según rol usando la matriz centralizada
   const menuItems = useMemo(() => {
     const permitidas = vistasPermitidas(rol)
     return ALL_ITEMS.filter((item) => permitidas.includes(item.key))

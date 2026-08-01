@@ -6,7 +6,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { requireRole } from '@/lib/auth-guard'
+import { requireAuth } from '@/lib/auth-guard'
 import { errorResponse, logError } from '@/lib/error-handler'
 import { generarCodigoPago } from '@/lib/finanzas'
 import { safeCompare } from '@/lib/security'
@@ -52,7 +52,7 @@ export async function POST(req: NextRequest) {
       clienteId = cliente.id
       clienteNombre = cliente.nombre
     } else {
-      const authResult = requireRole(req, ['ADMIN', 'GESTOR'])
+      const authResult = requireAuth(req)
       if (authResult instanceof NextResponse) return authResult
       clienteNombre = authResult.nombre
     }

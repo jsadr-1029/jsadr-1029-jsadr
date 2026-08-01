@@ -74,7 +74,7 @@ function calcularCuotasPendientes(pago: any, prestamo: any): {
 
 export async function GET(req: NextRequest) {
   try {
-    const authResult = requireRole(req, ['ADMIN', 'GESTOR'])
+    const authResult = requireRole(req, ['ADMIN', 'GESTOR', 'CONSULTOR'])
     if (authResult instanceof NextResponse) return authResult
 
     const { searchParams } = new URL(req.url)

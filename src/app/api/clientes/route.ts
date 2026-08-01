@@ -2,14 +2,10 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { clienteSchema, validateInput } from '@/lib/validators'
 import { sanitizeError } from '@/lib/error-handler'
-import { requireRole } from '@/lib/auth-guard'
 
 // GET - listar todos los clientes (con referidor incluido)
 export async function GET(req: NextRequest) {
   try {
-    const auth = requireRole(req, ['ADMIN', 'GESTOR', 'CONSULTOR'])
-    if (auth instanceof NextResponse) return auth
-
     const { searchParams } = new URL(req.url)
     const soloActivos = searchParams.get('activos') === '1'
 
@@ -50,9 +46,6 @@ export async function GET(req: NextRequest) {
 // POST - crear nuevo cliente
 export async function POST(req: NextRequest) {
   try {
-    const auth = requireRole(req, ['ADMIN', 'GESTOR'])
-    if (auth instanceof NextResponse) return auth
-
     const body = await req.json()
 
     // Reforzado: validar con Zod antes de procesar

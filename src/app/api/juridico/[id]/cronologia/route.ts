@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { sanitizeError } from '@/lib/error-handler'
-import { requireRole } from '@/lib/auth-guard'
 
 // POST - agregar evento a cronología del caso
 export async function POST(
@@ -9,9 +8,6 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const auth = requireRole(req, ['ADMIN', 'GESTOR'])
-    if (auth instanceof NextResponse) return auth
-
     const { id } = await params
     const body = await req.json()
     const { tipoEvento, titulo, descripcion, resultado, fecha } = body

@@ -64,11 +64,7 @@ function isPublicEndpoint(pathname: string): boolean {
     pathname.startsWith('/api/auth/mfa') ||
     pathname.startsWith('/api/auth/refresh') ||
     pathname.startsWith('/api/portal/auth') ||
-    pathname.startsWith('/api/portal/') || // portal cliente usa x-portal-token
-    pathname.startsWith('/api/juridico/portal/') || // portal abogado usa token propio
-    pathname.startsWith('/api/pagos/bancolombia-webhook') || // webhook bancolombia
-    pathname.startsWith('/api/pagos/cron') || // cron job
-    pathname.startsWith('/api/seguridad/plataformas-sync/webhook') || // webhook
+    pathname.startsWith('/api/portal/') || // portal usa x-portal-token
     pathname === '/api/simulador' // simulador público
   )
 }

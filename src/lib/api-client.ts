@@ -217,9 +217,10 @@ export function clearImpersonation(): void {
  * Requiere que la sesión actual sea ADMIN.
  *
  * @param targetUserId  ID del usuario destino (GESTOR, CONSULTOR o ADMIN)
- * @param volverA        true cuando se está volviendo a la cuenta original del admin
- *                       desde una sesión impersonada — usa /api/auth/switch-back
- *                       que valida el claim `impersonatedBy` del JWT.
+ * @param volverA        true cuando se está volviendo a la cuenta original
+ *                       del admin desde una sesión impersonada — usa
+ *                       /api/auth/switch-back que valida el claim
+ *                       `impersonatedBy` del JWT.
  */
 export async function switchUser(
   targetUserId: string,
@@ -235,10 +236,8 @@ export async function switchUser(
     if (!data.success) {
       return { success: false, error: data.error || 'No se pudo cambiar de cuenta' }
     }
-    // Guardar nuevos tokens y datos del usuario destino
     setTokens(data.data.access_token, data.data.refresh_token)
     setUserData(data.data.usuario)
-    // Guardar (o limpiar) la información del admin original
     if (data.data.impersonatedBy && data.data.adminOriginal) {
       setImpersonation(data.data.adminOriginal)
     } else {

@@ -1,13 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { sanitizeError } from '@/lib/error-handler'
-import { requireRole } from '@/lib/auth-guard'
 
-export async function GET(req: NextRequest) {
+export async function GET() {
   try {
-    const auth = requireRole(req, ['ADMIN', 'GESTOR', 'CONSULTOR'])
-    if (auth instanceof NextResponse) return auth
-
     const cuentas = await db.cuentaRecaudo.findMany({
       include: { _count: { select: { categorias: true, pagos: true } } },
       orderBy: { codigo: 'asc' },
@@ -20,9 +16,6 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
-    const auth = requireRole(req, ['ADMIN', 'GESTOR'])
-    if (auth instanceof NextResponse) return auth
-
     const body = await req.json()
     const { codigo, nombre, banco, tipoCuenta, numeroCuenta, titular } = body
 

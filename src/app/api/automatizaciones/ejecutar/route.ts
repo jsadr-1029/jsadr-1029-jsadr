@@ -12,7 +12,7 @@ import { sanitizeError } from '@/lib/error-handler'
 
 export async function POST(req: NextRequest) {
   try {
-    const authResult = requireRole(req, ['ADMIN'])
+    const authResult = requireRole(req, ['ADMIN', 'GESTOR'])
     if (authResult instanceof NextResponse) return authResult
 
     const body = await req.json()

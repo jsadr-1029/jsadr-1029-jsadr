@@ -1,17 +1,8 @@
 // =====================================================
-// Auth Guard v3.7.0 — RBAC estricto + separación de portales
-// -----------------------------------------------------
-// CAMBIOS v3.7.0 (auditoría de permisos JSADR):
-//  • El header `x-portal-token` (clientes del portal) YA NO devuelve
-//    un AuthUser interno. Antes se le asignaba rol:'CONSULTOR' y eso
-//    permitía a los clientes acceder a todas las APIs internas
-//    (/api/clientes, /api/prestamos, /api/usuarios, etc.).
-//  • Las APIs internas (todo lo que no sea /api/portal/* o
-//    /api/juridico/portal/*) ahora rechazan a los clientes del portal.
-//  • Las APIs del portal cliente deben usar `getPortalCliente(req)`
-//    para validar el token del cliente y obtener SU identidad.
-//  • Las APIs del portal abogado deben usar `getPortalAbogado(req)`.
-//  • Agregado rol ABOGADO al tipo AuthUser.
+// Auth Guard v3.6.1 — Modo compatibilidad
+// Verifica JWT si hay token, pero permite acceso en modo desarrollo
+// o cuando no hay token (fallback a admin).
+// En producción, todas las APIs deben requerir token.
 // =====================================================
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -43,162 +34,74 @@ function getJwtSecret(): string {
 
 export interface AuthUser {
   id: string
-  rol: 'ADMIN' | 'GESTOR' | 'CONSULTOR' | 'ABOGADO'
+  rol: 'ADMIN' | 'GESTOR' | 'CONSULTOR'
   username: string
   nombre: string
 }
 
 /**
- * Identidad de un cliente del portal cliente.
- * Se obtiene validando `x-portal-token` contra la BD.
- * Los clientes SOLO pueden acceder a /api/portal/* — ninguna API interna.
- */
-export interface PortalClienteAuth {
-  id: string
-  cedula: string
-  nombre: string
-  email: string | null
-  telefono: string
-  esPortalCliente: true
-}
-
-/**
- * Identidad de un abogado en el portal jurídico.
- * Se obtiene validando el token de sesión del portal abogado contra la BD.
- */
-export interface PortalAbogadoAuth {
-  id: string
-  cedula: string
-  nombre: string
-  username: string
-  rol: 'ABOGADO'
-  esPortalAbogado: true
-}
-
-/**
- * Extrae el usuario INTERNO autenticado del request.
- * Lee el header Authorization: Bearer <JWT> y verifica el token.
- *
- * IMPORTANTE: Este función NO reconoce el `x-portal-token` de los clientes
- * del portal. Los clientes del portal NO son usuarios internos y deben
- * usar `getPortalCliente()` en su lugar. Esto evita que un cliente del
- * portal acceda a APIs internas (/api/clientes, /api/prestamos, etc.).
- *
- * @returns AuthUser | null  — null si no hay JWT interno válido.
+ * Extrae el usuario autenticado del request.
+ * Lee el header Authorization: Bearer <token>
+ * Verifica el JWT y retorna el usuario.
+ * Si no hay token, retorna un usuario admin por defecto (modo compatibilidad).
  */
 export function getAuthUser(req: NextRequest | Request): AuthUser | null {
   try {
+    // Intentar leer token del header Authorization
     const authHeader = req.headers.get('authorization')
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return null
-    }
-    const token = authHeader.substring(7)
-    const decoded = jwt.verify(token, getJwtSecret()) as any
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      const token = authHeader.substring(7)
+      const decoded = jwt.verify(token, getJwtSecret()) as any
 
-    // Soportar tanto 'id' como 'userId' (formatos nuevos y legacy)
-    const userId = decoded.id || decoded.userId
-    if (decoded && userId && decoded.rol) {
-      return {
-        id: userId,
-        rol: decoded.rol,
-        username: decoded.username || 'unknown',
-        nombre: decoded.nombre || 'Usuario',
+      // Soportar tanto 'id' como 'userId' (formatos nuevos y legacy)
+      const userId = decoded.id || decoded.userId
+      if (decoded && userId && decoded.rol) {
+        return {
+          id: userId,
+          rol: decoded.rol,
+          username: decoded.username || 'unknown',
+          nombre: decoded.nombre || 'Usuario',
+        }
       }
     }
+
+    // Intentar leer token del header x-portal-token (portal del cliente)
+    const portalToken = req.headers.get('x-portal-token')
+    if (portalToken) {
+      // El portal token se valida en cada API específica, aquí solo devolvemos un cliente genérico
+      return {
+        id: 'portal-client',
+        rol: 'CONSULTOR',
+        username: 'portal',
+        nombre: 'Cliente Portal',
+      }
+    }
+
+    // === Modo compatibilidad ===
+    // Si no hay token, permitir acceso como ADMIN del sistema
+    // Esto mantiene el frontend funcionando sin cambios
+    // En producción (NODE_ENV=production), esto debería bloquearse
+    if (process.env.NODE_ENV !== 'production') {
+      return {
+        id: 'system',
+        rol: 'ADMIN',
+        username: 'system',
+        nombre: 'Administrador',
+      }
+    }
+
+    // En producción sin token, denegar
     return null
   } catch (error) {
-    return null
-  }
-}
-
-/**
- * Valida el `x-portal-token` de un cliente del portal contra la BD.
- * Para usar en APIs bajo /api/portal/* (NO en APIs internas).
- *
- * @returns PortalClienteAuth | null — null si el token no existe o expiró.
- */
-export async function getPortalCliente(req: NextRequest | Request): Promise<PortalClienteAuth | null> {
-  try {
-    const token = req.headers.get('x-portal-token')
-    if (!token) return null
-
-    // Import dinámico para evitar circular dependency con db en el cliente
-    const { db } = await import('@/lib/db')
-    const cliente = await db.cliente.findFirst({
-      where: { tokenSesion: token },
-    })
-    if (!cliente) return null
-    if (!cliente.tokenExpira || new Date(cliente.tokenExpira) < new Date()) return null
-    if (!cliente.activo) return null
-
-    return {
-      id: cliente.id,
-      cedula: cliente.cedula,
-      nombre: cliente.nombre,
-      email: cliente.email,
-      telefono: cliente.telefono,
-      esPortalCliente: true,
+    // En caso de error de verificación, permitir en desarrollo
+    if (process.env.NODE_ENV !== 'production') {
+      return {
+        id: 'system',
+        rol: 'ADMIN',
+        username: 'system',
+        nombre: 'Administrador',
+      }
     }
-  } catch {
-    return null
-  }
-}
-
-/**
- * Requiere que el request venga de un cliente del portal autenticado.
- * Para usar en APIs bajo /api/portal/*.
- *
- * @returns PortalClienteAuth | NextResponse(401)
- */
-export async function requirePortalCliente(req: NextRequest | Request): Promise<PortalClienteAuth | NextResponse> {
-  const cliente = await getPortalCliente(req)
-  if (!cliente) {
-    return NextResponse.json(
-      { success: false, error: 'Sesión del portal inválida o expirada.', code: 'PORTAL_UNAUTHORIZED' },
-      { status: 401 }
-    )
-  }
-  return cliente
-}
-
-/**
- * Valida el token de sesión del portal jurídico (abogado).
- * Para usar en APIs bajo /api/juridico/portal/*.
- */
-export async function getPortalAbogado(req: NextRequest | Request): Promise<PortalAbogadoAuth | null> {
-  try {
-    // El portal abogado usa query param ?token= o header x-portal-abogado-token
-    let token: string | null = null
-    const headerToken = req.headers.get('x-portal-abogado-token')
-    if (headerToken) {
-      token = headerToken
-    } else if (req instanceof NextRequest) {
-      token = req.nextUrl.searchParams.get('token')
-    } else if (req.url) {
-      try {
-        const u = new URL(req.url)
-        token = u.searchParams.get('token')
-      } catch {}
-    }
-    if (!token) return null
-
-    const { db } = await import('@/lib/db')
-    const usuario = await db.usuario.findFirst({
-      where: { tokenSesion: token, rol: 'ABOGADO' },
-    })
-    if (!usuario) return null
-    if (!usuario.tokenExpira || new Date(usuario.tokenExpira) < new Date()) return null
-    if (!usuario.activo) return null
-
-    return {
-      id: usuario.id,
-      cedula: usuario.cedula || '',
-      nombre: usuario.nombre,
-      username: usuario.username,
-      rol: 'ABOGADO',
-      esPortalAbogado: true,
-    }
-  } catch {
     return null
   }
 }
@@ -256,23 +159,14 @@ export function isAdmin(user: AuthUser): boolean {
 }
 
 /**
- * Verifica si el usuario es ABOGADO (acceso solo al portal jurídico).
- * NO tiene acceso al panel interno principal.
- */
-export function isAbogado(user: AuthUser): boolean {
-  return user?.rol === 'ABOGADO'
-}
-
-/**
- * Verifica si el usuario es GESTOR o superior (incluye ADMIN).
+ * Verifica si el usuario es GESTOR o superior.
  */
 export function isGestor(user: AuthUser): boolean {
   return user?.rol === 'ADMIN' || user?.rol === 'GESTOR'
 }
 
 /**
- * Verifica si el usuario es CONSULTOR o superior (ADMIN, GESTOR, CONSULTOR).
- * ABOGADO NO está incluido — el abogado usa el portal aparte.
+ * Verifica si el usuario es CONSULTOR o superior.
  */
 export function isConsultor(user: AuthUser): boolean {
   return user?.rol === 'ADMIN' || user?.rol === 'GESTOR' || user?.rol === 'CONSULTOR'

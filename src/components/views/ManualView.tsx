@@ -14,6 +14,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { getUserData } from '@/lib/api-client'
+import { puedeVerConfigManual } from '@/lib/permisos'
 import {
   BookOpen,
   RefreshCw,
@@ -25,6 +27,7 @@ import {
   ChevronRight,
   FileCode,
   Webhook,
+  Lock,
 } from 'lucide-react'
 
 interface ComponentInfo {
@@ -73,8 +76,14 @@ export function ManualView() {
   const [data, setData] = useState<ManualData | null>(null)
   const [loading, setLoading] = useState(true)
   const [busqueda, setBusqueda] = useState('')
+  // Por defecto, mostrar "componentes" (manual de uso).
+  // Si el rol NO puede ver la configuración, forzamos 'componentes'.
   const [seccion, setSeccion] = useState<'componentes' | 'endpoints' | 'modelos'>('componentes')
   const [expandido, setExpandido] = useState<Record<string, boolean>>({})
+
+  // Determinar permiso para ver pestañas de configuración (endpoints + modelos)
+  // Solo ADMIN lo ve. GESTOR y CONSULTOR solo ven "componentes" (uso de los módulos).
+  const verConfig = puedeVerConfigManual(getUserData()?.rol)
 
   const cargar = useCallback(async () => {
     setLoading(true)
@@ -170,24 +179,33 @@ export function ManualView() {
                 onClick={() => setSeccion('componentes')}
               >
                 <Boxes className="w-3.5 h-3.5 mr-1.5" />
-                Componentes
+                Uso de módulos
               </Button>
-              <Button
-                variant={seccion === 'endpoints' ? 'default' : 'outline'}
-                size="sm"
-                onClick={() => setSeccion('endpoints')}
-              >
-                <Webhook className="w-3.5 h-3.5 mr-1.5" />
-                Endpoints
-              </Button>
-              <Button
-                variant={seccion === 'modelos' ? 'default' : 'outline'}
-                size="sm"
-                onClick={() => setSeccion('modelos')}
-              >
-                <Database className="w-3.5 h-3.5 mr-1.5" />
-                Modelos
-              </Button>
+              {verConfig ? (
+                <>
+                  <Button
+                    variant={seccion === 'endpoints' ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => setSeccion('endpoints')}
+                  >
+                    <Webhook className="w-3.5 h-3.5 mr-1.5" />
+                    Endpoints API
+                  </Button>
+                  <Button
+                    variant={seccion === 'modelos' ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => setSeccion('modelos')}
+                  >
+                    <Database className="w-3.5 h-3.5 mr-1.5" />
+                    Configuración BD
+                  </Button>
+                </>
+              ) : (
+                <span className="inline-flex items-center gap-1 px-3 py-1.5 text-xs text-muted-foreground border border-dashed rounded-md">
+                  <Lock className="w-3 h-3" />
+                  Configuración disponible solo para Administrador
+                </span>
+              )}
             </div>
           </div>
         </CardContent>
@@ -245,7 +263,7 @@ export function ManualView() {
       )}
 
       {/* === Sección Endpoints === */}
-      {data && seccion === 'endpoints' && (
+      {data && seccion === 'endpoints' && verConfig && (
         <Card>
           <CardHeader>
             <CardTitle className="text-base flex items-center gap-2">
@@ -288,7 +306,7 @@ export function ManualView() {
       )}
 
       {/* === Sección Modelos === */}
-      {data && seccion === 'modelos' && (
+      {data && seccion === 'modelos' && verConfig && (
         <Card>
           <CardHeader>
             <CardTitle className="text-base flex items-center gap-2">

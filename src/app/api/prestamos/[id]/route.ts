@@ -2,59 +2,15 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { calcularPrestamo, calcularMoraCompuesta, calcularDiasMora, getTasaMoraAnual, debeIrAJuridico } from '@/lib/finanzas'
 import { sanitizeError } from '@/lib/error-handler'
-import { requireRole as requireRoleAuth, getPortalCliente } from '@/lib/auth-guard'
+import { requireRole as requireRoleAuth } from '@/lib/auth-guard'
 import { rateLimit, getClientInfo } from '@/lib/security'
-
-// === Helper: autoriza acceso a un préstamo ===
-// Si hay x-portal-token: valida al cliente del portal y verifica ownership.
-// Si no: requiere JWT interno con uno de los roles indicados.
-// Retorna { tipo: 'portal', clienteId } o { tipo: 'staff', user } o NextResponse(401/403).
-async function autorizarPrestamo(
-  req: NextRequest,
-  prestamoId: string,
-  rolesStaff: string[]
-): Promise<{ tipo: 'portal'; clienteId: string } | { tipo: 'staff'; user: any } | NextResponse> {
-  const portalToken = req.headers.get('x-portal-token')
-  if (portalToken) {
-    const cliente = await getPortalCliente(req)
-    if (!cliente) {
-      return NextResponse.json(
-        { success: false, error: 'Sesión del portal inválida o expirada.', code: 'PORTAL_UNAUTHORIZED' },
-        { status: 401 }
-      )
-    }
-    // Verificar ownership del préstamo
-    const prestamo = await db.prestamo.findUnique({
-      where: { id: prestamoId },
-      select: { clienteId: true },
-    })
-    if (!prestamo) {
-      return NextResponse.json(
-        { success: false, error: 'Préstamo no encontrado' },
-        { status: 404 }
-      )
-    }
-    if (prestamo.clienteId !== cliente.id) {
-      return NextResponse.json(
-        { success: false, error: 'No tienes acceso a este préstamo', code: 'FORBIDDEN' },
-        { status: 403 }
-      )
-    }
-    return { tipo: 'portal', clienteId: cliente.id }
-  }
-  // Sin portal token → requerir JWT interno
-  const user = requireRoleAuth(req, rolesStaff)
-  if (user instanceof NextResponse) return user
-  return { tipo: 'staff', user }
-}
 
 // GET - detalle de un préstamo
 export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const { id: prestamoId } = await params
-  const auth = await autorizarPrestamo(req, prestamoId, ['ADMIN', 'GESTOR', 'CONSULTOR'])
+  const auth = requireRoleAuth(req, ['ADMIN', 'GESTOR', 'CONSULTOR'])
   if (auth instanceof NextResponse) return auth
   try {
     const { id } = await params
@@ -142,34 +98,12 @@ export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const { id: prestamoId } = await params
-  // El portal cliente solo puede hacer 'aceptar_tyc'. Otras acciones requieren staff.
-  // Para no romper el flujo del portal, detectamos primero si es cliente del portal.
-  const portalToken = req.headers.get('x-portal-token')
-  let auth: any
-  let esPortal = false
-  if (portalToken) {
-    const resultado = await autorizarPrestamo(req, prestamoId, ['ADMIN', 'GESTOR'])
-    if (resultado instanceof NextResponse) return resultado
-    auth = resultado
-    esPortal = resultado.tipo === 'portal'
-  } else {
-    const resultado = requireRoleAuth(req, ['ADMIN', 'GESTOR'])
-    if (resultado instanceof NextResponse) return resultado
-    auth = { tipo: 'staff', user: resultado }
-  }
+  const auth = requireRoleAuth(req, ['ADMIN', 'GESTOR'])
+  if (auth instanceof NextResponse) return auth
   try {
     const { id } = await params
     const body = await req.json()
     const { accion, tasaMoraPersonalizada, datosFirma } = body
-
-    // Si es cliente del portal, solo puede aceptar T&C
-    if (esPortal && accion !== 'aceptar_tyc') {
-      return NextResponse.json(
-        { success: false, error: 'Los clientes del portal solo pueden aceptar T&C de sus préstamos.', code: 'FORBIDDEN' },
-        { status: 403 }
-      )
-    }
 
     const prestamo = await db.prestamo.findUnique({
       where: { id },

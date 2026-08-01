@@ -478,7 +478,15 @@ export function SeguridadView() {
       />
 
       {/* =================================================
-          SECCIÓN 3: Centro de Recuperación de Claves
+          SECCIÓN 3: Validador de Firma Electrónica
+          Permite a ADMIN/GESTOR pegar un código de firma
+          (el del QR del certificado) para verificar si es
+          auténtico o si fue modificado/falsificado.
+          ================================================= */}
+      <ValidadorFirmaPanel />
+
+      {/* =================================================
+          SECCIÓN 4: Centro de Recuperación de Claves
           ================================================= */}
       <RecuperacionClavesPanel />
     </div>
@@ -723,7 +731,7 @@ function RecuperacionClavesPanel() {
     destinatarios: Destinatario[]
   }>(`/api/seguridad/recuperacion-claves`, { refreshKey })
 
-  const [tab, setTab] = useState<'historial' | 'destinatarios' | 'reset'>('historial')
+  const [tab, setTab] = useState<'historial' | 'destinatarios' | 'reset' | 'credenciales'>('credenciales')
   const [busqueda, setBusqueda] = useState('')
   const [busy, setBusy] = useState<string | null>(null)
 
@@ -736,6 +744,23 @@ function RecuperacionClavesPanel() {
   // Estado para gestionar destinatarios
   const [destinatarios, setDestinatarios] = useState<Destinatario[]>([])
   const [nuevoDest, setNuevoDest] = useState<Destinatario>({ tipo: 'EMAIL', destino: '', nombre: '' })
+
+  // Estado para credenciales activas (usuarios y clientes)
+  // Permite ver qué credenciales hay activas y bloquearlas.
+  interface CredencialActiva {
+    id: string
+    tipo: 'USUARIO' | 'CLIENTE'
+    nombre: string
+    identificador: string // username (usuario) o cedula (cliente)
+    email: string | null
+    telefono: string | null
+    rol: string | null // ADMIN/GESTOR/CONSULTOR/ABOGADO para usuarios
+    activo: boolean
+    ultimoAcceso: string | null
+  }
+  const [credenciales, setCredenciales] = useState<CredencialActiva[]>([])
+  const [loadingCred, setLoadingCred] = useState(false)
+  const [bloqueando, setBloqueando] = useState<string | null>(null)
 
   useEffect(() => {
     if (data?.destinatarios) {
@@ -808,6 +833,61 @@ function RecuperacionClavesPanel() {
     setDestinatarios(destinatarios.filter((_, i) => i !== idx))
   }
 
+  // === Credenciales activas ===
+  // Carga la lista de usuarios y clientes con su estado (activo/bloqueado)
+  const cargarCredenciales = async () => {
+    setLoadingCred(true)
+    try {
+      const res = await fetch('/api/seguridad/credenciales-activas', { cache: 'no-store' })
+      const json = await res.json()
+      if (json.success) {
+        setCredenciales(json.data || [])
+      } else {
+        toast.error(json.error || 'No se pudieron cargar las credenciales')
+      }
+    } catch (e) {
+      toast.error('Error: ' + (e as Error).message)
+    } finally {
+      setLoadingCred(false)
+    }
+  }
+
+  // Cargar credenciales al montar el componente y cuando cambie el refreshKey
+  useEffect(() => {
+    cargarCredenciales()
+  }, [refreshKey])
+
+  // Bloquear o desbloquear un usuario/cliente
+  const toggleBloqueo = async (cred: CredencialActiva) => {
+    if (cred.rol === 'ADMIN' && cred.activo) {
+      toast.error('No se puede bloquear a un administrador desde aquí')
+      return
+    }
+    const accion = cred.activo ? 'bloquear' : 'desbloquear'
+    if (!confirm(`¿Confirmas ${accion} a "${cred.nombre}" (${cred.identificador})?`)) return
+    setBloqueando(cred.id)
+    try {
+      const res: any = await apiPost('/api/seguridad/credenciales-activas', {
+        accion,
+        tipo: cred.tipo,
+        id: cred.id,
+      })
+      if (res.error) {
+        toast.error(res.error)
+      } else {
+        toast.success(res.mensaje || `Cuenta ${accion}da correctamente`)
+        // Actualizar la lista localmente
+        setCredenciales((prev) =>
+          prev.map((c) => (c.id === cred.id ? { ...c, activo: !c.activo } : c))
+        )
+      }
+    } catch (e) {
+      toast.error('Error: ' + (e as Error).message)
+    } finally {
+      setBloqueando(null)
+    }
+  }
+
   const historial = data?.historial || []
   const stats = data?.stats || { totalSolicitudes: 0, exitosas: 0, fallidas: 0, porMetodo: { EMAIL: 0, WHATSAPP: 0 } }
   const destinatariosList = destinatarios || []
@@ -871,7 +951,18 @@ function RecuperacionClavesPanel() {
       </div>
 
       {/* Tabs */}
-      <div className="px-5 pt-4 flex gap-2 border-b border-slate-200">
+      <div className="px-5 pt-4 flex gap-2 border-b border-slate-200 flex-wrap">
+        <button
+          onClick={() => setTab('credenciales')}
+          className={`px-3 py-2 text-sm font-medium border-b-2 transition-colors ${
+            tab === 'credenciales'
+              ? 'border-purple-500 text-purple-700'
+              : 'border-transparent text-slate-500 hover:text-slate-700'
+          }`}
+        >
+          <KeyRound className="w-4 h-4 inline mr-1.5" />
+          Credenciales activas
+        </button>
         <button
           onClick={() => setTab('historial')}
           className={`px-3 py-2 text-sm font-medium border-b-2 transition-colors ${
@@ -909,6 +1000,123 @@ function RecuperacionClavesPanel() {
 
       {/* Contenido de tabs */}
       <div className="p-5">
+        {tab === 'credenciales' && (
+          <div className="space-y-3">
+            <div className="flex items-center justify-between flex-wrap gap-2">
+              <div>
+                <h3 className="text-sm font-semibold text-slate-900">Credenciales activas del sistema</h3>
+                <p className="text-xs text-slate-500">
+                  Lista en tiempo real de todos los usuarios internos y clientes del portal con sus credenciales.
+                  Puedes bloquear o desbloquear cualquiera desde aquí.
+                </p>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={cargarCredenciales}
+                disabled={loadingCred}
+              >
+                <RefreshCw className={`w-4 h-4 mr-1 ${loadingCred ? 'animate-spin' : ''}`} />
+                Refrescar
+              </Button>
+            </div>
+
+            {loadingCred ? (
+              <LoadingState />
+            ) : credenciales.length === 0 ? (
+              <EmptyState icon={KeyRound} title="No hay credenciales para mostrar" />
+            ) : (
+              <div className="space-y-2 max-h-[500px] overflow-y-auto">
+                {credenciales.map((cred) => (
+                  <div
+                    key={`${cred.tipo}-${cred.id}`}
+                    className={`rounded-lg border p-3 transition-shadow hover:shadow-sm ${
+                      cred.activo
+                        ? 'border-slate-200 bg-white'
+                        : 'border-red-200 bg-red-50'
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-3 flex-wrap">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-1 flex-wrap">
+                          <span
+                            className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                              cred.tipo === 'CLIENTE'
+                                ? 'bg-emerald-100 text-emerald-700'
+                                : 'bg-indigo-100 text-indigo-700'
+                            }`}
+                          >
+                            {cred.tipo === 'CLIENTE' ? <Users className="w-3 h-3" /> : <UserCog className="w-3 h-3" />}
+                            {cred.tipo}
+                          </span>
+                          {cred.rol && (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-violet-100 text-violet-700">
+                              {cred.rol}
+                            </span>
+                          )}
+                          <span
+                            className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                              cred.activo
+                                ? 'bg-emerald-100 text-emerald-700'
+                                : 'bg-red-100 text-red-700'
+                            }`}
+                          >
+                            {cred.activo ? <CheckCircle2 className="w-3 h-3" /> : <XCircle className="w-3 h-3" />}
+                            {cred.activo ? 'Activo' : 'Bloqueado'}
+                          </span>
+                        </div>
+                        <p className="text-sm font-semibold text-slate-900">{cred.nombre}</p>
+                        <div className="text-xs text-slate-500 mt-0.5 flex items-center gap-2 flex-wrap">
+                          <span className="font-mono">{cred.identificador}</span>
+                          {cred.email && (
+                            <>
+                              <span>·</span>
+                              <span className="inline-flex items-center gap-1">
+                                <Mail className="w-3 h-3" />
+                                {cred.email}
+                              </span>
+                            </>
+                          )}
+                          {cred.telefono && (
+                            <>
+                              <span>·</span>
+                              <span className="inline-flex items-center gap-1">
+                                <MessageCircle className="w-3 h-3" />
+                                {cred.telefono}
+                              </span>
+                            </>
+                          )}
+                          {cred.ultimoAcceso && (
+                            <>
+                              <span>·</span>
+                              <span>Último acceso: {new Date(cred.ultimoAcceso).toLocaleString('es-CO')}</span>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                      <Button
+                        variant={cred.activo ? 'destructive' : 'default'}
+                        size="sm"
+                        onClick={() => toggleBloqueo(cred)}
+                        disabled={bloqueando === cred.id || (cred.rol === 'ADMIN' && cred.activo)}
+                        title={cred.rol === 'ADMIN' && cred.activo ? 'No se puede bloquear a un administrador' : ''}
+                      >
+                        {bloqueando === cred.id ? (
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        ) : cred.activo ? (
+                          <Lock className="w-3.5 h-3.5" />
+                        ) : (
+                          <KeyRound className="w-3.5 h-3.5" />
+                        )}
+                        {cred.activo ? 'Bloquear' : 'Desbloquear'}
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
         {tab === 'historial' && (
           <div className="space-y-3">
             <div className="flex gap-2">
@@ -1209,6 +1417,200 @@ function RecuperacionClavesPanel() {
               )}
               Guardar configuración
             </Button>
+          </div>
+        )}
+      </div>
+    </Card>
+  )
+}
+
+// =====================================================
+// ValidadorFirmaPanel — Validador de código de firma
+// -----------------------------------------------------
+// Permite a ADMIN y GESTOR pegar el código que aparece
+// en el QR del certificado de firma electrónica para
+// verificar si el documento es auténtico o si fue
+// modificado/falsificado.
+// =====================================================
+
+function ValidadorFirmaPanel() {
+  const [codigo, setCodigo] = useState('')
+  const [resultado, setResultado] = useState<any>(null)
+  const [loading, setLoading] = useState(false)
+
+  const validar = async () => {
+    const cod = codigo.trim()
+    if (!cod) {
+      toast.error('Ingresa el código a validar')
+      return
+    }
+    setLoading(true)
+    setResultado(null)
+    try {
+      const res = await fetch(`/api/seguridad/validar-firma?codigo=${encodeURIComponent(cod)}`, {
+        cache: 'no-store',
+      })
+      const json = await res.json()
+      setResultado(json)
+      if (json.valido) {
+        toast.success('Código VÁLIDO — el documento es auténtico')
+      } else {
+        toast.error(json.error || 'Código no válido o modificado')
+      }
+    } catch (e) {
+      toast.error('Error: ' + (e as Error).message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const limpiar = () => {
+    setCodigo('')
+    setResultado(null)
+  }
+
+  return (
+    <Card>
+      <div className="p-5 border-b border-slate-200">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center">
+            <ShieldCheck className="w-5 h-5" />
+          </div>
+          <div>
+            <h2 className="text-base font-semibold text-slate-900">Validador de Firma Electrónica</h2>
+            <p className="text-sm text-slate-500">
+              Verifica si un código de firma (el del QR del certificado) es auténtico o si fue modificado. Evita la falsificación de documentos.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <div className="p-5 space-y-4">
+        {/* Input + botón */}
+        <div className="flex gap-2 flex-col sm:flex-row">
+          <Input
+            placeholder="Pega el código (formato: XXXX-XXXX-XXXX-XXXX)"
+            value={codigo}
+            onChange={(e) => setCodigo(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !loading) validar()
+            }}
+            className="flex-1 font-mono"
+            disabled={loading}
+          />
+          <Button onClick={validar} disabled={loading || !codigo.trim()}>
+            {loading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <ShieldCheck className="w-4 h-4 mr-2" />}
+            Validar
+          </Button>
+          {resultado && (
+            <Button variant="outline" onClick={limpiar} disabled={loading}>
+              Limpiar
+            </Button>
+          )}
+        </div>
+
+        {/* Resultado */}
+        {resultado && (
+          <div
+            className={`rounded-lg border p-4 ${
+              resultado.valido
+                ? 'bg-emerald-50 border-emerald-200'
+                : 'bg-red-50 border-red-200'
+            }`}
+          >
+            <div className="flex items-start gap-3">
+              {resultado.valido ? (
+                <CheckCircle2 className="w-6 h-6 text-emerald-600 shrink-0 mt-0.5" />
+              ) : (
+                <XCircle className="w-6 h-6 text-red-600 shrink-0 mt-0.5" />
+              )}
+              <div className="flex-1 min-w-0">
+                <p
+                  className={`text-sm font-semibold ${
+                    resultado.valido ? 'text-emerald-800' : 'text-red-800'
+                  }`}
+                >
+                  {resultado.valido ? 'DOCUMENTO AUTÉNTICO' : 'DOCUMENTO NO VÁLIDO'}
+                </p>
+                <p className="text-xs text-slate-600 mt-1">{resultado.mensaje || resultado.error}</p>
+
+                {resultado.data && (
+                  <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                    {resultado.data.deudor && (
+                      <div>
+                        <span className="text-slate-500">Deudor:</span>{' '}
+                        <span className="font-semibold text-slate-900">{resultado.data.deudor}</span>
+                      </div>
+                    )}
+                    {resultado.data.cedula && (
+                      <div>
+                        <span className="text-slate-500">Cédula:</span>{' '}
+                        <span className="font-mono font-semibold text-slate-900">{resultado.data.cedula}</span>
+                      </div>
+                    )}
+                    {resultado.data.codigoPrestamo && (
+                      <div>
+                        <span className="text-slate-500">Préstamo:</span>{' '}
+                        <span className="font-mono font-semibold text-slate-900">{resultado.data.codigoPrestamo}</span>
+                      </div>
+                    )}
+                    {resultado.data.monto !== null && resultado.data.monto !== undefined && (
+                      <div>
+                        <span className="text-slate-500">Monto:</span>{' '}
+                        <span className="font-semibold text-slate-900">
+                          ${Number(resultado.data.monto).toLocaleString('es-CO')}
+                        </span>
+                      </div>
+                    )}
+                    {resultado.data.fechaFirma && (
+                      <div>
+                        <span className="text-slate-500">Fecha firma:</span>{' '}
+                        <span className="font-semibold text-slate-900">
+                          {new Date(resultado.data.fechaFirma).toLocaleString('es-CO')}
+                        </span>
+                      </div>
+                    )}
+                    {resultado.data.canalOTP && (
+                      <div>
+                        <span className="text-slate-500">Canal OTP:</span>{' '}
+                        <span className="font-semibold text-slate-900">{resultado.data.canalOTP}</span>
+                      </div>
+                    )}
+                    {resultado.data.ipFirma && (
+                      <div>
+                        <span className="text-slate-500">IP firma:</span>{' '}
+                        <span className="font-mono font-semibold text-slate-900">{resultado.data.ipFirma}</span>
+                      </div>
+                    )}
+                    {resultado.data.firmaId && (
+                      <div className="sm:col-span-2">
+                        <span className="text-slate-500">ID firma:</span>{' '}
+                        <span className="font-mono text-[10px] text-slate-700">{resultado.data.firmaId}</span>
+                      </div>
+                    )}
+                    {resultado.data.hashCompleto && (
+                      <div className="sm:col-span-2">
+                        <span className="text-slate-500">Hash SHA-256 completo:</span>{' '}
+                        <span className="font-mono text-[10px] text-slate-700 break-all">{resultado.data.hashCompleto}</span>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Información de ayuda */}
+        {!resultado && (
+          <div className="rounded-lg bg-blue-50 border border-blue-200 p-3 text-xs text-blue-800">
+            <p className="font-semibold mb-1">¿Cómo usar el validador?</p>
+            <ol className="list-decimal list-inside space-y-0.5">
+              <li>Abre el certificado de firma electrónica del pagaré.</li>
+              <li>Copia el código de verificación (formato XXXX-XXXX-XXXX-XXXX) que aparece junto al QR.</li>
+              <li>Pégalo arriba y presiona <strong>Validar</strong>.</li>
+              <li>El sistema verificará si el código coincide con una firma registrada o si fue modificado.</li>
+            </ol>
           </div>
         )}
       </div>

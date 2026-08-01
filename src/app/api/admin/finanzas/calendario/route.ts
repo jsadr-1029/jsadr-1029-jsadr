@@ -21,7 +21,7 @@ const TIPOS_VALIDOS = ['PAGO', 'RECORDATORIO', 'REPORTE', 'OTRO']
 // =====================================================
 export async function GET(req: NextRequest) {
   try {
-    const auth = requireRole(req, ['ADMIN'])
+    const auth = requireRole(req, ['ADMIN', 'GESTOR', 'CONSULTOR'])
     if (auth instanceof NextResponse) return auth
 
     const { searchParams } = new URL(req.url)
@@ -86,7 +86,7 @@ export async function GET(req: NextRequest) {
 // =====================================================
 export async function POST(req: NextRequest) {
   try {
-    const auth = requireRole(req, ['ADMIN'])
+    const auth = requireRole(req, ['ADMIN', 'GESTOR'])
     if (auth instanceof NextResponse) return auth
 
     const clientInfo = getClientInfo(req)
@@ -152,7 +152,7 @@ export async function POST(req: NextRequest) {
 // =====================================================
 export async function PATCH(req: NextRequest) {
   try {
-    const auth = requireRole(req, ['ADMIN'])
+    const auth = requireRole(req, ['ADMIN', 'GESTOR'])
     if (auth instanceof NextResponse) return auth
 
     const clientInfo = getClientInfo(req)

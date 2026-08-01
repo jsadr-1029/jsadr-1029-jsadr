@@ -3,9 +3,9 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { Sidebar } from '@/components/Sidebar'
+import { RelojColombia } from '@/components/RelojColombia'
 import { useToast } from '@/hooks/use-toast'
 import { isAuthenticated, getUserData, logout } from '@/lib/api-client'
-import { puedeAcceder, vistaPorDefecto } from '@/lib/permisos'
 import { DashboardView } from '@/components/views/DashboardView'
 import { ClientesView } from '@/components/views/ClientesView'
 import { PrestamosView } from '@/components/views/PrestamosView'
@@ -31,8 +31,6 @@ import { CentroComunicacionesView } from '@/components/views/CentroComunicacione
 import { CentroConfiguracionView } from '@/components/views/CentroConfiguracionView'
 import { BuzonSolicitudesView } from '@/components/views/BuzonSolicitudesView'
 import { PortalAdminView } from '@/components/views/PortalAdminView'
-import { Button } from '@/components/ui/button'
-import { ShieldOff } from 'lucide-react'
 
 export type ViewKey =
   | 'dashboard'
@@ -89,21 +87,6 @@ export default function Home() {
         if (tk) setPortalToken(tk)
       } catch {}
       setView('portal')
-    } else if (u?.rol) {
-      // Guard de permisos: si la vista actual no está permitida para el rol,
-      // redirigir a la vista por defecto del rol.
-      const params = new URLSearchParams(window.location.search)
-      const queryView = params.get('view') as ViewKey | null
-      const vistaAValidar = queryView || view
-      if (!puedeAcceder(u.rol, vistaAValidar)) {
-        // Si la vista no es accesible, ir a la por defecto del rol
-        const porDefecto = vistaPorDefecto(u.rol)
-        setView(porDefecto)
-        if (queryView) {
-          // Limpiar el ?view=... de la URL
-          router.replace('/')
-        }
-      }
     }
     setAuthChecked(true)
   }, [router])
@@ -166,65 +149,43 @@ export default function Home() {
     return null
   }
 
-  // Guard de permisos activo en cada render
-  const currentUser = getUserData()
-  const rolActual = currentUser?.rol || ''
-  const vistaPermitida = esPortalCliente || puedeAcceder(rolActual, view)
-
   return (
     <div className="min-h-screen flex">
       {!esPortalCliente && <Sidebar view={view} onChange={setView} />}
       <main className="flex-1 overflow-x-hidden">
+        {/* Reloj digital Colombia — visible en todos los módulos (zona America/Bogota = Medellín/Bogotá) */}
+        {!esPortalCliente && (
+          <div className="fixed top-3 left-4 z-40">
+            <RelojColombia />
+          </div>
+        )}
         <div className="main-container p-6 max-w-[1600px] mx-auto fade-in pt-16 lg:pt-6" key={`${view}-${refreshKey}`}>
-          {!vistaPermitida ? (
-            <div className="flex flex-col items-center justify-center min-h-[60vh] text-center">
-              <div className="w-16 h-16 rounded-2xl bg-red-500/20 flex items-center justify-center mb-4">
-                <ShieldOff className="w-8 h-8 text-red-400" />
-              </div>
-              <h2 className="text-2xl font-bold text-white mb-2">Acceso denegado</h2>
-              <p className="text-sm text-muted-foreground max-w-md">
-                Tu rol <span className="font-semibold text-foreground">{rolActual}</span> no tiene permisos para acceder al módulo <span className="font-semibold text-foreground">{view}</span>.
-              </p>
-              <p className="text-xs text-muted-foreground mt-4">
-                Si crees que esto es un error, contacta al administrador del sistema.
-              </p>
-              <Button
-                className="mt-6"
-                onClick={() => setView(vistaPorDefecto(rolActual))}
-              >
-                Ir a mi panel
-              </Button>
-            </div>
-          ) : (
-            <>
-              {view === 'dashboard' && <DashboardView onAbrirPrestamo={abrirPrestamo} />}
-              {view === 'clientes' && <ClientesView onChanged={refresh} />}
-              {view === 'prestamos' && (
-                <PrestamosView onAbrirPrestamo={abrirPrestamo} onChanged={refresh} onCambiarVista={(v) => setView(v as ViewKey)} />
-              )}
-              {view === 'pagos' && <PagosView onChanged={refresh} />}
-              {view === 'juridico' && <JuridicoView onChanged={refresh} />}
-              {view === 'cajas' && <CajasView onChanged={refresh} />}
-              {view === 'simulador' && <SimuladorView />}
-              {view === 'campanas' && <CampanasView onChanged={refresh} />}
-              {view === 'portal' && <PortalView onAbrirPortal={abrirPortal} />}
-              {view === 'comunicaciones' && <CentroComunicacionesView />}
-              {view === 'usuarios' && <UsuariosView />}
-              {view === 'conexiones' && <ConexionesView />}
-              {view === 'seguridad' && <SeguridadView />}
-              {view === 'auditoria' && <AuditoriaSeguridadView />}
-              {view === 'notificaciones' && <NotificacionesView />}
-              {view === 'admin' && <AdminView onChanged={refresh} />}
-              {view === 'portal-admin' && <PortalAdminView />}
-              {view === 'configuracion' && <CentroConfiguracionView />}
-              {view === 'exportar' && <ExportarView />}
-              {view === 'codigo-fuente' && <CodigoFuenteView />}
-              {view === 'manual' && <ManualView />}
-              {view === 'automatizacion' && <AutomatizacionView />}
-              {view === 'buzon-solicitudes' && (
-                <BuzonSolicitudesView onConvertir={convertirSolicitudWeb} />
-              )}
-            </>
+          {view === 'dashboard' && <DashboardView onAbrirPrestamo={abrirPrestamo} />}
+          {view === 'clientes' && <ClientesView onChanged={refresh} />}
+          {view === 'prestamos' && (
+            <PrestamosView onAbrirPrestamo={abrirPrestamo} onChanged={refresh} onCambiarVista={(v) => setView(v as ViewKey)} />
+          )}
+          {view === 'pagos' && <PagosView onChanged={refresh} />}
+          {view === 'juridico' && <JuridicoView onChanged={refresh} />}
+          {view === 'cajas' && <CajasView onChanged={refresh} />}
+          {view === 'simulador' && <SimuladorView />}
+          {view === 'campanas' && <CampanasView onChanged={refresh} />}
+          {view === 'portal' && <PortalView onAbrirPortal={abrirPortal} />}
+          {view === 'comunicaciones' && <CentroComunicacionesView />}
+          {view === 'usuarios' && <UsuariosView />}
+          {view === 'conexiones' && <ConexionesView />}
+          {view === 'seguridad' && <SeguridadView />}
+          {view === 'auditoria' && <AuditoriaSeguridadView />}
+          {view === 'notificaciones' && <NotificacionesView />}
+          {view === 'admin' && <AdminView onChanged={refresh} />}
+          {view === 'portal-admin' && <PortalAdminView />}
+          {view === 'configuracion' && <CentroConfiguracionView />}
+          {view === 'exportar' && <ExportarView />}
+          {view === 'codigo-fuente' && <CodigoFuenteView />}
+          {view === 'manual' && <ManualView />}
+          {view === 'automatizacion' && <AutomatizacionView />}
+          {view === 'buzon-solicitudes' && (
+            <BuzonSolicitudesView onConvertir={convertirSolicitudWeb} />
           )}
         </div>
       </main>

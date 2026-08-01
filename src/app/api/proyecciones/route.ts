@@ -1,14 +1,10 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { calcularPrestamo } from '@/lib/finanzas'
 import { sanitizeError } from '@/lib/error-handler'
-import { requireRole } from '@/lib/auth-guard'
 
-export async function GET(req: NextRequest) {
+export async function GET() {
   try {
-    const auth = requireRole(req, ['ADMIN', 'GESTOR', 'CONSULTOR'])
-    if (auth instanceof NextResponse) return auth
-
     // =====================================================
     // PROYECCIONES FINANCIERAS
     // - Capital activo (saldo capital pendiente)

@@ -200,7 +200,7 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const auth = requireRole(req, ['ADMIN', 'GESTOR'])
+    const auth = requireRole(req, ['ADMIN'])
     if (auth instanceof NextResponse) return auth
 
     const { id } = await params
