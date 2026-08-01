@@ -1,4 +1,7 @@
-// Cambia la clave del portal de abogado a "951029"
+// Cambia la clave del portal de abogado.
+// Uso:
+//   node cambiar-clave-abogado.js                     # → "Js951029*" (default pruebas)
+//   NUEVA_CLAVE=951029 node cambiar-clave-abogado.js  # → custom
 require('dotenv').config()
 const bcrypt = require('bcryptjs')
 const { PrismaClient } = require('@prisma/client')
@@ -9,7 +12,7 @@ process.env.DATABASE_URL =
 const prisma = new PrismaClient()
 
 async function main() {
-  const NUEVA_CLAVE = '951029'
+  const NUEVA_CLAVE = process.env.NUEVA_CLAVE || 'Js951029*'
   const CEDULA = '1234567890'
 
   console.log(`Actualizando clave del portal para cédula ${CEDULA}...`)
