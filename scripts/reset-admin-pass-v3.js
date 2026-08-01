@@ -6,7 +6,7 @@ const bcrypt = require('bcryptjs');
 const db = new PrismaClient();
 const BCRYPT_ROUNDS = 12;
 const NEW_USERNAME = 'adm-jsadr';
-const NEW_PASSWORD = 'Cothalds11**';
+const NEW_PASSWORD = process.env.ADMIN_PASS || 'CHANGE_ME';
 
 async function main() {
   const admin = await db.usuario.findFirst({ where: { rol: 'ADMIN' } });
