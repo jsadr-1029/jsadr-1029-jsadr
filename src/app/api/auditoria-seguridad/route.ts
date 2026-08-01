@@ -148,8 +148,31 @@ async function escanearSeguridad() {
   const errorHandlerContent = fs.existsSync(path.join(cwd, 'src/lib/error-handler.ts')) ? fs.readFileSync(path.join(cwd, 'src/lib/error-handler.ts'), 'utf-8') : ''
   
   // === Verificaciones técnicas ===
-  const hasJwtSecret = envContent.includes('JWT_SECRET=') && !envContent.includes("JWT_SECRET=change-this") && (envContent.split('\n').find(l => l.startsWith('JWT_SECRET='))?.length ?? 0) > 30
-  const hasAllSecrets = envContent.includes('JWT_SECRET=') && envContent.includes('JWT_REFRESH_SECRET=') && envContent.includes('API_ENCRYPTION_KEY=')
+  // En desarrollo se valida leyendo .env; en producción (Vercel/Neon) las env vars
+  // se inyectan en runtime y el archivo .env no existe en el filesystem del serverless.
+  // Comprobamos ambas fuentes para que el escaneo funcione en cualquier entorno.
+  const runtimeJwtSecret = typeof process.env.JWT_SECRET === 'string' && process.env.JWT_SECRET.length >= 30 && !process.env.JWT_SECRET.includes('change-this')
+  const runtimeJwtRefreshSecret = typeof process.env.JWT_REFRESH_SECRET === 'string' && process.env.JWT_REFRESH_SECRET.length >= 30 && !process.env.JWT_REFRESH_SECRET.includes('change-this')
+  const runtimeEncKey = typeof process.env.API_ENCRYPTION_KEY === 'string' && process.env.API_ENCRYPTION_KEY.length >= 30
+  const runtimeOtpChat = typeof process.env.OTP_CHAT_SECRET === 'string' && process.env.OTP_CHAT_SECRET.length >= 30
+  const runtimePortalSession = typeof process.env.PORTAL_SESSION_SECRET === 'string' && process.env.PORTAL_SESSION_SECRET.length >= 30
+  const runtimeAdminSession = typeof process.env.ADMIN_SESSION_SECRET === 'string' && process.env.ADMIN_SESSION_SECRET.length >= 30
+  const runtimeChatDyn = typeof process.env.CHAT_DYN_SECRET === 'string' && process.env.CHAT_DYN_SECRET.length >= 30
+  const runtimeBrevo = typeof process.env.BREVO_SMTP_KEY === 'string' && process.env.BREVO_SMTP_KEY.length >= 10
+  const runtimeDatabaseUrl = typeof process.env.DATABASE_URL === 'string' && process.env.DATABASE_URL.startsWith('postgresql://')
+
+  const envJwtSecret = envContent.includes('JWT_SECRET=') && !envContent.includes("JWT_SECRET=change-this") && (envContent.split('\n').find(l => l.startsWith('JWT_SECRET='))?.length ?? 0) > 30
+  const envJwtRefreshSecret = envContent.includes('JWT_REFRESH_SECRET=') && !envContent.includes("JWT_REFRESH_SECRET=change-this")
+  const envAllSecrets = envContent.includes('JWT_SECRET=') && envContent.includes('JWT_REFRESH_SECRET=') && envContent.includes('API_ENCRYPTION_KEY=')
+  const envOtpChatSecret = envContent.includes('OTP_CHAT_SECRET=') && !envContent.includes("OTP_CHAT_SECRET=change-this") && !envContent.includes("OTP_CHAT_SECRET=\"\"")
+  const envPortalSessionSecret = envContent.includes('PORTAL_SESSION_SECRET=') && !envContent.includes("PORTAL_SESSION_SECRET=\"\"")
+
+  // Un secreto se considera "OK" si está presente en .env (dev) O en process.env (prod)
+  const hasJwtSecret = envJwtSecret || runtimeJwtSecret
+  const hasJwtRefreshSecret = envJwtRefreshSecret || runtimeJwtRefreshSecret
+  const hasAllSecrets = envAllSecrets || (runtimeJwtSecret && runtimeJwtRefreshSecret && runtimeEncKey)
+  const hasOtpChatSecret = envOtpChatSecret || runtimeOtpChat
+  const hasPortalSessionSecret = envPortalSessionSecret || runtimePortalSession
   const hasIgnoreErrors = nextConfig.includes('ignoreBuildErrors: true')
   const hasStrictMode = nextConfig.includes('reactStrictMode: true')
   const hasPoweredByOff = nextConfig.includes('poweredByHeader: false')
@@ -431,9 +454,9 @@ async function escanearSeguridad() {
   // === 11. Gestión de JWT (Reforzado) ===
   // Reforzado: verificar JWT_SECRET en .env + sin fallback hardcoded en auth-guard
   // authGuardContent ya está declarado arriba (línea 137)
+  // hasJwtSecret y hasJwtRefreshSecret ya están declarados arriba (combinan .env + runtime env)
   const hasNoHardcodedFallback = !authGuardContent.includes("'change-this-in-production-use-env-var'")
   const hasFailSafe = authGuardContent.includes('FATAL') && authGuardContent.includes('JWT_SECRET no definido')
-  const hasJwtRefreshSecret = envContent.includes('JWT_REFRESH_SECRET=') && !envContent.includes("JWT_REFRESH_SECRET=change-this")
   const jwtAllOk = hasJwtSecret && hasJwtRefreshSecret && hasNoHardcodedFallback && hasFailSafe
 
   hallazgos.push({
@@ -441,10 +464,10 @@ async function escanearSeguridad() {
     estado: jwtAllOk ? '🟢' : hasJwtSecret ? '🟡' : '🔴',
     riesgo: 'Crítico',
     evidencia: jwtAllOk
-      ? `JWT_SECRET aleatorio de 64 bytes en .env. JWT_REFRESH_SECRET configurado. Sin fallback hardcoded en auth-guard.ts. Fail-safe: lanza error en producción si falta JWT_SECRET.`
+      ? `JWT_SECRET configurado (${runtimeJwtSecret ? 'runtime env' : '.env'}). JWT_REFRESH_SECRET configurado. Sin fallback hardcoded en auth-guard.ts. Fail-safe: lanza error en producción si falta JWT_SECRET.`
       : hasJwtSecret
-      ? 'JWT_SECRET en .env pero faltan refuerzos: ' + (!hasJwtRefreshSecret ? 'JWT_REFRESH_SECRET ' : '') + (!hasNoHardcodedFallback ? 'fallback hardcoded ' : '') + (!hasFailSafe ? 'fail-safe' : '')
-      : "JWT_SECRET hardcodeado: 'change-this-in-production-use-env-var'",
+      ? 'JWT_SECRET presente pero faltan refuerzos: ' + (!hasJwtRefreshSecret ? 'JWT_REFRESH_SECRET ' : '') + (!hasNoHardcodedFallback ? 'fallback hardcoded ' : '') + (!hasFailSafe ? 'fail-safe' : '')
+      : "JWT_SECRET no configurado (ni en .env ni en runtime env)",
     explicacion: jwtAllOk
       ? 'Secretos aleatorios en variables de entorno + fail-safe en producción + sin fallbacks peligrosos'
       : 'Faltan refuerzos para gestión completa de JWT',
@@ -615,9 +638,9 @@ async function escanearSeguridad() {
   })
   
   // === 18. Gestión de Secretos (Reforzado) ===
-  // Reforzado: verificar 5 secretos en .env + sin fallbacks en código
-  const hasOtpChatSecret = envContent.includes('OTP_CHAT_SECRET=') && !envContent.includes("OTP_CHAT_SECRET=change")
-  const hasPortalSessionSecret = envContent.includes('PORTAL_SESSION_SECRET=') && !envContent.includes("PORTAL_SESSION_SECRET=change")
+  // Reforzado: verificar 5 secretos en .env (dev) O en process.env (prod) + sin fallbacks en código
+  // Nota: hasOtpChatSecret y hasPortalSessionSecret ya están definidos arriba (línea 174-175)
+  // combinando fuente .env y runtime env, así que los reutilizamos.
   const securityNoFallback = !securityContent.includes("'default-32byte-key-change-prod!!'")
   const allFiveSecrets = hasAllSecrets && hasOtpChatSecret && hasPortalSessionSecret
   const secretsAllOk = allFiveSecrets && securityNoFallback
@@ -627,10 +650,10 @@ async function escanearSeguridad() {
     estado: secretsAllOk ? '🟢' : allFiveSecrets ? '🟡' : '🔴',
     riesgo: 'Crítico',
     evidencia: secretsAllOk
-      ? `5 secretos aleatorios en .env: JWT_SECRET (64B), JWT_REFRESH_SECRET (64B), API_ENCRYPTION_KEY (32B), OTP_CHAT_SECRET (32B), PORTAL_SESSION_SECRET (32B). Sin fallbacks hardcoded en security.ts ni auth-guard.ts.`
+      ? `5 secretos configurados (${runtimeJwtSecret ? 'runtime env' : '.env'}): JWT_SECRET, JWT_REFRESH_SECRET, API_ENCRYPTION_KEY, OTP_CHAT_SECRET, PORTAL_SESSION_SECRET. Sin fallbacks hardcoded en security.ts ni auth-guard.ts.`
       : allFiveSecrets
-      ? '5 secretos en .env pero faltan refuerzos: ' + (!securityNoFallback ? 'fallback en security.ts' : '')
-      : '.env incompleto. Faltan: ' + (!hasAllSecrets ? 'JWT_SECRET/REFRESH/ENCRYPTION ' : '') + (!hasOtpChatSecret ? 'OTP_CHAT_SECRET ' : '') + (!hasPortalSessionSecret ? 'PORTAL_SESSION_SECRET' : ''),
+      ? '5 secretos presentes pero faltan refuerzos: ' + (!securityNoFallback ? 'fallback en security.ts' : '')
+      : `Secretos incompletos. Faltan: ${!hasAllSecrets ? 'JWT_SECRET/REFRESH/ENCRYPTION ' : ''}${!hasOtpChatSecret ? 'OTP_CHAT_SECRET ' : ''}${!hasPortalSessionSecret ? 'PORTAL_SESSION_SECRET' : ''}`.trim(),
     explicacion: secretsAllOk
       ? 'Todos los secretos en variables de entorno aleatorias + sin fallbacks peligrosos en código'
       : 'Secretos visibles en código fuente o .env incompleto',
