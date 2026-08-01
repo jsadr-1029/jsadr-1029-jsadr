@@ -1,7 +1,7 @@
 // =====================================================
 // /api/ficha-tecnica — Genera ficha técnica del préstamo v3.0
 // GET: genera HTML imprimible o JSON según ?formato=
-// Esta ruta es pública (whitelist en middleware) para que el
+// Esta ruta es pública (whitelist en proxy) para que el
 // cliente pueda verla desde el portal sin autenticación.
 // =====================================================
 

@@ -33,7 +33,7 @@ const nextConfig: NextConfig = {
   poweredByHeader: false,
   // Compresión habilitada
   compress: true,
-  // Headers de seguridad adicionales (también se aplican en middleware.ts)
+  // Headers de seguridad adicionales (también se aplican en src/proxy.ts)
   async headers() {
     return [
       {

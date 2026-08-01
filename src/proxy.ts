@@ -1,5 +1,7 @@
 // =====================================================
-// src/middleware.ts — Middleware de Seguridad (Next.js)
+// src/proxy.ts — Proxy de Seguridad (Next.js 16+)
+// (anteriormente middleware.ts — renombrado por deprecación de la
+//  convención "middleware" en Next.js 16; ver https://nextjs.org/docs/messages/middleware)
 // Centro único de seguridad perimetral:
 //  • CORS estricto con whitelist
 //  • CSRF check (Origin/Referer) en mutaciones
@@ -169,7 +171,7 @@ function getRateLimitForPath(pathname: string): { max: number; key: string } | n
   return null
 }
 
-export async function middleware(req: NextRequest) {
+export async function proxy(req: NextRequest) {
   // === 1. CORS preflight ===
   if (req.method === 'OPTIONS') {
     const response = new NextResponse(null, { status: 204 })

@@ -131,10 +131,18 @@ async function escanearSeguridad() {
   const cwd = process.cwd()
   
   // === Leer archivos clave ===
-  const middlewareExists = fs.existsSync(path.join(cwd, 'src/middleware.ts'))
+  // FIX-NEXT16: la convención "middleware" fue reemplazada por "proxy" en
+  // Next.js 16. Se comprueba ambos nombres para mantener compatibilidad con
+  // proyectos que aún no hayan migrado.
+  const middlewareExists =
+    fs.existsSync(path.join(cwd, 'src/proxy.ts')) ||
+    fs.existsSync(path.join(cwd, 'src/middleware.ts'))
+  const middlewarePath = fs.existsSync(path.join(cwd, 'src/proxy.ts'))
+    ? path.join(cwd, 'src/proxy.ts')
+    : path.join(cwd, 'src/middleware.ts')
   const envContent = fs.existsSync(path.join(cwd, '.env')) ? fs.readFileSync(path.join(cwd, '.env'), 'utf-8') : ''
   const nextConfig = fs.existsSync(path.join(cwd, 'next.config.ts')) ? fs.readFileSync(path.join(cwd, 'next.config.ts'), 'utf-8') : ''
-  const middlewareContent = middlewareExists ? fs.readFileSync(path.join(cwd, 'src/middleware.ts'), 'utf-8') : ''
+  const middlewareContent = middlewareExists ? fs.readFileSync(middlewarePath, 'utf-8') : ''
   const authGuardContent = fs.existsSync(path.join(cwd, 'src/lib/auth-guard.ts')) ? fs.readFileSync(path.join(cwd, 'src/lib/auth-guard.ts'), 'utf-8') : ''
   const securityContent = fs.existsSync(path.join(cwd, 'src/lib/security.ts')) ? fs.readFileSync(path.join(cwd, 'src/lib/security.ts'), 'utf-8') : ''
   const errorHandlerContent = fs.existsSync(path.join(cwd, 'src/lib/error-handler.ts')) ? fs.readFileSync(path.join(cwd, 'src/lib/error-handler.ts'), 'utf-8') : ''
@@ -198,8 +206,8 @@ async function escanearSeguridad() {
     estado: middlewareAllOk ? '🟢' : middlewareExists ? '🟡' : '🔴',
     riesgo: 'Crítico',
     evidencia: middlewareExists
-      ? `Existe src/middleware.ts. ${corsExists ? 'CORS activo. ' : ''}${hasHeaders ? 'Headers activos. ' : ''}${hasRateLimit ? 'Rate limiting activo. ' : ''}${hasJwtVerification ? 'JWT verification en producción. ' : ''}${hasConditionalAuth ? 'Auth condicional por entorno. ' : ''}Modo compatibilidad: ${authGuardContent.includes("NODE_ENV !== 'production'") ? 'sí (dev sin token)' : 'no'}`
-      : 'NO existe src/middleware.ts. 50+ APIs accesibles sin autenticación',
+      ? `Existe src/proxy.ts (convención Next.js 16+). ${corsExists ? 'CORS activo. ' : ''}${hasHeaders ? 'Headers activos. ' : ''}${hasRateLimit ? 'Rate limiting activo. ' : ''}${hasJwtVerification ? 'JWT verification en producción. ' : ''}${hasConditionalAuth ? 'Auth condicional por entorno. ' : ''}Modo compatibilidad: ${authGuardContent.includes("NODE_ENV !== 'production'") ? 'sí (dev sin token)' : 'no'}`
+      : 'NO existe src/proxy.ts (ni middleware.ts). 50+ APIs accesibles sin autenticación',
     explicacion: middlewareExists
       ? middlewareAllOk
         ? 'Middleware completo: CORS + headers + CSRF + rate limiting escalonado + JWT verification en producción + HSTS + redirect HTTPS. Modo compatibilidad solo en dev.'

@@ -1,7 +1,7 @@
 // =====================================================
 // /api/pagos/bancolombia-redirect — Maneja redirect tras pago v3.0
 // GET: recibe el redirect de Bancolombia después del pago.
-// Esta ruta es PÚBLICA (whitelist en middleware).
+// Esta ruta es PÚBLICA (whitelist en proxy).
 //
 // ⚠️ IMPORTANTE (fix de seguridad): Este endpoint NO actualiza el estado
 // del pago en la base de datos. Solo sirve como señal visual para

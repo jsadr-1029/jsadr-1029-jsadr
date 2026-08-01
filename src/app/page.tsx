@@ -153,9 +153,11 @@ export default function Home() {
     <div className="min-h-screen flex">
       {!esPortalCliente && <Sidebar view={view} onChange={setView} />}
       <main className="flex-1 overflow-x-hidden">
-        {/* Reloj digital Colombia — visible en todos los módulos (zona America/Bogota = Medellín/Bogotá) */}
+        {/* Reloj digital Colombia — visible en todos los módulos (zona America/Bogota = Medellín/Bogotá)
+            Ubicado al centro horizontal de la ventana, manteniendo la altura (top-3).
+            pointer-events-none para no bloquear clics; el contenido tiene pt-16 para evitar superposición. */}
         {!esPortalCliente && (
-          <div className="fixed top-3 left-4 z-40">
+          <div className="fixed top-3 left-1/2 -translate-x-1/2 z-40 pointer-events-none">
             <RelojColombia />
           </div>
         )}

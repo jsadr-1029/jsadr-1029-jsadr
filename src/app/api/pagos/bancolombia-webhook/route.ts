@@ -2,7 +2,7 @@
 // /api/pagos/bancolombia-webhook — Webhook de Bancolombia v3.0
 // POST: recibe notificaciones asíncronas de Bancolombia.
 // Verifica HMAC SHA-256 con el secreto compartido.
-// Esta ruta es PÚBLICA (whitelist en middleware) pero valida HMAC.
+// Esta ruta es PÚBLICA (whitelist en proxy) pero valida HMAC.
 // =====================================================
 
 import { NextRequest, NextResponse } from 'next/server'
