@@ -223,8 +223,8 @@ export async function PATCH(
         return NextResponse.json({ success: false, error: 'Estructura de snapshot inválida' }, { status: 400 })
       }
 
-      // Verificar compatibilidad (acepta tanto "Jsadr" como "Aurora Bancaria" para snapshots antiguos)
-      if (!data.proyecto || (data.proyecto !== 'Jsadr' && data.proyecto !== 'Aurora Bancaria')) {
+      // Verificar compatibilidad (acepta tanto "Jsadr" como "Jo*** Se*** Al*** D** R**" para snapshots antiguos)
+      if (!data.proyecto || (data.proyecto !== 'Jsadr' && data.proyecto !== 'Jo*** Se*** Al*** D** R**')) {
         return NextResponse.json({ success: false, error: 'Snapshot no compatible con este proyecto' }, { status: 400 })
       }
 

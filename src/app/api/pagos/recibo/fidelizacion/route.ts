@@ -65,7 +65,7 @@ const PLANTILLAS_FIDELIZACION = [
     generar: (ctx: { nombre: string; codigo: string; montoTotal: string }) =>
       `Hola ${ctx.nombre}, ⭐\n\n` +
       `Tu excelente comportamiento de pago en el préstamo ${ctx.codigo} te ha convertido ` +
-      `en cliente VIP de Jsadr · Aurora Bancaria.\n\n` +
+      `en cliente VIP de Jsadr · Jo*** Se*** Al*** D** R**.\n\n` +
       `A partir de hoy tienes acceso a:\n` +
       `• Aprobación prioritaria de nuevos préstamos 🚀\n` +
       `• Tasas preferenciales exclusivas 💎\n` +

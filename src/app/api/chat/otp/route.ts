@@ -160,9 +160,9 @@ async function solicitarOtp(req: NextRequest, body: any) {
   let envio: { exito: boolean; error?: string } | null = null
   const resultado = await enviarEmail({
     to: cliente.email,
-    subject: 'Tu código de verificación — Aurora Bancaria',
-    text: `Hola ${cliente.nombre},\n\nTu código de verificación es: ${codigo}\n\nVálido por ${OTP_EXPIRA_MIN} minutos. No lo compartas con nadie.\n\n— Aurora Bancaria`,
-    html: `<div style="font-family: Arial, sans-serif; max-width: 480px; margin: auto; padding: 24px;"><h2 style="color: #1e40af;">Aurora Bancaria</h2><p>Hola <strong>${cliente.nombre}</strong>,</p><p>Tu código de verificación es:</p><div style="text-align: center; margin: 24px 0;"><div style="display: inline-block; font-size: 32px; font-weight: bold; letter-spacing: 8px; color: #1e40af; background: #f3f4f6; padding: 16px 32px; border-radius: 8px; font-family: 'Courier New', monospace;">${codigo}</div></div><p style="color: #6b7280; font-size: 13px;">Válido por ${OTP_EXPIRA_MIN} minutos.</p></div>`,
+    subject: 'Tu código de verificación — Jo*** Se*** Al*** D** R**',
+    text: `Hola ${cliente.nombre},\n\nTu código de verificación es: ${codigo}\n\nVálido por ${OTP_EXPIRA_MIN} minutos. No lo compartas con nadie.\n\n— Jo*** Se*** Al*** D** R**`,
+    html: `<div style="font-family: Arial, sans-serif; max-width: 480px; margin: auto; padding: 24px;"><h2 style="color: #1e40af;">Jo*** Se*** Al*** D** R**</h2><p>Hola <strong>${cliente.nombre}</strong>,</p><p>Tu código de verificación es:</p><div style="text-align: center; margin: 24px 0;"><div style="display: inline-block; font-size: 32px; font-weight: bold; letter-spacing: 8px; color: #1e40af; background: #f3f4f6; padding: 16px 32px; border-radius: 8px; font-family: 'Courier New', monospace;">${codigo}</div></div><p style="color: #6b7280; font-size: 13px;">Válido por ${OTP_EXPIRA_MIN} minutos.</p></div>`,
   })
   envio = { exito: resultado.success, error: resultado.error }
 

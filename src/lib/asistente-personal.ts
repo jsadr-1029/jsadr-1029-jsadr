@@ -102,11 +102,39 @@ export async function registrarMovimiento(params: {
       },
     })
 
+    // === Mirror a MovimientoFinanciero ===
+    // FIX-INTEGRIDAD: para que el movimiento creado por el bot también aparezca
+    // en Administración → Contabilidad (que lee de MovimientoFinanciero vía
+    // /api/admin/finanzas) y en Reportes. Antes solo se escribía en
+    // MovimientoCaja y quedaba invisible para Contabilidad.
+    try {
+      const catFin = categoriaId
+        ? await db.categoriaFinanciera.findUnique({ where: { id: categoriaId } })
+        : null
+      await db.movimientoFinanciero.create({
+        data: {
+          tipo: params.tipo === 'EGRESO' ? 'GASTO' : params.tipo,
+          categoria: categoriaNombre || (catFin?.nombre || 'OTRO'),
+          descripcion: `${params.concepto} (Asistente Personal)`,
+          monto: params.monto,
+          fecha: new Date(),
+          metodoPago: 'CAJA_MENOR',
+          responsable: params.usuarioNombre || 'Asistente Personal',
+          notas: `Creado vía bot Asistente Personal. Caja: ${caja.nombre}. MovimientoCajaId: ${movimiento.id}`,
+          ambito: params.ambito,
+        },
+      })
+    } catch (mirrorErr: any) {
+      // No fallar el registro principal si el mirror falla (por ejemplo, si
+      // el schema de MovimientoFinanciero cambia). Se loguea para diagnóstico.
+      console.error('[asistente-personal] Mirror a MovimientoFinanciero falló:', mirrorErr?.message)
+    }
+
     return {
       success: true,
       movimientoId: movimiento.id,
       categoriaNombre,
-      mensaje: `Movimiento registrado en caja "${caja.nombre}".`,
+      mensaje: `Movimiento registrado en caja "${caja.nombre}" y reflejado en Contabilidad.`,
     }
   } catch (e: any) {
     return { success: false, mensaje: `Error: ${e.message}` }

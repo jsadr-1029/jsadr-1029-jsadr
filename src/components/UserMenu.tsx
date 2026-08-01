@@ -1,7 +1,7 @@
 'use client'
 
 // =====================================================
-// UserMenu v1.0 — Jsadr · Aurora Bancaria
+// UserMenu v1.0 — Jsadr · Jo*** Se*** Al*** D** R**
 // -----------------------------------------------------
 // Reemplaza al antiguo botón PWA. Ahora es un menú
 // flotante superior derecho que se adapta al dispositivo:
@@ -430,7 +430,7 @@ export function UserMenu({ currentView, onNavigate }: UserMenuProps) {
                   </div>
                   <div>
                     <h2 className="text-sm font-bold text-white">Jsadr</h2>
-                    <p className="text-[10px] text-white/50">Aurora Bancaria</p>
+                    <p className="text-[10px] text-white/50">Jo*** Se*** Al*** D** R**</p>
                   </div>
                 </div>
                 <button

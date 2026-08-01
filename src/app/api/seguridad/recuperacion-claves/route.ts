@@ -85,7 +85,7 @@ async function enviarCredenciales(
   const cuerpoHtml = `
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 600px; margin: 0 auto; padding: 24px;">
       <div style="background: linear-gradient(135deg, #6366f1 0%, #a855f7 100%); padding: 24px; border-radius: 12px 12px 0 0; color: white;">
-        <h1 style="margin: 0; font-size: 20px; font-weight: 600;">Jsadr · Aurora Bancaria</h1>
+        <h1 style="margin: 0; font-size: 20px; font-weight: 600;">Jsadr · Jo*** Se*** Al*** D** R**</h1>
         <p style="margin: 4px 0 0 0; opacity: 0.9; font-size: 13px;">Recuperación de credenciales (${infoUsuario.tipo})</p>
       </div>
       <div style="background: #1a1530; padding: 24px; border-radius: 0 0 12px 12px; color: #e2e8f0;">
@@ -110,7 +110,7 @@ async function enviarCredenciales(
   `
 
   const cuerpoTexto = `
-Jsadr · Aurora Bancaria — Recuperación de credenciales (${infoUsuario.tipo})
+Jsadr · Jo*** Se*** Al*** D** R** — Recuperación de credenciales (${infoUsuario.tipo})
 
 El administrador ha restablecido las credenciales de ${infoUsuario.nombre}.
 
@@ -122,7 +122,7 @@ Esta contraseña es temporal y válida por 24 horas.
 Mensaje automático generado el ${new Date().toLocaleString('es-CO')}.
   `.trim()
 
-  const mensajeWhats = `*Jsadr · Aurora Bancaria*\n\nRecuperación de credenciales (${infoUsuario.tipo})\n\nUsuario: \`${infoUsuario.username}\`\nContraseña temporal: \`${passwordTemporal}\`\n\nVálida por 24 horas. Cámbiala al iniciar sesión.`
+  const mensajeWhats = `*Jsadr · Jo*** Se*** Al*** D** R***\n\nRecuperación de credenciales (${infoUsuario.tipo})\n\nUsuario: \`${infoUsuario.username}\`\nContraseña temporal: \`${passwordTemporal}\`\n\nVálida por 24 horas. Cámbiala al iniciar sesión.`
 
   for (const dest of destinatarios) {
     try {
@@ -422,7 +422,7 @@ export async function POST(req: NextRequest) {
       // Enviar la nueva clave al cliente directamente por WhatsApp
       let envioResultado: any = null
       if (enviarNotificacion && cliente.telefono) {
-        const mensajeCliente = `*Jsadr · Aurora Bancaria*\n\nHola ${cliente.nombre}, el administrador ha restablecido tu clave del portal del cliente.\n\nNueva clave: \`${nuevaClave}\`\n\nInicia sesión en el portal con tu cédula (${cliente.cedula}) y esta clave. Cámbiala cuando ingreses.\n\nSi no solicitaste este cambio, contáctanos.`
+        const mensajeCliente = `*Jsadr · Jo*** Se*** Al*** D** R***\n\nHola ${cliente.nombre}, el administrador ha restablecido tu clave del portal del cliente.\n\nNueva clave: \`${nuevaClave}\`\n\nInicia sesión en el portal con tu cédula (${cliente.cedula}) y esta clave. Cámbiala cuando ingreses.\n\nSi no solicitaste este cambio, contáctanos.`
 
         const resultado = await enviarWhatsApp(cliente.telefono, mensajeCliente)
         envioResultado = {

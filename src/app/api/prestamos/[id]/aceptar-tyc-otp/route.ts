@@ -348,14 +348,14 @@ DOCUMENTACIÓN:
 
 Si no reconoces esta activación, contacta inmediatamente al administrador.
 
-— Aurora Bancaria
+— Jo*** Se*** Al*** D** R**
   `.trim()
 
   try {
     if (prestamo.cliente.email) {
       await enviarEmail({
         to: prestamo.cliente.email,
-        subject: `Préstamo ${prestamo.codigo} activado — Aurora Bancaria`,
+        subject: `Préstamo ${prestamo.codigo} activado — Jo*** Se*** Al*** D** R**`,
         text: mensajeCorreo,
         html: `<div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto; padding: 24px;">
   <h2 style="color: #1e40af;">Préstamo activado</h2>
@@ -372,7 +372,7 @@ Si no reconoces esta activación, contacta inmediatamente al administrador.
   <p>Tu foto de cédula y selfie con cédula fueron guardadas como respaldo de firma. Estas imágenes se incluyen en tu pagaré electrónico como evidencia de identidad.</p>
   <p style="color: #6b7280; font-size: 13px;">Si no reconoces esta activación, contacta inmediatamente al administrador.</p>
   <hr style="border: 0; border-top: 1px solid #e5e7eb; margin: 24px 0;">
-  <p style="color: #9ca3af; font-size: 12px;">Aurora Bancaria v5.0</p>
+  <p style="color: #9ca3af; font-size: 12px;">Jo*** Se*** Al*** D** R** v5.0</p>
 </div>`,
       })
     }

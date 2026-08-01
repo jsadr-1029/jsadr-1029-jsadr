@@ -40,11 +40,80 @@ export async function POST(req: NextRequest) {
       )
     }
 
+    // === RESPUESTA A CONFIRMACIÓN DE ÁMBITO (Negocio/Personal) ===
+    // FIX-CRÍTICO: este handler debe ejecutarse ANTES del branch `if (botTipo)`
+    // para que las respuestas "negocio"/"personal" funcionen incluso cuando
+    // el chat se envía con un botTipo específico (p.ej. ADMIN_SISTEMA).
+    // Antes estaba dentro del flujo legacy y no se ejecutaba si botTipo estaba presente.
+    const sessionIdPre = token || 'admin-session'
+    const memoriaPre = obtenerMemoria(sessionIdPre)
+    if (memoriaPre?.pendienteConfirmarAmbito) {
+      const pendiente = memoriaPre.pendienteConfirmarAmbito
+      // Verificar que no haya expirado (5 minutos)
+      if (Date.now() - pendiente.timestamp > 5 * 60 * 1000) {
+        guardarMemoria(sessionIdPre, { pendienteConfirmarAmbito: undefined } as any)
+      } else {
+        const mensajeLowerPre = mensaje.toLowerCase().trim()
+        const esNegocio = mensajeLowerPre === 'negocio' || mensajeLowerPre === '1' || mensajeLowerPre.includes('negocio') || mensajeLowerPre.includes('empresa') || mensajeLowerPre === 'n'
+        const esPersonal = mensajeLowerPre === 'personal' || mensajeLowerPre === '2' || mensajeLowerPre.includes('personal') || mensajeLowerPre === 'p'
+
+        if (esNegocio || esPersonal) {
+          const ambito = esNegocio ? 'NEGOCIO' : 'PERSONAL'
+          try {
+            const resultado = await registrarMovimiento({
+              tipo: pendiente.tipo === 'GASTO' ? 'EGRESO' : 'INGRESO',
+              monto: pendiente.monto,
+              concepto: pendiente.concepto,
+              ambito: ambito as 'NEGOCIO' | 'PERSONAL',
+              usuarioNombre: 'Admin',
+            })
+            const detalleAccionP = `${pendiente.tipo === 'GASTO' ? 'Gasto' : 'Ingreso'} ${ambito}: ${formatearMoneda(pendiente.monto)} | Motivo: ${pendiente.concepto} | Categoría: ${resultado.categoriaNombre}`
+            const respuestaP = resultado.success
+              ? `✅ ${pendiente.tipo === 'GASTO' ? 'Gasto' : 'Ingreso'} registrado (${ambito})\n\n💰 Monto: ${formatearMoneda(pendiente.monto)}\n📝 Motivo: ${pendiente.concepto}\n🏷️ Categoría: ${resultado.categoriaNombre}\n📅 ${new Date().toLocaleString('es-CO')}`
+              : `❌ ${resultado.mensaje}`
+            guardarMemoria(sessionIdPre, {
+              pendienteConfirmarAmbito: undefined,
+              ultimoMovimientoId: resultado.movimientoId,
+              ultimoMovimientoTipo: pendiente.tipo,
+              ultimoMovimientoMonto: pendiente.monto,
+              ultimoMovimientoConcepto: pendiente.concepto,
+              ultimoMovimientoAmbito: ambito as any,
+              ultimoMovimientoCategoria: resultado.categoriaNombre,
+            } as any)
+            return NextResponse.json({
+              success: true,
+              data: {
+                respuesta: respuestaP,
+                tipo: 'ACCION' as const,
+                accionEjecutada: resultado.success,
+                detalleAccion: detalleAccionP,
+              },
+            })
+          } catch (e) {
+            guardarMemoria(sessionIdPre, { pendienteConfirmarAmbito: undefined } as any)
+            return NextResponse.json({
+              success: true,
+              data: {
+                respuesta: `❌ No pude registrar el movimiento. Error: ${e instanceof Error ? e.message : 'desconocido'}`,
+                tipo: 'TEXTO' as const,
+                accionEjecutada: false,
+                detalleAccion: '',
+              },
+            })
+          }
+        }
+        // Si el usuario escribe algo distinto a "negocio"/"personal", cancelar el pendiente y continuar
+        if (mensajeLowerPre !== 'menu' && mensajeLowerPre !== 'menú' && mensajeLowerPre !== 'hola' && mensajeLowerPre !== 'ayuda') {
+          guardarMemoria(sessionIdPre, { pendienteConfirmarAmbito: undefined } as any)
+        }
+      }
+    }
+
     // === Si viene de un bot específico (BotIcons), responder según su especialidad ===
     // Todos los bots con tipo definido pasan por responderSegunBot, incluyendo Admin Guardian.
     // Excepción: si NO hay botTipo, es el chat admin genérico del menú principal.
     if (botTipo) {
-      return responderSegunBot(botTipo, botNombre || 'Bot', mensaje, clienteId)
+      return responderSegunBot(botTipo, botNombre || 'Bot', mensaje, clienteId, token || 'admin-session')
     }
 
     // === NUEVO MOTOR BOT-ADMIN v2.0 ===
@@ -776,7 +845,7 @@ export async function POST(req: NextRequest) {
 // Función: responderSegunBot
 // Responde según la especialidad del bot que está hablando
 // =====================================================
-async function responderSegunBot(botTipo: string, botNombre: string, mensaje: string, clienteId?: string): Promise<NextResponse> {
+async function responderSegunBot(botTipo: string, botNombre: string, mensaje: string, clienteId?: string, sessionId: string = 'admin-session'): Promise<NextResponse> {
   let mensajeLower = mensaje.toLowerCase().trim()
   let respuesta = ''
   let tipo: 'TEXTO' | 'ACCION' | 'REPORTE' = 'TEXTO'
@@ -3521,15 +3590,34 @@ ${categorias.map(c => `- ${c.icono || ''} ${c.nombre} (${c.tipo}/${c.ambito})`).
               respuesta = `❌ ${validacion.error}`
             } else {
               const concepto = extraerConcepto(mensaje, monto)
-              const resultado = await registrarMovimiento({
-                tipo: 'EGRESO', monto, concepto, ambito, usuarioNombre: 'Admin',
-              })
-              tipo = 'ACCION'
-              accionEjecutada = resultado.success
-              detalleAccion = `Gasto ${ambito}: ${formatearMoneda(monto)} (${resultado.categoriaNombre})`
-              respuesta = resultado.success
-                ? `✅ Gasto registrado (${ambito})\n💰 Monto: ${formatearMoneda(monto)}\n📝 Concepto: ${concepto}\n🏷️ Categoría: ${resultado.categoriaNombre}\n\n💡 ${formatearMoneda(monto)} descontados del balance.`
-                : `❌ ${resultado.mensaje}`
+              // === FIX: verificar si el usuario especificó ámbito explícitamente ===
+              // Si NO lo hizo, guardar en memoria y preguntar (mismo flujo que la rama legacy).
+              const esPersonalExplicito = /\bpersonal\b/i.test(mensaje) && !/personalizar/i.test(mensaje)
+              const esNegocioExplicito = /\b(?:negocio|empresa)\b/i.test(mensaje)
+              if (esPersonalExplicito || esNegocioExplicito) {
+                const ambitoResolve = esPersonalExplicito ? 'PERSONAL' : 'NEGOCIO'
+                const resultado = await registrarMovimiento({
+                  tipo: 'EGRESO', monto, concepto, ambito: ambitoResolve, usuarioNombre: 'Admin',
+                })
+                tipo = 'ACCION'
+                accionEjecutada = resultado.success
+                detalleAccion = `Gasto ${ambitoResolve}: ${formatearMoneda(monto)} (${resultado.categoriaNombre})`
+                respuesta = resultado.success
+                  ? `✅ Gasto registrado (${ambitoResolve})\n💰 Monto: ${formatearMoneda(monto)}\n📝 Concepto: ${concepto}\n🏷️ Categoría: ${resultado.categoriaNombre}\n\n💡 ${formatearMoneda(monto)} descontados del balance.`
+                  : `❌ ${resultado.mensaje}`
+              } else {
+                // No especificó ámbito: guardar en memoria y preguntar
+                guardarMemoria(sessionId, {
+                  pendienteConfirmarAmbito: {
+                    tipo: 'GASTO',
+                    monto,
+                    concepto,
+                    timestamp: Date.now(),
+                  },
+                } as any)
+                tipo = 'CONFIRMACION'
+                respuesta = `💰 Gasto detectado: ${formatearMoneda(monto)}\n📝 Concepto: ${concepto}\n\n━━━━━━━━━━━━━━━━━━\n¿Este gasto es para NEGOCIO o PERSONAL?\n━━━━━━━━━━━━━━━━━━\n\nResponde:\n  • "negocio" o "1" → Gasto del negocio\n  • "personal" o "2" → Gasto personal`
+              }
             }
           } else {
             tipo = 'TEXTO'
@@ -3547,15 +3635,32 @@ ${categorias.map(c => `- ${c.icono || ''} ${c.nombre} (${c.tipo}/${c.ambito})`).
               respuesta = `❌ ${validacion.error}`
             } else {
               const concepto = extraerConcepto(mensaje, monto)
-              const resultado = await registrarMovimiento({
-                tipo: 'INGRESO', monto, concepto, ambito, usuarioNombre: 'Admin',
-              })
-              tipo = 'ACCION'
-              accionEjecutada = resultado.success
-              detalleAccion = `Ingreso ${ambito}: ${formatearMoneda(monto)} (${resultado.categoriaNombre})`
-              respuesta = resultado.success
-                ? `✅ Ingreso registrado (${ambito})\n💰 Monto: ${formatearMoneda(monto)}\n📝 Concepto: ${concepto}\n🏷️ Categoría: ${resultado.categoriaNombre}`
-                : `❌ ${resultado.mensaje}`
+              // === FIX: verificar si el usuario especificó ámbito explícitamente ===
+              const esPersonalExplicito = /\bpersonal\b/i.test(mensaje) && !/personalizar/i.test(mensaje)
+              const esNegocioExplicito = /\b(?:negocio|empresa)\b/i.test(mensaje)
+              if (esPersonalExplicito || esNegocioExplicito) {
+                const ambitoResolve = esPersonalExplicito ? 'PERSONAL' : 'NEGOCIO'
+                const resultado = await registrarMovimiento({
+                  tipo: 'INGRESO', monto, concepto, ambito: ambitoResolve, usuarioNombre: 'Admin',
+                })
+                tipo = 'ACCION'
+                accionEjecutada = resultado.success
+                detalleAccion = `Ingreso ${ambitoResolve}: ${formatearMoneda(monto)} (${resultado.categoriaNombre})`
+                respuesta = resultado.success
+                  ? `✅ Ingreso registrado (${ambitoResolve})\n💰 Monto: ${formatearMoneda(monto)}\n📝 Concepto: ${concepto}\n🏷️ Categoría: ${resultado.categoriaNombre}`
+                  : `❌ ${resultado.mensaje}`
+              } else {
+                guardarMemoria(sessionId, {
+                  pendienteConfirmarAmbito: {
+                    tipo: 'INGRESO',
+                    monto,
+                    concepto,
+                    timestamp: Date.now(),
+                  },
+                } as any)
+                tipo = 'CONFIRMACION'
+                respuesta = `📈 Ingreso detectado: ${formatearMoneda(monto)}\n📝 Concepto: ${concepto}\n\n━━━━━━━━━━━━━━━━━━\n¿Este ingreso es para NEGOCIO o PERSONAL?\n━━━━━━━━━━━━━━━━━━\n\nResponde:\n  • "negocio" o "1" → Ingreso del negocio\n  • "personal" o "2" → Ingreso personal`
+              }
             }
           } else {
             tipo = 'TEXTO'
@@ -3786,6 +3891,65 @@ ${categorias.map(c => `- ${c.icono || ''} ${c.nombre} (${c.tipo}/${c.ambito})`).
           break
         }
 
+        case 'CUANTO_GASTAR': {
+          // === Recomendación de gasto máximo prudente ===
+          // Calcula con base en los últimos 30 días:
+          //   - Ingreso promedio mensual
+          //   - Gasto fijo promedio (recurrente)
+          //   - Balance disponible
+          //   - Capacidad de ahorro recomendada (20%)
+          // Regla 50/30/20 adaptada a Colombia:
+          //   50% necesidades, 30% deseos, 20% ahorro
+          tipo = 'REPORTE'
+          // Permitir override explícito del ámbito en el mensaje
+          const esPersonalQ = /\bpersonal\b/i.test(mensaje) && !/personalizar/i.test(mensaje)
+          const esNegocioQ = /\b(?:negocio|empresa)\b/i.test(mensaje)
+          const ambitoQ = esPersonalQ ? 'PERSONAL' : (esNegocioQ ? 'NEGOCIO' : ambito)
+          try {
+            const dash = await obtenerDashboard(ambitoQ, 30)
+            const k = dash.kpis
+            if (k.ingresos <= 0) {
+              respuesta = `📊 No tengo ingresos registrados para ${ambitoQ} en los últimos 30 días.\n\nPara darte una recomendación de gasto primero necesito que registres al menos un ingreso. Ejemplo:\n• "ingreso de 1000000 por venta del negocio"\n• "recibí 500000 de comisión personal"`
+            } else {
+              const ingresoMensual = k.ingresos
+              const gastoFijoMensual = k.gastos * 0.6 // aprox: 60% de gastos son fijos
+              const disponibleAntesAhorro = Math.max(0, ingresoMensual - gastoFijoMensual)
+              const ahorroRecomendado = ingresoMensual * 0.20
+              const gastoMaximoRecomendado = Math.max(0, disponibleAntesAhorro - ahorroRecomendado)
+              const gastoDisponibleHoy = gastoMaximoRecomendado / 30
+
+              let estadoRecomendacion = '🟢 SALUDABLE'
+              if (k.balance < 0) estadoRecomendacion = '🔴 DÉFICIT'
+              else if (k.capacidadAhorro < 10) estadoRecomendacion = '🟠 AJUSTADO'
+              else if (k.capacidadAhorro < 20) estadoRecomendacion = '🟡 EQUILIBRADO'
+
+              respuesta = `📊 RECOMENDACIÓN DE GASTO — ${ambitoQ}\n`
+              respuesta += `═══ Basado en últimos 30 días ═══\n\n`
+              respuesta += `Ingresos del mes:        ${formatearMoneda(ingresoMensual)}\n`
+              respuesta += `Gastos del mes:          ${formatearMoneda(k.gastos)}\n`
+              respuesta += `Balance actual:          ${formatearMoneda(k.balance)} ${k.balance >= 0 ? '✅' : '⚠️'}\n`
+              respuesta += `Estado:                  ${estadoRecomendacion}\n\n`
+              respuesta += `═══ REGLA 50/30/20 ADAPTADA ═══\n`
+              respuesta += `💼 Gastos necesarios (50%):   ${formatearMoneda(ingresoMensual * 0.50)}\n`
+              respuesta += `🎉 Gastos opcionales (30%):   ${formatearMoneda(ingresoMensual * 0.30)}\n`
+              respuesta += `🐷 Ahorro recomendado (20%):  ${formatearMoneda(ahorroRecomendado)}\n\n`
+              respuesta += `═══ TOPE RECOMENDADO ═══\n`
+              respuesta += `Gasto máximo prudente este mes: ${formatearMoneda(gastoMaximoRecomendado)}\n`
+              respuesta += `Tope diario sugerido:           ${formatearMoneda(gastoDisponibleHoy)}\n\n`
+              if (k.gastos >= gastoMaximoRecomendado) {
+                respuesta += `⚠️ ATENCIÓN: ya llevas ${formatearMoneda(k.gastos)} gastados este mes (${Math.round((k.gastos / gastoMaximoRecomendado) * 100)}% del tope).\n`
+                respuesta += `💡 Considera pausar gastos opcionales hasta el próximo mes.\n\n`
+              } else {
+                respuesta += `✅ Aún tienes margen: ${formatearMoneda(gastoMaximoRecomendado - k.gastos)} antes de superar el tope.\n\n`
+              }
+              respuesta += `💡 Escribe "dashboard" para ver más detalles o "presupuesto" para fijar un tope personalizado.`
+            }
+          } catch (e) {
+            respuesta = `❌ No pude calcular la recomendación: ${e instanceof Error ? e.message : 'error desconocido'}`
+          }
+          break
+        }
+
         default: {
           // Verificar si es saludo/menú
           if (mensajeNormalizado === 'menu' || mensajeNormalizado === 'hola' || mensajeNormalizado === 'ayuda' || mensajeNormalizado === 'help' || mensajeNormalizado === 'que puedes hacer' || mensajeNormalizado === 'que puedes hacer') {
@@ -3812,7 +3976,8 @@ ${categorias.map(c => `- ${c.icono || ''} ${c.nombre} (${c.tipo}/${c.ambito})`).
               `F️⃣ Recomendaciones del día\n` +
               `G️⃣ Análisis predictivo (30/60/90 días)\n` +
               `H️⃣ Consejos de ahorro\n` +
-              `I️⃣ Preguntas frecuentes\n\n` +
+              `I️⃣ ¿Cuánto es recomendable gastar? (regla 50/30/20)\n` +
+              `J️⃣ Preguntas frecuentes\n\n` +
               `💡 Escribe el número, letra o tu instrucción directamente.`
           } else {
             tipo = 'TEXTO'

@@ -165,13 +165,13 @@ async function enviarCredencialesPorCorreo(
   const cuerpoHtml = `
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 600px; margin: 0 auto; padding: 24px;">
       <div style="background: linear-gradient(135deg, #6366f1 0%, #a855f7 100%); padding: 24px; border-radius: 12px 12px 0 0; color: white;">
-        <h1 style="margin: 0; font-size: 20px; font-weight: 600;">Jsadr · Aurora Bancaria</h1>
+        <h1 style="margin: 0; font-size: 20px; font-weight: 600;">Jsadr · Jo*** Se*** Al*** D** R**</h1>
         <p style="margin: 4px 0 0 0; opacity: 0.9; font-size: 13px;">Recuperación de contraseña</p>
       </div>
       <div style="background: #1a1530; padding: 24px; border-radius: 0 0 12px 12px; color: #e2e8f0;">
         <p style="margin: 0 0 16px 0; font-size: 14px;">Hola <strong>${destinatario.nombre}</strong>,</p>
         <p style="margin: 0 0 16px 0; font-size: 14px; line-height: 1.6;">
-          Se ha solicitado la recuperación de tu contraseña para acceder al sistema Jsadr · Aurora Bancaria.
+          Se ha solicitado la recuperación de tu contraseña para acceder al sistema Jsadr · Jo*** Se*** Al*** D** R**.
         </p>
         <div style="background: rgba(255,255,255,0.05); border: 1px solid rgba(168, 85, 247, 0.3); border-radius: 8px; padding: 16px; margin: 16px 0;">
           <p style="margin: 0 0 8px 0; font-size: 12px; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.05em;">Tu identificador</p>
@@ -189,14 +189,14 @@ async function enviarCredencialesPorCorreo(
         </div>
         <p style="margin: 24px 0 0 0; font-size: 12px; color: #64748b; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 16px;">
           Mensaje automático generado el ${new Date().toLocaleString('es-CO')}.<br/>
-          © ${new Date().getFullYear()} Jsadr · Aurora Bancaria
+          © ${new Date().getFullYear()} Jsadr · Jo*** Se*** Al*** D** R**
         </p>
       </div>
     </div>
   `
 
   const cuerpoTexto = `
-Jsadr · Aurora Bancaria — Recuperación de contraseña
+Jsadr · Jo*** Se*** Al*** D** R** — Recuperación de contraseña
 
 Hola ${destinatario.nombre},
 
@@ -210,7 +210,7 @@ Esta contraseña es temporal y válida por 24 horas. Al iniciar sesión, el sist
 Si no solicitaste este cambio, ignora este mensaje y contacta al administrador.
 
 Mensaje automático generado el ${new Date().toLocaleString('es-CO')}.
-© ${new Date().getFullYear()} Jsadr · Aurora Bancaria
+© ${new Date().getFullYear()} Jsadr · Jo*** Se*** Al*** D** R**
   `.trim()
 
   try {

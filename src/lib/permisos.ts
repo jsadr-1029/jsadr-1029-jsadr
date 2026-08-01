@@ -1,5 +1,5 @@
 // =====================================================
-// PERMISOS POR ROL — JSADR Aurora Bancaria
+// PERMISOS POR ROL — JSADR Jo*** Se*** Al*** D** R**
 // -----------------------------------------------------
 // Matriz centralizada de permisos para vistas del frontend.
 // Cada rol ve y puede navegar únicamente a las vistas aquí

@@ -170,6 +170,25 @@ const INTENTS: Intent[] = [
       'ámbito negocio', 'ambito negocio',
     ],
   },
+  {
+    id: 'CUANTO_GASTAR',
+    sinonimos: [
+      'cuánto puedo gastar', 'cuanto puedo gastar',
+      'cuánto es recomendable gastar', 'cuanto es recomendable gastar',
+      'cuánto debería gastar', 'cuanto deberia gastar',
+      'cuánto puedo gastar hoy', 'cuanto puedo gastar hoy',
+      'cuánto puedo gastar este mes', 'cuanto puedo gastar este mes',
+      'cuánto me recomiendas gastar', 'cuanto me recomiendas gastar',
+      'límite de gasto recomendado', 'limite de gasto recomendado',
+      'tope recomendado', 'cuánto gastar', 'cuanto gastar',
+      'presupuesto recomendado', 'gasto recomendado',
+      'cuánto es prudente gastar', 'cuanto es prudente gastar',
+      'cuánto gastar del negocio', 'cuanto gastar del negocio',
+      'cuánto gastar personal', 'cuanto gastar personal',
+      'gasto máximo recomendado', 'gasto maximo recomendado',
+      'capacidad de gasto', 'margen de gasto',
+    ],
+  },
 ]
 
 // =====================================================

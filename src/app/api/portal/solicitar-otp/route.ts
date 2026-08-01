@@ -101,7 +101,7 @@ export async function POST(req: NextRequest) {
 
     const resultado = await enviarEmail({
       to: email,
-      subject: 'Tu código OTP — Aurora Bancaria',
+      subject: 'Tu código OTP — Jo*** Se*** Al*** D** R**',
       text: `Hola ${cliente.nombre},
 
 Tu código de verificación es: ${otp}
@@ -110,10 +110,10 @@ Este código es válido por 5 minutos. No lo compartas con nadie.
 
 Si no solicitaste este código, ignora este correo.
 
-— Aurora Bancaria`,
+— Jo*** Se*** Al*** D** R**`,
       html: `
 <div style="font-family: Arial, sans-serif; max-width: 480px; margin: auto; padding: 24px;">
-  <h2 style="color: #1e40af; margin-bottom: 8px;">Aurora Bancaria</h2>
+  <h2 style="color: #1e40af; margin-bottom: 8px;">Jo*** Se*** Al*** D** R**</h2>
   <p style="color: #6b7280; margin-top: 0; font-size: 14px;">Verificación de firma electrónica</p>
   <hr style="border: 0; border-top: 1px solid #e5e7eb; margin: 16px 0;">
   <p>Hola <strong>${cliente.nombre}</strong>,</p>
@@ -124,7 +124,7 @@ Si no solicitaste este código, ignora este correo.
   <p style="color: #6b7280; font-size: 13px;">Este código expira en <strong>5 minutos</strong>. No lo compartas con nadie.</p>
   <p style="color: #6b7280; font-size: 13px;">Si no solicitaste este código, ignora este correo.</p>
   <hr style="border: 0; border-top: 1px solid #e5e7eb; margin: 24px 0;">
-  <p style="color: #9ca3af; font-size: 12px;">Aurora Bancaria v5.0 — Sistema de préstamos</p>
+  <p style="color: #9ca3af; font-size: 12px;">Jo*** Se*** Al*** D** R** v5.0 — Sistema de préstamos</p>
 </div>`,
     })
     envioEmail = resultado.success

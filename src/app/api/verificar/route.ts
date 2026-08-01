@@ -74,7 +74,7 @@ function renderHTML(codigo: string, data: any): string {
       <div class="cert">
         <div class="cert-stamp">✓ AUTÉNTICO</div>
         <h2>Certificado de Autenticidad</h2>
-        <p class="subtitle">Documento verificado electrónicamente — JSADR Aurora Bancaria</p>
+        <p class="subtitle">Documento verificado electrónicamente — JSADR Jo*** Se*** Al*** D** R**</p>
 
         <div class="grid">
           <div class="row"><span class="lbl">Deudor:</span><span class="val">${d.deudor || '—'}</span></div>
@@ -195,14 +195,14 @@ function renderHTML(codigo: string, data: any): string {
 <body>
 <div class="wrap">
   <div class="header">
-    <h1>JSADR · Aurora Bancaria</h1>
+    <h1>JSADR · Jo*** Se*** Al*** D** R**</h1>
     <p>Verificación oficial de documentos firmados electrónicamente</p>
   </div>
   <div class="body">
     ${cuerpo}
   </div>
   <div class="footer">
-    <strong>JSADR Aurora Bancaria</strong> · Sistema de firma electrónica con validez legal en Colombia<br>
+    <strong>JSADR Jo*** Se*** Al*** D** R**</strong> · Sistema de firma electrónica con validez legal en Colombia<br>
     Ley 527 de 1999 · Decreto 1074 de 2015 · Código General del Proceso art. 419<br>
     Hora oficial: America/Bogota (UTC-5, sin horario de verano)
   </div>
@@ -217,7 +217,7 @@ function renderInputPage(): string {
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Verificación de documento — JSADR Aurora Bancaria</title>
+<title>Verificación de documento — JSADR Jo*** Se*** Al*** D** R**</title>
 <style>
   body{font-family:'Segoe UI',system-ui,sans-serif;background:#0f172a;margin:0;padding:0}
   .wrap{max-width:680px;margin:40px auto;background:#fff;border-radius:16px;overflow:hidden;box-shadow:0 25px 50px -12px rgba(0,0,0,.25)}
@@ -236,7 +236,7 @@ function renderInputPage(): string {
 <body>
 <div class="wrap">
   <div class="header">
-    <h1>JSADR · Aurora Bancaria</h1>
+    <h1>JSADR · Jo*** Se*** Al*** D** R**</h1>
     <p>Centro público de verificación de documentos firmados electrónicamente</p>
   </div>
   <div class="body">
@@ -249,7 +249,7 @@ function renderInputPage(): string {
     </form>
   </div>
   <div class="footer">
-    JSADR Aurora Bancaria · Sistema de firma electrónica con validez legal en Colombia<br>
+    JSADR Jo*** Se*** Al*** D** R** · Sistema de firma electrónica con validez legal en Colombia<br>
     Ley 527 de 1999 · Decreto 1074 de 2015 · Habeas Data
   </div>
 </div>

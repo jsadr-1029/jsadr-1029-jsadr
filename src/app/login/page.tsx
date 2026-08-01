@@ -26,7 +26,7 @@ import {
 import { login, isAuthenticated, setTokens, setUserData, getUserData } from '@/lib/api-client'
 
 // =====================================================
-// Login Unificado v5.0 — Jsadr · Aurora Bancaria
+// Login Unificado v5.0 — Jsadr · Jo*** Se*** Al*** D** R**
 // -----------------------------------------------------
 // Un ÚNICO formulario para TODOS los usuarios del sistema
 // (administradores, gestores, consultores, abogados y
@@ -323,7 +323,7 @@ export default function LoginPage() {
           </div>
           <div>
             <h1 className="text-2xl font-bold text-white tracking-tight">Jsadr</h1>
-            <p className="text-xs text-slate-400">Aurora Bancaria · v5.0</p>
+            <p className="text-xs text-slate-400">Jo*** Se*** Al*** D** R** · v5.0</p>
           </div>
         </div>
 
@@ -354,7 +354,7 @@ export default function LoginPage() {
               {
                 icon: ShieldCheck,
                 title: 'Seguridad bancaria',
-                desc: 'Cifrado, MFA opcional y auditoría completa.',
+                desc: 'Protección de datos y trazabilidad completa.',
               },
               {
                 icon: Mail,
@@ -379,7 +379,7 @@ export default function LoginPage() {
         </div>
 
         <div className="flex items-center justify-between text-xs text-slate-500">
-          <span>© 2026 Jsadr · Aurora Bancaria</span>
+          <span>© 2026 Jsadr · Jo*** Se*** Al*** D** R**</span>
           <div className="flex items-center gap-2">
             <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
             <span>Sistema operativo</span>
@@ -397,7 +397,7 @@ export default function LoginPage() {
             </div>
             <div>
               <h1 className="text-xl font-bold text-white">Jsadr</h1>
-              <p className="text-[11px] text-slate-400">Aurora Bancaria · v5.0</p>
+              <p className="text-[11px] text-slate-400">Jo*** Se*** Al*** D** R** · v5.0</p>
             </div>
           </div>
 
@@ -513,20 +513,12 @@ export default function LoginPage() {
                 </div>
               </form>
 
-              <Alert className="mt-5 bg-slate-800/40 border-slate-700/50 text-slate-300">
-                <Info className="w-4 h-4 text-indigo-400" />
-                <AlertDescription className="text-xs">
-                  Tu identificador puede ser tu <strong>usuario</strong>, tu{' '}
-                  <strong>cédula</strong> o tu <strong>correo electrónico</strong>. El sistema
-                  detecta automáticamente el tipo de cuenta y te lleva al panel correcto.
-                </AlertDescription>
-              </Alert>
             </div>
           </div>
 
           {/* Footer móvil */}
           <p className="lg:hidden text-center text-xs text-slate-500 mt-6">
-            © 2026 Jsadr · Aurora Bancaria · Todos los derechos reservados
+            © 2026 Jsadr · Jo*** Se*** Al*** D** R** · Todos los derechos reservados
           </p>
         </div>
       </div>

@@ -342,7 +342,7 @@ export async function PATCH(
                 source: 'jsadr-automatizacion',
                 event: 'test_connection',
                 timestamp: new Date().toISOString(),
-                payload: { mensaje: 'Prueba de conexión desde Jsadr Aurora Bancaria' },
+                payload: { mensaje: 'Prueba de conexión desde Jsadr Jo*** Se*** Al*** D** R**' },
               }),
             })
             const text = await resp.text()

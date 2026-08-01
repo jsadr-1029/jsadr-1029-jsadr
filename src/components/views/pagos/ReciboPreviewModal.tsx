@@ -308,7 +308,7 @@ export function ReciboPreviewModal({ abierto, pagoId, onCerrar }: Props) {
                   </div>
                   <div>
                     <div className="text-xl font-black bg-gradient-to-r from-indigo-700 to-purple-700 bg-clip-text text-transparent leading-tight">
-                      Jsadr · Aurora Bancaria
+                      Jsadr · Jo*** Se*** Al*** D** R**
                     </div>
                     <div className="text-[11px] text-slate-500 mt-0.5">
                       Comprobante oficial de pago · Recibo firmado criptográficamente
@@ -522,7 +522,7 @@ export function ReciboPreviewModal({ abierto, pagoId, onCerrar }: Props) {
                 {/* Firma institucional */}
                 <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-[9px] text-slate-400">
                   <div>Este recibo es un documento electrónico firmado. Cualquier alteración invalida su autenticidad.</div>
-                  <div className="font-mono">v4.1 · Jsadr · Aurora Bancaria</div>
+                  <div className="font-mono">v4.1 · Jsadr · Jo*** Se*** Al*** D** R**</div>
                 </div>
               </div>
 
@@ -855,7 +855,7 @@ function generarHtmlImprimible(data: DatosRecibo): string {
       <div class="brand">
         <div class="logo">J</div>
         <div class="brand-text">
-          <div class="nombre">Jsadr · Aurora Bancaria</div>
+          <div class="nombre">Jsadr · Jo*** Se*** Al*** D** R**</div>
           <div class="sub">Comprobante oficial de pago · Recibo firmado criptográficamente</div>
           <div class="sub2">NIT 901.234.567-8 · Calle 100 #50-25, Bogotá · www.jsadr.com.co</div>
         </div>
@@ -938,7 +938,7 @@ function generarHtmlImprimible(data: DatosRecibo): string {
 
     <div class="firma">
       <div>Este recibo es un documento electrónico firmado. Cualquier alteración invalida su autenticidad.</div>
-      <div style="font-family:monospace">v4.1 · Jsadr · Aurora Bancaria</div>
+      <div style="font-family:monospace">v4.1 · Jsadr · Jo*** Se*** Al*** D** R**</div>
     </div>
 
     <div class="banda-inf"></div>

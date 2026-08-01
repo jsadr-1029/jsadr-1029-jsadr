@@ -1117,7 +1117,7 @@ model OtpChat {
 // -----------------------------------------------------
 model ConfiguracionEmpresa {
   id              String   @id @default(cuid())
-  nombre          String   @default("Aurora Bancaria")
+  nombre          String   @default("Jo*** Se*** Al*** D** R**")
   razonSocial     String?
   nit             String?
   direccion       String?

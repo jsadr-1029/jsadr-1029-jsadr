@@ -16,7 +16,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Jsadr · Aurora Bancaria",
+  title: "Jsadr · Jo*** Se*** Al*** D** R**",
   description: "Plataforma bancaria para registro y control de préstamos, con seguimiento jurídico y notificaciones WhatsApp automáticas.",
   keywords: ["préstamos", "gestión", "banca", "jurídico", "WhatsApp"],
 };

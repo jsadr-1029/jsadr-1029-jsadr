@@ -347,7 +347,7 @@ export function BuzonSolicitudesView({ onConvertir }: BuzonSolicitudesViewProps)
   const contactarWhatsApp = (s: SolicitudWeb) => {
     const telefono = s.clienteTelefono.replace(/[^\d]/g, '')
     const telCompleto = telefono.length === 10 ? `57${telefono}` : telefono
-    const mensaje = `Hola ${s.clienteNombre}, nos comunicamos desde Jsadr · Aurora Bancaria respecto a tu solicitud de crédito ${s.codigo} por ${formatearMoneda(s.valorSolicitado)}. ¿Podemos conversar?`
+    const mensaje = `Hola ${s.clienteNombre}, nos comunicamos desde Jsadr · Jo*** Se*** Al*** D** R** respecto a tu solicitud de crédito ${s.codigo} por ${formatearMoneda(s.valorSolicitado)}. ¿Podemos conversar?`
     window.open(`https://wa.me/${telCompleto}?text=${encodeURIComponent(mensaje)}`, '_blank')
   }
 
@@ -355,7 +355,7 @@ export function BuzonSolicitudesView({ onConvertir }: BuzonSolicitudesViewProps)
   const rechazarWhatsApp = (s: SolicitudWeb) => {
     const telefono = s.clienteTelefono.replace(/[^\d]/g, '')
     const telCompleto = telefono.length === 10 ? `57${telefono}` : telefono
-    const mensaje = `Hola ${s.clienteNombre}, gracias por tu interés en Jsadr · Aurora Bancaria. Lamentablemente tu solicitud ${s.codigo} no pudo ser aprobada en este momento. Si deseas más información, contáctanos.`
+    const mensaje = `Hola ${s.clienteNombre}, gracias por tu interés en Jsadr · Jo*** Se*** Al*** D** R**. Lamentablemente tu solicitud ${s.codigo} no pudo ser aprobada en este momento. Si deseas más información, contáctanos.`
     window.open(`https://wa.me/${telCompleto}?text=${encodeURIComponent(mensaje)}`, '_blank')
   }
 
@@ -365,8 +365,8 @@ export function BuzonSolicitudesView({ onConvertir }: BuzonSolicitudesViewProps)
       toast({ title: 'Sin correo', description: 'El cliente no tiene correo registrado', variant: 'destructive' })
       return
     }
-    const asunto = `Solicitud de crédito ${s.codigo} — Jsadr · Aurora Bancaria`
-    const cuerpo = `Hola ${s.clienteNombre},%0D%0A%0D%0ANos comunicamos desde Jsadr · Aurora Bancaria respecto a tu solicitud de crédito ${s.codigo} por ${formatearMoneda(s.valorSolicitado)}.%0D%0A%0D%0ASaludos cordiales,%0D%0AEquipo Jsadr`
+    const asunto = `Solicitud de crédito ${s.codigo} — Jsadr · Jo*** Se*** Al*** D** R**`
+    const cuerpo = `Hola ${s.clienteNombre},%0D%0A%0D%0ANos comunicamos desde Jsadr · Jo*** Se*** Al*** D** R** respecto a tu solicitud de crédito ${s.codigo} por ${formatearMoneda(s.valorSolicitado)}.%0D%0A%0D%0ASaludos cordiales,%0D%0AEquipo Jsadr`
     window.location.href = `mailto:${s.clienteEmail}?subject=${encodeURIComponent(asunto)}&body=${cuerpo}`
   }
 
