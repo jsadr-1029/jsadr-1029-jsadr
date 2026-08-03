@@ -19,7 +19,7 @@ generator client {
 //    Ver DEPLOYMENT_GUIDE.md sección "Migración a Neon" para pasos detallados.
 // =====================================================
 datasource db {
-  provider = "postgresql"
+  provider = "sqlite"
   url      = env("DATABASE_URL")
 }
 
