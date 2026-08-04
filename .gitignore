@@ -89,7 +89,7 @@ docker-compose.prod.yml
 # Scripts con claves en plaintext
 scripts/reset-admin-clave-acceso.js
 
-# GitHub Actions workflows (token actual no tiene scope 'workflow')
-.github/workflows/
+# GitHub Actions workflows — ahora SÍ se commitean (auto-deploy Vercel)
+# .github/workflows/  ← descomentar si se quiere excluir de nuevo
 .env.bak.1785538124
 *.env.bak.*
