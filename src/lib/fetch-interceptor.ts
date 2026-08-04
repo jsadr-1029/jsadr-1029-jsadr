@@ -199,4 +199,11 @@ function clearAuth() {
   localStorage.removeItem('portal_cliente_cedula')
   localStorage.removeItem('juridico_token')
   localStorage.removeItem('juridico_user')
+  // Notificar a la UI que el estado de auth cambió, para que
+  // UserMenu/Sidebar actualicen el rol mostrado inmediatamente
+  // (en lugar de seguir mostrando "Administrador" cuando la sesión
+  // ya se borró).
+  try {
+    window.dispatchEvent(new CustomEvent('auth:changed'))
+  } catch {}
 }

@@ -5,6 +5,7 @@ import { ViewKey } from '@/app/page'
 import { cn } from '@/lib/utils'
 import { getUserData } from '@/lib/api-client'
 import { vistasPermitidas } from '@/lib/permisos'
+import { useAuthReactive } from '@/hooks/use-auth-reactive'
 import {
   FileText,
   DollarSign,
@@ -96,8 +97,12 @@ const ALL_ITEMS: MenuNode[] = [
 ]
 
 export function Sidebar({ view, onChange }: SidebarProps) {
+  // Hook reactivo: re-lee el rol cuando cambia el estado de auth,
+  // evitando que el Sidebar quede con un rol desactualizado tras un
+  // switch-user o un refresh-token fallido.
+  const { rol: reactiveRol } = useAuthReactive()
   const user = getUserData()
-  const rol = user?.rol || ''
+  const rol = reactiveRol || user?.rol || ''
 
   // Filtrar items según rol usando la matriz centralizada.
   // Para los nodos con hijos: se incluye si el padre está permitido

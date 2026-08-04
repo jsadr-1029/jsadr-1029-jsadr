@@ -6,6 +6,9 @@ import { Sidebar } from '@/components/Sidebar'
 import { RelojColombia } from '@/components/RelojColombia'
 import { useToast } from '@/hooks/use-toast'
 import { isAuthenticated, getUserData, logout } from '@/lib/api-client'
+import { puedeAcceder, vistasPermitidas, vistaPorDefecto } from '@/lib/permisos'
+import { useAuthReactive } from '@/hooks/use-auth-reactive'
+import { ShieldAlert } from 'lucide-react'
 import { DashboardView } from '@/components/views/DashboardView'
 import { ClientesView } from '@/components/views/ClientesView'
 import { PrestamosView } from '@/components/views/PrestamosView'
@@ -65,6 +68,9 @@ export default function Home() {
   const [refreshKey, setRefreshKey] = useState(0)
   const { toast } = useToast()
   const router = useRouter()
+  // Hook reactivo: cuando el rol cambia (switch-user, refresh, login),
+  // re-validamos que la vista actual esté permitida.
+  const { rol: reactiveRol } = useAuthReactive()
 
   // === GUARDIA DE AUTENTICACIÓN ===
   // Si no está autenticado, redirigir a /login
@@ -93,9 +99,26 @@ export default function Home() {
         if (tk) setPortalToken(tk)
       } catch {}
       setView('portal')
+    } else {
+      // Si es usuario interno (ADMIN/GESTOR/CONSULTOR), validar que la
+      // vista inicial esté permitida para su rol. Si no, ir a la vista
+      // por defecto del rol.
+      const permitidas = vistasPermitidas(u?.rol || reactiveRol)
+      if (permitidas.length > 0 && !permitidas.includes('prestamos' as ViewKey)) {
+        setView(vistaPorDefecto(u?.rol || reactiveRol))
+      }
     }
     setAuthChecked(true)
-  }, [router])
+  }, [router, reactiveRol])
+
+  // === GUARDIA DE PERMISOS POR VISTA ===
+  // Si el rol actual no tiene permiso para la vista activa, mostrar
+  // un mensaje de "Acceso denegado" en lugar de renderizar el módulo.
+  // Esto bloquea el acceso directo por URL (?view=usuarios) a roles no
+  // autorizados, incluso si el Sidebar no muestra el ítem.
+  const vistaPermitida = esPortalCliente
+    ? view === 'portal'
+    : puedeAcceder(reactiveRol, view)
 
   // Detectar query params para portal cliente (?tyc=token o ?pay=codigo o ?portal=cliente)
   useEffect(() => {
@@ -168,32 +191,53 @@ export default function Home() {
           </div>
         )}
         <div className="main-container p-6 max-w-[1600px] mx-auto fade-in pt-16 lg:pt-6" key={`${view}-${refreshKey}`}>
-          {view === 'dashboard' && <DashboardView onAbrirPrestamo={abrirPrestamo} />}
-          {view === 'clientes' && <ClientesView onChanged={refresh} />}
-          {view === 'prestamos' && (
-            <PrestamosView onAbrirPrestamo={abrirPrestamo} onChanged={refresh} onCambiarVista={(v) => setView(v as ViewKey)} />
-          )}
-          {view === 'pagos' && <PagosView onChanged={refresh} />}
-          {view === 'juridico' && <JuridicoView onChanged={refresh} />}
-          {view === 'cajas' && <CajasView onChanged={refresh} />}
-          {view === 'simulador' && <SimuladorView />}
-          {view === 'campanas' && <CampanasView onChanged={refresh} />}
-          {view === 'portal' && <PortalView onAbrirPortal={abrirPortal} />}
-          {view === 'comunicaciones' && <CentroComunicacionesView />}
-          {view === 'usuarios' && <UsuariosView />}
-          {view === 'conexiones' && <ConexionesView />}
-          {view === 'seguridad' && <SeguridadView />}
-          {view === 'auditoria' && <AuditoriaSeguridadView />}
-          {view === 'notificaciones' && <NotificacionesView />}
-          {view === 'admin' && <AdminView onChanged={refresh} />}
-          {view === 'portal-admin' && <PortalAdminView />}
-          {view === 'configuracion' && <CentroConfiguracionView />}
-          {view === 'exportar' && <ExportarView />}
-          {view === 'codigo-fuente' && <CodigoFuenteView />}
-          {view === 'manual' && <ManualView />}
-          {view === 'automatizacion' && <AutomatizacionView />}
-          {view === 'buzon-solicitudes' && (
-            <BuzonSolicitudesView onConvertir={convertirSolicitudWeb} />
+          {!vistaPermitida ? (
+            <div className="flex flex-col items-center justify-center min-h-[60vh] text-center">
+              <div className="w-20 h-20 rounded-full bg-red-500/15 flex items-center justify-center mb-4">
+                <ShieldAlert className="w-10 h-10 text-red-400" />
+              </div>
+              <h2 className="text-xl font-bold text-white mb-2">Acceso denegado</h2>
+              <p className="text-sm text-white/60 max-w-md">
+                Tu rol actual (<span className="font-semibold text-white">{reactiveRol || 'sin rol'}</span>) no tiene
+                permiso para acceder a este módulo. Si crees que es un error, contacta al administrador.
+              </p>
+              <button
+                onClick={() => setView(vistaPorDefecto(reactiveRol))}
+                className="mt-6 px-4 py-2 rounded-lg text-sm font-semibold text-white gradient-primary hover:opacity-90 transition-opacity"
+              >
+                Ir a mi módulo principal
+              </button>
+            </div>
+          ) : (
+            <>
+              {view === 'dashboard' && <DashboardView onAbrirPrestamo={abrirPrestamo} />}
+              {view === 'clientes' && <ClientesView onChanged={refresh} />}
+              {view === 'prestamos' && (
+                <PrestamosView onAbrirPrestamo={abrirPrestamo} onChanged={refresh} onCambiarVista={(v) => setView(v as ViewKey)} />
+              )}
+              {view === 'pagos' && <PagosView onChanged={refresh} />}
+              {view === 'juridico' && <JuridicoView onChanged={refresh} />}
+              {view === 'cajas' && <CajasView onChanged={refresh} />}
+              {view === 'simulador' && <SimuladorView />}
+              {view === 'campanas' && <CampanasView onChanged={refresh} />}
+              {view === 'portal' && <PortalView onAbrirPortal={abrirPortal} />}
+              {view === 'comunicaciones' && <CentroComunicacionesView />}
+              {view === 'usuarios' && <UsuariosView />}
+              {view === 'conexiones' && <ConexionesView />}
+              {view === 'seguridad' && <SeguridadView />}
+              {view === 'auditoria' && <AuditoriaSeguridadView />}
+              {view === 'notificaciones' && <NotificacionesView />}
+              {view === 'admin' && <AdminView onChanged={refresh} />}
+              {view === 'portal-admin' && <PortalAdminView />}
+              {view === 'configuracion' && <CentroConfiguracionView />}
+              {view === 'exportar' && <ExportarView />}
+              {view === 'codigo-fuente' && <CodigoFuenteView />}
+              {view === 'manual' && <ManualView />}
+              {view === 'automatizacion' && <AutomatizacionView />}
+              {view === 'buzon-solicitudes' && (
+                <BuzonSolicitudesView onConvertir={convertirSolicitudWeb} />
+              )}
+            </>
           )}
         </div>
       </main>

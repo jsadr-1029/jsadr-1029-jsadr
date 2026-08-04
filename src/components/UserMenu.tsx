@@ -32,6 +32,7 @@ import { useEffect, useState, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { getUserData, logout, switchUser, getImpersonation, apiJson } from '@/lib/api-client'
 import { vistasPermitidas } from '@/lib/permisos'
+import { useAuthReactive } from '@/hooks/use-auth-reactive'
 import {
   LogOut,
   Menu,
@@ -77,6 +78,8 @@ interface UserData {
   username?: string
   email?: string
   rol?: string
+  esPortalCliente?: boolean
+  cedula?: string
 }
 
 const ROLE_LABELS: Record<string, string> = {
@@ -134,10 +137,7 @@ const FULL_NAV_ALL = [
 
 // Hook utilitario — filtra QUICK_NAV y FULL_NAV según el rol del usuario
 function useFilteredNav() {
-  const [rol, setRol] = useState<string | undefined>(undefined)
-  useEffect(() => {
-    setRol(getUserData()?.rol)
-  }, [])
+  const { rol } = useAuthReactive()
   const permitidas = vistasPermitidas(rol)
   return {
     QUICK_NAV: QUICK_NAV_ALL.filter((i) => permitidas.includes(i.key as any)),
@@ -162,6 +162,11 @@ interface UsuarioCambio {
 }
 
 export function UserMenu({ currentView, onNavigate }: UserMenuProps) {
+  // Hook reactivo: re-lee user_data del localStorage cuando cambia
+  // (login, logout, switch-user, refresh-token fallido, storage event de
+  // otra pestaña, focus en la ventana). Esto evita que el menú muestre
+  // "Usuario" en lugar del rol real cuando el estado de auth cambia.
+  const { user: reactiveUser, rol: reactiveRol } = useAuthReactive()
   const [user, setUser] = useState<UserData | null>(null)
   const [mounted, setMounted] = useState(false)
   const [isMobile, setIsMobile] = useState(false)
@@ -192,6 +197,19 @@ export function UserMenu({ currentView, onNavigate }: UserMenuProps) {
     mq.addEventListener('change', update)
     return () => mq.removeEventListener('change', update)
   }, [])
+
+  // Sincronizar el estado local `user` con el hook reactivo.
+  // Cuando el hook reactivo detecte un cambio en localStorage
+  // (vía evento `auth:changed`, `storage`, o `focus`), actualiza
+  // el estado local del menú.
+  useEffect(() => {
+    if (reactiveUser) {
+      setUser(reactiveUser as UserData)
+    } else if (mounted && !reactiveUser) {
+      // Si el hook reactivo dice que no hay user, confiar en eso
+      setUser(null)
+    }
+  }, [reactiveUser, mounted])
 
   // --- Abrir modal de cambio de cuenta ---
   const abrirModalCambio = useCallback(async () => {
@@ -386,10 +404,13 @@ export function UserMenu({ currentView, onNavigate }: UserMenuProps) {
   if (!mounted) return null
 
   // Para cliente del portal, no mostrar el menú completo
-  if (user?.rol === 'CLIENTE') return null
+  // Usamos reactiveRol que también intenta decodificar el JWT si
+  // user_data está incompleto, evitando el bug de mostrar "Usuario".
+  const effectiveRol = reactiveRol || user?.rol || ''
+  if (effectiveRol === 'CLIENTE' || user?.esPortalCliente) return null
 
-  const roleLabel = ROLE_LABELS[user?.rol || ''] || user?.rol || 'Usuario'
-  const roleColor = ROLE_COLORS[user?.rol || ''] || 'from-indigo-500 to-purple-600'
+  const roleLabel = ROLE_LABELS[effectiveRol] || effectiveRol || 'Usuario'
+  const roleColor = ROLE_COLORS[effectiveRol] || 'from-indigo-500 to-purple-600'
   const initials = getInitials(user?.nombre)
 
   // ====== VARIANTE MOBILE: DRAWER ======
@@ -498,7 +519,7 @@ export function UserMenu({ currentView, onNavigate }: UserMenuProps) {
               {/* Footer con logout */}
               <div className="p-3 border-t border-white/10">
                 {/* Cambiar de cuenta — SOLO ADMIN */}
-                {user?.rol === 'ADMIN' && (
+                {effectiveRol === 'ADMIN' && (
                   <button
                     onClick={abrirModalCambio}
                     className="w-full flex items-center gap-3 px-3 py-3 mb-1 rounded-lg text-sm font-semibold text-fuchsia-200 hover:text-white hover:bg-fuchsia-500/20 transition-all"
@@ -668,7 +689,7 @@ export function UserMenu({ currentView, onNavigate }: UserMenuProps) {
           {/* Footer con logout */}
           <div className="p-2">
             {/* Cambiar de cuenta — SOLO ADMIN */}
-            {user?.rol === 'ADMIN' && (
+            {effectiveRol === 'ADMIN' && (
               <button
                 onClick={abrirModalCambio}
                 className="w-full flex items-center gap-3 px-3 py-2.5 mb-1 rounded-lg text-sm font-semibold text-fuchsia-200 hover:text-white hover:bg-fuchsia-500/20 transition-all"

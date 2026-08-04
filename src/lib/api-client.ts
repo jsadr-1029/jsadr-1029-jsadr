@@ -6,6 +6,16 @@ const TOKEN_KEY = 'access_token'
 const REFRESH_KEY = 'refresh_token'
 const USER_KEY = 'user_data'
 
+// Dispara un evento custom `auth:changed` para que los componentes
+// (UserMenu, Sidebar, useAuthReactive) puedan reaccionar a cambios
+// de sesión sin tener que re-leer localStorage en cada render.
+function notifyAuthChanged(): void {
+  if (typeof window === 'undefined') return
+  try {
+    window.dispatchEvent(new CustomEvent('auth:changed'))
+  } catch {}
+}
+
 export function getToken(): string | null {
   if (typeof window === 'undefined') return null
   return localStorage.getItem(TOKEN_KEY)
@@ -20,11 +30,13 @@ export function setTokens(access: string, refresh: string): void {
   if (typeof window === 'undefined') return
   localStorage.setItem(TOKEN_KEY, access)
   localStorage.setItem(REFRESH_KEY, refresh)
+  notifyAuthChanged()
 }
 
 export function setUserData(user: any): void {
   if (typeof window === 'undefined') return
   localStorage.setItem(USER_KEY, JSON.stringify(user))
+  notifyAuthChanged()
 }
 
 export function getUserData(): any | null {
@@ -44,13 +56,14 @@ export function clearAuth(): void {
   localStorage.removeItem(REFRESH_KEY)
   localStorage.removeItem(USER_KEY)
   // FIX-LOGIN-LOOP: limpiar también tokens de portal cliente y jurídico,
-  // que antes quedaban huérfanos y provocaban bucles de redirección.
+  // que antes quedaban huérfanos y provocando bucles de redirección.
   localStorage.removeItem('portal_cliente_token')
   localStorage.removeItem('portal_cliente_id')
   localStorage.removeItem('portal_cliente_nombre')
   localStorage.removeItem('portal_cliente_cedula')
   localStorage.removeItem('juridico_token')
   localStorage.removeItem('juridico_user')
+  notifyAuthChanged()
 }
 
 export function isAuthenticated(): boolean {
