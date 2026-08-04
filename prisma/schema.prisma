@@ -12,14 +12,14 @@ generator client {
 
 // =====================================================
 // Datasource:
-//  - Desarrollo local (actual): SQLite
-//    DATABASE_URL="postgresql://USER:PASS@HOST/DB?sslmode=require&schema=public" (Neon)
-//  - Producción (Vercel + Neon): cambiar provider a "postgresql" y usar:
+//  - Unificado (local + Vercel): PostgreSQL en Neon
 //    DATABASE_URL="postgresql://USER:PASS@HOST/DB?sslmode=require&schema=public"
-//    Ver DEPLOYMENT_GUIDE.md sección "Migración a Neon" para pasos detallados.
+//  - Local usa el mismo Neon que Vercel → no hay drift de credenciales
+//  - SQLite local fue migrado a Neon en 2026-08-04 (326 registros, 32 tablas)
+//    El archivo db/custom.db se mantiene solo como backup histórico.
 // =====================================================
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
