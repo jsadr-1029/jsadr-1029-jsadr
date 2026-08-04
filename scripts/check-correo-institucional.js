@@ -1,57 +1,24 @@
-// Script temporal para inspeccionar la configuración de CorreoInstitucional
-const { PrismaClient } = require('@prisma/client')
-const prisma = new PrismaClient()
-
-async function main() {
-  const correos = await prisma.correoInstitucional.findMany()
-  console.log('=== Correos Institucionales ===')
-  for (const c of correos) {
-    console.log({
-      id: c.id,
-      nombre: c.nombre,
-      email: c.email,
-      tipo: c.tipo,
-      estado: c.estado,
-      esPrincipal: c.esPrincipal,
-      smtpHost: c.smtpHost,
-      smtpPort: c.smtpPort,
-      smtpUser: c.smtpUser,
-      smtpPass_LENGTH: c.smtpPass ? c.smtpPass.length : 0,
-      smtpPass_first15: c.smtpPass ? c.smtpPass.substring(0, 15) : null,
-      ssl: c.ssl,
-      tls: c.tls,
-      starttls: c.starttls,
-      aliasRemitente: c.aliasRemitente,
-      nombreRemitente: c.nombreRemitente,
-      ultimoTest: c.ultimoTest,
-      ultimoTestOk: c.ultimoTestOk,
-    })
-  }
-  console.log('Total:', correos.length)
-
-  // También mostrar últimos envíos
-  const envios = await prisma.envioCorreo.findMany({
-    take: 5,
-    orderBy: { createdAt: 'desc' },
-  })
-  console.log('\n=== Últimos 5 envíos ===')
-  for (const e of envios) {
-    console.log({
-      id: e.id,
-      remitenteEmail: e.remitenteEmail,
-      destinatario: e.destinatario,
-      asunto: e.asunto,
-      estado: e.estado,
-      mensajeError: e.mensajeError,
-      fechaEnvio: e.fechaEnvio,
-      createdAt: e.createdAt,
-    })
-  }
-}
-
-main()
-  .catch((e) => {
-    console.error('Error:', e)
-    process.exit(1)
-  })
-  .finally(() => prisma.$disconnect())
+const { PrismaClient } = require('@prisma/client');
+const prisma = new PrismaClient();
+(async () => {
+  const correos = await prisma.correoInstitucional.findMany();
+  console.log('Correos institucionales:', correos.length);
+  correos.forEach(c => {
+    console.log('---');
+    console.log('  id:', c.id);
+    console.log('  nombre:', c.nombre);
+    console.log('  email:', c.email);
+    console.log('  tipo:', c.tipo);
+    console.log('  estado:', c.estado);
+    console.log('  esPrincipal:', c.esPrincipal);
+    console.log('  esRespaldo:', c.esRespaldo);
+    console.log('  smtpHost:', c.smtpHost);
+    console.log('  smtpPort:', c.smtpPort);
+    console.log('  smtpUser:', c.smtpUser);
+    console.log('  smtpPass (len):', c.smtpPass?.length || 0);
+    console.log('  ssl:', c.ssl, 'tls:', c.tls, 'starttls:', c.starttls);
+    console.log('  ultimoTest:', c.ultimoTest);
+    console.log('  ultimoTestOk:', c.ultimoTestOk);
+  });
+  await prisma.$disconnect();
+})().catch(e => { console.error('ERROR:', e); process.exit(1); });
