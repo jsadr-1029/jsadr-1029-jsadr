@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
+import dynamic from 'next/dynamic'
 import { Sidebar } from '@/components/Sidebar'
 import { RelojColombia } from '@/components/RelojColombia'
 import { useToast } from '@/hooks/use-toast'
@@ -9,31 +10,40 @@ import { isAuthenticated, getUserData, logout } from '@/lib/api-client'
 import { puedeAcceder, vistasPermitidas, vistaPorDefecto } from '@/lib/permisos'
 import { useAuthReactive } from '@/hooks/use-auth-reactive'
 import { ShieldAlert } from 'lucide-react'
-import { DashboardView } from '@/components/views/DashboardView'
-import { ClientesView } from '@/components/views/ClientesView'
-import { PrestamosView } from '@/components/views/PrestamosView'
-import { PagosView } from '@/components/views/PagosView'
-import { JuridicoView } from '@/components/views/JuridicoView'
-import { ExportarView } from '@/components/views/ExportarView'
-import { ManualView } from '@/components/views/ManualView'
-import { NotificacionesView } from '@/components/views/NotificacionesView'
-import { PrestamoDetalleModal } from '@/components/views/PrestamoDetalleModal'
-import { CajasView } from '@/components/views/CajasView'
-import { SimuladorView } from '@/components/views/SimuladorView'
-import { CampanasView } from '@/components/views/CampanasView'
-import { PortalView } from '@/components/views/PortalView'
-import { AdminView } from '@/components/views/AdminView'
-import { PortalClienteModal } from '@/components/views/PortalClienteModal'
-import { UsuariosView } from '@/components/views/UsuariosView'
-import { ConexionesView } from '@/components/views/ConexionesView'
-import { SeguridadView } from '@/components/views/SeguridadView'
-import { CodigoFuenteView } from '@/components/views/CodigoFuenteView'
-import { AutomatizacionView } from '@/components/views/AutomatizacionView'
-import { AuditoriaSeguridadView } from '@/components/views/AuditoriaSeguridadView'
-import { CentroComunicacionesView } from '@/components/views/CentroComunicacionesView'
-import { CentroConfiguracionView } from '@/components/views/CentroConfiguracionView'
-import { BuzonSolicitudesView } from '@/components/views/BuzonSolicitudesView'
-import { PortalAdminView } from '@/components/views/PortalAdminView'
+
+// ====================================================================
+// CODE-SPLITTING (RCA 2026-08-04):
+// Antes las 34 vistas se importaban estáticamente al compilar `/`,
+// lo que inflaba el heap de Node a >614MB y disparaba el auto-restart
+// de Next.js 16 (RESTART_EXIT_CODE=77 cuando used_heap_size > 0.8 * heap_size_limit).
+// Con next/dynamic, cada vista se carga en su propio chunk y solo se
+// transpila cuando se accede a ella. El primer compile baja de ~600MB a ~150MB.
+// ====================================================================
+const DashboardView = dynamic(() => import('@/components/views/DashboardView').then(m => ({ default: m.DashboardView })), { ssr: false })
+const ClientesView = dynamic(() => import('@/components/views/ClientesView').then(m => ({ default: m.ClientesView })), { ssr: false })
+const PrestamosView = dynamic(() => import('@/components/views/PrestamosView').then(m => ({ default: m.PrestamosView })), { ssr: false })
+const PagosView = dynamic(() => import('@/components/views/PagosView').then(m => ({ default: m.PagosView })), { ssr: false })
+const JuridicoView = dynamic(() => import('@/components/views/JuridicoView').then(m => ({ default: m.JuridicoView })), { ssr: false })
+const ExportarView = dynamic(() => import('@/components/views/ExportarView').then(m => ({ default: m.ExportarView })), { ssr: false })
+const ManualView = dynamic(() => import('@/components/views/ManualView').then(m => ({ default: m.ManualView })), { ssr: false })
+const NotificacionesView = dynamic(() => import('@/components/views/NotificacionesView').then(m => ({ default: m.NotificacionesView })), { ssr: false })
+const PrestamoDetalleModal = dynamic(() => import('@/components/views/PrestamoDetalleModal').then(m => ({ default: m.PrestamoDetalleModal })), { ssr: false })
+const CajasView = dynamic(() => import('@/components/views/CajasView').then(m => ({ default: m.CajasView })), { ssr: false })
+const SimuladorView = dynamic(() => import('@/components/views/SimuladorView').then(m => ({ default: m.SimuladorView })), { ssr: false })
+const CampanasView = dynamic(() => import('@/components/views/CampanasView').then(m => ({ default: m.CampanasView })), { ssr: false })
+const PortalView = dynamic(() => import('@/components/views/PortalView').then(m => ({ default: m.PortalView })), { ssr: false })
+const AdminView = dynamic(() => import('@/components/views/AdminView').then(m => ({ default: m.AdminView })), { ssr: false })
+const PortalClienteModal = dynamic(() => import('@/components/views/PortalClienteModal').then(m => ({ default: m.PortalClienteModal })), { ssr: false })
+const UsuariosView = dynamic(() => import('@/components/views/UsuariosView').then(m => ({ default: m.UsuariosView })), { ssr: false })
+const ConexionesView = dynamic(() => import('@/components/views/ConexionesView').then(m => ({ default: m.ConexionesView })), { ssr: false })
+const SeguridadView = dynamic(() => import('@/components/views/SeguridadView').then(m => ({ default: m.SeguridadView })), { ssr: false })
+const CodigoFuenteView = dynamic(() => import('@/components/views/CodigoFuenteView').then(m => ({ default: m.CodigoFuenteView })), { ssr: false })
+const AutomatizacionView = dynamic(() => import('@/components/views/AutomatizacionView').then(m => ({ default: m.AutomatizacionView })), { ssr: false })
+const AuditoriaSeguridadView = dynamic(() => import('@/components/views/AuditoriaSeguridadView').then(m => ({ default: m.AuditoriaSeguridadView })), { ssr: false })
+const CentroComunicacionesView = dynamic(() => import('@/components/views/CentroComunicacionesView').then(m => ({ default: m.CentroComunicacionesView })), { ssr: false })
+const CentroConfiguracionView = dynamic(() => import('@/components/views/CentroConfiguracionView').then(m => ({ default: m.CentroConfiguracionView })), { ssr: false })
+const BuzonSolicitudesView = dynamic(() => import('@/components/views/BuzonSolicitudesView').then(m => ({ default: m.BuzonSolicitudesView })), { ssr: false })
+const PortalAdminView = dynamic(() => import('@/components/views/PortalAdminView').then(m => ({ default: m.PortalAdminView })), { ssr: false })
 
 export type ViewKey =
   | 'dashboard'
