@@ -5,10 +5,14 @@ import { useRouter } from 'next/navigation'
 import dynamic from 'next/dynamic'
 import { Sidebar } from '@/components/Sidebar'
 import { RelojColombia } from '@/components/RelojColombia'
+import { ResponsiveViewToggle } from '@/components/ResponsiveViewToggle'
+import { MobileNav } from '@/components/mobile-nav'
 import { useToast } from '@/hooks/use-toast'
 import { isAuthenticated, getUserData, logout } from '@/lib/api-client'
 import { puedeAcceder, vistasPermitidas, vistaPorDefecto } from '@/lib/permisos'
 import { useAuthReactive } from '@/hooks/use-auth-reactive'
+import { useResponsiveView } from '@/hooks/use-responsive-view'
+import { cn } from '@/lib/utils'
 import { ShieldAlert } from 'lucide-react'
 
 // ====================================================================
@@ -81,6 +85,11 @@ export default function Home() {
   // Hook reactivo: cuando el rol cambia (switch-user, refresh, login),
   // re-validamos que la vista actual esté permitida.
   const { rol: reactiveRol } = useAuthReactive()
+
+  // Modo de vista responsiva preferido por el usuario (Auto/Móvil/Tablet/PC).
+  // Solo aplica a usuarios internos (ADMIN/GESTOR/CONSULTOR); el portal
+  // cliente y el portal jurídico NO se ven afectados por esta preferencia.
+  const { mode: responsiveMode } = useResponsiveView()
 
   // === GUARDIA DE AUTENTICACIÓN ===
   // Si no está autenticado, redirigir a /login
@@ -188,69 +197,126 @@ export default function Home() {
     return null
   }
 
+  // === LAYOUT RESPONSIVO ===
+  // El modo forzado por el usuario (responsiveMode) determina si mostramos
+  // Sidebar (desktop), MobileNav (móvil/tablet), o dejamos que el CSS
+  // responsivo normal haga su trabajo (auto).
+  //
+  // Reglas:
+  //   - Portal cliente → NO se ve afectado (layout propio)
+  //   - mode='desktop' → siempre Sidebar, nunca MobileNav
+  //   - mode='mobile'  → nunca Sidebar, siempre MobileNav, contenido centrado max-w-[480px]
+  //   - mode='tablet'  → nunca Sidebar, siempre MobileNav, contenido centrado max-w-[768px]
+  //   - mode='auto'    → comportamiento responsivo normal (Sidebar lg+, MobileNav md-)
+  const forzarDesktop = responsiveMode === 'desktop'
+  const forzarMobile = responsiveMode === 'mobile'
+  const forzarTablet = responsiveMode === 'tablet'
+  const forzarMobileLayout = forzarMobile || forzarTablet
+
+  // Ancho máximo del contenido cuando se simula móvil/tablet
+  const contenidoMaxWidth = forzarMobile ? 480 : forzarTablet ? 768 : undefined
+
   return (
-    <div className="min-h-screen flex">
-      {!esPortalCliente && <Sidebar view={view} onChange={setView} />}
-      <main className="flex-1 overflow-x-hidden">
-        {/* Reloj digital Colombia — visible en todos los módulos (zona America/Bogota = Medellín/Bogotá)
-            Ubicado al centro horizontal de la ventana, manteniendo la altura (top-3).
-            pointer-events-none para no bloquear clics; el contenido tiene pt-16 para evitar superposición. */}
-        {!esPortalCliente && (
-          <div className="fixed top-3 left-1/2 -translate-x-1/2 z-40 pointer-events-none">
-            <RelojColombia />
-          </div>
+    <div
+      className={cn(
+        'min-h-screen flex',
+        // En modo móvil/tablet forzado, centramos el contenido como si fuera
+        // un celular/tablet real (banda oscura a los lados en desktop)
+        forzarMobileLayout && 'bg-slate-950',
+      )}
+      data-responsive-mode={responsiveMode}
+    >
+      {/* Sidebar — solo se renderiza cuando corresponde según el modo */}
+      {!esPortalCliente && !forzarMobileLayout && (
+        <Sidebar view={view} onChange={setView} forceVisible={forzarDesktop} />
+      )}
+
+      {/* Contenedor principal — se centra y limita el ancho en modo móvil/tablet */}
+      <div
+        className={cn(
+          'flex-1 flex flex-col min-w-0',
+          forzarMobileLayout && 'mx-auto w-full',
         )}
-        <div className="main-container p-6 max-w-[1600px] mx-auto fade-in pt-16 lg:pt-6" key={`${view}-${refreshKey}`}>
-          {!vistaPermitida ? (
-            <div className="flex flex-col items-center justify-center min-h-[60vh] text-center">
-              <div className="w-20 h-20 rounded-full bg-red-500/15 flex items-center justify-center mb-4">
-                <ShieldAlert className="w-10 h-10 text-red-400" />
-              </div>
-              <h2 className="text-xl font-bold text-white mb-2">Acceso denegado</h2>
-              <p className="text-sm text-white/60 max-w-md">
-                Tu rol actual (<span className="font-semibold text-white">{reactiveRol || 'sin rol'}</span>) no tiene
-                permiso para acceder a este módulo. Si crees que es un error, contacta al administrador.
-              </p>
-              <button
-                onClick={() => setView(vistaPorDefecto(reactiveRol))}
-                className="mt-6 px-4 py-2 rounded-lg text-sm font-semibold text-white gradient-primary hover:opacity-90 transition-opacity"
-              >
-                Ir a mi módulo principal
-              </button>
+        style={forzarMobileLayout && contenidoMaxWidth ? { maxWidth: `${contenidoMaxWidth}px` } : undefined}
+      >
+        <main className="flex-1 overflow-x-hidden bg-background">
+          {/* Reloj digital Colombia — visible en todos los módulos (zona America/Bogota = Medellín/Bogotá)
+              Ubicado al centro horizontal de la ventana, manteniendo la altura (top-3).
+              pointer-events-none para no bloquear clics; el contenido tiene pt-16 para evitar superposición. */}
+          {!esPortalCliente && (
+            <div className="fixed top-3 left-1/2 -translate-x-1/2 z-40 pointer-events-none">
+              <RelojColombia />
             </div>
-          ) : (
-            <>
-              {view === 'dashboard' && <DashboardView onAbrirPrestamo={abrirPrestamo} />}
-              {view === 'clientes' && <ClientesView onChanged={refresh} />}
-              {view === 'prestamos' && (
-                <PrestamosView onAbrirPrestamo={abrirPrestamo} onChanged={refresh} onCambiarVista={(v) => setView(v as ViewKey)} />
-              )}
-              {view === 'pagos' && <PagosView onChanged={refresh} />}
-              {view === 'juridico' && <JuridicoView onChanged={refresh} />}
-              {view === 'cajas' && <CajasView onChanged={refresh} />}
-              {view === 'simulador' && <SimuladorView />}
-              {view === 'campanas' && <CampanasView onChanged={refresh} />}
-              {view === 'portal' && <PortalView onAbrirPortal={abrirPortal} />}
-              {view === 'comunicaciones' && <CentroComunicacionesView />}
-              {view === 'usuarios' && <UsuariosView />}
-              {view === 'conexiones' && <ConexionesView />}
-              {view === 'seguridad' && <SeguridadView />}
-              {view === 'auditoria' && <AuditoriaSeguridadView />}
-              {view === 'notificaciones' && <NotificacionesView />}
-              {view === 'admin' && <AdminView onChanged={refresh} />}
-              {view === 'portal-admin' && <PortalAdminView />}
-              {view === 'configuracion' && <CentroConfiguracionView />}
-              {view === 'exportar' && <ExportarView />}
-              {view === 'codigo-fuente' && <CodigoFuenteView />}
-              {view === 'manual' && <ManualView />}
-              {view === 'automatizacion' && <AutomatizacionView />}
-              {view === 'buzon-solicitudes' && (
-                <BuzonSolicitudesView onConvertir={convertirSolicitudWeb} />
-              )}
-            </>
           )}
-        </div>
-      </main>
+
+          {/* Botón de vista responsiva — solo para ADMIN/GESTOR/CONSULTOR */}
+          {!esPortalCliente && <ResponsiveViewToggle />}
+
+          <div
+            className={cn(
+              'main-container p-6 mx-auto fade-in pt-16 lg:pt-6',
+              forzarMobileLayout ? 'w-full pb-24' : 'max-w-[1600px]',
+            )}
+            key={`${view}-${refreshKey}`}
+          >
+            {!vistaPermitida ? (
+              <div className="flex flex-col items-center justify-center min-h-[60vh] text-center">
+                <div className="w-20 h-20 rounded-full bg-red-500/15 flex items-center justify-center mb-4">
+                  <ShieldAlert className="w-10 h-10 text-red-400" />
+                </div>
+                <h2 className="text-xl font-bold text-white mb-2">Acceso denegado</h2>
+                <p className="text-sm text-white/60 max-w-md">
+                  Tu rol actual (<span className="font-semibold text-white">{reactiveRol || 'sin rol'}</span>) no tiene
+                  permiso para acceder a este módulo. Si crees que es un error, contacta al administrador.
+                </p>
+                <button
+                  onClick={() => setView(vistaPorDefecto(reactiveRol))}
+                  className="mt-6 px-4 py-2 rounded-lg text-sm font-semibold text-white gradient-primary hover:opacity-90 transition-opacity"
+                >
+                  Ir a mi módulo principal
+                </button>
+              </div>
+            ) : (
+              <>
+                {view === 'dashboard' && <DashboardView onAbrirPrestamo={abrirPrestamo} />}
+                {view === 'clientes' && <ClientesView onChanged={refresh} />}
+                {view === 'prestamos' && (
+                  <PrestamosView onAbrirPrestamo={abrirPrestamo} onChanged={refresh} onCambiarVista={(v) => setView(v as ViewKey)} />
+                )}
+                {view === 'pagos' && <PagosView onChanged={refresh} />}
+                {view === 'juridico' && <JuridicoView onChanged={refresh} />}
+                {view === 'cajas' && <CajasView onChanged={refresh} />}
+                {view === 'simulador' && <SimuladorView />}
+                {view === 'campanas' && <CampanasView onChanged={refresh} />}
+                {view === 'portal' && <PortalView onAbrirPortal={abrirPortal} />}
+                {view === 'comunicaciones' && <CentroComunicacionesView />}
+                {view === 'usuarios' && <UsuariosView />}
+                {view === 'conexiones' && <ConexionesView />}
+                {view === 'seguridad' && <SeguridadView />}
+                {view === 'auditoria' && <AuditoriaSeguridadView />}
+                {view === 'notificaciones' && <NotificacionesView />}
+                {view === 'admin' && <AdminView onChanged={refresh} />}
+                {view === 'portal-admin' && <PortalAdminView />}
+                {view === 'configuracion' && <CentroConfiguracionView />}
+                {view === 'exportar' && <ExportarView />}
+                {view === 'codigo-fuente' && <CodigoFuenteView />}
+                {view === 'manual' && <ManualView />}
+                {view === 'automatizacion' && <AutomatizacionView />}
+                {view === 'buzon-solicitudes' && (
+                  <BuzonSolicitudesView onConvertir={convertirSolicitudWeb} />
+                )}
+              </>
+            )}
+          </div>
+        </main>
+
+        {/* MobileNav — se renderiza cuando se fuerza modo móvil/tablet, o cuando
+            estamos en modo auto (MobileNav internamente usa md:hidden para auto-ocultarse).
+            En modo desktop forzado, NO se renderiza. */}
+        {!esPortalCliente && !forzarDesktop && (
+          <MobileNav current={view} onChange={setView} forceVisible={forzarMobileLayout} />
+        )}
+      </div>
 
       {prestamoSeleccionado && (
         <PrestamoDetalleModal

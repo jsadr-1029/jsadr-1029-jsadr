@@ -37,6 +37,13 @@ import {
 interface MobileNavProps {
   current: ViewKey
   onChange: (view: ViewKey) => void
+  /**
+   * Cuando es true, fuerza la visibilidad del MobileNav sin importar
+   * el ancho del dispositivo. Se usa en modo "Móvil"/"Tablet" del
+   * toggle responsivo para mostrar la barra inferior incluso en
+   * pantallas grandes.
+   */
+  forceVisible?: boolean
 }
 
 interface NavItem {
@@ -105,7 +112,7 @@ const prestamosGroup: NavItem = {
  * - El botón "Más" abre un `Sheet` con el resto de módulos.
  * - Respeta la safe area de iOS (`env(safe-area-inset-bottom)`).
  */
-export function MobileNav({ current, onChange }: MobileNavProps) {
+export function MobileNav({ current, onChange, forceVisible = false }: MobileNavProps) {
   const [open, setOpen] = React.useState(false)
   const [expanded, setExpanded] = React.useState<Record<string, boolean>>({})
 
@@ -143,7 +150,12 @@ export function MobileNav({ current, onChange }: MobileNavProps) {
 
   return (
     <nav
-      className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-background/95 backdrop-blur-xl border-t border-white/10"
+      className={cn(
+        'fixed bottom-0 left-0 right-0 z-50 bg-background/95 backdrop-blur-xl border-t border-white/10',
+        // En modo auto (default): oculto en md+, visible en md-
+        // En modo móvil/tablet forzado: siempre visible
+        forceVisible ? 'flex' : 'md:hidden',
+      )}
       style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
       aria-label="Navegación principal móvil"
     >

@@ -38,6 +38,12 @@ import { useMemo } from 'react'
 interface SidebarProps {
   view: ViewKey
   onChange: (view: ViewKey) => void
+  /**
+   * Cuando es true, fuerza la visibilidad del Sidebar sin importar
+   * el ancho del dispositivo. Se usa en modo "PC" del toggle responsivo
+   * para mostrar el sidebar incluso en pantallas pequeñas.
+   */
+  forceVisible?: boolean
 }
 
 // ---------- Tipos ----------
@@ -96,7 +102,7 @@ const ALL_ITEMS: MenuNode[] = [
   { key: 'exportar', label: 'Reportes', icon: BarChart3, description: 'Exportación de datos' },
 ]
 
-export function Sidebar({ view, onChange }: SidebarProps) {
+export function Sidebar({ view, onChange, forceVisible = false }: SidebarProps) {
   // Hook reactivo: re-lee el rol cuando cambia el estado de auth,
   // evitando que el Sidebar quede con un rol desactualizado tras un
   // switch-user o un refresh-token fallido.
@@ -145,7 +151,12 @@ export function Sidebar({ view, onChange }: SidebarProps) {
   return (
     <aside
       data-sidebar
-      className="w-64 hidden lg:flex flex-col h-screen sticky top-0 text-sidebar-foreground border-r border-sidebar-border bg-sidebar backdrop-blur-xl"
+      className={cn(
+        'w-64 flex-col h-screen sticky top-0 text-sidebar-foreground border-r border-sidebar-border bg-sidebar backdrop-blur-xl',
+        // En modo auto (default): oculto en pantallas < lg, visible en lg+
+        // En modo desktop forzado: siempre visible
+        forceVisible ? 'flex' : 'hidden lg:flex',
+      )}
     >
       <div className="p-6 border-b border-sidebar-border">
         <div className="flex items-center gap-3">
