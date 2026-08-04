@@ -313,9 +313,8 @@ export async function POST(req: NextRequest) {
       // El cliente debe cambiarla al ingresar (se le pedirá en el primer login).
       // Para mantener compatibilidad con el PIN actual, también reseteamos pinHash
       // con la contraseña temporal, lo que le permite entrar con esa clave temporal.
-      // bcrypt.hashSync para hashear el PIN temporal
-      const bcrypt = await import('bcryptjs')
-      const pinHash = bcrypt.hashSync(passwordTemporal, 10)
+      // Usar hashPassword() (rounds=12) para consistencia con el resto del sistema.
+      const pinHash = passwordHash // ya hasheado con hashPassword() rounds=12 arriba
       await db.cliente.update({
         where: { id: destinatario.id },
         data: {
@@ -323,8 +322,38 @@ export async function POST(req: NextRequest) {
           pinCreatedAt: new Date(),
           pinIntentos: 0,
           pinBloqueadoHasta: null,
+          claveResetToken: crypto.randomBytes(16).toString('hex'),
+          claveResetExpira: new Date(Date.now() + 24 * 60 * 60 * 1000), // 24h
         },
       })
+
+      // Actualizar también Configuracion.PORTAL_PIN_<cedula> (lo usa /api/portal/auth action=login)
+      try {
+        const pinConfigKey = `PORTAL_PIN_${destinatario.username || destinatario.id}`
+        await db.configuracion.upsert({
+          where: { clave: pinConfigKey },
+          create: {
+            clave: pinConfigKey,
+            valor: JSON.stringify({
+              pinHash,
+              createdAt: new Date().toISOString(),
+              intentos: 0,
+              bloqueadoHasta: null,
+            }),
+            descripcion: `PIN de portal para ${destinatario.nombre} (recuperación)`,
+          },
+          update: {
+            valor: JSON.stringify({
+              pinHash,
+              createdAt: new Date().toISOString(),
+              intentos: 0,
+              bloqueadoHasta: null,
+            }),
+          },
+        })
+      } catch {
+        // No fallar si la clave de configuración ya existe o no se puede escribir
+      }
     }
 
     // Enviar credenciales al correo registrado

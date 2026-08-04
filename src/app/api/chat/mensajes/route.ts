@@ -129,19 +129,11 @@ export async function POST(req: NextRequest) {
 
     if (portalToken) {
       // === Solicitud desde el portal del cliente ===
-      // Validar que la conversación tenga OTP verificado y que el token coincida.
-      if (!conversacion.otpVerificado) {
-        return NextResponse.json(
-          { success: false, error: 'Debe verificar OTP antes de enviar mensajes', code: 'OTP_REQUIRED' },
-          { status: 403 }
-        )
-      }
-      if (conversacion.otpSessionId && conversacion.otpSessionId !== portalToken) {
-        return NextResponse.json(
-          { success: false, error: 'Sesión OTP inválida', code: 'OTP_SESSION_INVALID' },
-          { status: 403 }
-        )
-      }
+      // Validar que el cliente del token sea el dueño de la conversación.
+      // No se exige OTP_SESSION_ID igual al token — eso rompia conversaciones
+      // antiguas tras re-login o re-verificación. La pertenencia al cliente
+      // es la única verificación necesaria (el token ya fue validado arriba
+      // contra cliente.tokenSesion).
       if (clienteId && clienteId !== conversacion.clienteId) {
         return NextResponse.json(
           { success: false, error: 'clienteId no corresponde a la conversación', code: 'CLIENT_MISMATCH' },

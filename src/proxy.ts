@@ -71,8 +71,11 @@ function isPublicEndpoint(pathname: string): boolean {
     pathname.startsWith('/api/auth/login') ||
     pathname.startsWith('/api/auth/mfa') ||
     pathname.startsWith('/api/auth/refresh') ||
+    pathname.startsWith('/api/auth/recuperar-clave') ||
     pathname.startsWith('/api/portal/auth') ||
     pathname.startsWith('/api/portal/') || // portal usa x-portal-token
+    pathname.startsWith('/api/chat/iniciar') || // inicio de chat con cédula+teléfono (sin token previo)
+    pathname.startsWith('/api/chat/otp') || // solicitud/verificación OTP del chat
     pathname === '/api/simulador' // simulador público
   )
 }
@@ -221,8 +224,14 @@ export async function proxy(req: NextRequest) {
   // === 1.6. VERIFICACIÓN JWT EN PRODUCCIÓN (Reforzado) ===
   // En producción, todas las APIs (excepto login/portal) requieren JWT válido.
   // En desarrollo, se mantiene modo compatibilidad (auth-guard maneja el fallback).
+  // EXCEPCIÓN: /api/estado-cuenta y /api/paz-y-salvo aceptan ?token= en query string
+  // (porque el frontend usa window.open() que no puede setear headers).
+  // Estas rutas validan el token internamente contra cliente.tokenSesion.
   const isProductionEnv = process.env.NODE_ENV === 'production'
-  if (isProductionEnv && isApiPath && !isPublicEndpoint(pathname)) {
+  const isDocEndpointWithToken =
+    (pathname.startsWith('/api/estado-cuenta') || pathname.startsWith('/api/paz-y-salvo')) &&
+    !!req.nextUrl.searchParams.get('token')
+  if (isProductionEnv && isApiPath && !isPublicEndpoint(pathname) && !isDocEndpointWithToken) {
     const authHeader = req.headers.get('authorization')
     const portalToken = req.headers.get('x-portal-token')
     if (!authHeader && !portalToken) {

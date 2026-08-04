@@ -30,7 +30,10 @@ async function obtenerConfigSmtp(): Promise<SmtpConfig | null> {
       },
     })
 
-    if (!conexion) return null
+    if (!conexion) {
+      // Fallback: intentar con CorreoInstitucional (panel Configuración Global)
+      return await obtenerConfigSmtpFromCorreoInstitucional()
+    }
 
     // Campos según schema ConexionAPI:
     // - url (host:port o solo host) o configuracionExtra JSON con host/port/secure
@@ -93,6 +96,38 @@ async function obtenerConfigSmtp(): Promise<SmtpConfig | null> {
 }
 
 /**
+ * Fallback alternativo: configuración SMTP desde la tabla CorreoInstitucional
+ * (la configurada vía el panel de Configuración Global → Correos).
+ * Se invoca si ConexionAPI no tiene ninguna fila EMAIL_SMTP activa.
+ */
+async function obtenerConfigSmtpFromCorreoInstitucional(): Promise<SmtpConfig | null> {
+  try {
+    const correo = await db.correoInstitucional.findFirst({
+      where: { estado: 'activo', esPrincipal: true },
+    })
+    if (!correo) return null
+    if (!correo.smtpHost || !correo.smtpPort || !correo.smtpUser || !correo.email) return null
+    let pass = ''
+    if (correo.smtpPass) {
+      try { pass = decryptSensitive(correo.smtpPass) } catch { pass = correo.smtpPass }
+    }
+    if (!pass) return null
+    return {
+      host: correo.smtpHost,
+      port: correo.smtpPort,
+      secure: correo.smtpPort === 465,
+      user: correo.smtpUser,
+      pass,
+      fromName: correo.nombreRemitente || correo.aliasRemitente || correo.nombre || 'Sistema de Préstamos',
+      fromEmail: correo.email,
+    }
+  } catch (error) {
+    console.error('[email] Error en CorreoInstitucional fallback:', error)
+    return null
+  }
+}
+
+/**
  * Crea o reutiliza un transporter de Nodemailer según la configuración SMTP activa.
  */
 async function obtenerTransporter(): Promise<{
@@ -123,17 +158,36 @@ async function obtenerTransporter(): Promise<{
     return { transporter, config, isEthereal: false }
   }
 
-  // FALLBACK: Crear cuenta de Ethereal Email (servicio de prueba que captura correos)
-  // Solo para que el sistema funcione en desarrollo sin SMTP configurado
+  // FALLBACK: En desarrollo usar Ethereal (captura correos de prueba).
+  // En producción NO usar Ethereal — devolver error explícito para que el
+  // llamador (recuperar-clave, chat OTP, etc.) pueda reportar el fallo.
+  if (process.env.NODE_ENV === 'production') {
+    // Producción: exigir SMTP configurado en ConexionAPI o CorreoInstitucional
+    const correoCfg = await obtenerConfigSmtpFromCorreoInstitucional()
+    if (correoCfg) {
+      const transporter = nodemailer.createTransport({
+        host: correoCfg.host,
+        port: correoCfg.port,
+        secure: correoCfg.secure,
+        auth: { user: correoCfg.user, pass: correoCfg.pass },
+      })
+      cachedTransporter = transporter
+      cachedConfigHash = `${correoCfg.host}:${correoCfg.port}:${correoCfg.user}`
+      return { transporter, config: correoCfg, isEthereal: false }
+    }
+    // Sin SMTP configurado: devolver transporter dummy que fallará al enviar
+    // con un mensaje claro, en vez de mandar correos a Ethereal silenciosamente.
+    throw new Error(
+      'SMTP no configurado en producción. Configura ConexionAPI.EMAIL_SMTP activa o CorreoInstitucional principal activa.'
+    )
+  }
+  // Modo desarrollo: usar Ethereal para no depender de SMTP real
   const testAccount = await nodemailer.createTestAccount()
   const transporter = nodemailer.createTransport({
     host: 'smtp.ethereal.email',
     port: 587,
     secure: false,
-    auth: {
-      user: testAccount.user,
-      pass: testAccount.pass,
-    },
+    auth: { user: testAccount.user, pass: testAccount.pass },
   })
   cachedTransporter = transporter
   cachedConfigHash = 'ethereal:' + testAccount.user
@@ -199,6 +253,31 @@ export async function enviarEmail({
       html: html || text || '',
     })
 
+    // Registrar en EnvioCorreo para auditoría
+    try {
+      const correoInstitucionalId = await db.correoInstitucional.findFirst({
+        where: { email: fromEmail, estado: 'activo' },
+        select: { id: true },
+      })
+      await db.envioCorreo.create({
+        data: {
+          correoInstitucionalId: correoInstitucionalId?.id || null,
+          remitenteEmail: fromEmail,
+          destinatario: safeTo,
+          asunto: safeSubject,
+          cuerpo: (text || html || '').slice(0, 5000),
+          formato: html ? 'html' : 'texto',
+          estado: 'ENVIADO',
+          fechaEnvio: new Date(),
+          enviadoPorNombre: 'Sistema',
+          metadata: JSON.stringify({ messageId: info.messageId }),
+        },
+      })
+    } catch (e) {
+      // No fallar el envío si la auditoría falla
+      console.error('[email] No se pudo registrar EnvioCorreo:', e)
+    }
+
     if (isEthereal) {
       const previewUrl = nodemailer.getTestMessageUrl(info) || undefined
       return {
@@ -220,6 +299,21 @@ export async function enviarEmail({
     }
   } catch (error: any) {
     console.error('[email] Error enviando email:', error)
+    // Registrar fallo en EnvioCorreo también
+    try {
+      await db.envioCorreo.create({
+        data: {
+          remitenteEmail: 'sistema@no-configurado',
+          destinatario: to,
+          asunto: subject,
+          cuerpo: (text || html || '').slice(0, 5000),
+          estado: 'FALLIDO',
+          fechaEnvio: new Date(),
+          enviadoPorNombre: 'Sistema',
+          mensajeError: error.message?.slice(0, 500),
+        },
+      })
+    } catch {}
     return {
       success: false,
       isEthereal: false,
@@ -234,7 +328,10 @@ export async function enviarEmail({
  */
 export async function haySmtpConfigurado(): Promise<boolean> {
   const config = await obtenerConfigSmtp()
-  return config !== null
+  if (config) return true
+  // Verificar también CorreoInstitucional como fallback
+  const correo = await obtenerConfigSmtpFromCorreoInstitucional()
+  return correo !== null
 }
 
 /**

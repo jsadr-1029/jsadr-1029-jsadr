@@ -71,7 +71,7 @@ interface Mensaje {
   archivoNombre: string | null
 }
 
-type Fase = 'verificado' | 'solicitar' | 'verificar' | 'verificando' | 'solicitando' | 'totp' | 'totp_setup'
+type Fase = 'verificado' | 'verificar_identidad' | 'verificando_identidad' | 'solicitar' | 'verificar' | 'verificando' | 'solicitando' | 'totp' | 'totp_setup'
 
 // === Helpers ===
 function fmtHora(f: string): string {
@@ -93,11 +93,14 @@ function fmtFechaCorta(f: string): string {
 export function CentroComunicacionesPortal({ clienteId, cedula, token: tokenInicial }: Props) {
   const { toast } = useToast()
 
-  const [fase, setFase] = useState<Fase>(tokenInicial ? 'verificado' : 'solicitar')
+  const [fase, setFase] = useState<Fase>(tokenInicial ? 'verificado' : 'verificar_identidad')
   const [sessionToken, setSessionToken] = useState<string | undefined>(tokenInicial)
-  const [autoGenerando, setAutoGenerando] = useState(!tokenInicial)
+  const [autoGenerando, setAutoGenerando] = useState(false) // ya no se auto-genera; el usuario confirma
 
-  // OTP
+  // Identidad (cédula + teléfono)
+  const [telefonoInput, setTelefonoInput] = useState('') // últimos 4 dígitos
+
+  // OTP (legacy — solo se usa si el usuario explícitamente solicita OTP como respaldo)
   const [otpId, setOtpId] = useState<string | null>(null)
   const [codigoOtp, setCodigoOtp] = useState('')
   const [intentosRestantes, setIntentosRestantes] = useState<number | null>(null)
@@ -129,71 +132,65 @@ export function CentroComunicacionesPortal({ clienteId, cedula, token: tokenInic
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
-  // === Al montar: verificar si TOTP está activo para el cliente ===
-  useEffect(() => {
-    let cancelado = false
-    const checkTotp = async () => {
-      try {
-        const res = await fetch(`/api/chat/totp-setup?clienteId=${clienteId}&cedula=${encodeURIComponent(cedula)}`)
-        const json = await res.json()
-        if (!cancelado && json.success) {
-          setTotpEnabled(json.data.totpEnabled)
-        }
-      } catch {
-        // silencioso — si falla, queda null y se usa OTP-WhatsApp
-      }
-    }
-    checkTotp()
-    return () => { cancelado = true }
-  }, [clienteId, cedula])
-
-  // === AUTO-GENERAR CLAVE DINÁMICA ===
-  // Si no hay token inicial y TOTP NO está activo, intentar generar automáticamente
-  // una clave dinámica interna para que el cliente pueda usar el chat sin OTP.
-  // Si TOTP está activo, no auto-generamos — debe ingresar el código TOTP.
+  // === Al montar: ya no verificamos TOTP automáticamente — el usuario
+  // debe confirmar su identidad (cédula + teléfono) dentro del chat.
+  // Si llega tokenInicial (sesión del portal), se usa directamente.
   useEffect(() => {
     if (tokenInicial) {
-      setAutoGenerando(false)
+      setFase('verificado')
+    } else {
+      setFase('verificar_identidad')
+    }
+  }, [tokenInicial])
+
+  // === Iniciar chat confirmando cédula + teléfono (sin OTP, sin token) ===
+  const iniciarChatConIdentidad = async () => {
+    const telefonoLimpio = telefonoInput.replace(/\D/g, '')
+    if (telefonoLimpio.length !== 4) {
+      toast({
+        title: 'Teléfono incompleto',
+        description: 'Ingresa los últimos 4 dígitos de tu teléfono registrado.',
+        variant: 'destructive',
+      })
       return
     }
-    // Esperar a saber si TOTP está activo
-    if (totpEnabled === null) return
-    if (totpEnabled === true) {
-      // TOTP activo: no auto-generar, ir directo a UI TOTP
-      setAutoGenerando(false)
-      setFase('totp')
-      return
-    }
-    let cancelado = false
-    const generarClave = async () => {
-      try {
-        const res = await fetch('/api/chat/clave-dinamica', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ clienteId, cedula }),
+    try {
+      setFase('verificando_identidad')
+      const res = await fetch('/api/chat/iniciar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ cedula, telefono: telefonoLimpio }),
+      })
+      const json = await res.json()
+      if (json.success && json.data?.sessionId) {
+        setSessionToken(json.data.sessionId)
+        setFase('verificado')
+        setTelefonoInput('')
+        toast({
+          title: 'Identidad verificada',
+          description: 'Ya puedes chatear con tus asesores.',
         })
-        if (cancelado) return
-        const json = await res.json()
-        if (json.success && json.data?.sessionId) {
-          setSessionToken(json.data.sessionId)
-          setFase('verificado')
-          setAutoGenerando(false)
+      } else {
+        setFase('verificar_identidad')
+        if (json.code === 'RATE_LIMIT') {
+          toast({
+            title: 'Demasiados intentos',
+            description: json.error,
+            variant: 'destructive',
+          })
         } else {
-          setAutoGenerando(false)
-          setFase('solicitar')
-        }
-      } catch {
-        if (!cancelado) {
-          setAutoGenerando(false)
-          setFase('solicitar')
+          toast({
+            title: 'Datos no coinciden',
+            description: json.error || 'Verifica tu cédula y los últimos 4 dígitos de tu teléfono.',
+            variant: 'destructive',
+          })
         }
       }
+    } catch (e: any) {
+      setFase('verificar_identidad')
+      toast({ title: 'Error', description: e.message, variant: 'destructive' })
     }
-    generarClave()
-    return () => {
-      cancelado = true
-    }
-  }, [clienteId, cedula, tokenInicial, totpEnabled])
+  }
 
   // === Solicitar OTP ===
   const solicitarOtp = async () => {
@@ -593,24 +590,92 @@ export function CentroComunicacionesPortal({ clienteId, cedula, token: tokenInic
     )
   }
 
-  // === Render: Generando clave dinámica automáticamente ===
-  if (autoGenerando) {
+  // === Render: Generando (verificando identidad) ===
+  if (fase === 'verificando_identidad') {
     return (
       <Card className="max-w-md mx-auto">
         <CardContent className="p-6 sm:p-8 text-center">
           <div className="w-14 h-14 sm:w-16 sm:h-16 mx-auto mb-4 rounded-2xl gradient-primary flex items-center justify-center">
             <ShieldCheck className="w-7 h-7 sm:w-8 sm:h-8 text-white animate-pulse" />
           </div>
-          <h3 className="text-base sm:text-lg font-bold mb-2">Accediendo al chat...</h3>
-          <p className="text-xs sm:text-sm text-muted-foreground mb-4 leading-relaxed">
-            Estamos generando una clave interna segura para que puedas chatear con tus asesores sin necesidad de código de verificación.
-          </p>
+          <h3 className="text-base sm:text-lg font-bold mb-2">Verificando identidad...</h3>
           <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground">
             <RefreshCw className="w-3 h-3 animate-spin" />
-            <span>Conectando...</span>
+            <span>Confirmando tus datos</span>
           </div>
         </CardContent>
       </Card>
+    )
+  }
+
+  // === Render: Verificación de identidad (cédula + teléfono) ===
+  if (fase === 'verificar_identidad') {
+    return (
+      <div className="max-w-md mx-auto">
+        <Card>
+          <CardHeader className="text-center pb-2">
+            <div className="w-14 h-14 sm:w-16 sm:h-16 mx-auto mb-2 rounded-2xl gradient-primary flex items-center justify-center">
+              <Shield className="w-7 h-7 sm:w-8 sm:h-8 text-white" />
+            </div>
+            <CardTitle className="text-lg sm:text-xl">Confirma tu identidad</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="bg-blue-500/10 border border-blue-400/30 rounded-lg p-3 text-sm text-blue-200 flex gap-2">
+              <Phone className="w-5 h-5 shrink-0 mt-0.5" />
+              <div className="min-w-0">
+                <p className="font-semibold mb-1">Verificación rápida</p>
+                <p className="text-xs leading-relaxed">
+                  Para iniciar el chat, confirma tu cédula y los últimos 4 dígitos
+                  de tu teléfono registrado. No necesitas código de verificación.
+                </p>
+              </div>
+            </div>
+
+            <div className="bg-white/5 rounded-lg p-3 text-sm space-y-1.5">
+              <div className="flex items-center gap-2 min-w-0">
+                <Phone className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                <span className="text-muted-foreground shrink-0">Cédula:</span>
+                <span className="font-mono truncate">{cedula}</span>
+              </div>
+            </div>
+
+            <div>
+              <label className="text-xs text-muted-foreground mb-1 block">
+                Últimos 4 dígitos de tu teléfono:
+              </label>
+              <Input
+                inputMode="numeric"
+                maxLength={4}
+                placeholder="____"
+                value={telefonoInput}
+                onChange={(e) => setTelefonoInput(e.target.value.replace(/\D/g, ''))}
+                onKeyDown={(e) => e.key === 'Enter' && telefonoInput.length === 4 && iniciarChatConIdentidad()}
+                className="text-center text-xl sm:text-2xl font-mono tracking-[0.4em] sm:tracking-[0.5em]"
+                autoFocus
+              />
+              <p className="text-[10px] text-muted-foreground mt-1 text-center">
+                Ingresa solo los últimos 4 dígitos del teléfono que registraste con nosotros.
+              </p>
+            </div>
+
+            <Button
+              className="w-full"
+              size="lg"
+              onClick={iniciarChatConIdentidad}
+              disabled={telefonoInput.length !== 4}
+            >
+              <ShieldCheck className="w-4 h-4" /> Verificar y entrar al chat
+            </Button>
+
+            <button
+              onClick={() => setFase('solicitar')}
+              className="text-xs text-muted-foreground hover:text-foreground mx-auto block text-center"
+            >
+              ← ¿Prefieres recibir un código por WhatsApp/correo?
+            </button>
+          </CardContent>
+        </Card>
+      </div>
     )
   }
 
@@ -968,9 +1033,10 @@ export function CentroComunicacionesPortal({ clienteId, cedula, token: tokenInic
             size="sm"
             onClick={() => {
               setSessionToken(undefined)
-              setFase('solicitar')
+              setFase('verificar_identidad')
               setOtpId(null)
               setCodigoOtp('')
+              setTelefonoInput('')
               setSelectedId(null)
               setDetalle(null)
             }}
