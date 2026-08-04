@@ -39,6 +39,86 @@ const SECCIONES = [
 ] as const
 type Seccion = (typeof SECCIONES)[number]
 
+// =====================================================
+// REFUERZO DE ELIMINACIÓN — Clave maestra "Eliminar"
+// =====================================================
+// Para borrar correos institucionales (SMTP, jsa@jsadr.com.co, Brevo, etc.),
+// integraciones (incluida la API key de Brevo), variables globales con secretos
+// o dominios críticos, se exige una clave maestra literal "Eliminar".
+//
+// Características:
+//   • Es ILIMITADA: no caduca, no tiene TTL, no se almacena en BD ni en .env.
+//   • Es CONSTANTE: vive solo en el código fuente del servidor.
+//   • Es INDEPENDIENTE del .env: sobrevive a pérdida de variables de entorno.
+//   • Se verifica en el SERVIDOR (no en el cliente) — imposible evadirla desde la UI.
+//   • Cualquier intento (exitoso o fallido) se registra en auditoriaConfiguracion.
+//   • El botón "Eliminar" del frontend abre un modal que pide escribir la palabra
+//     "Eliminar" literal; el botón solo se habilita cuando coincide exactamente.
+//
+// Esto evita borrados accidentales o no autorizados de credenciales críticas.
+// =====================================================
+const CLAVE_ELIMINACION_MAESTRA = 'Eliminar'
+
+/**
+ * Valida que el payload incluya { clave: 'Eliminar' } exactamente.
+ * Si no coincide, retorna un NextResponse 403 (no lanza error).
+ * Si coincide, retorna null (OK para proceder).
+ */
+function validarClaveEliminacion(
+  payload: Record<string, unknown> | undefined,
+  recurso: string
+): NextResponse | null {
+  const clave = payload?.clave
+  if (typeof clave !== 'string' || clave !== CLAVE_ELIMINACION_MAESTRA) {
+    return NextResponse.json(
+      {
+        success: false,
+        error: `Se requiere la clave maestra de eliminación para borrar ${recurso}.`,
+        codigo: 'CLAVE_ELIMINACION_REQUERIDA',
+        ayuda: `Escriba la palabra "${CLAVE_ELIMINACION_MAESTRA}" en el campo de confirmación del modal.`,
+      },
+      { status: 403 }
+    )
+  }
+  return null
+}
+
+/**
+ * Registra en auditoriaConfiguracion cualquier intento de eliminación
+ * (exitoso o fallido) para trazabilidad completa.
+ */
+async function auditarEliminacion(
+  seccion: string,
+  recursoId: string,
+  recursoDesc: string,
+  exito: boolean,
+  usuarioId: string,
+  usuarioNombre: string,
+  ip: string,
+  userAgent: string,
+  detalleError?: string
+): Promise<void> {
+  try {
+    await db.auditoriaConfiguracion.create({
+      data: {
+        seccion,
+        campo: `__ELIMINACION__${recursoId}`,
+        valorAnterior: recursoDesc.slice(0, 500),
+        valorNuevo: exito ? '__ELIMINADO__' : `__FALLIDO__${detalleError || ''}`.slice(0, 500),
+        usuarioId,
+        usuarioNombre,
+        ipOrigen: ip,
+        userAgent,
+        motivo: exito
+          ? `Eliminación autorizada de ${recursoDesc} (clave maestra verificada)`
+          : `Intento de eliminación de ${recursoDesc} RECHAZADO: ${detalleError || 'clave incorrecta'}`,
+      },
+    })
+  } catch {
+    // La auditoría no debe bloquear la operación principal
+  }
+}
+
 // === SERVICIOS POR DEFECTO (9) ===
 const SERVICIOS_DEFAULT = [
   { servicio: 'api-principal', detalle: 'API REST Jsadr' },
@@ -566,7 +646,16 @@ export async function POST(req: NextRequest) {
       }
 
       case 'eliminar_dominio': {
-        await db.dominio.delete({ where: { id: String(payload?.id) } })
+        const recursoId = String(payload?.id)
+        // Refuerzo: exigir clave maestra "Eliminar"
+        const prohibido = validarClaveEliminacion(payload, `el dominio ${recursoId}`)
+        if (prohibido) {
+          await auditarEliminacion('dominios', recursoId, `Dominio id=${recursoId}`, false, auth.id, auth.nombre, ip, userAgent, 'clave maestra incorrecta o ausente')
+          return prohibido
+        }
+        const dominioPrev = await db.dominio.findUnique({ where: { id: recursoId } }).catch(() => null)
+        await db.dominio.delete({ where: { id: recursoId } })
+        await auditarEliminacion('dominios', recursoId, `Dominio "${dominioPrev?.nombre || recursoId}" (${dominioPrev?.url || '?'})`, true, auth.id, auth.nombre, ip, userAgent)
         return NextResponse.json({ success: true })
       }
 
@@ -603,7 +692,29 @@ export async function POST(req: NextRequest) {
       }
 
       case 'eliminar_correo': {
-        await db.correoInstitucional.delete({ where: { id: String(payload?.id) } })
+        const recursoId = String(payload?.id)
+        // Refuerzo: exigir clave maestra "Eliminar" — protege jsa@jsadr.com.co y Brevo
+        const prohibido = validarClaveEliminacion(payload, `el correo institucional ${recursoId}`)
+        if (prohibido) {
+          await auditarEliminacion('correos', recursoId, `Correo id=${recursoId}`, false, auth.id, auth.nombre, ip, userAgent, 'clave maestra incorrecta o ausente')
+          return prohibido
+        }
+        const correoPrev = await db.correoInstitucional.findUnique({ where: { id: recursoId } }).catch(() => null)
+        // Si era el correo principal, también limpiar la tabla conexionAPI para evitar SMTP fantasma
+        if (correoPrev?.esPrincipal) {
+          const previos = await db.conexionAPI.findMany({ where: { tipo: 'EMAIL_SMTP' } })
+          for (const p of previos) {
+            await db.conexionAPI.delete({ where: { id: p.id } })
+          }
+        }
+        await db.correoInstitucional.delete({ where: { id: recursoId } })
+        await auditarEliminacion(
+          'correos',
+          recursoId,
+          `Correo "${correoPrev?.email || recursoId}" (SMTP ${correoPrev?.smtpHost || '?'}:${correoPrev?.smtpPort || '?'}, principal=${correoPrev?.esPrincipal ?? false})`,
+          true,
+          auth.id, auth.nombre, ip, userAgent
+        )
         return NextResponse.json({ success: true })
       }
 
@@ -627,7 +738,22 @@ export async function POST(req: NextRequest) {
       }
 
       case 'eliminar_integracion': {
-        await db.integracion.delete({ where: { id: String(payload?.id) } })
+        const recursoId = String(payload?.id)
+        // Refuerzo: exigir clave maestra "Eliminar" — protege API keys (Brevo, Bancolombia, etc.)
+        const prohibido = validarClaveEliminacion(payload, `la integración ${recursoId}`)
+        if (prohibido) {
+          await auditarEliminacion('integraciones', recursoId, `Integración id=${recursoId}`, false, auth.id, auth.nombre, ip, userAgent, 'clave maestra incorrecta o ausente')
+          return prohibido
+        }
+        const integPrev = await db.integracion.findUnique({ where: { id: recursoId } }).catch(() => null)
+        await db.integracion.delete({ where: { id: recursoId } })
+        await auditarEliminacion(
+          'integraciones',
+          recursoId,
+          `Integración "${integPrev?.nombre || recursoId}" (proveedor=${integPrev?.proveedor || '?'}, ambiente=${integPrev?.ambiente || '?'})`,
+          true,
+          auth.id, auth.nombre, ip, userAgent
+        )
         return NextResponse.json({ success: true })
       }
 
@@ -649,7 +775,22 @@ export async function POST(req: NextRequest) {
       }
 
       case 'eliminar_variable': {
-        await db.variableGlobal.delete({ where: { id: String(payload?.id) } })
+        const recursoId = String(payload?.id)
+        // Refuerzo: exigir clave maestra "Eliminar" — protege variables tipo 'secret' (API keys, tokens)
+        const prohibido = validarClaveEliminacion(payload, `la variable global ${recursoId}`)
+        if (prohibido) {
+          await auditarEliminacion('variables', recursoId, `Variable id=${recursoId}`, false, auth.id, auth.nombre, ip, userAgent, 'clave maestra incorrecta o ausente')
+          return prohibido
+        }
+        const varPrev = await db.variableGlobal.findUnique({ where: { id: recursoId } }).catch(() => null)
+        await db.variableGlobal.delete({ where: { id: recursoId } })
+        await auditarEliminacion(
+          'variables',
+          recursoId,
+          `Variable "${varPrev?.clave || recursoId}" (tipo=${varPrev?.tipo || '?'}, categoría=${varPrev?.categoria || '?'})`,
+          true,
+          auth.id, auth.nombre, ip, userAgent
+        )
         return NextResponse.json({ success: true })
       }
 

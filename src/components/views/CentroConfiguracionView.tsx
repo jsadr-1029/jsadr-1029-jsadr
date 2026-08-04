@@ -82,6 +82,7 @@ import {
 } from 'lucide-react'
 import { SnapshotsProyectoView } from '@/components/views/SnapshotsProyectoView'
 import { BotIcons } from '@/components/views/BotIcons'
+import { EliminarConfirmacionDialog } from '@/components/views/EliminarConfirmacionDialog'
 
 const API = '/api/configuracion-global'
 
@@ -396,6 +397,9 @@ function DominiosPanel() {
   const [modal, setModal] = useState(false)
   const [editando, setEditando] = useState<Dominio | null>(null)
   const [guiaAbierta, setGuiaAbierta] = useState(false)
+  // === Refuerzo eliminación ===
+  const [pendienteEliminar, setPendienteEliminar] = useState<{ id: string; tipo: string; nombre: string; detalle?: string } | null>(null)
+  const [eliminando, setEliminando] = useState(false)
   const [form, setForm] = useState({
     nombre: '',
     url: '',
@@ -466,10 +470,28 @@ function DominiosPanel() {
   }
 
   const eliminar = async (id: string) => {
-    if (!confirm('¿Eliminar este dominio? Esta acción no se puede deshacer.')) return
-    const json = await postAccion('eliminar_dominio', { id })
-    if (json.success) { toast({ title: 'Dominio eliminado' }); cargar() }
-    else toast({ title: 'Error', description: json.error, variant: 'destructive' })
+    // Refuerzo: el botón "Eliminar" abre el modal que pide la clave maestra "Eliminar"
+    const dominio = items.find((d) => d.id === id)
+    setPendienteEliminar({
+      id,
+      tipo: 'dominio',
+      nombre: dominio?.nombre || id,
+      detalle: dominio?.url,
+    })
+  }
+
+  const confirmarEliminar = async () => {
+    if (!pendienteEliminar) return
+    setEliminando(true)
+    const json = await postAccion('eliminar_dominio', { id: pendienteEliminar.id, clave: 'Eliminar' })
+    setEliminando(false)
+    if (json.success) {
+      toast({ title: 'Dominio eliminado', description: pendienteEliminar.nombre })
+      setPendienteEliminar(null)
+      cargar()
+    } else {
+      toast({ title: 'No se pudo eliminar', description: json.error, variant: 'destructive' })
+    }
   }
 
   const testear = async (id: string) => {
@@ -897,6 +919,17 @@ function DominiosPanel() {
           </CardContent>
         </Card>
       )}
+
+      {/* === Modal de confirmación reforzada para eliminación === */}
+      <EliminarConfirmacionDialog
+        open={pendienteEliminar !== null}
+        onClose={() => { if (!eliminando) setPendienteEliminar(null) }}
+        onConfirm={confirmarEliminar}
+        recursoTipo="dominio"
+        recursoNombre={pendienteEliminar?.nombre || ''}
+        recursoDetalle={pendienteEliminar?.detalle}
+        cargando={eliminando}
+      />
     </div>
   )
 }
@@ -910,6 +943,9 @@ function CorreosPanel() {
   const [modalComposer, setModalComposer] = useState(false)
   const [modalEnviados, setModalEnviados] = useState(false)
   const [editando, setEditando] = useState<Correo | null>(null)
+  // === Refuerzo eliminación ===
+  const [pendienteEliminar, setPendienteEliminar] = useState<{ id: string; nombre: string; detalle?: string } | null>(null)
+  const [eliminando, setEliminando] = useState(false)
   const [form, setForm] = useState<Partial<Correo>>({})
   const [composer, setComposer] = useState<{
     correoInstitucionalId: string
@@ -990,10 +1026,29 @@ function CorreosPanel() {
   }
 
   const eliminar = async (id: string) => {
-    if (!confirm('¿Eliminar este correo?')) return
-    const json = await postAccion('eliminar_correo', { id })
-    if (json.success) { toast({ title: 'Correo eliminado' }); cargar() }
-    else toast({ title: 'Error', description: json.error, variant: 'destructive' })
+    // Refuerzo: el botón "Eliminar" abre el modal que pide la clave maestra "Eliminar"
+    const correo = items.find((c) => c.id === id)
+    setPendienteEliminar({
+      id,
+      nombre: correo?.email || id,
+      detalle: correo
+        ? `${correo.smtpHost || '—'}:${correo.smtpPort || '—'} · ${correo.esPrincipal ? 'PRINCIPAL' : 'Secundario'}`
+        : undefined,
+    })
+  }
+
+  const confirmarEliminar = async () => {
+    if (!pendienteEliminar) return
+    setEliminando(true)
+    const json = await postAccion('eliminar_correo', { id: pendienteEliminar.id, clave: 'Eliminar' })
+    setEliminando(false)
+    if (json.success) {
+      toast({ title: 'Correo eliminado', description: pendienteEliminar.nombre })
+      setPendienteEliminar(null)
+      cargar()
+    } else {
+      toast({ title: 'No se pudo eliminar', description: json.error, variant: 'destructive' })
+    }
   }
 
   const establecerPrincipal = async (c: Correo) => {
@@ -1477,6 +1532,17 @@ function CorreosPanel() {
           </DialogContent>
         </Dialog>
       </Card>
+
+      {/* === Modal de confirmación reforzada para eliminación === */}
+      <EliminarConfirmacionDialog
+        open={pendienteEliminar !== null}
+        onClose={() => { if (!eliminando) setPendienteEliminar(null) }}
+        onConfirm={confirmarEliminar}
+        recursoTipo="correo institucional"
+        recursoNombre={pendienteEliminar?.nombre || ''}
+        recursoDetalle={pendienteEliminar?.detalle}
+        cargando={eliminando}
+      />
     </div>
   )
 }
@@ -1804,6 +1870,9 @@ function IntegracionesPanel() {
   const [loading, setLoading] = useState(true)
   const [modal, setModal] = useState(false)
   const [editando, setEditando] = useState<Integracion | null>(null)
+  // === Refuerzo eliminación ===
+  const [pendienteEliminar, setPendienteEliminar] = useState<{ id: string; nombre: string; detalle?: string } | null>(null)
+  const [eliminando, setEliminando] = useState(false)
   const [form, setForm] = useState<Partial<Integracion>>({})
   const { toast } = useToast()
 
@@ -1840,10 +1909,29 @@ function IntegracionesPanel() {
   }
 
   const eliminar = async (id: string) => {
-    if (!confirm('¿Eliminar esta integración?')) return
-    const json = await postAccion('eliminar_integracion', { id })
-    if (json.success) { toast({ title: 'Integración eliminada' }); cargar() }
-    else toast({ title: 'Error', description: json.error, variant: 'destructive' })
+    // Refuerzo: el botón "Eliminar" abre el modal que pide la clave maestra "Eliminar"
+    const integ = items.find((i) => i.id === id)
+    setPendienteEliminar({
+      id,
+      nombre: integ?.nombre || id,
+      detalle: integ
+        ? `Proveedor: ${integ.proveedor} · Auth: ${integ.metodoAuth} · Ambiente: ${integ.ambiente}${integ.apiKey ? ' · API key: ********' : ''}`
+        : undefined,
+    })
+  }
+
+  const confirmarEliminar = async () => {
+    if (!pendienteEliminar) return
+    setEliminando(true)
+    const json = await postAccion('eliminar_integracion', { id: pendienteEliminar.id, clave: 'Eliminar' })
+    setEliminando(false)
+    if (json.success) {
+      toast({ title: 'Integración eliminada', description: pendienteEliminar.nombre })
+      setPendienteEliminar(null)
+      cargar()
+    } else {
+      toast({ title: 'No se pudo eliminar', description: json.error, variant: 'destructive' })
+    }
   }
 
   const testear = async (id: string) => {
@@ -1923,6 +2011,17 @@ function IntegracionesPanel() {
           </form>
         </DialogContent>
       </Dialog>
+
+      {/* === Modal de confirmación reforzada para eliminación === */}
+      <EliminarConfirmacionDialog
+        open={pendienteEliminar !== null}
+        onClose={() => { if (!eliminando) setPendienteEliminar(null) }}
+        onConfirm={confirmarEliminar}
+        recursoTipo="integración"
+        recursoNombre={pendienteEliminar?.nombre || ''}
+        recursoDetalle={pendienteEliminar?.detalle}
+        cargando={eliminando}
+      />
     </Card>
   )
 }
@@ -1933,6 +2032,9 @@ function VariablesPanel() {
   const [loading, setLoading] = useState(true)
   const [modal, setModal] = useState(false)
   const [editando, setEditando] = useState<Variable | null>(null)
+  // === Refuerzo eliminación ===
+  const [pendienteEliminar, setPendienteEliminar] = useState<{ id: string; nombre: string; detalle?: string } | null>(null)
+  const [eliminando, setEliminando] = useState(false)
   const [form, setForm] = useState<Partial<Variable>>({})
   const { toast } = useToast()
 
@@ -1969,10 +2071,29 @@ function VariablesPanel() {
   }
 
   const eliminar = async (id: string) => {
-    if (!confirm('¿Eliminar esta variable?')) return
-    const json = await postAccion('eliminar_variable', { id })
-    if (json.success) { toast({ title: 'Variable eliminada' }); cargar() }
-    else toast({ title: 'Error', description: json.error, variant: 'destructive' })
+    // Refuerzo: el botón "Eliminar" abre el modal que pide la clave maestra "Eliminar"
+    const variable = items.find((v) => v.id === id)
+    setPendienteEliminar({
+      id,
+      nombre: variable?.clave || id,
+      detalle: variable
+        ? `Tipo: ${variable.tipo} · Categoría: ${variable.categoria}${variable.tipo === 'secret' ? ' · ⚠ Contiene un secreto (API key, token, etc.)' : ''}`
+        : undefined,
+    })
+  }
+
+  const confirmarEliminar = async () => {
+    if (!pendienteEliminar) return
+    setEliminando(true)
+    const json = await postAccion('eliminar_variable', { id: pendienteEliminar.id, clave: 'Eliminar' })
+    setEliminando(false)
+    if (json.success) {
+      toast({ title: 'Variable eliminada', description: pendienteEliminar.nombre })
+      setPendienteEliminar(null)
+      cargar()
+    } else {
+      toast({ title: 'No se pudo eliminar', description: json.error, variant: 'destructive' })
+    }
   }
 
   return (
@@ -2033,6 +2154,17 @@ function VariablesPanel() {
           </form>
         </DialogContent>
       </Dialog>
+
+      {/* === Modal de confirmación reforzada para eliminación === */}
+      <EliminarConfirmacionDialog
+        open={pendienteEliminar !== null}
+        onClose={() => { if (!eliminando) setPendienteEliminar(null) }}
+        onConfirm={confirmarEliminar}
+        recursoTipo="variable global"
+        recursoNombre={pendienteEliminar?.nombre || ''}
+        recursoDetalle={pendienteEliminar?.detalle}
+        cargando={eliminando}
+      />
     </Card>
   )
 }
