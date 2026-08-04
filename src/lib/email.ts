@@ -7,6 +7,11 @@ import { decryptSensitive } from './security'
 let cachedTransporter: nodemailer.Transporter | null = null
 let cachedConfigHash: string = ''
 
+// === Caché de API key Brevo (HTTPS API) ===
+// Para no leer la BD en cada envío
+let cachedBrevoApiKey: string | null = null
+let cachedBrevoApiKeyHash: string = ''
+
 interface SmtpConfig {
   host: string
   port: number
@@ -127,6 +132,125 @@ async function obtenerConfigSmtpFromCorreoInstitucional(): Promise<SmtpConfig | 
   }
 }
 
+// =====================================================
+// === BREVO HTTPS API (camino principal) ===
+// =====================================================
+// Brevo expone una API HTTPS en https://api.brevo.com/v3/smtp/email
+// que NO tiene restricción de IP (a diferencia de SMTP).
+// Usamos la API key (xkeysib-...) guardada en ConexionAPI.EMAIL_SMTP.apiKey
+// como camino principal, con SMTP (xsmtpsib-...) como fallback.
+// =====================================================
+
+/**
+ * Obtiene la API key de Brevo desde:
+ *   1. process.env.BREVO_API_KEY (Vercel env var)
+ *   2. ConexionAPI.EMAIL_SMTP.apiKey (BD, cifrada)
+ *
+ * Retorna null si no hay API key configurada.
+ */
+async function obtenerBrevoApiKey(): Promise<string | null> {
+  // 1. Intentar desde env var (más rápido, evita query a BD)
+  if (process.env.BREVO_API_KEY) {
+    if (cachedBrevoApiKey !== process.env.BREVO_API_KEY) {
+      cachedBrevoApiKey = process.env.BREVO_API_KEY
+      cachedBrevoApiKeyHash = process.env.BREVO_API_KEY.slice(-6)
+    }
+    return cachedBrevoApiKey
+  }
+
+  // 2. Fallback: leer desde ConexionAPI.EMAIL_SMTP.apiKey (cifrado)
+  try {
+    const conexion = await db.conexionAPI.findFirst({
+      where: { tipo: 'EMAIL_SMTP', activa: true },
+      select: { apiKey: true },
+    })
+    if (!conexion?.apiKey) return null
+
+    // Verificar si es un valor cifrado (formato iv:encrypted) o texto plano
+    const parts = conexion.apiKey.split(':')
+    if (parts.length === 2 && /^[0-9a-fA-F]+$/.test(parts[0]) && /^[0-9a-fA-F]+$/.test(parts[1])) {
+      // Cifrado AES-256-CBC — desencriptar
+      const decrypted = decryptSensitive(conexion.apiKey)
+      const hash = decrypted.slice(-6)
+      if (cachedBrevoApiKeyHash !== hash) {
+        cachedBrevoApiKey = decrypted
+        cachedBrevoApiKeyHash = hash
+      }
+      return cachedBrevoApiKey
+    }
+    // Texto plano (no debería pasar, pero por compatibilidad)
+    return conexion.apiKey
+  } catch (error) {
+    console.error('[email] Error obteniendo Brevo API key:', error)
+    return null
+  }
+}
+
+/**
+ * Envía un correo vía Brevo HTTPS API (POST /v3/smtp/email).
+ * Retorna el messageId si fue exitoso, o null si falló.
+ */
+async function enviarPorBrevoApi(params: {
+  apiKey: string
+  to: string
+  subject: string
+  text?: string
+  html?: string
+  fromName: string
+  fromEmail: string
+}): Promise<{ success: boolean; messageId?: string; error?: string }> {
+  const { apiKey, to, subject, text, html, fromName, fromEmail } = params
+
+  try {
+    // Sanitizar headers (defensa contra CRLF injection)
+    const sanitize = (v: string) => v.replace(/[\r\n]/g, '').trim()
+    const safeTo = sanitize(to)
+    const safeSubject = sanitize(subject)
+    const safeFromName = sanitize(fromName)
+    const safeFromEmail = sanitize(fromEmail)
+
+    // Validar email del destinatario
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+    if (!emailRegex.test(safeTo)) {
+      return { success: false, error: 'Email del destinatario inválido' }
+    }
+
+    const body: any = {
+      sender: { name: safeFromName, email: safeFromEmail },
+      to: [{ email: safeTo }],
+      subject: safeSubject,
+    }
+    if (html) body.htmlContent = html
+    if (text) body.textContent = text
+
+    const res = await fetch('https://api.brevo.com/v3/smtp/email', {
+      method: 'POST',
+      headers: {
+        'api-key': apiKey,
+        'Content-Type': 'application/json',
+        accept: 'application/json',
+      },
+      body: JSON.stringify(body),
+    })
+
+    if (!res.ok) {
+      const errBody = await res.text()
+      return {
+        success: false,
+        error: `Brevo API HTTP ${res.status}: ${errBody.slice(0, 300)}`,
+      }
+    }
+
+    const data = await res.json()
+    return {
+      success: true,
+      messageId: data.messageId,
+    }
+  } catch (error: any) {
+    return { success: false, error: `Brevo API exception: ${error.message}` }
+  }
+}
+
 /**
  * Crea o reutiliza un transporter de Nodemailer según la configuración SMTP activa.
  */
@@ -209,8 +333,20 @@ export interface ResultadoEnvioEmail {
 
 /**
  * Envía un correo electrónico.
- * - Si hay SMTP configurado en ConexionAPI, lo usa.
- * - Si no, usa Ethereal Email (captura correos de prueba) y devuelve previewUrl.
+ *
+ * Estrategia de defensa en profundidad:
+ *   1. BREVO HTTPS API (api.brevo.com/v3/smtp/email) — camino principal
+ *      → No tiene restricción de IP, funciona en Vercel serverless sin config extra.
+ *      → Usa la API key (xkeysib-...) de ConexionAPI.EMAIL_SMTP.apiKey (cifrada).
+ *
+ *   2. SMTP (smtp-relay.brevo.com:587) — fallback
+ *      → Si la API HTTPS falla (caída del servicio, red, etc.) intenta SMTP.
+ *      → Usa la SMTP key (xsmtpsib-...) de ConexionAPI.EMAIL_SMTP.password (cifrada).
+ *      → En Vercel puede fallar con "525 5.7.1 Unauthorized IP" si IP restriction
+ *        está activa en panel Brevo → por eso la API HTTPS es el camino principal.
+ *
+ *   3. Ethereal Email — solo en desarrollo (NODE_ENV !== 'production')
+ *      → Captura correos de prueba sin enviar realmente.
  */
 export async function enviarEmail({
   to,
@@ -223,30 +359,87 @@ export async function enviarEmail({
   text?: string
   html?: string
 }): Promise<ResultadoEnvioEmail> {
-  try {
-    const { transporter, config, isEthereal } = await obtenerTransporter()
+  // Sanitizar headers (defensa contra CRLF injection)
+  const sanitizeHeader = (value: string): string => value.replace(/[\r\n]/g, '').trim()
+  const safeTo = sanitizeHeader(to)
+  const safeSubject = sanitizeHeader(subject)
 
-    const fromName = config?.fromName || 'Sistema de Préstamos'
-    const fromEmail = config?.fromEmail || 'jsa@jsadr.com.co'
+  // Validar email del destinatario
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+  if (!emailRegex.test(safeTo)) {
+    return {
+      success: false,
+      error: 'Email del destinatario inválido',
+      isEthereal: false,
+      configUsada: false,
+    }
+  }
 
-    // Reforzado: sanitizar headers contra CRLF injection
-    // Cualquier \r o \n permite inyectar headers adicionales (Bcc, CC, etc.)
-    const sanitizeHeader = (value: string): string => value.replace(/[\r\n]/g, '').trim()
-    const safeTo = sanitizeHeader(to)
-    const safeSubject = sanitizeHeader(subject)
-    const safeFromName = sanitizeHeader(fromName)
-    const safeFromEmail = sanitizeHeader(fromEmail)
+  // === Leer configuración SMTP (para fromName/fromEmail y como fallback) ===
+  const config = await obtenerConfigSmtp()
+  const correoCfg = config ?? (await obtenerConfigSmtpFromCorreoInstitucional())
+  const fromName = correoCfg?.fromName || 'Sistema de Préstamos'
+  const fromEmail = correoCfg?.fromEmail || 'jsa@jsadr.com.co'
+  const safeFromName = sanitizeHeader(fromName)
+  const safeFromEmail = sanitizeHeader(fromEmail)
 
-    // Reforzado: validar formato de email del destinatario
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-    if (!emailRegex.test(safeTo)) {
+  // === 1) INTENTAR BREVO HTTPS API (camino principal) ===
+  const brevoApiKey = await obtenerBrevoApiKey()
+  if (brevoApiKey) {
+    const result = await enviarPorBrevoApi({
+      apiKey: brevoApiKey,
+      to: safeTo,
+      subject: safeSubject,
+      text,
+      html,
+      fromName: safeFromName,
+      fromEmail: safeFromEmail,
+    })
+
+    if (result.success) {
+      // Registrar envío exitoso en EnvioCorreo
+      try {
+        const correoInstitucionalId = await db.correoInstitucional.findFirst({
+          where: { email: fromEmail, estado: 'activo' },
+          select: { id: true },
+        })
+        await db.envioCorreo.create({
+          data: {
+            correoInstitucionalId: correoInstitucionalId?.id || null,
+            remitenteEmail: fromEmail,
+            destinatario: safeTo,
+            asunto: safeSubject,
+            cuerpo: (text || html || '').slice(0, 5000),
+            formato: html ? 'html' : 'texto',
+            estado: 'ENVIADO',
+            fechaEnvio: new Date(),
+            enviadoPorNombre: 'Sistema (Brevo API)',
+            metadata: JSON.stringify({
+              messageId: result.messageId,
+              via: 'BREVO_HTTPS_API',
+            }),
+          },
+        })
+      } catch (e) {
+        console.error('[email] No se pudo registrar EnvioCorreo (API success):', e)
+      }
+
       return {
-        success: false,
-        error: 'Email del destinatario inválido',
+        success: true,
+        messageId: result.messageId,
         isEthereal: false,
-        configUsada: false,
+        configUsada: true,
+        fromEmail,
       }
     }
+
+    // Si la API falló, log y continuar al fallback SMTP
+    console.warn('[email] Brevo HTTPS API falló, intentando SMTP fallback:', result.error)
+  }
+
+  // === 2) FALLBACK SMTP (camino secundario) ===
+  try {
+    const { transporter, config: smtpConfig, isEthereal } = await obtenerTransporter()
 
     const info = await transporter.sendMail({
       from: `"${safeFromName}" <${safeFromEmail}>`,
@@ -272,12 +465,15 @@ export async function enviarEmail({
           formato: html ? 'html' : 'texto',
           estado: 'ENVIADO',
           fechaEnvio: new Date(),
-          enviadoPorNombre: 'Sistema',
-          metadata: JSON.stringify({ messageId: info.messageId }),
+          enviadoPorNombre: 'Sistema (SMTP fallback)',
+          metadata: JSON.stringify({
+            messageId: info.messageId,
+            via: 'SMTP_FALLBACK',
+            apiFailedReason: brevoApiKey ? 'API intentada pero falló' : 'API key no configurada',
+          }),
         },
       })
     } catch (e) {
-      // No fallar el envío si la auditoría falla
       console.error('[email] No se pudo registrar EnvioCorreo:', e)
     }
 
@@ -301,7 +497,7 @@ export async function enviarEmail({
       fromEmail,
     }
   } catch (error: any) {
-    console.error('[email] Error enviando email:', error)
+    console.error('[email] Error enviando email (SMTP fallback también falló):', error)
     // Registrar fallo en EnvioCorreo también
     try {
       await db.envioCorreo.create({

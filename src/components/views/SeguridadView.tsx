@@ -491,10 +491,10 @@ export function SeguridadView() {
             </div>
             <div>
               <h2 className="text-base font-semibold text-slate-900">
-                Credenciales SMTP (Brevo)
+                Credenciales SMTP (Brevo) — Fallback
               </h2>
               <p className="text-sm text-slate-500">
-                Clave de envío de correos para recuperación de contraseña, OTP y notificaciones.
+                Clave SMTP (xsmtpsib-...) usada como <strong>fallback</strong> cuando la API HTTPS de Brevo falla.
                 El botón «Eliminar» requiere la clave maestra <strong>«Eliminar»</strong> (no caduca).
               </p>
             </div>
@@ -533,6 +533,67 @@ export function SeguridadView() {
             >
               <Trash2 className="w-4 h-4 mr-1" />
               Eliminar clave Brevo SMTP
+            </Button>
+          </div>
+        </div>
+      </Card>
+
+      {/* =================================================
+          SECCIÓN 1c: Credenciales API HTTPS (Brevo) — camino principal
+          ================================================= */}
+      <Card>
+        <div className="p-5 border-b border-slate-200">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center">
+              <Send className="w-5 h-5" />
+            </div>
+            <div>
+              <h2 className="text-base font-semibold text-slate-900">
+                Credenciales API HTTPS (Brevo) — Principal
+              </h2>
+              <p className="text-sm text-slate-500">
+                API key (xkeysib-...) usada como <strong>camino principal</strong> para envío de correos vía
+                <code className="px-1 py-0.5 bg-slate-100 rounded text-xs">POST api.brevo.com/v3/smtp/email</code>.
+                No tiene restricción de IP → funciona en Vercel sin configuración adicional.
+                El botón «Eliminar» requiere la clave maestra <strong>«Eliminar»</strong> (no caduca).
+              </p>
+            </div>
+          </div>
+        </div>
+        <div className="p-5 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          <div className="p-3 rounded-lg border border-slate-200 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-lg flex items-center justify-center bg-emerald-100 text-emerald-700">
+                <Send className="w-4 h-4" />
+              </div>
+              <div>
+                <p className="text-sm font-medium text-slate-900">Brevo API HTTPS</p>
+                <p className="text-xs text-slate-500 font-mono">jsa@jsadr.com.co</p>
+                <p className="text-xs text-slate-500">api.brevo.com/v3/smtp/email</p>
+              </div>
+            </div>
+          </div>
+          <div className="p-3 rounded-lg border border-slate-200 flex flex-col justify-center gap-2 sm:col-span-2">
+            <p className="text-xs text-slate-600">
+              Esta API key (xkeysib-...) es el <strong>camino principal</strong> de envío de correos desde el sistema.
+              Si falla (servicio caído, red), el sistema intenta automáticamente el <strong>fallback SMTP</strong> de arriba.
+              Está protegida: para eliminarla hay que escribir la palabra <strong>«Eliminar»</strong> en el modal de confirmación.
+              La clave maestra <strong>no caduca</strong>.
+            </p>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="self-start text-red-600 hover:text-red-700 hover:bg-red-50 border border-red-200"
+              onClick={() =>
+                eliminarCredencial(
+                  'BREVO_API',
+                  'Brevo API HTTPS (jsa@jsadr.com.co)',
+                  'API key de Brevo (xkeysib-...) — se elimina de ConexionAPI.EMAIL_SMTP.apiKey y de la env var BREVO_API_KEY en Vercel. El sistema seguirá funcionando con el fallback SMTP.'
+                )
+              }
+            >
+              <Trash2 className="w-4 h-4 mr-1" />
+              Eliminar clave Brevo API HTTPS
             </Button>
           </div>
         </div>

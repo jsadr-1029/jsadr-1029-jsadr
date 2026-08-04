@@ -2,7 +2,7 @@
 // /api/seguridad/credenciales/eliminar
 // -----------------------------------------------------
 // POST /api/seguridad/credenciales/eliminar
-//   { plataforma: 'BREVO_SMTP' | 'VERCEL' | 'GITHUB' | 'NEON',
+//   { plataforma: 'BREVO_SMTP' | 'BREVO_API' | 'VERCEL' | 'GITHUB' | 'NEON',
 //     clave: 'Eliminar' }
 //
 // Elimina (bloquea) las credenciales de la plataforma indicada.
@@ -12,6 +12,8 @@
 // Para BREVO_SMTP: limpia ConexionAPI.EMAIL_SMTP.password,
 //                  CorreoInstitucional.smtpPass
 //                  y BREVO_SMTP_KEY en Vercel env vars
+// Para BREVO_API:  limpia ConexionAPI.EMAIL_SMTP.apiKey
+//                  y BREVO_API_KEY en Vercel env vars
 // Para VERCEL:     limpia PlataformaSync.VERCEL.tokenCifrado
 //                  y VERCEL_TOKEN en Vercel env vars
 // Para GITHUB:     limpia PlataformaSync.GITHUB.tokenCifrado
@@ -128,11 +130,11 @@ export async function POST(req: NextRequest) {
           where: { id: smtp.id },
           data: {
             password: null,
-            apiKey: null,
+            // NO tocamos apiKey aquí — la API key (BREVO_API) es independiente
             activa: false,
             fechaUltimaPrueba: new Date(),
             probada: false,
-            resultadoUltimaPrueba: 'Credenciales eliminadas por administrador',
+            resultadoUltimaPrueba: 'Credenciales SMTP eliminadas por administrador',
           },
         })
         resultados.push('ConexionAPI.EMAIL_SMTP.password limpiada')
@@ -170,6 +172,40 @@ export async function POST(req: NextRequest) {
         }
       } else {
         resultados.push('No se eliminó BREVO_SMTP_KEY de Vercel: VERCEL token no configurado en BD')
+      }
+    }
+    // === Caso 1b: BREVO_API (API HTTPS — clave xkeysib-...) ===
+    else if (plataforma === 'BREVO_API') {
+      const smtp = await db.conexionAPI.findFirst({ where: { tipo: 'EMAIL_SMTP' } })
+      if (smtp) {
+        await db.conexionAPI.update({
+          where: { id: smtp.id },
+          data: {
+            apiKey: null, // Solo se limpia la API key (xkeysib-...)
+            probada: false,
+            fechaUltimaPrueba: new Date(),
+            resultadoUltimaPrueba: 'API key Brevo (HTTPS) eliminada por administrador',
+          },
+        })
+        resultados.push('ConexionAPI.EMAIL_SMTP.apiKey limpiada (BREVO_API)')
+      } else {
+        resultados.push('ConexionAPI.EMAIL_SMTP no existía')
+      }
+
+      // Eliminar BREVO_API_KEY de Vercel env vars
+      const vercelPlat = await db.plataformaSync.findUnique({ where: { plataforma: 'VERCEL' } })
+      if (vercelPlat?.tokenCifrado) {
+        try {
+          const vercelToken = decryptSensitive(vercelPlat.tokenCifrado)
+          const del = await eliminarVercelEnvVar(vercelToken, 'BREVO_API_KEY')
+          resultados.push(del.mensaje)
+          if (!del.ok) totalOk = false
+        } catch (e: any) {
+          resultados.push(`No se pudo eliminar BREVO_API_KEY de Vercel: ${e.message}`)
+          totalOk = false
+        }
+      } else {
+        resultados.push('No se eliminó BREVO_API_KEY de Vercel: VERCEL token no configurado en BD')
       }
     }
     // === Caso 2: VERCEL ===
@@ -247,7 +283,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(
         {
           success: false,
-          error: `Plataforma '${plataforma}' no soportada. Use: BREVO_SMTP, VERCEL, GITHUB o NEON`,
+          error: `Plataforma '${plataforma}' no soportada. Use: BREVO_SMTP, BREVO_API, VERCEL, GITHUB o NEON`,
         },
         { status: 400 }
       )
