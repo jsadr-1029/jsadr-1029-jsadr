@@ -4,13 +4,6 @@ import * as React from 'react'
 import { ViewKey } from '@/app/page'
 import { cn } from '@/lib/utils'
 import {
-  Sheet,
-  SheetTrigger,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-} from '@/components/ui/sheet'
-import {
   FileText,
   DollarSign,
   Home,
@@ -23,8 +16,23 @@ import {
   Settings,
   Bell,
   BarChart3,
+  ChevronDown,
+  Users,
+  Plug,
+  Code2,
+  BookOpen,
+  Landmark as CajasIcon,
+  Calculator,
+  Megaphone,
   type LucideIcon,
 } from 'lucide-react'
+import {
+  Sheet,
+  SheetTrigger,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+} from '@/components/ui/sheet'
 
 interface MobileNavProps {
   current: ViewKey
@@ -35,6 +43,7 @@ interface NavItem {
   key: ViewKey
   label: string
   icon: LucideIcon
+  children?: NavItem[]
 }
 
 /**
@@ -49,16 +58,43 @@ const primaryItems: NavItem[] = [
 
 /**
  * Módulos adicionales que se muestran dentro del Sheet "Más".
+ * Estructura jerárquica coherente con el Sidebar:
+ *   - Préstamos agrupa: Cajas, Campañas, Simulador
+ *   - Seguridad agrupa: Conexiones API, Usuarios, Código Fuente, Manual
  */
 const moreItems: NavItem[] = [
   { key: 'juridico', label: 'Jurídico', icon: Scale },
   { key: 'automatizacion', label: 'Automatización', icon: Zap },
-  { key: 'seguridad', label: 'Seguridad', icon: Shield },
+  {
+    key: 'seguridad',
+    label: 'Seguridad',
+    icon: Shield,
+    children: [
+      { key: 'conexiones', label: 'Conexiones API', icon: Plug },
+      { key: 'usuarios', label: 'Usuarios', icon: Users },
+      { key: 'codigo-fuente', label: 'Código Fuente', icon: Code2 },
+      { key: 'manual', label: 'Manual', icon: BookOpen },
+    ],
+  },
   { key: 'auditoria', label: 'Auditoría', icon: ShieldAlert },
   { key: 'admin', label: 'Administración', icon: Settings },
   { key: 'exportar', label: 'Reportes', icon: BarChart3 },
   { key: 'notificaciones', label: 'Notificaciones', icon: Bell },
 ]
+
+/**
+ * Grupo de módulos de Préstamos que se muestra como desplegable en el Sheet.
+ */
+const prestamosGroup: NavItem = {
+  key: 'prestamos',
+  label: 'Préstamos (más)',
+  icon: FileText,
+  children: [
+    { key: 'cajas', label: 'Cajas', icon: CajasIcon },
+    { key: 'campanas', label: 'Campañas', icon: Megaphone },
+    { key: 'simulador', label: 'Simulador', icon: Calculator },
+  ],
+}
 
 /**
  * Barra de navegación inferior fija para dispositivos móviles.
@@ -71,13 +107,39 @@ const moreItems: NavItem[] = [
  */
 export function MobileNav({ current, onChange }: MobileNavProps) {
   const [open, setOpen] = React.useState(false)
+  const [expanded, setExpanded] = React.useState<Record<string, boolean>>({})
 
   const handleSelect = (view: ViewKey) => {
     onChange(view)
     setOpen(false)
   }
 
-  const isInMore = moreItems.some((item) => item.key === current)
+  const toggleGroup = (key: string) => {
+    setExpanded((prev) => ({ ...prev, [key]: !prev[key] }))
+  }
+
+  // Determinar si la vista actual está dentro de "Más"
+  const isInMore = moreItems.some((item) => {
+    if (item.key === current) return true
+    if (item.children?.some((c) => c.key === current)) return true
+    return false
+  })
+
+  // Auto-expandir el grupo que contiene la vista activa
+  React.useEffect(() => {
+    setExpanded((prev) => {
+      const next = { ...prev }
+      if (prestamosGroup.children?.some((c) => c.key === current)) {
+        next[prestamosGroup.key] = true
+      }
+      for (const item of moreItems) {
+        if (item.children?.some((c) => c.key === current)) {
+          next[item.key] = true
+        }
+      }
+      return next
+    })
+  }, [current])
 
   return (
     <nav
@@ -133,7 +195,7 @@ export function MobileNav({ current, onChange }: MobileNavProps) {
             <button
               type="button"
               aria-label="Más módulos"
-              aria-current={isInMore ? 'page' : undefined}
+              aria-current={isInMore || open ? 'page' : undefined}
               className={cn(
                 'flex flex-col items-center justify-center gap-0.5 py-1.5 rounded-lg transition-colors',
                 isInMore || open
@@ -156,30 +218,42 @@ export function MobileNav({ current, onChange }: MobileNavProps) {
 
           <SheetContent
             side="bottom"
-            className="rounded-t-2xl border-t border-white/10 glass-card-strong p-0"
+            className="rounded-t-2xl border-t border-white/10 glass-card-strong p-0 max-h-[85vh] overflow-y-auto"
           >
             <SheetHeader className="px-4 pt-4 pb-3 border-b border-white/10">
               <SheetTitle className="text-white text-base">Más módulos</SheetTitle>
             </SheetHeader>
-            <div className="grid grid-cols-2 gap-2 p-4 pb-6">
+            <div className="p-4 pb-6 space-y-2">
+              {/* Grupo Préstamos (Cajas, Campañas, Simulador) */}
+              <MobileGroup
+                item={prestamosGroup}
+                current={current}
+                expanded={!!expanded[prestamosGroup.key]}
+                onToggle={() => toggleGroup(prestamosGroup.key)}
+                onSelect={handleSelect}
+              />
+
+              {/* Resto de items del sheet */}
               {moreItems.map((item) => {
-                const Icon = item.icon
-                const active = current === item.key
+                if (item.children && item.children.length > 0) {
+                  return (
+                    <MobileGroup
+                      key={item.key}
+                      item={item}
+                      current={current}
+                      expanded={!!expanded[item.key]}
+                      onToggle={() => toggleGroup(item.key)}
+                      onSelect={handleSelect}
+                    />
+                  )
+                }
                 return (
-                  <button
+                  <MobileLeafButton
                     key={item.key}
-                    type="button"
+                    item={item}
+                    active={current === item.key}
                     onClick={() => handleSelect(item.key)}
-                    className={cn(
-                      'flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-medium transition-all text-left',
-                      active
-                        ? 'gradient-primary text-white shadow-lg'
-                        : 'glass-card border border-white/10 text-foreground hover:bg-white/5'
-                    )}
-                  >
-                    <Icon className="w-4 h-4 shrink-0" />
-                    <span className="truncate">{item.label}</span>
-                  </button>
+                  />
                 )
               })}
             </div>
@@ -190,6 +264,7 @@ export function MobileNav({ current, onChange }: MobileNavProps) {
   )
 }
 
+// ---------- Sub-componentes ----------
 interface NavButtonProps {
   item: NavItem
   active: boolean
@@ -222,5 +297,109 @@ function NavButton({ item, active, onClick }: NavButtonProps) {
         <span className="mt-0.5 h-1 w-1 rounded-full bg-primary shadow-[0_0_8px_2px_oklch(0.55_0.22_285/0.6)]" />
       )}
     </button>
+  )
+}
+
+interface MobileLeafButtonProps {
+  item: NavItem
+  active: boolean
+  onClick: () => void
+}
+
+function MobileLeafButton({ item, active, onClick }: MobileLeafButtonProps) {
+  const Icon = item.icon
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        'w-full flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-medium transition-all text-left',
+        active
+          ? 'gradient-primary text-white shadow-lg'
+          : 'glass-card border border-white/10 text-foreground hover:bg-white/5'
+      )}
+    >
+      <Icon className="w-4 h-4 shrink-0" />
+      <span className="truncate">{item.label}</span>
+    </button>
+  )
+}
+
+interface MobileGroupProps {
+  item: NavItem
+  current: ViewKey
+  expanded: boolean
+  onToggle: () => void
+  onSelect: (view: ViewKey) => void
+}
+
+function MobileGroup({ item, current, expanded, onToggle, onSelect }: MobileGroupProps) {
+  const isParentActive = current === item.key
+  const isChildActive = !!item.children?.some((c) => c.key === current)
+  const isOpen = expanded || isChildActive
+
+  return (
+    <div className="space-y-1">
+      <div className="flex items-stretch gap-1">
+        {/* Cuerpo del grupo → navegación al módulo padre */}
+        <button
+          type="button"
+          onClick={() => onSelect(item.key)}
+          className={cn(
+            'flex-1 flex items-center gap-3 px-3 py-3 rounded-l-xl text-sm font-medium transition-all text-left',
+            isParentActive
+              ? 'gradient-primary text-white shadow-lg'
+              : 'glass-card border border-white/10 text-foreground hover:bg-white/5'
+          )}
+        >
+          <item.icon className="w-4 h-4 shrink-0" />
+          <span className="truncate">{item.label}</span>
+        </button>
+        {/* Chevron → expandir/colapsar */}
+        <button
+          type="button"
+          onClick={onToggle}
+          aria-label={isOpen ? 'Contraer' : 'Expandir'}
+          className={cn(
+            'px-3 rounded-r-xl border border-l-0 border-white/10 transition-colors',
+            isParentActive
+              ? 'gradient-primary text-white shadow-lg'
+              : 'glass-card text-muted-foreground hover:text-foreground hover:bg-white/5'
+          )}
+        >
+          <ChevronDown
+            className={cn(
+              'w-4 h-4 transition-transform duration-200',
+              isOpen && 'rotate-180'
+            )}
+          />
+        </button>
+      </div>
+
+      {isOpen && item.children && (
+        <div className="ml-4 pl-3 border-l border-white/10 space-y-1">
+          {item.children.map((child) => {
+            const childActive = current === child.key
+            const Icon = child.icon
+            return (
+              <button
+                key={child.key}
+                type="button"
+                onClick={() => onSelect(child.key)}
+                className={cn(
+                  'w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-[13px] font-medium transition-all text-left',
+                  childActive
+                    ? 'bg-white/10 text-white'
+                    : 'text-foreground/80 hover:bg-white/5 hover:text-foreground'
+                )}
+              >
+                <Icon className="w-3.5 h-3.5 shrink-0" />
+                <span className="truncate">{child.label}</span>
+              </button>
+            )
+          })}
+        </div>
+      )}
+    </div>
   )
 }
