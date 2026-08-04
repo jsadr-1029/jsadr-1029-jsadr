@@ -152,9 +152,20 @@ export function MobileNav({ current, onChange, forceVisible = false }: MobileNav
     <nav
       className={cn(
         'fixed bottom-0 left-0 right-0 z-50 bg-background/95 backdrop-blur-xl border-t border-white/10',
-        // En modo auto (default): oculto en md+, visible en md-
-        // En modo móvil/tablet forzado: siempre visible
-        forceVisible ? 'flex' : 'md:hidden',
+        // FIX (2026-08-05): En modo auto, oculto en lg+ (no md+).
+        //
+        // Antes: `md:hidden` ocultaba el MobileNav en pantallas ≥ 768px.
+        // Pero el Sidebar usa `hidden lg:flex` (visible solo en ≥ 1024px).
+        // Eso dejaba un gap en tablets (768–1023px) donde NO había ni
+        // Sidebar ni MobileNav → el usuario no podía navegar.
+        //
+        // Ahora: `lg:hidden` hace que el MobileNav se mantenga visible en
+        // tablets (768–1023px) en modo auto, coincidiendo con el
+        // breakpoint del Sidebar. En lg+ (≥ 1024px) se oculta porque el
+        // Sidebar ya está visible.
+        //
+        // En modo móvil/tablet forzado: siempre visible (flex).
+        forceVisible ? 'flex' : 'lg:hidden',
       )}
       style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
       aria-label="Navegación principal móvil"

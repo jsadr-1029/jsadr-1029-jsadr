@@ -311,8 +311,9 @@ export default function Home() {
         </main>
 
         {/* MobileNav — se renderiza cuando se fuerza modo móvil/tablet, o cuando
-            estamos en modo auto (MobileNav internamente usa md:hidden para auto-ocultarse).
-            En modo desktop forzado, NO se renderiza. */}
+            estamos en modo auto (MobileNav internamente usa lg:hidden para auto-ocultarse
+            en pantallas lg+ donde el Sidebar ya está visible).
+            En modo desktop forzado, NO se renderiza (el usuario quiere el Sidebar). */}
         {!esPortalCliente && !forzarDesktop && (
           <MobileNav current={view} onChange={setView} forceVisible={forzarMobileLayout} />
         )}

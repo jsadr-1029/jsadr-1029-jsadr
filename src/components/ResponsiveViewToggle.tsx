@@ -117,8 +117,14 @@ export function ResponsiveViewToggle() {
   }
 
   return (
-    <div ref={dropdownRef} className="fixed top-3 right-3 z-50">
-      {/* Botón principal */}
+    <div
+      ref={dropdownRef}
+      className="fixed top-3 left-3 z-[60]"
+      style={{ zIndex: 60 }}
+    >
+      {/* Botón principal — posicionado a la IZQUIERDA para no overlapping
+          con el UserMenu FAB (top-right, z-9997). El toggle debe ser
+          accesible sin captura de clics por parte del FAB. */}
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
@@ -127,7 +133,7 @@ export function ResponsiveViewToggle() {
         aria-haspopup="menu"
         title={`Vista actual: ${currentOption.label} — click para cambiar`}
         className={cn(
-          'group relative flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold',
+          'group relative flex items-center gap-1.5 px-2.5 py-2 rounded-xl text-xs font-semibold',
           'glass-card border border-white/15 shadow-lg transition-all',
           'hover:border-white/30 hover:shadow-[0_0_20px_rgba(124,108,240,0.25)]',
           mode !== 'auto' && 'border-violet-400/50 ring-1 ring-violet-400/30',
@@ -146,7 +152,7 @@ export function ResponsiveViewToggle() {
           )}
           style={mode === 'auto' ? { transitionDuration: '500ms' } : undefined}
         />
-        <span className="text-white/90 hidden sm:inline">{currentOption.label}</span>
+        <span className="text-white/90 hidden xl:inline">{currentOption.label}</span>
         <ChevronDown
           className={cn(
             'w-3.5 h-3.5 text-white/50 transition-transform',
@@ -155,11 +161,11 @@ export function ResponsiveViewToggle() {
         />
       </button>
 
-      {/* Dropdown */}
+      {/* Dropdown — se abre hacia la DERECHA desde el botón izquierdo */}
       {open && (
         <div
           role="menu"
-          className="absolute right-0 top-full mt-2 w-72 rounded-2xl glass-card-strong border border-white/15 shadow-2xl overflow-hidden"
+          className="absolute left-0 top-full mt-2 w-72 rounded-2xl glass-card-strong border border-white/15 shadow-2xl overflow-hidden"
         >
           {/* Header */}
           <div className="px-4 py-3 border-b border-white/10 bg-white/[0.02]">

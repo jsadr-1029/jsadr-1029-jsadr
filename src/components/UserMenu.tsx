@@ -306,12 +306,37 @@ export function UserMenu({ currentView, onNavigate }: UserMenuProps) {
         html, body { -webkit-tap-highlight-color: transparent; }
         body { padding-bottom: env(safe-area-inset-bottom, 0px); }
         @media (max-width: 1023px) {
-          /* En móvil ocultar sidebar principal y maximizar main */
-          aside[data-sidebar], aside.sidebar-principal { display: none !important; }
+          /*
+           * FIX (2026-08-05): Ya NO ocultamos el Sidebar por CSS global.
+           *
+           * Antes: 'aside[data-sidebar] { display: none !important; }' se
+           * aplicaba a TODA pantalla < 1024px, incluso cuando el usuario
+           * había forzado el modo "PC" vía el ResponsiveViewToggle. Eso
+           * dejaba al usuario sin navegación (ni Sidebar, ni MobileNav)
+           * porque el ResponsiveViewToggle también omite el MobileNav en
+           * modo desktop.
+           *
+           * Ahora: El Sidebar se oculta por sus propias clases Tailwind
+           * ('hidden lg:flex') en modo 'auto'. Si el usuario fuerza modo
+           * 'PC' (forceVisible=true), el Sidebar recibe la clase 'flex' y
+           * se mantiene visible incluso en móvil, respetando la elección
+           * explícita del usuario.
+           *
+           * El Sidebar SÍ se oculta en modos 'mobile' y 'tablet' forzados,
+           * porque el componente no se renderiza desde page.tsx en esos
+           * modos (ver '!forzarMobileLayout').
+           */
           main { margin-left: 0 !important; }
           .main-container { padding: 12px !important; }
-          /* Ajustar grids a 1 columna */
-          .grid-cols-2:not(.keep-cols), .grid-cols-3:not(.keep-cols), .grid-cols-4:not(.keep-cols) {
+          /* Ajustar grids a 1 columna — solo cuando NO estamos en modo
+             desktop forzado (para no romper los grids multi-columna que
+             el usuario espera ver en modo PC). */
+          [data-responsive-mode]:not([data-responsive-mode="desktop"])
+            .grid-cols-2:not(.keep-cols),
+          [data-responsive-mode]:not([data-responsive-mode="desktop"])
+            .grid-cols-3:not(.keep-cols),
+          [data-responsive-mode]:not([data-responsive-mode="desktop"])
+            .grid-cols-4:not(.keep-cols) {
             grid-template-columns: 1fr !important;
           }
           /* Drawer overlay */
