@@ -46,6 +46,7 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog'
 import { toast } from 'sonner'
+import { EliminarConfirmacionDialog } from '@/components/views/EliminarConfirmacionDialog'
 
 // =====================================================
 // Tipos
@@ -131,6 +132,13 @@ export function SeguridadView() {
   const [configOpen, setConfigOpen] = useState(false)
   const [editing, setEditing] = useState<PlataformaSync | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
+  // Estado para eliminar credenciales (clave maestra "Eliminar")
+  const [pendienteEliminar, setPendienteEliminar] = useState<{
+    plataforma: string
+    nombreMostrar: string
+    detalle?: string
+  } | null>(null)
+  const [eliminando, setEliminando] = useState(false)
 
   const toggleProtegido = async (modulo: ModuloSeguridad) => {
     try {
@@ -175,6 +183,38 @@ export function SeguridadView() {
   const openConfig = (p: PlataformaSync) => {
     setEditing(p)
     setConfigOpen(true)
+  }
+
+  // === Eliminar credenciales con clave maestra "Eliminar" ===
+  const eliminarCredencial = (plataforma: string, nombreMostrar: string, detalle?: string) => {
+    setPendienteEliminar({ plataforma, nombreMostrar, detalle })
+  }
+
+  const confirmarEliminarCredencial = async () => {
+    if (!pendienteEliminar) return
+    setEliminando(true)
+    try {
+      const res = await fetch('/api/seguridad/credenciales/eliminar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          plataforma: pendienteEliminar.plataforma,
+          clave: 'Eliminar',
+        }),
+      })
+      const json = await res.json()
+      if (json.success) {
+        toast.success(json.mensaje || `Credenciales de ${pendienteEliminar.nombreMostrar} eliminadas`)
+        setPendienteEliminar(null)
+        setRefreshKey((k) => k + 1)
+      } else {
+        toast.error(json.error || 'No se pudieron eliminar las credenciales')
+      }
+    } catch (e: any) {
+      toast.error('Error: ' + (e as Error).message)
+    } finally {
+      setEliminando(false)
+    }
   }
 
   return (
@@ -393,6 +433,26 @@ export function SeguridadView() {
                         Probar
                       </Button>
                     </div>
+
+                    {/* Eliminar credenciales (con clave maestra "Eliminar") */}
+                    {p.tokenConfigurado && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="w-full text-red-600 hover:text-red-700 hover:bg-red-50 border border-red-200"
+                        onClick={() =>
+                          eliminarCredencial(
+                            p.plataforma,
+                            p.nombreMostrar,
+                            `Token de ${p.nombreMostrar} (${p.plataforma}) — se elimina de la BD local y de las env vars de Vercel`
+                          )
+                        }
+                        disabled={isBusy}
+                      >
+                        <Trash2 className="w-4 h-4 mr-1" />
+                        Eliminar credenciales de {p.plataforma}
+                      </Button>
+                    )}
                   </div>
                 </div>
               )
@@ -416,6 +476,64 @@ export function SeguridadView() {
                 </ol>
               </div>
             </div>
+          </div>
+        </div>
+      </Card>
+
+      {/* =================================================
+          SECCIÓN 1b: Credenciales SMTP (Brevo) — bloqueable con "Eliminar"
+          ================================================= */}
+      <Card>
+        <div className="p-5 border-b border-slate-200">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-lg bg-blue-100 text-blue-700 flex items-center justify-center">
+              <Mail className="w-5 h-5" />
+            </div>
+            <div>
+              <h2 className="text-base font-semibold text-slate-900">
+                Credenciales SMTP (Brevo)
+              </h2>
+              <p className="text-sm text-slate-500">
+                Clave de envío de correos para recuperación de contraseña, OTP y notificaciones.
+                El botón «Eliminar» requiere la clave maestra <strong>«Eliminar»</strong> (no caduca).
+              </p>
+            </div>
+          </div>
+        </div>
+        <div className="p-5 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          <div className="p-3 rounded-lg border border-slate-200 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-lg flex items-center justify-center bg-blue-100 text-blue-700">
+                <Mail className="w-4 h-4" />
+              </div>
+              <div>
+                <p className="text-sm font-medium text-slate-900">Brevo SMTP</p>
+                <p className="text-xs text-slate-500 font-mono">jsa@jsadr.com.co</p>
+                <p className="text-xs text-slate-500">smtp-relay.brevo.com:587</p>
+              </div>
+            </div>
+          </div>
+          <div className="p-3 rounded-lg border border-slate-200 flex flex-col justify-center gap-2 sm:col-span-2">
+            <p className="text-xs text-slate-600">
+              Esta clave se usa para enviar correos desde el sistema (recuperación de clave, OTP de firma,
+              notificaciones automáticas). Está protegida: para eliminarla hay que escribir la palabra
+              <strong> «Eliminar»</strong> en el modal de confirmación. La clave maestra <strong>no caduca</strong>.
+            </p>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="self-start text-red-600 hover:text-red-700 hover:bg-red-50 border border-red-200"
+              onClick={() =>
+                eliminarCredencial(
+                  'BREVO_SMTP',
+                  'Brevo SMTP (jsa@jsadr.com.co)',
+                  'Clave SMTP de Brevo — se elimina de ConexionAPI, CorreoInstitucional y de la env var BREVO_SMTP_KEY en Vercel'
+                )
+              }
+            >
+              <Trash2 className="w-4 h-4 mr-1" />
+              Eliminar clave Brevo SMTP
+            </Button>
           </div>
         </div>
       </Card>
@@ -489,6 +607,21 @@ export function SeguridadView() {
           SECCIÓN 4: Centro de Recuperación de Claves
           ================================================= */}
       <RecuperacionClavesPanel />
+
+      {/* =================================================
+          Modal de confirmación reforzada para eliminar credenciales
+          Requiere la palabra exacta "Eliminar" (clave maestra,
+          no caduca, no se almacena en BD).
+          ================================================= */}
+      <EliminarConfirmacionDialog
+        open={pendienteEliminar !== null}
+        onClose={() => { if (!eliminando) setPendienteEliminar(null) }}
+        onConfirm={confirmarEliminarCredencial}
+        recursoTipo={`credencial de ${pendienteEliminar?.nombreMostrar || ''}`}
+        recursoNombre={pendienteEliminar?.nombreMostrar || ''}
+        recursoDetalle={pendienteEliminar?.detalle}
+        cargando={eliminando}
+      />
     </div>
   )
 }

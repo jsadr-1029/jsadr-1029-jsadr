@@ -139,8 +139,11 @@ async function obtenerTransporter(): Promise<{
   const config = await obtenerConfigSmtp()
 
   if (config) {
-    // Crear hash de configuración para detectar cambios
-    const hash = `${config.host}:${config.port}:${config.user}`
+    // Crear hash de configuración para detectar cambios — INCLUYE pass
+    // (anteriormente solo host:port:user, lo que impedía rotar la clave SMTP
+    // sin reiniciar el proceso — las instancias warm de Vercel seguían usando
+    // la clave anterior ya revocada por Brevo).
+    const hash = `${config.host}:${config.port}:${config.user}:${config.pass.slice(-6)}`
     if (cachedTransporter && cachedConfigHash === hash) {
       return { transporter: cachedTransporter, config, isEthereal: false }
     }
