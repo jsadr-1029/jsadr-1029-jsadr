@@ -1,0 +1,122 @@
+# =====================================================
+# Auto-Deploy a Vercel — Triggered on push to main
+# =====================================================
+# Este workflow reemplaza la integración nativa Vercel-GitHub App.
+# Cada vez que se hace push a `main`, GitHub Actions construye
+# el proyecto y lo despliega a producción en Vercel usando el CLI
+# y los secrets del repositorio.
+#
+# Secrets requeridos (Settings → Secrets and variables → Actions):
+#   - VERCEL_TOKEN        → token de Vercel (vcp_...)
+#   - VERCEL_ORG_ID       → team id (team_...)
+#   - VERCEL_PROJECT_ID   → project id (prj_...)
+#
+# Si el token deja de funcionar (403 invalidToken):
+#   1. Generar uno nuevo en https://vercel.com/account/tokens
+#   2. Actualizar el secret VERCEL_TOKEN en
+#      https://github.com/jsadr-1029/jsadr-1029-jsadr/settings/secrets/actions
+#   3. El próximo push se desplegará automáticamente.
+# =====================================================
+
+name: Deploy to Vercel
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: # Permite dispararlo manualmente desde la pestaña Actions
+
+# Evita deploys concurrentes: si un nuevo push llega mientras
+# otro está construyendo, se cancela el anterior y se inicia el nuevo.
+concurrency:
+  group: vercel-production
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    name: Build & Deploy to Vercel (production)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm install --legacy-peer-deps
+
+      - name: Install Vercel CLI
+        run: npm install --no-save vercel@latest
+
+      - name: Pull Vercel environment (production)
+        run: |
+          vercel pull --yes --environment=production \
+            --token="$VERCEL_TOKEN" \
+            --org="$VERCEL_ORG_ID" \
+            --project="$VERCEL_PROJECT_ID"
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+
+      - name: Generate Prisma client
+        run: npx prisma generate
+
+      - name: Build project (Vercel)
+        run: |
+          vercel build --prod \
+            --token="$VERCEL_TOKEN" \
+            --org="$VERCEL_ORG_ID" \
+            --project="$VERCEL_PROJECT_ID"
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+
+      - name: Deploy to Vercel (production)
+        id: deploy
+        run: |
+          DEPLOY_URL=$(vercel deploy --prebuilt --prod \
+            --token="$VERCEL_TOKEN" \
+            --org="$VERCEL_ORG_ID" \
+            --project="$VERCEL_PROJECT_ID")
+          echo "deployment_url=$DEPLOY_URL" >> "$GITHUB_OUTPUT"
+          echo "::notice::Deployment URL: $DEPLOY_URL"
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+
+      - name: Summary
+        if: always()
+        run: |
+          echo "## Vercel Deploy Result" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          if [ "${{ job.status }}" = "success" ]; then
+            echo "✅ **Deployment exitoso**" >> "$GITHUB_STEP_SUMMARY"
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "**URL:** ${{ steps.deploy.outputs.deployment_url }}" >> "$GITHUB_STEP_SUMMARY"
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "**Commit:** ${{ github.event.head_commit.message }}" >> "$GITHUB_STEP_SUMMARY"
+            echo "**Author:** ${{ github.actor }}" >> "$GITHUB_STEP_SUMMARY"
+            echo "**SHA:** \`${{ github.sha }}\`" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "❌ **Deployment fallido**" >> "$GITHUB_STEP_SUMMARY"
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "Revisa los logs arriba para detalles." >> "$GITHUB_STEP_SUMMARY"
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "Si el error es \`HTTP 403 invalidToken\`:" >> "$GITHUB_STEP_SUMMARY"
+            echo "1. Genera un nuevo token en https://vercel.com/account/tokens" >> "$GITHUB_STEP_SUMMARY"
+            echo "2. Actualiza el secret \`VERCEL_TOKEN\` en [GitHub settings](https://github.com/jsadr-1029/jsadr-1029-jsadr/settings/secrets/actions)" >> "$GITHUB_STEP_SUMMARY"
+            echo "3. Re-run este workflow desde la pestaña Actions" >> "$GITHUB_STEP_SUMMARY"
+          fi
