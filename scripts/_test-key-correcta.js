@@ -1,6 +1,6 @@
 const nodemailer = require('nodemailer');
 (async () => {
-  const KEY = 'REDACTED_BREVO_KEY';
+  const KEY = process.env.BREVO_SMTP_KEY || 'REDACTED_USE_ENV_VAR';
   console.log('Probando key:', KEY.substring(0, 25) + '...' + KEY.substring(KEY.length - 8));
   
   // Brevo con API key moderna: el usuario es el email del remitente, el pass es la api key
