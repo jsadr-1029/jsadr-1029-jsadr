@@ -74,6 +74,8 @@ function isPublicEndpoint(pathname: string): boolean {
     pathname.startsWith('/api/auth/recuperar-clave') ||
     pathname.startsWith('/api/portal/auth') ||
     pathname.startsWith('/api/portal/') || // portal usa x-portal-token
+    pathname.startsWith('/api/admin/portal/auth') || // login del portal administrador (1214731649 / 731649)
+    pathname.startsWith('/api/juridico/portal/auth') || // login del portal jurídico (abogados con cédula + clave)
     pathname.startsWith('/api/chat/iniciar') || // inicio de chat con cédula+teléfono (sin token previo)
     pathname.startsWith('/api/chat/otp') || // solicitud/verificación OTP del chat
     pathname === '/api/simulador' // simulador público
@@ -141,7 +143,13 @@ function getClientIp(req: NextRequest): string {
 
 function getRateLimitForPath(pathname: string): { max: number; key: string } | null {
   // Endpoints de autenticación — límite estricto
-  if (pathname.startsWith('/api/auth/') || pathname.startsWith('/api/portal/auth')) {
+  // Incluye login del portal admin y portal jurídico (rutas de login públicas)
+  if (
+    pathname.startsWith('/api/auth/') ||
+    pathname.startsWith('/api/portal/auth') ||
+    pathname.startsWith('/api/admin/portal/auth') ||
+    pathname.startsWith('/api/juridico/portal/auth')
+  ) {
     return { max: RATE_LIMIT_AUTH, key: `auth:${pathname}` }
   }
   // Endpoints de OTP — límite muy estricto
