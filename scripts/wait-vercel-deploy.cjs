@@ -35,7 +35,7 @@ async function fetchJson(url) {
 }
 
 async function main() {
-  console.log('Esperando a que aparezca el nuevo deploy (commit 50dc500)...')
+  console.log('Esperando a que aparezca el nuevo deploy (commit a307577)...')
   let deployFound = null
   const startTime = Date.now()
 
@@ -48,7 +48,7 @@ async function main() {
     console.log(`Intento ${i + 1}: ${deploys.length} deploys listados`)
     for (const d of deploys) {
       console.log(`  - ${d.uid} | ${d.meta?.githubCommitSha?.slice(0, 7) || '?'} | ${d.readyState} | ${d.createdAt}`)
-      if (d.meta?.githubCommitSha?.startsWith('50dc500')) {
+      if (d.meta?.githubCommitSha?.startsWith('a307577')) {
         deployFound = d
         break
       }
@@ -58,7 +58,7 @@ async function main() {
   }
 
   if (!deployFound) {
-    console.error('\n❌ No se encontró deploy para commit 50dc500.')
+    console.error('\n❌ No se encontró deploy para commit a307577.')
     console.error('   Probablemente Vercel aún no detectó el push. Reintenta en 1 min.')
     process.exit(1)
   }
