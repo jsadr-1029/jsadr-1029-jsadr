@@ -19,7 +19,9 @@ const { PrismaClient } = require('@prisma/client')
 const prisma = new PrismaClient()
 
 // --- SMTP key provista por el usuario ---
-const SMTP_KEY = process.env.BREVO_SMTP_KEY || process.argv[2]
+// Prioridad: argumento CLI > variable de entorno
+// (esto evita que una key vieja en .env pise la nueva passada por CLI)
+const SMTP_KEY = process.argv[2] || process.env.BREVO_SMTP_KEY
 
 if (!SMTP_KEY) {
   console.error('❌ Falta la SMTP key de Brevo.')
