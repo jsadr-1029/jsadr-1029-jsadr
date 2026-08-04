@@ -47,7 +47,7 @@ const BREVO = {
   host: 'smtp-relay.brevo.com',
   port: 587,
   user: 'b3e8df001@smtp-brevo.com',
-  pass: 'REDACTED_BREVO_KEY',
+  pass: process.env.BREVO_SMTP_KEY || 'REDACTED_USE_ENV_VAR',
   fromEmail: 'jsa@jsadr.com.co',
   fromName: 'Jsadr · Jo*** Se*** Al*** D** R**',
 }
