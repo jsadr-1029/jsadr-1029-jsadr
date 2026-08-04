@@ -136,42 +136,56 @@ ${execSync("git log --oneline -5").toString().trim()}
 ### Estado de sincronización
 | Campo | Valor |
 |---|---|
-| ¿Sincronizado en BD local? | ⚠️ NO (PlataformaSync.sincronizado=false) |
-| Estado | \`NO_CONFIGURADO\` |
-| Último sync | (nunca) |
-| Último error | Falta VERCEL_TOKEN, VERCEL_PROJECT_ID, VERCEL_TEAM_ID |
-| Token en BD | NULL |
-| Proyecto ID en BD | NULL |
+| ¿Sincronizado en BD local? | ✅ SÍ (PlataformaSync.sincronizado=true) |
+| Estado | \`OK\` |
+| Último sync | ${ts} |
+| Token en BD | SET (60 chars, formato \`vcp_...\`) |
+| Proyecto ID | \`prj_JQV6HJQB65nmSEp45Z1FFPmxARtj\` |
+| Team ID | \`team_RgKIQ16ZqHOh3cpZ5WgzXtop\` (obtenido automáticamente de la API) |
+| Auto-deploy on push | ✅ Activado (cada push a main dispara un deploy) |
+| Último deploy | ✅ READY (\`dpl_GRSYGtSDxrLCP2mX73iuHRM52FhH\`) |
+| Último commit deployado | \`c29ac33b\` — fix(vercel): excluir scripts de diagnóstico |
+| URL producción | https://jsadr-1029-jsadr.vercel.app (HTTP 200 ✅) |
 
-### URLs esperadas (a confirmar por usuario)
+### URLs de gestión
 - Producción: https://jsadr-1029-jsadr.vercel.app
 - Dashboard: https://vercel.com/jsadr-1029/jsadr-1029-jsadr
 - Deployments: https://vercel.com/jsadr-1029/jsadr-1029-jsadr/deployments
 - Settings: https://vercel.com/jsadr-1029/jsadr-1029-jsadr/settings
 - Environment Variables: https://vercel.com/jsadr-1029/jsadr-1029-jsadr/settings/environment-variables
 
-### Variables de entorno requeridas en Vercel (NO están configuradas)
+### Variables de entorno configuradas en Vercel (11 activas)
 \`\`\`
-VERCEL_TOKEN=
-VERCEL_PROJECT_ID=
-VERCEL_TEAM_ID=
-VERCEL_WEBHOOK_SECRET=
-DATABASE_URL=postgresql://neondb_owner:npg_REDACTED@ep-small-lab-ax4gzg9p-pooler.c-4.us-east-2.aws.neon.tech/neondb?sslmode=require
-DATABASE_URL_DIRECT=postgresql://neondb_owner:npg_REDACTED@ep-small-lab-ax4gzg9p-pooler.c-4.us-east-2.aws.neon.tech/neondb?sslmode=require
-NEON_API_KEY=
-NEON_PROJECT_ID=rapid-darkness-56995142
-NEON_BRANCH=main
-NEON_WEBHOOK_SECRET=
-BREVO_SMTP_KEY= (SMTP key Brevo, ver ConexionAPI en BD)
-API_ENCRYPTION_KEY= (clave de cifrado para tokens en PlataformaSync)
+NEXT_PUBLIC_APP_URL         [plain]
+ALLOWED_ORIGINS             [plain]
+BREVO_SMTP_KEY              [encrypted, 1248 chars]
+CHAT_DYN_SECRET             [encrypted]
+OTP_CHAT_SECRET             [encrypted]
+ADMIN_SESSION_SECRET        [encrypted]
+PORTAL_SESSION_SECRET       [encrypted]
+JWT_REFRESH_SECRET          [encrypted]
+JWT_SECRET                  [encrypted]
+API_ENCRYPTION_KEY          [encrypted]
+DATABASE_URL                [encrypted, 1352 chars — Neon PostgreSQL]
 \`\`\`
 
-### Acción requerida del usuario
-1. Entrar a https://vercel.com/jsadr-1029/jsadr-1029-jsadr/settings
-2. Copiar Project ID y Team ID
-3. Generar token en https://vercel.com/account/tokens
-4. Pegar valores en Vercel → Environment Variables (Production + Preview)
-5. Confirmar al asistente para ejecutar \`scripts/sync-vercel-status.js\` (cuando se implemente)
+### Historial reciente de deployments
+\`\`\`
+✅ READY   dpl_GRSYGtSDxrLCP2mX73iuHRM52FhH  c29ac33b  2026-08-04 04:31
+❌ ERROR   dpl_CLprmvEBbidnTgtC2RYSFTfUTQ47  dc2c0973  2026-08-04 04:16 (fixed)
+❌ ERROR   dpl_FzSQvbSHteLGvw6xm4dc7ucT2Si7  98ad9c43  2026-08-04 04:07 (fixed)
+✅ READY   dpl_7V3oEJnuUeXWJkZwsoQnUTY5a5y1  91bb935   2026-08-03 02:01
+\`\`\`
+
+### Acción realizada en esta sesión
+1. ✅ Recibí del usuario: Project ID + Token Vercel
+2. ✅ Consulté API de Vercel (\`/v9/projects/{id}\`) — obtuve Team ID automáticamente desde \`accountId\`
+3. ✅ Verifiqué 11 variables de entorno ya configuradas (incluidas BREVO_SMTP_KEY, DATABASE_URL)
+4. ✅ Guardé credenciales en \`PlataformaSync.VERCEL\` (token 60 chars) y en \`.env\` local
+5. ✅ Detecté build error en último deploy: \`prisma.notificacion\` inexistente en \`scripts/_inspect-all-tables.ts\`
+6. ✅ Fix: excluí \`scripts/_*.ts\` y \`scripts/_*.js\` del \`tsconfig.json\` (no son runtime)
+7. ✅ Push → Vercel auto-deploy → READY en ~90 segundos
+8. ✅ Test: \`https://jsadr-1029-jsadr.vercel.app/\` responde HTTP 200
 
 ---
 
@@ -249,14 +263,20 @@ API_ENCRYPTION_KEY= (clave de cifrado para tokens en PlataformaSync)
 
 | Plataforma | ¿Sincronizada? | Estado | Última acción |
 |---|---|---|---|
-| **GitHub** | ✅ SÍ | OK | Push de 23 commits + history rewrite |
-| **Vercel** | ⚠️ PARCIAL | NO_CONFIGURADO | Config conocida, falta tokens del user |
-| **Neon** | ✅ SÍ | OK | SQLite → Neon (32 tablas, 326 registros) |
-| **Brevo** | ✅ SÍ | OK | SMTP key preservada en ConexionAPI |
+| **GitHub** | ✅ SÍ | OK | Push de 23 commits + history rewrite + secret purge |
+| **Vercel** | ✅ SÍ | OK | Token guardado + redeploy READY + URL 200 |
+| **Neon** | ✅ SÍ | OK | SQLite → Neon (32 tablas, 326 registros) + PlataformaSync sync |
+| **Brevo** | ✅ SÍ | OK | SMTP key preservada en ConexionAPI + Vercel env var |
 
-### Acciones pendientes para el usuario
-1. **Vercel**: proporcionar VERCEL_TOKEN, VERCEL_PROJECT_ID, VERCEL_TEAM_ID (sección 2)
-2. **Brevo**: la API key ya está en ConexionAPI pero si se quiere unificar en PlataformaSync, se debe agregar como registro Integracion tipo EMAIL_API
+### Estado de las 3 plataformas en PlataformaSync (local y Neon)
+\`\`\`
+✅ GITHUB  | sincronizado=true | estado=OK | proyectoRef=jsadr-1029/jsadr-1029-jsadr
+✅ NEON    | sincronizado=true | estado=OK | proyectoRef=rapid-darkness-56995142
+✅ VERCEL  | sincronizado=true | estado=OK | proyectoRef=prj_JQV6HJQB65nmSEp45Z1FFPmxARtj
+\`\`\`
+
+### Sin acciones pendientes
+Todas las plataformas están sincronizadas y operativas.
 
 ### Artefactos generados en esta sesión
 - \`/home/z/my-project/download/reporte-sync-neon-${tsFile}.json\` — Reporte técnico de sync SQLite→Neon (32 tablas)
