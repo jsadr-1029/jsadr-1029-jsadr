@@ -4,6 +4,9 @@
   "private": true,
   "scripts": {
     "dev": "next dev -p 3000 2>&1 | tee dev.log",
+    "dev:safe": "NODE_OPTIONS='--max-old-space-size=1024 --max-semi-space-size=64' next dev -p 3000 --webpack 2>&1 | tee dev.log",
+    "dev:watchdog": "bash scripts/dev-watchdog.sh",
+    "start-dev": "bash scripts/start-dev.sh",
     "build": "next build && cp -r .next/static .next/standalone/.next/ && cp -r public .next/standalone/",
     "start": "NODE_ENV=production bun .next/standalone/server.js 2>&1 | tee server.log",
     "lint": "eslint .",

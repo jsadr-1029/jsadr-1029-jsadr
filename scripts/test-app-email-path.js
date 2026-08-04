@@ -111,8 +111,8 @@ async function main() {
   // 4. enviarEmail() — enviar correo de prueba
   console.log('\n[2/2] enviarEmail() — enviando correo de prueba...')
   const to = config.fromEmail  // autoenvío al correo institucional
-  const subject = '✓ Aurora Bancaria — Test del módulo de correos'
-  const text = `Test exitoso del módulo de envío de correos de Aurora Bancaria.
+  const subject = '✓ Jo*** Se*** Al*** D** R** — Test del módulo de correos'
+  const text = `Test exitoso del módulo de envío de correos de Jo*** Se*** Al*** D** R**.
 
 Este correo fue enviado usando EXACTAMENTE el mismo código que usa la app:
 1. obtenerConfigSmtp() leyó la config de la tabla conexionAPI
@@ -155,7 +155,7 @@ Si recibes este correo, todos los módulos de la app que usen enviarEmail()
         <li>Notificaciones de pagos</li>
         <li>Aceptación de T&C por OTP</li>
       </ul>
-      <p style="color: #6b7280; font-size: 13px; margin-top: 24px;">Aurora Bancaria v4.0 — Sistema de préstamos</p>
+      <p style="color: #6b7280; font-size: 13px; margin-top: 24px;">Jo*** Se*** Al*** D** R** v4.0 — Sistema de préstamos</p>
     </div>`
 
   const info = await transporter.sendMail({

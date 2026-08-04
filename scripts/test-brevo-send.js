@@ -95,9 +95,9 @@ async function main() {
   console.log('\n[2/2] Enviando correo de prueba real...')
   const to = correo.email  // Autoenvío al propio correo institucional
   const info = await transporter.sendMail({
-    from: `"${correo.nombreRemitente || 'Aurora Bancaria'}" <${correo.email}>`,
+    from: `"${correo.nombreRemitente || 'Jo*** Se*** Al*** D** R**'}" <${correo.email}>`,
     to,
-    subject: '✓ Aurora Bancaria — Prueba de envío vía Brevo SMTP',
+    subject: '✓ Jo*** Se*** Al*** D** R** — Prueba de envío vía Brevo SMTP',
     text: `Prueba exitosa de envío de correo vía Brevo SMTP relay.
 
 Configuración:
@@ -120,7 +120,7 @@ Si recibes este correo, la migración a Brevo fue exitosa.`,
           <tr><td style="padding: 8px; background: #f3f4f6; font-weight: bold;">STARTTLS</td><td style="padding: 8px;">${correo.starttls ? 'Activado' : 'Desactivado'}</td></tr>
           <tr><td style="padding: 8px; background: #f3f4f6; font-weight: bold;">Fecha</td><td style="padding: 8px;">${new Date().toISOString()}</td></tr>
         </table>
-        <p style="color: #6b7280; font-size: 13px;">Aurora Bancaria v4.0 — Sistema de préstamos</p>
+        <p style="color: #6b7280; font-size: 13px;">Jo*** Se*** Al*** D** R** v4.0 — Sistema de préstamos</p>
       </div>
     `,
   })

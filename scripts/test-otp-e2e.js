@@ -138,10 +138,10 @@ async function main() {
       const info = await transporter.sendMail({
         from: `"${fromName}" <${fromEmail}>`,
         to: email,
-        subject: 'prueba invitacion — Aurora Bancaria',
+        subject: 'prueba invitacion — Jo*** Se*** Al*** D** R**',
         text: `Hola ${nombreCliente},
 
-Este es un correo de prueba invitacion de Aurora Bancaria.
+Este es un correo de prueba invitacion de Jo*** Se*** Al*** D** R**.
 
 Si recibes este correo, la configuración SMTP está funcionando correctamente.
 
@@ -153,12 +153,12 @@ Datos del cliente:
 
 Fecha: ${new Date().toISOString()}
 
-— Aurora Bancaria`,
+— Jo*** Se*** Al*** D** R**`,
         html: `
 <div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto; padding: 24px;">
-  <h2 style="color: #1e40af;">Aurora Bancaria — prueba invitacion</h2>
+  <h2 style="color: #1e40af;">Jo*** Se*** Al*** D** R** — prueba invitacion</h2>
   <p>Hola <strong>${nombreCliente}</strong>,</p>
-  <p>Este es un correo de <strong>prueba invitacion</strong> de Aurora Bancaria.</p>
+  <p>Este es un correo de <strong>prueba invitacion</strong> de Jo*** Se*** Al*** D** R**.</p>
   <p>Si recibes este correo, la configuración SMTP está funcionando correctamente.</p>
   <table style="border-collapse: collapse; width: 100%; margin: 16px 0;">
     <tr><td style="padding: 8px; background: #f3f4f6; font-weight: bold;">Nombre</td><td style="padding: 8px;">${nombreCliente}</td></tr>
@@ -167,7 +167,7 @@ Fecha: ${new Date().toISOString()}
     <tr><td style="padding: 8px; background: #f3f4f6; font-weight: bold;">Teléfono</td><td style="padding: 8px;">${telefono}</td></tr>
     <tr><td style="padding: 8px; background: #f3f4f6; font-weight: bold;">Fecha</td><td style="padding: 8px;">${new Date().toISOString()}</td></tr>
   </table>
-  <p style="color: #6b7280; font-size: 13px;">Aurora Bancaria v4.0</p>
+  <p style="color: #6b7280; font-size: 13px;">Jo*** Se*** Al*** D** R** v4.0</p>
 </div>`,
       })
       console.log(`  ✓ [INVITACION] MessageId: ${info.messageId}`)
@@ -262,7 +262,7 @@ Fecha: ${new Date().toISOString()}
       const info = await transporter.sendMail({
         from: `"${fromName}" <${fromEmail}>`,
         to: email,
-        subject: `Tu código OTP — Aurora Bancaria (préstamo ${prestamo.codigo})`,
+        subject: `Tu código OTP — Jo*** Se*** Al*** D** R** (préstamo ${prestamo.codigo})`,
         text: `Hola ${nombreCliente},
 
 Tu código de verificación para firma del préstamo ${prestamo.codigo} es:
@@ -274,10 +274,10 @@ No lo compartas con nadie.
 
 Si no solicitaste este código, ignora este correo.
 
-— Aurora Bancaria`,
+— Jo*** Se*** Al*** D** R**`,
         html: `
 <div style="font-family: Arial, sans-serif; max-width: 480px; margin: auto; padding: 24px;">
-  <h2 style="color: #1e40af; margin-bottom: 8px;">Aurora Bancaria</h2>
+  <h2 style="color: #1e40af; margin-bottom: 8px;">Jo*** Se*** Al*** D** R**</h2>
   <p style="color: #6b7280; margin-top: 0; font-size: 14px;">Verificación de firma electrónica</p>
   <hr style="border: 0; border-top: 1px solid #e5e7eb; margin: 16px 0;">
   <p>Hola <strong>${nombreCliente}</strong>,</p>
@@ -288,7 +288,7 @@ Si no solicitaste este código, ignora este correo.
   <p style="color: #6b7280; font-size: 13px;">Este código expira en <strong>5 minutos</strong>. No lo compartas con nadie.</p>
   <p style="color: #6b7280; font-size: 13px;">Si no solicitaste este código, ignora este correo.</p>
   <hr style="border: 0; border-top: 1px solid #e5e7eb; margin: 24px 0;">
-  <p style="color: #9ca3af; font-size: 12px;">Aurora Bancaria v4.0 — Sistema de préstamos</p>
+  <p style="color: #9ca3af; font-size: 12px;">Jo*** Se*** Al*** D** R** v4.0 — Sistema de préstamos</p>
 </div>`,
       })
       console.log(`  ✓ [OTP] MessageId: ${info.messageId}`)

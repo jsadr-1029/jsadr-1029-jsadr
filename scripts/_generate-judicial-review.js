@@ -74,7 +74,7 @@ async function main() {
 <html lang="es">
 <head>
 <meta charset="UTF-8">
-<title>Revisión Judicial del Pagaré Electrónico — JSADR Aurora Bancaria</title>
+<title>Revisión Judicial del Pagaré Electrónico — Jsadr · Jo*** Se*** Al*** D** R**</title>
 <style>
 @page { size: A4; margin: 2cm; }
 body { font-family: Georgia, 'Times New Roman', serif; line-height: 1.65; color: #1a1a1a; font-size: 11pt; }
@@ -114,7 +114,7 @@ small { color: #6b7280; font-size: 9pt; }
 <div class="cover">
   <div class="escudo">⚖️</div>
   <h1>REVISIÓN JUDICIAL DEL PAGARÉ ELECTRÓNICO</h1>
-  <p class="subtitle">Análisis en Proceso Ejecutivo — Sistema JSADR Aurora Bancaria</p>
+  <p class="subtitle">Análisis en Proceso Ejecutivo — Sistema Jsadr · Jo*** Se*** Al*** D** R**</p>
   <p class="meta">
     Documento elaborado en calidad de Juez Civil del Circuito<br>
     Bogotá D.C. · Colombia · ${fechaHoy}<br><br>
@@ -124,7 +124,7 @@ small { color: #6b7280; font-size: 9pt; }
 
 <h2>1. Antecedentes del caso</h2>
 <p>
-  En el presente despacho se admite la demanda ejecutiva promovida por JSADR Aurora Bancaria contra el deudor 
+  En el presente despacho se admite la demanda ejecutiva promovida por Jsadr · Jo*** Se*** Al*** D** R** contra el deudor 
   <strong>${cliente?.nombre || '—'}</strong>, identificado con cédula de ciudadanía 
   <strong>${cliente?.cedula || '—'}</strong>, en relación con el pagaré electrónico 
   <strong>${prestamo?.codigo || '—'}</strong> por un monto principal de 
@@ -200,7 +200,7 @@ small { color: #6b7280; font-size: 9pt; }
   <code>/api/verificar?codigo=XXXX-XXXX-XXXX-XXXX</code>. Esta página:
 </p>
 <ol>
-  <li>Muestra un encabezado con la identidad del emisor: <strong>"JSADR · Aurora Bancaria — Verificación oficial de documentos firmados electrónicamente"</strong>.</li>
+  <li>Muestra un encabezado con la identidad del emisor: <strong>"JSADR · Jo*** Se*** Al*** D** R** — Verificación oficial de documentos firmados electrónicamente"</strong>.</li>
   <li>Si el código es válido, despliega un <strong>Certificado de Autenticidad</strong> visual con todos los datos del préstamo, deudor, fecha de firma, canal OTP, IP y un sello verde "✓ AUTÉNTICO".</li>
   <li>Si el código no coincide con ningún registro, muestra una alerta roja "✗ NO VÁLIDO" con instrucciones para denunciar presunta falsificación.</li>
   <li>Incluye referencias legales explícitas: Ley 527 de 1999, Decreto 1074 de 2015 y art. 419 del CGP.</li>
@@ -244,7 +244,7 @@ small { color: #6b7280; font-size: 9pt; }
   <tr><td class="lbl">2. Obligación clara y expresa</td><td>✓ Cumple — monto: $${Number(prestamo?.montoPrincipal || 0).toLocaleString('es-CO')}, deudor identificado por cédula</td></tr>
   <tr><td class="lbl">3. Exigibilidad</td><td>✓ Cumple — el préstamo está en estado ${prestamo?.estado}, lo que permite la acción ejecutiva</td></tr>
   <tr><td class="lbl">4. Firma del deudor</td><td>${firma.estadoFirma === 'COMPLETADA' ? '✓ Cumple — firma electrónica completada el ' + fechaFirmaFmt : '✗ Pendiente — la firma no fue completada'}</td></tr>
-  <tr><td class="lbl">5. Identificación del acreedor</td><td>✓ Cumple — JSADR Aurora Bancaria emite el certificado</td></tr>
+  <tr><td class="lbl">5. Identificación del acreedor</td><td>✓ Cumple — Jsadr · Jo*** Se*** Al*** D** R** emite el certificado</td></tr>
 </table>
 
 <h3>4.2 Validez de la firma electrónica (Ley 527 de 1999)</h3>
@@ -355,7 +355,7 @@ small { color: #6b7280; font-size: 9pt; }
 
 <h2>8. Conclusión</h2>
 <p>
-  El pagaré electrónico firmado mediante el sistema JSADR Aurora Bancaria, con su 
+  El pagaré electrónico firmado mediante el sistema Jsadr · Jo*** Se*** Al*** D** R**, con su 
   certificado de firma electrónica y QR de verificación, <strong>constituye un 
   título ejecutivo válido</strong> conforme a la legislación colombiana. La firma 
   electrónica cumple los requisitos del artículo 24 de la Ley 527 de 1999, y el 

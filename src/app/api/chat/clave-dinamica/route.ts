@@ -38,7 +38,7 @@ import { sanitizeError } from '@/lib/error-handler'
 const SESION_HORAS = 24 // 24h de validez para clientes autenticados en el portal
 
 // FIX-SEGURIDAD-CRITICA #2: el secreto del servidor DEBE venir de process.env.CHAT_DYN_SECRET.
-// Antes estaba hardcoded como fallback ('jsadr-aurora-bancaria-dynamic-key-secret-2026-v1'),
+// Antes estaba hardcoded como fallback ('jsadr-dynamic-key-secret-2026-v1'),
 // lo que permitía a un atacante forjar claves dinámicas si conocía el código fuente.
 // La validación se realiza dentro del handler POST para no romper imports del módulo.
 

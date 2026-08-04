@@ -49,7 +49,7 @@ const BREVO = {
   user: 'b3e8df001@smtp-brevo.com',
   pass: 'REDACTED_BREVO_KEY',
   fromEmail: 'jsa@jsadr.com.co',
-  fromName: 'Jsadr - Aurora Bancaria',
+  fromName: 'Jsadr · Jo*** Se*** Al*** D** R**',
 }
 
 async function main() {
@@ -81,7 +81,7 @@ async function main() {
     const actualizada = await db.conexionAPI.update({
       where: { id: existente.id },
       data: {
-        nombre: 'SMTP — Brevo (Jsadr Aurora Bancaria)',
+        nombre: 'SMTP — Brevo (Jsadr · Jo*** Se*** Al*** D** R**)',
         descripcion: 'Relay SMTP Brevo (key regenerada ' + new Date().toISOString().split('T')[0] + '). Host: ' + BREVO.host + ':' + BREVO.port + '. From: ' + BREVO.fromEmail,
         url: BREVO.host + ':' + BREVO.port,
         apiKey: BREVO.fromEmail,
@@ -110,7 +110,7 @@ async function main() {
     // Crear nueva
     const nueva = await db.conexionAPI.create({
       data: {
-        nombre: 'SMTP — Brevo (Jsadr Aurora Bancaria)',
+        nombre: 'SMTP — Brevo (Jsadr · Jo*** Se*** Al*** D** R**)',
         tipo: 'EMAIL_SMTP',
         descripcion: 'Relay SMTP Brevo. Host: ' + BREVO.host + ':' + BREVO.port + '. From: ' + BREVO.fromEmail,
         url: BREVO.host + ':' + BREVO.port,

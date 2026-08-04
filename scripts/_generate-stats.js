@@ -197,7 +197,7 @@ const html = `<!DOCTYPE html>
 <html lang="es">
 <head>
 <meta charset="UTF-8">
-<title>Estadísticas de Cumplimiento — JSADR Aurora Bancaria</title>
+<title>Estadísticas de Cumplimiento — Jsadr · Jo*** Se*** Al*** D** R**</title>
 <style>
 @page { size: A4; margin: 2cm; }
 body { font-family: 'Segoe UI', system-ui, sans-serif; line-height: 1.55; color: #0f172a; font-size: 10pt; margin: 0; padding: 20px; }
@@ -242,7 +242,7 @@ h2 { color: #1e3a8a; font-size: 14pt; margin: 20px 0 8px; padding-bottom: 4px; b
 
 <div class="cover">
   <h1>Estadísticas de Cumplimiento</h1>
-  <p class="subtitle">JSADR Aurora Bancaria — Implementación Completa</p>
+  <p class="subtitle">Jsadr · Jo*** Se*** Al*** D** R** — Implementación Completa</p>
   <p class="meta">
     Fecha de generación: ${fechaHoy}<br>
     Último commit: ${gitCommit}<br>
@@ -308,7 +308,7 @@ ${checks.map(c => `
 </ol>
 
 <div class="footer">
-  Documento generado automáticamente por JSADR Aurora Bancaria · ${fechaHoy}<br>
+  Documento generado automáticamente por Jsadr · Jo*** Se*** Al*** D** R** · ${fechaHoy}<br>
   Stack: Next.js 14 + Prisma + PostgreSQL (Neon) + TypeScript + Tailwind CSS
 </div>
 

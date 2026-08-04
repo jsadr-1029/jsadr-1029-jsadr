@@ -116,7 +116,7 @@ async function ensureSystemUser() {
     user = await db.usuario.create({
       data: {
         nombre: 'Sistema',
-        email: 'system@aurora.local',
+        email: 'system@jsadr.local',
         username: 'system',
         passwordHash: 'disabled',
         rol: 'ADMIN',

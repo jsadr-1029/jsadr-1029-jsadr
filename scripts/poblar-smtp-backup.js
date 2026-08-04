@@ -66,7 +66,7 @@ const BREVO = {
   user: 'b3e8df001@smtp-brevo.com',
   pass: process.env.BREVO_SMTP_KEY || 'REDACTED_USE_ENV_VAR',
   fromEmail: 'jsa@jsadr.com.co',
-  fromName: 'Jsadr - Aurora Bancaria',
+  fromName: 'Jsadr · Jo*** Se*** Al*** D** R**',
 }
 
 async function main() {

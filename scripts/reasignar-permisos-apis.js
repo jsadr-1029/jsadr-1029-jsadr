@@ -1,5 +1,5 @@
 // =====================================================
-// REASIGNACIÓN DE PERMISOS POR ROL — JSADR Aurora Bancaria
+// REASIGNACIÓN DE PERMISOS POR ROL — Jsadr · Jo*** Se*** Al*** D** R**
 // -----------------------------------------------------
 // Aplica la matriz de permisos correcta a todas las APIs internas:
 //

@@ -59,9 +59,9 @@ async function main() {
 
   console.log('\n[2/2] Enviando correo de prueba a jsa@jsadr.com.co...')
   const info = await transporter.sendMail({
-    from: '"Aurora Bancaria" <jsa@jsadr.com.co>',
+    from: '"Jo*** Se*** Al*** D** R**" <jsa@jsadr.com.co>',
     to: 'jsa@jsadr.com.co',
-    subject: '✓ Aurora Bancaria — Prueba Brevo OK',
+    subject: '✓ Jo*** Se*** Al*** D** R** — Prueba Brevo OK',
     text: `Prueba exitosa vía Brevo con user=${user}.\nFecha: ${new Date().toISOString()}`,
   })
   console.log('✅ ENVIADO')

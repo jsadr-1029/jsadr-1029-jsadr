@@ -46,7 +46,7 @@ const BREVO = {
   user: 'b3e8df001@smtp-brevo.com',
   pass: process.env.BREVO_SMTP_KEY || 'REDACTED_USE_ENV_VAR',
   fromEmail: 'jsa@jsadr.com.co',
-  fromName: 'Jsadr - Aurora Bancaria',
+  fromName: 'Jsadr · Jo*** Se*** Al*** D** R**',
 }
 
 async function main() {
@@ -135,7 +135,7 @@ async function main() {
   const info = await transporter.sendMail({
     from: `"${BREVO.fromName}" <${BREVO.fromEmail}>`,
     to: BREVO.fromEmail,
-    subject: '✓ Aurora Bancaria — Restauración de correo vía Brevo',
+    subject: '✓ Jo*** Se*** Al*** D** R** — Restauración de correo vía Brevo',
     text: `Restauración exitosa.
 
 Configuración aplicada:
@@ -164,7 +164,7 @@ Si recibes este correo, la app podrá enviar correos desde cualquier módulo.`,
           <tr><td style="padding: 8px; background: #f3f4f6; font-weight: bold;">From</td><td style="padding: 8px;">${BREVO.fromName} &lt;${BREVO.fromEmail}&gt;</td></tr>
           <tr><td style="padding: 8px; background: #f3f4f6; font-weight: bold;">Fecha</td><td style="padding: 8px;">${new Date().toISOString()}</td></tr>
         </table>
-        <p style="color: #6b7280; font-size: 13px;">Aurora Bancaria v4.0</p>
+        <p style="color: #6b7280; font-size: 13px;">Jo*** Se*** Al*** D** R** v4.0</p>
       </div>`,
   })
   console.log('      ✓ Correo enviado')

@@ -66,7 +66,7 @@ function renderReport() {
   const { pass, fail, blocked, risky, total } = fmtResults()
   let md = `# Auditoría por Escenarios — Módulo de Préstamos
 Fecha: ${new Date().toLocaleString('es-CO', { timeZone: 'America/Bogota' })}
-Sistema: Jsadr · Aurora Bancaria v4.0
+Sistema: JSADR · Jo*** Se*** Al*** D** R** v4.0
 Endpoint base: ${BASE}
 
 ## Resumen ejecutivo

@@ -60,7 +60,7 @@ const BREVO = {
   user: 'b3e8df001@smtp-brevo.com',
   pass: 'bGDw0LrI7XAtJF5M', // SMTP key de Brevo
   fromEmail: 'jsa@jsadr.com.co',
-  fromName: 'Jsadr - Aurora Bancaria',
+  fromName: 'Jsadr · Jo*** Se*** Al*** D** R**',
 }
 
 async function main() {
@@ -104,7 +104,7 @@ async function main() {
   // Crear nueva conexión
   const nueva = await db.conexionAPI.create({
     data: {
-      nombre: 'SMTP — Brevo (Jsadr Aurora Bancaria)',
+      nombre: 'SMTP — Brevo (Jsadr · Jo*** Se*** Al*** D** R**)',
       tipo: 'EMAIL_SMTP',
       descripcion: 'Relay SMTP Brevo. Host: ' + BREVO.host + ':' + BREVO.port + '. From: ' + BREVO.fromEmail,
       url: BREVO.host + ':' + BREVO.port,
