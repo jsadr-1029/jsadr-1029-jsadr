@@ -24,7 +24,7 @@ RESTART_COUNT=0
 SLEEP_BETWEEN=8
 
 # Límites de memoria para evitar OOM kill
-export NODE_OPTIONS="--max-old-space-size=1024 --max-semi-space-size=64"
+export NODE_OPTIONS="--max-old-space-size=768 --max-semi-space-size=32"
 
 # Log directo al archivo (sin tee, que cuelga del process group)
 exec >> /home/z/my-project/dev.log 2>&1
