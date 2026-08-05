@@ -177,6 +177,11 @@ model CuentaRecaudo {
   tipoCuenta      String   // AHORROS | CORRIENTE
   numeroCuenta    String
   titular         String
+  // === QR de la cuenta (imagen en base64) ===
+  // Permite cargar una imagen QR para que los clientes puedan escanearla
+  // desde el portal del cliente al momento de realizar pagos.
+  // Se almacena como data URL (base64) para no depender de servicios externos.
+  qrImagen        String?
   activa          Boolean  @default(true)
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt

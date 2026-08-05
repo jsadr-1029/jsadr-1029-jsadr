@@ -33,7 +33,7 @@ import {
 } from '@/components/ui/table'
 import { useToast } from '@/hooks/use-toast'
 import { formatearMoneda, formatearFecha, calcularPrestamo, calcularPrestamoTasaFijaMensual, Frecuencia } from '@/lib/finanzas'
-import { FileText, Plus, Search, Eye, Check, X, ArrowRight, RefreshCw, PenTool, Shield, Trash2 } from 'lucide-react'
+import { FileText, Plus, Search, Eye, Check, X, ArrowRight, RefreshCw, PenTool, Shield, Trash2, Calendar } from 'lucide-react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { ClientesView } from '@/components/views/ClientesView'
 import { CajasView } from '@/components/views/CajasView'
@@ -157,6 +157,19 @@ function PrestamosPanel({
   // === Codeudor ===
   const [tieneCodeudor, setTieneCodeudor] = useState(false)
   const [codeudorId, setCodeudorId] = useState('')
+
+  // === Fecha del préstamo (fecha asignada) ===
+  // Permite registrar una solicitud con la fecha real en que se realizó el préstamo,
+  // no la fecha actual del sistema. Todos los documentos generados (pagaré, carta,
+  // tabla de amortización) usarán esta fecha como fecha base.
+  // Por defecto es hoy (formato YYYY-MM-DD para el input type="date").
+  const [fechaPrestamo, setFechaPrestamo] = useState<string>(() => {
+    const hoy = new Date()
+    const yyyy = hoy.getFullYear()
+    const mm = String(hoy.getMonth() + 1).padStart(2, '0')
+    const dd = String(hoy.getDate()).padStart(2, '0')
+    return `${yyyy}-${mm}-${dd}`
+  })
 
   // === Renovación de crédito ===
   const [esRenovacion, setEsRenovacion] = useState(false)
@@ -318,11 +331,21 @@ function PrestamosPanel({
       const nCuotas = parseInt(numeroCuotasFija)
       if (!monto || !tasaMen || !nCuotas) return null
 
+      // Parsear fechaPrestamo para usar como fecha base de la tabla de amortización
+      let fechaBaseTf: Date | undefined = undefined
+      if (fechaPrestamo) {
+        const [yyyy, mm, dd] = fechaPrestamo.split('-').map(Number)
+        if (yyyy && mm && dd) {
+          fechaBaseTf = new Date(yyyy, mm - 1, dd, 12, 0, 0)
+        }
+      }
+
       return calcularPrestamoTasaFijaMensual({
         montoPrincipal: monto,
         tasaMensualFija: tasaMen,
         numeroCuotas: nCuotas,
         frecuencia,
+        fechaDesembolso: fechaBaseTf,
       })
     }
 
@@ -344,6 +367,15 @@ function PrestamosPanel({
       const totalPagar = Math.round((cuota * nCuotas) * 100) / 100
       const tasaAnual = tasaMen * 12
 
+      // === Parsear fechaPrestamo para usar como fecha base de la tabla de amortización ===
+      let fechaBase: Date | null = null
+      if (fechaPrestamo) {
+        const [yyyy, mm, dd] = fechaPrestamo.split('-').map(Number)
+        if (yyyy && mm && dd) {
+          fechaBase = new Date(yyyy, mm - 1, dd, 12, 0, 0)
+        }
+      }
+
       // Generar tabla básica
       const tabla: any[] = []
       let saldoCapital = monto
@@ -354,7 +386,8 @@ function PrestamosPanel({
         saldoCapital = Math.round((saldoCapital - capital) * 100) / 100
         if (saldoCapital < 0) saldoCapital = 0
 
-        const fechaVenc = new Date()
+        // === Usar fechaBase si está disponible, si no, la fecha actual ===
+        const fechaVenc = fechaBase ? new Date(fechaBase.getTime()) : new Date()
         if (frecuencia === 'MENSUAL') fechaVenc.setMonth(fechaVenc.getMonth() + i)
         else if (frecuencia === 'QUINCENAL') fechaVenc.setDate(fechaVenc.getDate() + 15 * i)
         else if (frecuencia === 'SEMANAL') fechaVenc.setDate(fechaVenc.getDate() + 7 * i)
@@ -389,17 +422,26 @@ function PrestamosPanel({
     const tasa = parseFloat(tasaInteresAnual)
     const plazo = parseInt(plazoMeses)
     if (!monto || !tasa || !plazo) return null
+    // Parsear fechaPrestamo para usar como fecha base de la tabla de amortización
+    let fechaBaseFr: Date | undefined = undefined
+    if (fechaPrestamo) {
+      const [yyyy, mm, dd] = fechaPrestamo.split('-').map(Number)
+      if (yyyy && mm && dd) {
+        fechaBaseFr = new Date(yyyy, mm - 1, dd, 12, 0, 0)
+      }
+    }
     return calcularPrestamo({
       montoPrincipal: monto,
       tasaInteresAnual: tasa,
       tasaMoraAnual: parseFloat(tasaMoraAnual),
       plazoMeses: plazo,
       frecuencia,
+      fechaDesembolso: fechaBaseFr,
     })
   }, [
     modalidad, montoPrincipal, tasaInteresAnual, tasaMoraAnual, plazoMeses, frecuencia,
     tasaMensualPersonalizada, montoCuotaPersonalizada, numeroCuotasPersonalizada,
-    tasaMensualFija, numeroCuotasFija,
+    tasaMensualFija, numeroCuotasFija, fechaPrestamo,
   ])
 
   const prestamosFiltrados = prestamos.filter((p) => {
@@ -534,6 +576,10 @@ function PrestamosPanel({
         docsDatosAdicionales,
         aprobarYEnviarTyC,
         notas,
+        // === Fecha del préstamo (fecha asignada) ===
+        // Se envía al backend para que el código del préstamo, fechaSolicitud,
+        // fechaDesembolso y todos los documentos usen esta fecha como base.
+        fechaPrestamo,
       }
 
       // === Renovación ===
@@ -755,6 +801,12 @@ ${linkFirmaCodeudor}
     setDireccion('')
     setAprobarYEnviarTyC(true)
     setNotas('')
+    // Reset fecha del préstamo a hoy
+    const hoy = new Date()
+    const yyyy = hoy.getFullYear()
+    const mm = String(hoy.getMonth() + 1).padStart(2, '0')
+    const dd = String(hoy.getDate()).padStart(2, '0')
+    setFechaPrestamo(`${yyyy}-${mm}-${dd}`)
     // Reset renovación
     setEsRenovacion(false)
     setPrestamoARenovar('')
@@ -1208,6 +1260,47 @@ ${linkFirmaCodeudor}
                   </div>
                 </button>
               </div>
+            </div>
+
+            {/* === FECHA DEL PRÉSTAMO (fecha asignada) ===
+                Permite registrar la fecha real en que se realizó el préstamo.
+                Todos los documentos generados (pagaré, carta, tabla de amortización)
+                usarán esta fecha como fecha base.
+                Ej: si el préstamo se hizo el 2/08/2026 y se carga el 5/08/2026,
+                todos los documentos empezarán desde el 2/08/2026. */}
+            <div className="space-y-2 p-3 rounded-md bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800">
+              <Label htmlFor="fechaPrestamo" className="text-sm font-medium flex items-center gap-1.5">
+                <Calendar className="w-3.5 h-3.5 text-emerald-700 dark:text-emerald-300" />
+                Fecha del préstamo *
+              </Label>
+              <Input
+                id="fechaPrestamo"
+                type="date"
+                value={fechaPrestamo}
+                onChange={(e) => setFechaPrestamo(e.target.value)}
+                required
+                max={(() => {
+                  const hoy = new Date()
+                  const yyyy = hoy.getFullYear()
+                  const mm = String(hoy.getMonth() + 1).padStart(2, '0')
+                  const dd = String(hoy.getDate()).padStart(2, '0')
+                  return `${yyyy}-${mm}-${dd}`
+                })()}
+              />
+              <p className="text-xs text-emerald-800 dark:text-emerald-200">
+                📅 Esta será la fecha base del préstamo. Todos los documentos generados (pagaré, carta, tabla de amortización) y el código del préstamo usarán esta fecha, no la fecha actual del sistema.
+              </p>
+              {fechaPrestamo !== (() => {
+                const hoy = new Date()
+                const yyyy = hoy.getFullYear()
+                const mm = String(hoy.getMonth() + 1).padStart(2, '0')
+                const dd = String(hoy.getDate()).padStart(2, '0')
+                return `${yyyy}-${mm}-${dd}`
+              })() && (
+                <p className="text-xs text-amber-700 dark:text-amber-300 font-medium">
+                  ⚠️ Estás registrando un préstamo con fecha retroactiva ({fechaPrestamo}). Verifica que sea correcto.
+                </p>
+              )}
             </div>
 
             {/* === Si es renovación, mostrar préstamos del cliente === */}
@@ -2411,16 +2504,19 @@ export function PrestamosView({
       />
 
       <Tabs value={tab} onValueChange={setTab}>
-        <TabsList className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-9 w-full">
-          <TabsTrigger value="solicitudes">Solicitudes</TabsTrigger>
-          <TabsTrigger value="clientes">Clientes</TabsTrigger>
-          <TabsTrigger value="simulador">Simulador</TabsTrigger>
-          <TabsTrigger value="cajas">Cajas</TabsTrigger>
-          <TabsTrigger value="campanas">Campañas</TabsTrigger>
-          <TabsTrigger value="notificaciones">Notificaciones</TabsTrigger>
-          <TabsTrigger value="documentos">Documentos</TabsTrigger>
-          <TabsTrigger value="buzon">Buzón Web</TabsTrigger>
-          <TabsTrigger value="plan-cliente">Plan Cliente</TabsTrigger>
+        {/* === FIX MOBILE (2026-08-05): Antes era grid-cols-2 que mostraba 9 pestañas
+            en 5 filas en la mitad de la pantalla del móvil, bloqueando la navegación.
+            Ahora es un TabsList horizontal con scroll suave en móvil, y grid en desktop. === */}
+        <TabsList className="flex overflow-x-auto whitespace-nowrap md:grid md:grid-cols-4 lg:grid-cols-9 w-full gap-1 md:gap-0 no-scrollbar">
+          <TabsTrigger value="solicitudes" className="flex-1 md:flex-initial">Solicitudes</TabsTrigger>
+          <TabsTrigger value="clientes" className="flex-1 md:flex-initial">Clientes</TabsTrigger>
+          <TabsTrigger value="simulador" className="flex-1 md:flex-initial">Simulador</TabsTrigger>
+          <TabsTrigger value="cajas" className="flex-1 md:flex-initial">Cajas</TabsTrigger>
+          <TabsTrigger value="campanas" className="flex-1 md:flex-initial">Campañas</TabsTrigger>
+          <TabsTrigger value="notificaciones" className="flex-1 md:flex-initial">Notificaciones</TabsTrigger>
+          <TabsTrigger value="documentos" className="flex-1 md:flex-initial">Documentos</TabsTrigger>
+          <TabsTrigger value="buzon" className="flex-1 md:flex-initial">Buzón Web</TabsTrigger>
+          <TabsTrigger value="plan-cliente" className="flex-1 md:flex-initial">Plan Cliente</TabsTrigger>
         </TabsList>
 
         <TabsContent value="solicitudes" className="mt-6">

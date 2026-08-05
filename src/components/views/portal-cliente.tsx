@@ -5,7 +5,7 @@ import { apiPost } from '@/hooks/use-fetch'
 import { Card, PageHeader, Badge, EmptyState, LoadingState } from '@/components/shared/ui'
 import { formatCOP, formatDate, formatPercent, getInitials, estadoPrestamoColor } from '@/lib/format'
 import { calcularPrestamo, generarCronograma } from '@/lib/finance'
-import { LogIn, ArrowLeft, Phone, Lock, Calculator, FileCheck, Send, KeyRound, ShieldCheck, Eye, EyeOff } from 'lucide-react'
+import { LogIn, ArrowLeft, Phone, Lock, Calculator, FileCheck, Send, KeyRound, ShieldCheck, Eye, EyeOff, QrCode, Copy, Check } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -195,8 +195,9 @@ function PortalHome({ session, onLogout, navigate }: { session: PortalSession; o
       </Card>
 
       <Tabs defaultValue="prestamos">
-        <TabsList className="grid w-full grid-cols-3">
+        <TabsList className="grid w-full grid-cols-4">
           <TabsTrigger value="prestamos">Mis Préstamos</TabsTrigger>
+          <TabsTrigger value="pagos">Pagos / QR</TabsTrigger>
           <TabsTrigger value="simular">Simular</TabsTrigger>
           <TabsTrigger value="perfil">Mi Perfil</TabsTrigger>
         </TabsList>
@@ -215,6 +216,10 @@ function PortalHome({ session, onLogout, navigate }: { session: PortalSession; o
           </Card>
         </TabsContent>
 
+        <TabsContent value="pagos">
+          <CuentaPagoPanel token={session.token} />
+        </TabsContent>
+
         <TabsContent value="simular">
           <SimuladorPrestamo token={session.token} />
         </TabsContent>
@@ -230,6 +235,122 @@ function PortalHome({ session, onLogout, navigate }: { session: PortalSession; o
           </Card>
         </TabsContent>
       </Tabs>
+    </div>
+  )
+}
+
+// =====================================================
+// CuentaPagoPanel — muestra la cuenta de recaudo asignada
+// al cliente con su código QR para escanear al momento de pagar.
+// =====================================================
+function CuentaPagoPanel({ token }: { token: string }) {
+  const [cuenta, setCuenta] = useState<any>(null)
+  const [loading, setLoading] = useState(true)
+  const [copiado, setCopiado] = useState(false)
+
+  useEffect(() => {
+    fetch('/api/portal/cuenta-pago', {
+      headers: { 'x-portal-token': token },
+    })
+      .then(r => r.json())
+      .then(d => {
+        if (d.success) setCuenta(d.cuenta)
+        else toast.error(d.error || 'No se pudo cargar la cuenta de pago')
+      })
+      .catch(e => toast.error('Error: ' + e.message))
+      .finally(() => setLoading(false))
+  }, [token])
+
+  if (loading) return <LoadingState />
+  if (!cuenta) return <EmptyState icon={QrCode} title="Sin cuenta asignada" description="No tienes una cuenta de recaudo asignada. Contacta al administrador." />
+
+  const copiarNumero = async () => {
+    try {
+      await navigator.clipboard.writeText(cuenta.numeroCuenta)
+      setCopiado(true)
+      setTimeout(() => setCopiado(false), 2000)
+      toast.success('Número de cuenta copiado al portapapeles')
+    } catch {
+      toast.error('No se pudo copiar el número')
+    }
+  }
+
+  return (
+    <div className="space-y-4">
+      <Card>
+        <div className="text-center mb-4">
+          <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-blue-500 to-blue-700 text-white flex items-center justify-center mx-auto mb-3">
+            <QrCode className="w-7 h-7" />
+          </div>
+          <h3 className="font-bold text-slate-900 text-lg">Cuenta para realizar tus pagos</h3>
+          <p className="text-sm text-slate-500 mt-1">
+            Escanea el código QR o copia el número de cuenta para realizar el pago de tus cuotas.
+          </p>
+        </div>
+
+        {/* === QR de la cuenta === */}
+        {cuenta.qrImagen ? (
+          <div className="flex flex-col items-center mb-4">
+            <div className="bg-white p-3 rounded-xl shadow-sm border border-slate-200">
+              <img
+                src={cuenta.qrImagen}
+                alt={`QR cuenta ${cuenta.codigo}`}
+                className="w-48 h-48 object-contain"
+              />
+            </div>
+            <p className="text-xs text-slate-500 mt-2 text-center max-w-xs">
+              Escanea este código con la app de tu banco para realizar el pago de forma rápida.
+            </p>
+          </div>
+        ) : (
+          <div className="flex flex-col items-center mb-4 p-6 bg-slate-50 rounded-lg border border-slate-200">
+            <QrCode className="w-12 h-12 text-slate-400 mb-2" />
+            <p className="text-sm text-slate-500 text-center">
+              Esta cuenta aún no tiene un código QR cargado. Usa los datos de la cuenta para realizar tu pago.
+            </p>
+          </div>
+        )}
+
+        {/* === Datos de la cuenta === */}
+        <div className="bg-slate-50 rounded-lg p-4 space-y-3">
+          <div className="grid grid-cols-2 gap-3 text-sm">
+            <div>
+              <p className="text-xs text-slate-500">Banco</p>
+              <p className="font-semibold text-slate-900">{cuenta.banco}</p>
+            </div>
+            <div>
+              <p className="text-xs text-slate-500">Tipo de cuenta</p>
+              <p className="font-semibold text-slate-900">{cuenta.tipoCuenta}</p>
+            </div>
+            <div className="col-span-2">
+              <p className="text-xs text-slate-500">Número de cuenta</p>
+              <div className="flex items-center gap-2">
+                <p className="font-mono font-semibold text-slate-900 text-lg">{cuenta.numeroCuenta}</p>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="h-8 w-8 p-0"
+                  onClick={copiarNumero}
+                  title="Copiar número"
+                >
+                  {copiado ? <Check className="w-4 h-4 text-green-600" /> : <Copy className="w-4 h-4" />}
+                </Button>
+              </div>
+            </div>
+            <div className="col-span-2">
+              <p className="text-xs text-slate-500">Titular</p>
+              <p className="font-semibold text-slate-900">{cuenta.titular}</p>
+            </div>
+          </div>
+        </div>
+
+        {/* === Aviso importante === */}
+        <div className="mt-4 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+          <p className="text-xs text-amber-800">
+            <strong>Importante:</strong> Realiza el pago solo a la cuenta asignada a tu categoría. Si tienes dudas sobre qué cuenta usar, contacta al administrador. Conserva el comprobante de pago como respaldo.
+          </p>
+        </div>
+      </Card>
     </div>
   )
 }

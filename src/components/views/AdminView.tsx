@@ -44,6 +44,9 @@ import {
   BarChart3,
   Calculator,
   Download,
+  QrCode,
+  Upload,
+  Trash2,
 } from 'lucide-react'
 import { BotIcons } from '@/components/views/BotIcons'
 import { ReportesUnificadoView } from '@/components/views/ReportesUnificadoView'
@@ -77,7 +80,8 @@ export function AdminView({ onChanged }: { onChanged: () => void }) {
       <BotIcons modulo="admin" />
 
       <Tabs value={tab} onValueChange={setTab}>
-        <TabsList className="grid grid-cols-3 md:grid-cols-6 w-full">
+        {/* FIX MOBILE (2026-08-05): TabsList horizontal con scroll en móvil, grid en desktop */}
+        <TabsList className="flex overflow-x-auto whitespace-nowrap md:grid md:grid-cols-6 w-full no-scrollbar">
           <TabsTrigger value="reportes">
             <BarChart3 className="w-4 h-4 mr-1.5" />
             <span className="hidden sm:inline">Reportes</span>
@@ -135,6 +139,8 @@ function CuentasPanel({ onChanged }: { onChanged: () => void }) {
   const [editando, setEditando] = useState<any | null>(null)
   const { toast } = useToast()
 
+  // === Estado del formulario ===
+  // qrImagen: data URL (base64) de la imagen QR cargada, o null si no hay
   const [form, setForm] = useState({
     codigo: '',
     nombre: '',
@@ -142,7 +148,10 @@ function CuentasPanel({ onChanged }: { onChanged: () => void }) {
     tipoCuenta: 'AHORROS',
     numeroCuenta: '',
     titular: '',
+    qrImagen: '' as string,
   })
+  // Subiendo QR (mientras se lee el archivo)
+  const [subiendoQr, setSubiendoQr] = useState(false)
 
   useEffect(() => {
     cargar()
@@ -158,7 +167,15 @@ function CuentasPanel({ onChanged }: { onChanged: () => void }) {
 
   const abrirNuevo = () => {
     setEditando(null)
-    setForm({ codigo: '', nombre: '', banco: '', tipoCuenta: 'AHORROS', numeroCuenta: '', titular: '' })
+    setForm({
+      codigo: '',
+      nombre: '',
+      banco: '',
+      tipoCuenta: 'AHORROS',
+      numeroCuenta: '',
+      titular: '',
+      qrImagen: '',
+    })
     setModal(true)
   }
 
@@ -171,8 +188,52 @@ function CuentasPanel({ onChanged }: { onChanged: () => void }) {
       tipoCuenta: c.tipoCuenta,
       numeroCuenta: c.numeroCuenta,
       titular: c.titular,
+      qrImagen: c.qrImagen || '',
     })
     setModal(true)
+  }
+
+  // === Cargar imagen QR desde el input file ===
+  // Convierte el archivo a data URL (base64) y lo guarda en form.qrImagen
+  const handleQrUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    // Validar tipo
+    if (!file.type.startsWith('image/')) {
+      toast({ title: 'Error', description: 'El archivo debe ser una imagen (PNG, JPG, etc.)', variant: 'destructive' })
+      return
+    }
+
+    // Validar tamaño (máximo 5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      toast({ title: 'Error', description: 'La imagen es demasiado grande (máximo 5MB)', variant: 'destructive' })
+      return
+    }
+
+    setSubiendoQr(true)
+    try {
+      const reader = new FileReader()
+      reader.onload = () => {
+        const result = reader.result as string
+        setForm((prev) => ({ ...prev, qrImagen: result }))
+        setSubiendoQr(false)
+        toast({ title: 'QR cargado', description: 'La imagen se ha cargado correctamente. Guarda los cambios para confirmar.' })
+      }
+      reader.onerror = () => {
+        setSubiendoQr(false)
+        toast({ title: 'Error', description: 'No se pudo leer el archivo', variant: 'destructive' })
+      }
+      reader.readAsDataURL(file)
+    } catch (e: any) {
+      setSubiendoQr(false)
+      toast({ title: 'Error', description: e.message, variant: 'destructive' })
+    }
+  }
+
+  const limpiarQr = () => {
+    setForm((prev) => ({ ...prev, qrImagen: '' }))
+    toast({ title: 'QR eliminado', description: 'Guarda los cambios para confirmar.' })
   }
 
   const guardar = async (e: React.FormEvent) => {
@@ -221,7 +282,8 @@ function CuentasPanel({ onChanged }: { onChanged: () => void }) {
               <TableHead>Tipo</TableHead>
               <TableHead>N° Cuenta</TableHead>
               <TableHead>Titular</TableHead>
-              <TableHead>Pagos</TableHead>
+              <TableHead className="text-center">QR</TableHead>
+              <TableHead className="text-center">Pagos</TableHead>
               <TableHead>Estado</TableHead>
               <TableHead></TableHead>
             </TableRow>
@@ -229,13 +291,13 @@ function CuentasPanel({ onChanged }: { onChanged: () => void }) {
           <TableBody>
             {loading ? (
               <TableRow>
-                <TableCell colSpan={9} className="text-center py-6 text-muted-foreground">
+                <TableCell colSpan={10} className="text-center py-6 text-muted-foreground">
                   Cargando...
                 </TableCell>
               </TableRow>
             ) : cuentas.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={9} className="text-center py-6 text-muted-foreground">
+                <TableCell colSpan={10} className="text-center py-6 text-muted-foreground">
                   No hay cuentas registradas
                 </TableCell>
               </TableRow>
@@ -250,6 +312,20 @@ function CuentasPanel({ onChanged }: { onChanged: () => void }) {
                   </TableCell>
                   <TableCell className="font-mono text-xs">{c.numeroCuenta}</TableCell>
                   <TableCell className="text-sm">{c.titular}</TableCell>
+                  <TableCell className="text-center">
+                    {c.qrImagen ? (
+                      <div className="flex items-center justify-center">
+                        <img
+                          src={c.qrImagen}
+                          alt={`QR ${c.codigo}`}
+                          className="w-10 h-10 object-contain rounded border border-border"
+                          title="QR cargado"
+                        />
+                      </div>
+                    ) : (
+                      <span className="text-xs text-muted-foreground">Sin QR</span>
+                    )}
+                  </TableCell>
                   <TableCell className="text-center">{c._count.pagos}</TableCell>
                   <TableCell>
                     <Badge variant={c.activa ? 'default' : 'secondary'}>
@@ -333,6 +409,82 @@ function CuentasPanel({ onChanged }: { onChanged: () => void }) {
                 />
               </div>
             </div>
+
+            {/* === SECCIÓN QR DE LA CUENTA === */}
+            <div className="space-y-2 p-3 rounded-md bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800">
+              <Label className="text-sm font-medium flex items-center gap-1.5">
+                <QrCode className="w-3.5 h-3.5 text-blue-700 dark:text-blue-300" />
+                Código QR de la cuenta
+              </Label>
+              <p className="text-xs text-blue-800 dark:text-blue-200">
+                Carga una imagen QR que los clientes podrán escanear desde el portal del cliente al momento de realizar pagos.
+              </p>
+
+              {form.qrImagen ? (
+                <div className="flex items-center gap-3">
+                  <img
+                    src={form.qrImagen}
+                    alt="QR preview"
+                    className="w-24 h-24 object-contain rounded border border-blue-300 dark:border-blue-700 bg-white p-1"
+                  />
+                  <div className="flex-1 space-y-2">
+                    <p className="text-xs text-green-700 dark:text-green-300 font-medium">
+                      ✓ QR cargado correctamente
+                    </p>
+                    <div className="flex gap-2">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        onClick={() => document.getElementById('qr-upload-input')?.click()}
+                        disabled={subiendoQr}
+                      >
+                        <Upload className="w-3 h-3 mr-1" />
+                        Cambiar QR
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                        onClick={limpiarQr}
+                        disabled={subiendoQr}
+                      >
+                        <Trash2 className="w-3 h-3 mr-1" />
+                        Eliminar
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex flex-col items-center justify-center gap-2 py-4 border-2 border-dashed border-blue-300 dark:border-blue-700 rounded-md">
+                  <QrCode className="w-8 h-8 text-blue-400" />
+                  <p className="text-xs text-muted-foreground text-center">
+                    {subiendoQr ? 'Cargando...' : 'Arrastra una imagen o haz clic para subir un QR'}
+                  </p>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() => document.getElementById('qr-upload-input')?.click()}
+                    disabled={subiendoQr}
+                  >
+                    <Upload className="w-3 h-3 mr-1" />
+                    Subir QR
+                  </Button>
+                </div>
+              )}
+
+              {/* Input file oculto — se activa con los botones de arriba */}
+              <input
+                id="qr-upload-input"
+                type="file"
+                accept="image/*"
+                onChange={handleQrUpload}
+                className="hidden"
+              />
+            </div>
+
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setModal(false)}>
                 Cancelar

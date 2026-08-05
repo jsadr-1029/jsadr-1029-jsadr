@@ -90,7 +90,29 @@ export async function POST(req: NextRequest) {
       codeudorTelefono,
       codeudorEmail,
       codeudorDireccion,
+      // === Fecha del préstamo (fecha asignada) ===
+      // Permite registrar el préstamo con una fecha distinta a la actual del sistema.
+      // Todos los documentos generados (pagaré, carta, tabla de amortización) y el
+      // código del préstamo usarán esta fecha como base.
+      fechaPrestamo,
     } = body
+
+    // === Resolver la fecha del préstamo ===
+    // Si no se proporciona fechaPrestamo, se usa la fecha actual del sistema (default).
+    // Si se proporciona, se parsea como fecha local (sin zona horaria) y se usa para:
+    //   - fechaSolicitud (reemplaza el @default(now()) de Prisma)
+    //   - fechaDesembolso
+    //   - fechaStr del código del préstamo
+    //   - fechaVencimiento de cada cuota en la tabla de amortización
+    let fechaBasePrestamo: Date = new Date()
+    if (fechaPrestamo) {
+      // fechaPrestamo viene en formato YYYY-MM-DD desde el input type="date".
+      // Lo parseamos como mediodía UTC para evitar que cambie de día por zona horaria.
+      const [yyyy, mm, dd] = fechaPrestamo.split('-').map(Number)
+      if (yyyy && mm && dd) {
+        fechaBasePrestamo = new Date(Date.UTC(yyyy, mm - 1, dd, 12, 0, 0))
+      }
+    }
 
     const esCuotaPersonalizada = modalidad === 'CUOTA_PERSONALIZADA'
     const esTasaFija = modalidad === 'TASA_FIJA'
@@ -199,7 +221,9 @@ export async function POST(req: NextRequest) {
         saldoCapital = Math.round((saldoCapital - capital) * 100) / 100
         if (saldoCapital < 0) saldoCapital = 0
 
-        const fechaVenc = new Date()
+        // === Usar fechaBasePrestamo como fecha inicial de la cuota ===
+        // (antes era new Date() que siempre usaba la fecha actual del sistema)
+        const fechaVenc = new Date(fechaBasePrestamo.getTime())
         if (frecuencia === 'MENSUAL') fechaVenc.setMonth(fechaVenc.getMonth() + i)
         else if (frecuencia === 'QUINCENAL') fechaVenc.setDate(fechaVenc.getDate() + 15 * i)
         else if (frecuencia === 'SEMANAL') fechaVenc.setDate(fechaVenc.getDate() + 7 * i)
@@ -236,6 +260,9 @@ export async function POST(req: NextRequest) {
         tasaMensualFija: tasaMen,
         numeroCuotas: nCuotas,
         frecuencia,
+        // === Pasar la fecha base del préstamo para que la tabla de amortización
+        //     se calcule desde la fecha asignada (no la fecha actual del sistema). ===
+        fechaDesembolso: fechaBasePrestamo,
       })
       cuotaFinal = calculo.montoCuota
       nCuotasFinal = calculo.numeroCuotas
@@ -250,6 +277,9 @@ export async function POST(req: NextRequest) {
         tasaMoraAnual: tasaMoraFinal,
         plazoMeses: plazoFinal,
         frecuencia,
+        // === Pasar la fecha base del préstamo para que la tabla de amortización
+        //     se calcule desde la fecha asignada (no la fecha actual del sistema). ===
+        fechaDesembolso: fechaBasePrestamo,
       })
       cuotaFinal = calculo.montoCuota
       nCuotasFinal = calculo.numeroCuotas
@@ -268,7 +298,21 @@ export async function POST(req: NextRequest) {
     //   - NUMPRESTAMO: número del préstamo activo del cliente (01, 02, 03, etc.)
     // ============================================================================
 
-    const fechaCodigo = new Date()
+    // === Generar código del préstamo con estructura completa ===
+    // Formato: INICIALES-CC-CEDULA-FECHA-NUMPRESTAMO
+    // Ej: JG-CC-1020509876-20260725-01 (Carlos Gómez, primer préstamo del día)
+    // Ej: JG-CC-1020509876-20260725-02 (Carlos Gómez, segundo préstamo del día)
+    //
+    // Esto permite identificar rápidamente:
+    //   - INICIALES: nombre y apellido del cliente
+    //   - CC: tipo de documento (cédula de ciudadanía)
+    //   - CEDULA: número de cédula
+    //   - FECHA: fecha de creación (YYYYMMDD) — usa fechaBasePrestamo si se proporciona
+    //   - NUMPRESTAMO: número del préstamo activo del cliente (01, 02, 03, etc.)
+    // ============================================================================
+
+    // Usar la fecha del préstamo (asignada) si se proporciona, si no, la fecha actual.
+    const fechaCodigo = fechaBasePrestamo
     const fechaStr = `${fechaCodigo.getFullYear()}${(fechaCodigo.getMonth() + 1).toString().padStart(2, '0')}${fechaCodigo.getDate().toString().padStart(2, '0')}`
 
     // Generar iniciales del nombre (primeras letras de cada palabra, máximo 3)
@@ -329,6 +373,12 @@ export async function POST(req: NextRequest) {
           tasaAplicada: calculo.tasaAplicada,
           moraCompuestaDiaria: true,
           estado: aprobarYEnviarTyC ? 'PENDIENTE_ACEPTACION' : 'SOLICITUD',
+          // === Fechas basadas en fechaBasePrestamo (fecha asignada) ===
+          // fechaSolicitud reemplaza el @default(now()) de Prisma.
+          // fechaDesembolso se setea si el préstamo se aprueba y envía TyC directamente.
+          fechaSolicitud: fechaBasePrestamo,
+          fechaDesembolso: aprobarYEnviarTyC ? fechaBasePrestamo : null,
+          fechaVencimiento: calculo.fechaVencimiento || null,
           tycEnviado: !!aprobarYEnviarTyC,
           tycToken,
           requiereDocumentos: requiereDocumentos ?? true,

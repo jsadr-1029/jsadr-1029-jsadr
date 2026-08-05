@@ -281,6 +281,35 @@ export default function Home() {
             </button>
           )}
 
+          {/* === BOTÓN "REGRESAR AL MENÚ" (visible solo en móvil) ===
+              Se agrega (2026-08-05) porque en móvil el usuario necesitaba una forma
+              clara de regresar al menú anterior / cambiar de módulo desde cualquier
+              vista. El botón hamburguesa (arriba a la izquierda) abre el drawer;
+              este botón adicional muestra una etiqueta "← Menú" para mayor claridad
+              y va al dashboard si ya está en el dashboard (funciona como back). */}
+          {!esPortalCliente && !forzarMobileLayout && !forzarDesktop && (
+            <button
+              type="button"
+              onClick={() => {
+                if (view === 'dashboard') {
+                  // Si ya está en dashboard, abrir el drawer para cambiar de módulo
+                  setMobileSidebarOpen(true)
+                } else {
+                  // Si está en otro módulo, regresar al dashboard (menu anterior)
+                  setView('dashboard')
+                }
+              }}
+              aria-label="Regresar al menú"
+              className="lg:hidden fixed top-3 right-3 z-[60] flex items-center gap-1.5 px-3 h-11 rounded-xl glass-card border border-white/15 shadow-lg hover:border-white/30 transition-all text-white text-xs font-semibold"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4">
+                <line x1="19" y1="12" x2="5" y2="12" />
+                <polyline points="12 19 5 12 12 5" />
+              </svg>
+              {view === 'dashboard' ? 'Menú' : 'Volver'}
+            </button>
+          )}
+
           {/* Botón de vista responsiva — solo para ADMIN/GESTOR/CONSULTOR */}
           {!esPortalCliente && <ResponsiveViewToggle />}
 

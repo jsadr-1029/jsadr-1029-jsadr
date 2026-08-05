@@ -258,6 +258,30 @@ function SidebarContent({ menuItems, view, expanded, toggleGroup, onChange, onCl
       </div>
 
       <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
+        {/* === BOTÓN "REGRESAR AL INICIO" ===
+            Acceso rápido al dashboard desde el drawer móvil.
+            Solo visible en móvil (lg:hidden) ya que en desktop el dashboard
+            ya está como primer item del menú. */}
+        {onClose && (
+          <button
+            type="button"
+            onClick={() => {
+              onChange('dashboard' as ViewKey)
+              onClose()
+            }}
+            className="lg:hidden w-full mb-2 flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all text-left text-white bg-white/5 hover:bg-white/10 border border-white/10"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4 shrink-0">
+              <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+              <polyline points="9 22 9 12 15 12 15 22" />
+            </svg>
+            <div className="flex-1 min-w-0">
+              <div className="truncate">Regresar al Inicio</div>
+              <div className="text-[10px] text-sidebar-foreground/50">Volver al dashboard</div>
+            </div>
+          </button>
+        )}
+
         {menuItems.map((item) => {
           // Si no tiene hijos → item plano original
           if (!item.children || item.children.length === 0) {
