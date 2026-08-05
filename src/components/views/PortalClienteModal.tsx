@@ -76,6 +76,12 @@ import {
   Wallet,
   History,
   Plus,
+  Landmark,
+  AlarmClockCheck,
+  SlidersHorizontal,
+  FileSignature,
+  MessagesSquare,
+  Clock3,
 } from 'lucide-react'
 import { CentroComunicacionesPortal } from '@/components/views/CentroComunicacionesPortal'
 
@@ -605,55 +611,55 @@ export function PortalClienteModal({
   const notificaciones = data.notificaciones || []
   const notifStats = data.notificacionesStats || { total: 0, noLeidas: 0, pendientes: 0 }
 
-  // Configuración del Hub (6 items alrededor del logo)
+  // Configuración del Hub (6 items alrededor del logo) — Iconos premium
   const hubItems: HubItemConfig[] = [
     {
       id: 'prestamos',
       label: 'Créditos',
-      icon: FileText,
+      icon: Landmark,
       color: 'text-indigo-300',
-      gradient: 'from-indigo-500 to-violet-600',
+      gradient: 'from-indigo-500 via-indigo-600 to-violet-700',
       position: { x: 0, y: -110 },
       badge: prestamos.filter(p => p.estado === 'PENDIENTE_ACEPTACION').length || undefined,
     },
     {
       id: 'proximos',
       label: 'Próximos',
-      icon: CalendarClock,
+      icon: AlarmClockCheck,
       color: 'text-cyan-300',
-      gradient: 'from-cyan-500 to-blue-600',
+      gradient: 'from-cyan-400 via-cyan-600 to-blue-700',
       position: { x: 95, y: -55 },
     },
     {
       id: 'simulador',
       label: 'Simulador',
-      icon: Calculator,
+      icon: SlidersHorizontal,
       color: 'text-violet-300',
-      gradient: 'from-violet-500 to-purple-600',
+      gradient: 'from-violet-400 via-violet-600 to-purple-700',
       position: { x: 95, y: 55 },
     },
     {
       id: 'solicitudes',
       label: 'Solicitudes',
-      icon: ClipboardList,
+      icon: FileSignature,
       color: 'text-amber-300',
-      gradient: 'from-amber-500 to-orange-600',
+      gradient: 'from-amber-400 via-amber-600 to-orange-700',
       position: { x: 0, y: 110 },
     },
     {
       id: 'comunicaciones',
       label: 'Chat',
-      icon: MessageSquare,
+      icon: MessagesSquare,
       color: 'text-emerald-300',
-      gradient: 'from-emerald-500 to-teal-600',
+      gradient: 'from-emerald-400 via-emerald-600 to-teal-700',
       position: { x: -95, y: 55 },
     },
     {
       id: 'historial',
       label: 'Historial',
-      icon: History,
+      icon: Clock3,
       color: 'text-fuchsia-300',
-      gradient: 'from-fuchsia-500 to-pink-600',
+      gradient: 'from-fuchsia-400 via-fuchsia-600 to-pink-700',
       position: { x: -95, y: -55 },
     },
   ]
@@ -1285,8 +1291,8 @@ function HubView({
           </div>
         </div>
 
-        {/* Items del hub alrededor */}
-        {hubItems.map((item) => {
+        {/* Items del hub alrededor — iconos premium con halo, profundidad y shimmer */}
+        {hubItems.map((item, idx) => {
           const Icon = item.icon
           return (
             <button
@@ -1296,18 +1302,42 @@ function HubView({
               style={{
                 transform: `translate(-50%, -50%) translate(${item.position.x}px, ${item.position.y}px)`,
               }}
+              aria-label={item.label}
             >
-              <div className="relative">
-                <div className={`w-14 h-14 sm:w-16 sm:h-16 rounded-2xl bg-gradient-to-br ${item.gradient} flex items-center justify-center shadow-lg`}>
-                  <Icon className="w-6 h-6 sm:w-7 sm:h-7 text-white" />
+              <div
+                className="hub-tile-wrap"
+                style={{ animationDelay: `${idx * 0.18}s` }}
+              >
+                {/* Halo de resplandor detrás del icono */}
+                <div className={`hub-halo bg-gradient-to-br ${item.gradient}`}></div>
+
+                {/* Anillo decorativo translúcido */}
+                <div className={`hub-ring-decor bg-gradient-to-br ${item.gradient}`}></div>
+
+                {/* Tarjeta principal del icono */}
+                <div className={`hub-tile bg-gradient-to-br ${item.gradient}`}>
+                  {/* Reflejo superior-izquierdo (luz) */}
+                  <div className="hub-tile-highlight"></div>
+                  {/* Patrón sutil de profundidad */}
+                  <div className="hub-tile-pattern"></div>
+                  {/* Icono principal */}
+                  <Icon className="w-7 h-7 sm:w-8 sm:h-8 text-white relative z-10" strokeWidth={2.2} />
+                  {/* Brillo deslizante */}
+                  <div className="hub-tile-shimmer"></div>
                 </div>
+
+                {/* Badge de notificación */}
                 {item.badge && item.badge > 0 && (
-                  <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] rounded-full min-w-[18px] h-[18px] px-1 flex items-center justify-center font-bold pulse-glow border-2 border-background">
+                  <span className="hub-badge">
                     {item.badge}
                   </span>
                 )}
+
+                {/* Punto de estado inferior (acento de color) */}
+                <span className={`hub-status-dot bg-gradient-to-br ${item.gradient}`}></span>
               </div>
-              <span className={`text-[10px] sm:text-xs font-semibold ${item.color}`}>
+
+              <span className={`text-[11px] sm:text-xs font-bold ${item.color} hub-label`}>
                 {item.label}
               </span>
             </button>
