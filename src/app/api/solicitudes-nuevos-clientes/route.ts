@@ -1,6 +1,6 @@
 // =====================================================
 // /api/solicitudes-nuevos-clientes — Solicitudes de nuevos clientes
-// POST: crear solicitud (público, sin auth)
+// POST: crear solicitud (público, sin auth) — incluye fotos cédula + selfie
 // GET: listar solicitudes (GESTOR+)
 // =====================================================
 
@@ -11,13 +11,23 @@ import { rateLimit, getClientInfo, registrarAuditLog } from '@/lib/security'
 import { sanitizeError } from '@/lib/error-handler'
 import { z } from 'zod'
 
+// Validador para imágenes base64 (data URL)
+const fotoSchema = z
+  .string()
+  .min(50, 'Foto demasiado pequeña')
+  .max(7_000_000, 'Foto demasiado grande (máx ~5MB)')
+  .refine(
+    (v) => v.startsWith('data:image/jpeg') || v.startsWith('data:image/png') || v.startsWith('data:image/webp'),
+    'Formato no válido. Solo JPG, PNG o WEBP.'
+  )
+
 const schema = z.object({
-  nombre: z.string().min(2, 'Nombre requerido'),
-  apellido: z.string().min(2, 'Apellido requerido'),
+  nombre: z.string().min(2, 'Nombre requerido').max(80),
+  apellido: z.string().min(2, 'Apellido requerido').max(80),
   tipoDocumento: z.enum(['CC', 'CE', 'TI']).default('CC'),
-  cedula: z.string().min(5, 'Documento requerido'),
+  cedula: z.string().min(5, 'Documento requerido').max(20),
   fechaNacimiento: z.string().optional(),
-  telefono: z.string().min(7, 'Teléfono requerido'),
+  telefono: z.string().min(7, 'Teléfono requerido').max(20),
   email: z.string().email().optional().or(z.literal('')),
   ciudad: z.string().optional(),
   municipio: z.string().optional(),
@@ -33,9 +43,18 @@ const schema = z.object({
   referidoPorParentesco: z.string().optional(),
   aceptaTyC: z.boolean(),
   aceptaTratamientoDatos: z.boolean(),
+  aceptaConsultaCentrales: z.boolean().default(false),
+  aceptaReportarCentral: z.boolean().default(false),
+  // Fotos obligatorias
+  fotoCedulaFrente: fotoSchema,
+  fotoCedulaReverso: fotoSchema,
+  fotoSelfie: fotoSchema,
+  fotoCedulaFrenteNombre: z.string().optional(),
+  fotoCedulaReversoNombre: z.string().optional(),
+  fotoSelfieNombre: z.string().optional(),
 })
 
-// === GET — Listar (GESTOR+) ===
+// === GET — Listar (GESTOR+) — SIN fotos en respuesta para no saturar ===
 export async function GET(req: NextRequest) {
   try {
     const auth = requireRole(req, ['ADMIN', 'GESTOR', 'CONSULTOR'])
@@ -43,7 +62,7 @@ export async function GET(req: NextRequest) {
 
     const { searchParams } = new URL(req.url)
     const estado = searchParams.get('estado')
-    
+
     const where: any = {}
     if (estado && estado !== 'all') where.estado = estado
 
@@ -51,6 +70,31 @@ export async function GET(req: NextRequest) {
       where,
       orderBy: { createdAt: 'desc' },
       take: 100,
+      select: {
+        id: true,
+        codigo: true,
+        nombre: true,
+        apellido: true,
+        tipoDocumento: true,
+        cedula: true,
+        telefono: true,
+        email: true,
+        ciudad: true,
+        municipio: true,
+        ocupacion: true,
+        ingresoMensual: true,
+        valorSolicitado: true,
+        plazoDeseado: true,
+        destinoCredito: true,
+        estado: true,
+        observaciones: true,
+        createdAt: true,
+        fechaRevision: true,
+        revisadoPorNombre: true,
+        clienteCreadoId: true,
+        clienteCreadoCodigo: true,
+        // NO incluir fotoCedulaFrente/Reverso/Selfie (pesan ~5MB c/u)
+      },
     })
 
     const resumen = {
@@ -80,7 +124,25 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    const body = await req.json()
+    // Aumentar límite de body para fotos base64 (hasta ~25MB)
+    const rawBody = await req.text()
+    if (rawBody.length > 25_000_000) {
+      return NextResponse.json(
+        { success: false, error: 'Payload demasiado grande (máx 25MB)' },
+        { status: 413 }
+      )
+    }
+
+    let body: unknown
+    try {
+      body = JSON.parse(rawBody)
+    } catch {
+      return NextResponse.json(
+        { success: false, error: 'JSON inválido' },
+        { status: 400 }
+      )
+    }
+
     const validacion = schema.safeParse(body)
     if (!validacion.success) {
       return NextResponse.json(
@@ -102,13 +164,25 @@ export async function POST(req: NextRequest) {
     // Generar código único
     const codigo = `SNC-${Date.now().toString(36).toUpperCase()}`
 
-    // Verificar que no exista ya una solicitud con la misma cédula pendiente
+    // Verificar que no exista ya una solicitud pendiente con esa cédula
     const existente = await db.solicitudNuevoCliente.findFirst({
       where: { cedula: data.cedula, estado: 'PENDIENTE' },
     })
     if (existente) {
       return NextResponse.json(
         { success: false, error: 'Ya tienes una solicitud pendiente. Nos pondremos en contacto pronto.' },
+        { status: 400 }
+      )
+    }
+
+    // Verificar que la cédula no esté ya en Cliente (no permitir duplicados)
+    const clienteExistente = await db.cliente.findFirst({
+      where: { cedula: data.cedula },
+      select: { id: true, nombre: true },
+    })
+    if (clienteExistente) {
+      return NextResponse.json(
+        { success: false, error: 'Ya estás registrado como cliente. Inicia sesión en el portal.' },
         { status: 400 }
       )
     }
@@ -137,9 +211,27 @@ export async function POST(req: NextRequest) {
         referidoPorParentesco: data.referidoPorParentesco || null,
         aceptaTyC: data.aceptaTyC,
         aceptaTratamientoDatos: data.aceptaTratamientoDatos,
+        aceptaConsultaCentrales: data.aceptaConsultaCentrales,
+        aceptaReportarCentral: data.aceptaReportarCentral,
         fechaAceptacion: new Date(),
+        // Fotos
+        fotoCedulaFrente: data.fotoCedulaFrente,
+        fotoCedulaReverso: data.fotoCedulaReverso,
+        fotoSelfie: data.fotoSelfie,
+        fotoCedulaFrenteNombre: data.fotoCedulaFrenteNombre || 'cedula-frente.jpg',
+        fotoCedulaReversoNombre: data.fotoCedulaReversoNombre || 'cedula-reverso.jpg',
+        fotoSelfieNombre: data.fotoSelfieNombre || 'selfie.jpg',
         ipOrigen: clientInfo.ip,
         userAgent: clientInfo.userAgent,
+      },
+      select: {
+        id: true,
+        codigo: true,
+        nombre: true,
+        apellido: true,
+        cedula: true,
+        estado: true,
+        createdAt: true,
       },
     })
 

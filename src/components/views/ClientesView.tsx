@@ -49,6 +49,7 @@ import {
   Percent,
   AlertCircle,
 } from 'lucide-react'
+import { SolicitudesPendientesPanel } from './SolicitudesPendientesPanel'
 
 interface ReferidorInfo {
   id: string
@@ -403,6 +404,13 @@ export function ClientesView({ onChanged }: { onChanged: () => void }) {
             Nuevo Cliente
           </Button>
         }
+      />
+
+      {/* Solicitudes de registro pendientes (desde el formulario público /register) */}
+      <SolicitudesPendientesPanel
+        categorias={categorias}
+        cuentas={cuentas}
+        onClienteCreado={cargar}
       />
 
       {/* Tarjetas de estadísticas */}

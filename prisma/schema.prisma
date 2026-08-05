@@ -1611,21 +1611,37 @@ model SolicitudNuevoCliente {
   // Aceptaciones
   aceptaTyC         Boolean  @default(false)
   aceptaTratamientoDatos Boolean @default(false)
+  aceptaConsultaCentrales  Boolean @default(false)
+  aceptaReportarCentral    Boolean @default(false)
   fechaAceptacion    DateTime?
-  
+
+  // Documentos (fotos en base64 data URL)
+  fotoCedulaFrente       String?  // data:image/jpeg;base64,...
+  fotoCedulaReverso      String?
+  fotoSelfie             String?  // selfie sosteniendo la cédula
+  fotoCedulaFrenteNombre String?
+  fotoCedulaReversoNombre String?
+  fotoSelfieNombre       String?
+
   // Estado
   estado            String   @default("PENDIENTE") // PENDIENTE | REVISADA | APROBADA | RECHAZADA | CONVERTIDA
   observaciones     String?
-  
+  revisadoPorId     String?
+  revisadoPorNombre String?
+  fechaRevision     DateTime?
+  clienteCreadoId   String?  // id del Cliente creado al convertir
+  clienteCreadoCodigo String? // código generado
+
   // Trazabilidad
   ipOrigen          String?
   userAgent         String?
-  
+
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
-  
+
   @@index([estado])
   @@index([cedula])
+  @@index([email])
 }
 
 // -----------------------------------------------------

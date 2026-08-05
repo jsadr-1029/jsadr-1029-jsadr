@@ -22,8 +22,10 @@ import {
   AlertCircle,
   X,
   Mail,
+  UserPlus,
 } from 'lucide-react'
 import { login, isAuthenticated, setTokens, setUserData, getUserData } from '@/lib/api-client'
+import Link from 'next/link'
 
 // =====================================================
 // Login Unificado v5.0 — Jsadr · Jo*** Se*** Al*** D** R**
@@ -539,6 +541,26 @@ export default function LoginPage() {
                   <span className="text-[10px] text-slate-500">Recuperación por correo</span>
                 </div>
               </form>
+
+              {/* Línea divisora */}
+              <div className="mt-5 mb-4 flex items-center gap-3">
+                <span className="h-px flex-1 bg-slate-700/60" />
+                <span className="text-[10px] uppercase tracking-wider text-slate-500">¿No tienes cuenta?</span>
+                <span className="h-px flex-1 bg-slate-700/60" />
+              </div>
+
+              {/* CTA Registro nuevo cliente */}
+              <Link
+                href="/register"
+                className="group flex items-center justify-center gap-2 w-full h-11 rounded-xl border border-emerald-500/40 bg-emerald-500/10 hover:bg-emerald-500/20 hover:border-emerald-500/60 text-emerald-200 text-sm font-medium transition-all"
+              >
+                <UserPlus className="w-4 h-4" />
+                Regístrate como nuevo cliente
+                <ArrowRight className="w-3.5 h-3.5 opacity-60 group-hover:translate-x-0.5 transition-transform" />
+              </Link>
+              <p className="text-center text-[10px] text-slate-500 mt-2">
+                Solicita tu crédito en 5 minutos · Validación de identidad con cédula y selfie
+              </p>
 
             </div>
           </div>
