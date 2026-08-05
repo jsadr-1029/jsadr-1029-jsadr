@@ -80,6 +80,7 @@ export default function Home() {
   const [portalCedula, setPortalCedula] = useState<string | null>(null)
   const [portalToken, setPortalToken] = useState<string | null>(null)
   const [refreshKey, setRefreshKey] = useState(0)
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false)
   const { toast } = useToast()
   const router = useRouter()
   // Hook reactivo: cuando el rol cambia (switch-user, refresh, login),
@@ -140,17 +141,26 @@ export default function Home() {
     : puedeAcceder(reactiveRol, view)
 
   // Detectar query params para portal cliente (?tyc=token o ?pay=codigo o ?portal=cliente)
+  // y para redirección post-login (?view=portal-admin para P_jsadr)
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
     const tyc = params.get('tyc')
     const pay = params.get('pay')
     const portalCliente = params.get('portal')
+    const viewParam = params.get('view')
     if (tyc || pay) {
       // Mostrar portal cliente con el token/pendiente
       setView('portal')
     } else if (portalCliente === 'cliente') {
       // Login desde el perfil Cliente: llevar directo a la vista Portal
       setView('portal')
+    } else if (viewParam) {
+      // Redirección post-login (ej: ?view=portal-admin para P_jsadr)
+      // Solo aplicar si la vista está permitida para el rol del usuario.
+      const u = getUserData()
+      if (u && puedeAcceder(u.rol, viewParam)) {
+        setView(viewParam as ViewKey)
+      }
     }
   }, [])
 
@@ -228,7 +238,13 @@ export default function Home() {
     >
       {/* Sidebar — solo se renderiza cuando corresponde según el modo */}
       {!esPortalCliente && !forzarMobileLayout && (
-        <Sidebar view={view} onChange={setView} forceVisible={forzarDesktop} />
+        <Sidebar
+          view={view}
+          onChange={setView}
+          forceVisible={forzarDesktop}
+          mobileOpen={mobileSidebarOpen}
+          onMobileOpenChange={setMobileSidebarOpen}
+        />
       )}
 
       {/* Contenedor principal — se centra y limita el ancho en modo móvil/tablet */}
@@ -247,6 +263,22 @@ export default function Home() {
             <div className="fixed top-3 left-1/2 -translate-x-1/2 z-40 pointer-events-none">
               <RelojColombia />
             </div>
+          )}
+
+          {/* Botón de menú móvil (hamburguesa) — abre el Sidebar como drawer */}
+          {!esPortalCliente && !forzarMobileLayout && !forzarDesktop && (
+            <button
+              type="button"
+              onClick={() => setMobileSidebarOpen(true)}
+              aria-label="Abrir menú de módulos"
+              className="lg:hidden fixed top-3 left-3 z-[60] flex items-center justify-center w-11 h-11 rounded-xl glass-card border border-white/15 shadow-lg hover:border-white/30 transition-all"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5 text-white">
+                <line x1="3" y1="6" x2="21" y2="6" />
+                <line x1="3" y1="12" x2="21" y2="12" />
+                <line x1="3" y1="18" x2="21" y2="18" />
+              </svg>
+            </button>
           )}
 
           {/* Botón de vista responsiva — solo para ADMIN/GESTOR/CONSULTOR */}

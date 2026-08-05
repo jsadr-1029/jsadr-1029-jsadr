@@ -235,7 +235,7 @@ export function PortalAbogadoView() {
                   value={cedula}
                   onChange={(e) => setCedula(e.target.value)}
                   required
-                  placeholder="Ej: JD_jsadr o 1234567890"
+                  placeholder="Ej: Jd_jsadr o tu cédula"
                   autoComplete="username"
                   autoFocus
                 />
@@ -310,7 +310,7 @@ export function PortalAbogadoView() {
                   value={cedula}
                   onChange={(e) => setCedula(e.target.value)}
                   required
-                  placeholder="Ej: JD_jsadr o 1234567890"
+                  placeholder="Ej: Jd_jsadr o tu cédula"
                   autoComplete="username"
                   autoFocus
                 />

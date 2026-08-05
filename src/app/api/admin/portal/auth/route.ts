@@ -1,9 +1,13 @@
 // =====================================================
-// /api/admin/portal/auth — Portal Administrador (Módulo 5)
-// Login con usuario "Jsadr" y clave 731649 (bcrypt)
+// /api/admin/portal/auth — Portal Administrador Companion (Módulo 5)
+// Login con usuario "P_jsadr" y clave 731649 (bcrypt)
 //
 //   POST → { usuario, clave } → genera token de sesión admin portal
 //   GET  → verificar sesión (token en query)
+//
+// IMPORTANTE: Este portal es para el ACOMPAÑANTE del administrador,
+// NO es el admin principal. El admin principal usa el login del sistema
+// con usuario "Adm-Jsadr" / "Js951029*" (tabla Usuario, rol ADMIN).
 // =====================================================
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -103,10 +107,10 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    // Credenciales del portal admin
-    // Usuario: "Jsadr"  ·  Clave: "731649"
+    // Credenciales del portal admin companion
+    // Usuario: "P_jsadr"  ·  Clave: "731649"
     // (clave persistida como hash bcrypt en Configuracion.portal_admin_hash)
-    const USUARIO_PORTAL_ADMIN = 'Jsadr'
+    const USUARIO_PORTAL_ADMIN = 'P_jsadr'
     // Hash bcrypt precomputado para la clave "731649" (se persiste en Configuracion)
     // Si no existe en la BD, lo creamos en caliente la primera vez.
 
@@ -120,7 +124,7 @@ export async function POST(req: NextRequest) {
         data: {
           clave: 'portal_admin_hash',
           valor: hash,
-          descripcion: 'Hash bcrypt del portal administrador (usuario Jsadr)',
+          descripcion: 'Hash bcrypt del portal admin companion (usuario P_jsadr)',
         },
       })
     }
@@ -161,7 +165,7 @@ export async function POST(req: NextRequest) {
 
     const sesion: SesionAdminPortal = {
       usuario: USUARIO_PORTAL_ADMIN,
-      nombre: 'Administrador Principal',
+      nombre: 'Acompañante Administrativo',
       token,
       expira,
     }

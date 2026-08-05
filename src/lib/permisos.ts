@@ -79,9 +79,12 @@ export const VISTAS_POR_ROL: Record<Rol, ViewKey[]> = {
     'exportar',
     // 'manual' se incluye abajo — GESTOR ve solo la pestaña de uso
     'manual',
+    // portal-admin: el acompañante administrativo (P_jsadr) usa este módulo
+    // como su portal principal. Otros GESTORes pueden acceder también.
+    'portal-admin',
     // Ocultos para GESTOR (solo ADMIN):
     //   usuarios, conexiones, seguridad (parcial), auditoria,
-    //   admin, portal-admin, configuracion, codigo-fuente,
+    //   admin, configuracion, codigo-fuente,
     //   automatizacion
   ],
 

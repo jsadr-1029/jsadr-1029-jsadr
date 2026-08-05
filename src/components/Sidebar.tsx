@@ -44,6 +44,12 @@ interface SidebarProps {
    * para mostrar el sidebar incluso en pantallas pequeñas.
    */
   forceVisible?: boolean
+  /**
+   * Estado controlado del drawer móvil.
+   * Si se pasa, el Sidebar se comporta también como drawer en mobile.
+   */
+  mobileOpen?: boolean
+  onMobileOpenChange?: (open: boolean) => void
 }
 
 // ---------- Tipos ----------
@@ -102,7 +108,7 @@ const ALL_ITEMS: MenuNode[] = [
   { key: 'exportar', label: 'Reportes', icon: BarChart3, description: 'Exportación de datos' },
 ]
 
-export function Sidebar({ view, onChange, forceVisible = false }: SidebarProps) {
+export function Sidebar({ view, onChange, forceVisible = false, mobileOpen = false, onMobileOpenChange }: SidebarProps) {
   // Hook reactivo: re-lee el rol cuando cambia el estado de auth,
   // evitando que el Sidebar quede con un rol desactualizado tras un
   // switch-user o un refresh-token fallido.
@@ -148,17 +154,80 @@ export function Sidebar({ view, onChange, forceVisible = false }: SidebarProps) 
     setExpanded((prev) => ({ ...prev, [key]: !prev[key] }))
   }
 
+  // Wrapper que cierra el drawer móvil al seleccionar un item
+  const handleSelect = (v: ViewKey) => {
+    onChange(v)
+    if (onMobileOpenChange) onMobileOpenChange(false)
+  }
+
   return (
-    <aside
-      data-sidebar
-      className={cn(
-        'w-64 flex-col h-screen sticky top-0 text-sidebar-foreground border-r border-sidebar-border bg-sidebar backdrop-blur-xl',
-        // En modo auto (default): oculto en pantallas < lg, visible en lg+
-        // En modo desktop forzado: siempre visible
-        forceVisible ? 'flex' : 'hidden lg:flex',
+    <>
+      {/* === Desktop Sidebar === */}
+      <aside
+        data-sidebar
+        className={cn(
+          'w-64 flex-col h-screen sticky top-0 text-sidebar-foreground border-r border-sidebar-border bg-sidebar backdrop-blur-xl',
+          // En modo auto (default): oculto en pantallas < lg, visible en lg+
+          // En modo desktop forzado: siempre visible
+          forceVisible ? 'flex' : 'hidden lg:flex',
+        )}
+      >
+        <SidebarContent
+          menuItems={menuItems}
+          view={view}
+          expanded={expanded}
+          toggleGroup={toggleGroup}
+          onChange={onChange}
+          rol={rol}
+        />
+      </aside>
+
+      {/* === Mobile Drawer === */}
+      {/* Overlay */}
+      {mobileOpen && (
+        <div
+          className="fixed inset-0 z-[70] bg-black/60 lg:hidden"
+          onClick={() => onMobileOpenChange?.(false)}
+          aria-hidden="true"
+        />
       )}
-    >
-      <div className="p-6 border-b border-sidebar-border">
+      {/* Drawer */}
+      <aside
+        className={cn(
+          'fixed top-0 left-0 bottom-0 z-[71] w-72 max-w-[85vw] flex flex-col text-sidebar-foreground border-r border-sidebar-border bg-sidebar backdrop-blur-xl lg:hidden transition-transform duration-300 ease-out',
+          mobileOpen ? 'translate-x-0' : '-translate-x-full'
+        )}
+        aria-hidden={!mobileOpen}
+      >
+        <SidebarContent
+          menuItems={menuItems}
+          view={view}
+          expanded={expanded}
+          toggleGroup={toggleGroup}
+          onChange={handleSelect}
+          onClose={() => onMobileOpenChange?.(false)}
+          rol={rol}
+        />
+      </aside>
+    </>
+  )
+}
+
+// === Contenido compartido entre Desktop y Mobile ===
+interface SidebarContentProps {
+  menuItems: MenuNode[]
+  view: ViewKey
+  expanded: Record<string, boolean>
+  toggleGroup: (key: string) => void
+  onChange: (v: ViewKey) => void
+  onClose?: () => void
+  rol?: string
+}
+
+function SidebarContent({ menuItems, view, expanded, toggleGroup, onChange, onClose, rol }: SidebarContentProps) {
+  return (
+    <>
+      <div className="p-6 border-b border-sidebar-border flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div className="relative w-11 h-11 rounded-xl gradient-logo flex items-center justify-center shadow-lg glow-primary">
             <Landmark className="w-6 h-6 text-white" />
@@ -173,6 +242,19 @@ export function Sidebar({ view, onChange, forceVisible = false }: SidebarProps) 
             </p>
           </div>
         </div>
+        {onClose && (
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Cerrar menú"
+            className="lg:hidden p-2 rounded-lg text-white/70 hover:text-white hover:bg-white/10 transition-colors"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5">
+              <line x1="18" y1="6" x2="6" y2="18" />
+              <line x1="6" y1="6" x2="18" y2="18" />
+            </svg>
+          </button>
+        )}
       </div>
 
       <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
@@ -315,7 +397,7 @@ export function Sidebar({ view, onChange, forceVisible = false }: SidebarProps) 
         <p className="mt-1">Interés fijo · Mora compuesta</p>
         <p className="mt-1">© {new Date().getFullYear()}</p>
       </div>
-    </aside>
+    </>
   )
 }
 

@@ -74,7 +74,7 @@ function isPublicEndpoint(pathname: string): boolean {
     pathname.startsWith('/api/auth/recuperar-clave') ||
     pathname.startsWith('/api/portal/auth') ||
     pathname.startsWith('/api/portal/') || // portal usa x-portal-token
-    pathname.startsWith('/api/admin/portal/auth') || // login del portal administrador (1214731649 / 731649)
+    pathname.startsWith('/api/admin/portal/auth') || // login del portal admin companion (P_jsadr / 731649)
     pathname.startsWith('/api/juridico/portal/auth') || // login del portal jurídico (abogados con cédula + clave)
     pathname.startsWith('/api/chat/iniciar') || // inicio de chat con cédula+teléfono (sin token previo)
     pathname.startsWith('/api/chat/otp') || // solicitud/verificación OTP del chat

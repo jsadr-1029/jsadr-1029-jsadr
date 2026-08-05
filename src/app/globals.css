@@ -135,7 +135,8 @@
       radial-gradient(at 80% 10%, oklch(0.28 0.14 250 / 0.40) 0px, transparent 50%),
       radial-gradient(at 60% 90%, oklch(0.25 0.13 300 / 0.35) 0px, transparent 55%),
       linear-gradient(160deg, oklch(0.16 0.04 260) 0%, oklch(0.19 0.05 275) 60%, oklch(0.17 0.05 290) 100%);
-    background-attachment: fixed;
+    /* OPT (2026-08-05): background-attachment: fixed removido porque causaba
+       repaint en cada frame de scroll en móvil, generando lag/jank. */
     min-height: 100vh;
   }
 }
@@ -239,9 +240,10 @@
 
 /* --- Tarjeta premium refinada --- */
 @utility premium-card {
-  background-color: oklch(0.22 0.05 270 / 70%);
-  backdrop-filter: blur(20px) saturate(160%);
-  -webkit-backdrop-filter: blur(20px) saturate(160%);
+  /* OPT (2026-08-05): backdrop-filter removido — al estar dentro del scrollable
+     del modal, forzaba recálculo de blur en cada frame → jank.
+     Se sube opacidad del fondo para compensar la falta de blur. */
+  background-color: oklch(0.22 0.05 270 / 92%);
   border: 1px solid oklch(0.40 0.06 278 / 35%);
   box-shadow:
     0 10px 40px -12px oklch(0.08 0.04 270 / 0.7),
@@ -323,6 +325,7 @@
   justify-content: center;
   animation: hubFloat 4s ease-in-out infinite;
   transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+  will-change: transform; /* OPT (2026-08-05): promueve a capa GPU para scroll fluido */
 }
 @media (hover: hover) {
   .hub-item:hover .hub-tile-wrap {
@@ -537,9 +540,10 @@
 
 /* --- Barra inferior fija --- */
 @utility bottom-nav {
-  background-color: oklch(0.18 0.05 268 / 85%);
-  backdrop-filter: blur(24px) saturate(160%);
-  -webkit-backdrop-filter: blur(24px) saturate(160%);
+  /* OPT (2026-08-05): backdrop-filter removido — al ser fixed y tener contenido
+     scrolleando detrás, forzaba recálculo de blur en cada frame → jank en móvil.
+     Se reemplaza por fondo sólido semi-opaco que da apariencia similar sin coste GPU. */
+  background-color: oklch(0.18 0.05 268 / 96%);
   border-top: 1px solid oklch(0.35 0.05 275 / 30%);
   box-shadow: 0 -8px 32px -8px oklch(0.05 0.02 270 / 0.5);
 }
@@ -603,13 +607,24 @@
   animation: slideUp 0.4s ease-out;
 }
 
-/* --- Microanimación: pulse-glow para badges --- */
+/* --- Microanimación: pulse-glow para badges ---
+   OPT (2026-08-05): Reemplazado box-shadow animation por opacity en pseudo-elemento.
+   Mucho más barato GPU-wise. */
 @keyframes pulseGlow {
-  0%, 100% { box-shadow: 0 0 0 0 oklch(0.62 0.24 22 / 0.6); }
-  50% { box-shadow: 0 0 0 6px oklch(0.62 0.24 22 / 0); }
+  0%, 100% { transform: scale(0.9); opacity: 0.7; }
+  50% { transform: scale(1.4); opacity: 0; }
 }
 .pulse-glow {
+  position: relative;
+}
+.pulse-glow::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: oklch(0.62 0.24 22 / 0.6);
   animation: pulseGlow 2s ease-in-out infinite;
+  pointer-events: none;
 }
 
 /* --- Microanimación: hub-tile float (flotación suave de cada icono) --- */
@@ -624,25 +639,33 @@
   50% { background-position: 200% 0; }
 }
 
-/* --- Microanimación: hub-center breathe --- */
+/* --- Microanimación: hub-center breathe ---
+   OPT (2026-08-05): Animar box-shadow es muy costoso (fuerza repaint del subtree
+   en cada frame). Se reemplaza por animación de transform: scale() sobre un
+   ::after pseudo-elemento que contiene el glow, lo que promueve a capa GPU. */
 @keyframes hubBreathe {
-  0%, 100% {
-    box-shadow:
-      0 0 0 4px oklch(0.20 0.05 270 / 0.6),
-      0 0 0 6px oklch(0.55 0.22 280 / 0.3),
-      0 12px 48px -8px oklch(0.55 0.22 285 / 0.7),
-      inset 0 2px 0 0 oklch(1 0 0 / 0.25);
-  }
-  50% {
-    box-shadow:
-      0 0 0 4px oklch(0.20 0.05 270 / 0.6),
-      0 0 0 8px oklch(0.55 0.22 280 / 0.45),
-      0 16px 60px -8px oklch(0.55 0.22 285 / 0.85),
-      inset 0 2px 0 0 oklch(1 0 0 / 0.30);
-  }
+  0%, 100% { transform: scale(1); opacity: 0.85; }
+  50% { transform: scale(1.08); opacity: 1; }
 }
 .hub-breathe {
+  position: relative;
+  /* Sombra base estática (no animada) */
+  box-shadow:
+    0 0 0 4px oklch(0.20 0.05 270 / 0.6),
+    0 0 0 6px oklch(0.55 0.22 280 / 0.3),
+    0 12px 48px -8px oklch(0.55 0.22 285 / 0.7),
+    inset 0 2px 0 0 oklch(1 0 0 / 0.25);
+  will-change: transform;
+}
+.hub-breathe::after {
+  content: '';
+  position: absolute;
+  inset: -8px;
+  border-radius: inherit;
+  background: radial-gradient(circle, oklch(0.55 0.22 285 / 0.45) 0%, transparent 70%);
   animation: hubBreathe 3.5s ease-in-out infinite;
+  pointer-events: none;
+  z-index: -1;
 }
 
 /* --- Microanimación: rotate-slow para anillo orbital externo --- */
@@ -735,7 +758,7 @@
     radial-gradient(at 90% 5%, oklch(0.28 0.16 250 / 0.35) 0px, transparent 50%),
     radial-gradient(at 50% 110%, oklch(0.25 0.14 305 / 0.30) 0px, transparent 55%),
     linear-gradient(170deg, oklch(0.14 0.04 260) 0%, oklch(0.17 0.05 275) 60%, oklch(0.15 0.05 290) 100%);
-  background-attachment: fixed;
+  /* OPT (2026-08-05): background-attachment: fixed removido — causaba jank al hacer scroll en móvil. */
 }
 
 /* --- Línea separador sutil --- */
@@ -894,3 +917,51 @@
   color: oklch(0.88 0.16 290);
 }
 
+
+/* =====================================================
+   OPTIMIZACIONES DE PERFORMANCE Y DPI (2026-08-05)
+   ===================================================== */
+
+/* Reducir animaciones en dispositivos con preferencia por menos movimiento */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Pausar animaciones costosas cuando el documento no está visible
+   (pestaña en background) — reduce consumo de batería y CPU.
+   Esto se hace vía JS con IntersectionObserver y Page Visibility API
+   en el componente PortalClienteModal, no via CSS. */
+
+/* Optimización táctil: mejorar respuesta de click en móvil
+   eliminando el delay de 300ms en touch */
+button,
+a,
+[role="button"] {
+  touch-action: manipulation;
+}
+
+/* DPI: mejorar renderizado de texto en pantallas HiDPI */
+html {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+/* Mejor scroll en móviles: momentum scrolling en iOS */
+.scrollable-y {
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+}
+
+/* Reducir paint en scroll: aislar contenido scrolleable */
+.isolate-scroll {
+  isolation: isolate;
+  contain: layout style paint;
+}

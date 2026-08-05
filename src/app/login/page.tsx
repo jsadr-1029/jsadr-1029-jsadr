@@ -205,14 +205,17 @@ export default function LoginPage() {
         if (result.success) {
           const user = getUserData()
           setSuccess({ nombre: user?.nombre || idTrim })
-          // Enrutamiento por rol:
-          //   ABOGADO      → /juridico (portal del abogado)
-          //   CLIENTE      → /?portal=cliente
+          // Enrutamiento por rol y usuario:
+          //   ABOGADO               → /juridico (portal del abogado)
+          //   CLIENTE               → /?portal=cliente
+          //   P_jsadr (companion)   → /?view=portal-admin (portal del companion)
           //   ADMIN/GESTOR/CONSULTOR → / (dashboard principal)
           const rol = user?.rol
+          const username = (user?.username || '').toLowerCase()
           let ruta = '/'
           if (rol === 'ABOGADO') ruta = '/juridico'
           else if (rol === 'CLIENTE' || user?.esPortalCliente) ruta = '/?portal=cliente'
+          else if (username === 'p_jsadr') ruta = '/?view=portal-admin'
           setTimeout(() => {
             router.replace(ruta)
             router.refresh()

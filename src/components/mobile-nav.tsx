@@ -63,6 +63,11 @@ const primaryItems: NavItem[] = [
   { key: 'portal', label: 'Portal', icon: Search },
 ]
 
+// Nota: El botón "Más" fue eliminado del bottom nav porque abría un Sheet
+// en la mitad de la pantalla que bloqueaba la navegación móvil.
+// Ahora TODOS los módulos se acceden desde el botón hamburguesa superior-izquierdo
+// que abre el Sidebar como drawer. (2026-08-05)
+
 /**
  * Módulos adicionales que se muestran dentro del Sheet "Más".
  * Estructura jerárquica coherente con el Sidebar:
@@ -170,7 +175,7 @@ export function MobileNav({ current, onChange, forceVisible = false }: MobileNav
       style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
       aria-label="Navegación principal móvil"
     >
-      <div className="grid grid-cols-5 items-center gap-1 px-2 pt-2 pb-2">
+      <div className="grid grid-cols-4 items-center gap-1 px-2 pt-2 pb-2">
         {/* --- Préstamos --- */}
         <NavButton
           item={primaryItems[0]}
@@ -212,76 +217,9 @@ export function MobileNav({ current, onChange, forceVisible = false }: MobileNav
           onClick={() => handleSelect(primaryItems[2].key)}
         />
 
-        {/* --- Más (abre el Sheet) --- */}
-        <Sheet open={open} onOpenChange={setOpen}>
-          <SheetTrigger asChild>
-            <button
-              type="button"
-              aria-label="Más módulos"
-              aria-current={isInMore || open ? 'page' : undefined}
-              className={cn(
-                'flex flex-col items-center justify-center gap-0.5 py-1.5 rounded-lg transition-colors',
-                isInMore || open
-                  ? 'text-primary'
-                  : 'text-muted-foreground hover:text-foreground'
-              )}
-            >
-              <Menu
-                className={cn(
-                  'w-5 h-5 transition-transform duration-200',
-                  open && 'rotate-90'
-                )}
-              />
-              <span className="text-[10px] font-medium leading-none">Más</span>
-              {isInMore && !open && (
-                <span className="mt-0.5 h-1 w-1 rounded-full bg-primary shadow-[0_0_8px_2px_oklch(0.55_0.22_285/0.6)]" />
-              )}
-            </button>
-          </SheetTrigger>
-
-          <SheetContent
-            side="bottom"
-            className="rounded-t-2xl border-t border-white/10 glass-card-strong p-0 max-h-[85vh] overflow-y-auto"
-          >
-            <SheetHeader className="px-4 pt-4 pb-3 border-b border-white/10">
-              <SheetTitle className="text-white text-base">Más módulos</SheetTitle>
-            </SheetHeader>
-            <div className="p-4 pb-6 space-y-2">
-              {/* Grupo Préstamos (Cajas, Campañas, Simulador) */}
-              <MobileGroup
-                item={prestamosGroup}
-                current={current}
-                expanded={!!expanded[prestamosGroup.key]}
-                onToggle={() => toggleGroup(prestamosGroup.key)}
-                onSelect={handleSelect}
-              />
-
-              {/* Resto de items del sheet */}
-              {moreItems.map((item) => {
-                if (item.children && item.children.length > 0) {
-                  return (
-                    <MobileGroup
-                      key={item.key}
-                      item={item}
-                      current={current}
-                      expanded={!!expanded[item.key]}
-                      onToggle={() => toggleGroup(item.key)}
-                      onSelect={handleSelect}
-                    />
-                  )
-                }
-                return (
-                  <MobileLeafButton
-                    key={item.key}
-                    item={item}
-                    active={current === item.key}
-                    onClick={() => handleSelect(item.key)}
-                  />
-                )
-              })}
-            </div>
-          </SheetContent>
-        </Sheet>
+        {/* El botón "Más" fue eliminado.
+            Ahora TODOS los módulos están en el botón hamburguesa superior-izquierdo
+            que abre el Sidebar como drawer. Esto evita el menú en la mitad de la pantalla. */}
       </div>
     </nav>
   )

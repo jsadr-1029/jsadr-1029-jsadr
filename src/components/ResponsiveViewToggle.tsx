@@ -119,12 +119,14 @@ export function ResponsiveViewToggle() {
   return (
     <div
       ref={dropdownRef}
-      className="fixed top-3 left-3 z-[60]"
+      className="fixed top-3 left-3 z-[60] hidden lg:block"
       style={{ zIndex: 60 }}
     >
       {/* Botón principal — posicionado a la IZQUIERDA para no overlapping
           con el UserMenu FAB (top-right, z-9997). El toggle debe ser
-          accesible sin captura de clics por parte del FAB. */}
+          accesible sin captura de clics por parte del FAB.
+          En móvil/tablet se oculta (lg:block) para dar paso al botón hamburguesa
+          que abre el Sidebar drawer. */}
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
