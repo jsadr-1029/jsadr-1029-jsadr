@@ -23,6 +23,7 @@ export type OtpFlujo =
   | 'PORTAL_LOGIN'
   | 'CAMBIO_CLAVE'
   | 'MFA_ADMIN'
+  | 'SOLICITUD_SIMULADOR'
   | 'OTRO'
 
 // --- Alfabeto sin caracteres confusos (sin 0/O/1/I/L) ---
