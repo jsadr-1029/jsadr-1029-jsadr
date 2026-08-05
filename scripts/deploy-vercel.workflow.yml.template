@@ -80,24 +80,14 @@ jobs:
       - name: Generate Prisma client
         run: npx prisma generate
 
-      - name: Build project (Vercel)
-        run: |
-          npx vercel build --prod \
-            --token="$VERCEL_TOKEN" \
-            --scope="$VERCEL_ORG_ID" \
-            --project="$VERCEL_PROJECT_ID"
-        env:
-          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
-          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
-
       - name: Deploy to Vercel (production)
         id: deploy
         run: |
-          DEPLOY_URL=$(npx vercel deploy --prebuilt --prod \
+          DEPLOY_URL=$(npx vercel deploy --prod \
             --token="$VERCEL_TOKEN" \
             --scope="$VERCEL_ORG_ID" \
-            --project="$VERCEL_PROJECT_ID")
+            --project="$VERCEL_PROJECT_ID" \
+            --yes)
           echo "deployment_url=$DEPLOY_URL" >> "$GITHUB_OUTPUT"
           echo "::notice::Deployment URL: $DEPLOY_URL"
         env:
