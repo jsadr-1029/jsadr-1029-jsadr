@@ -33,7 +33,8 @@ import {
 } from '@/components/ui/table'
 import { useToast } from '@/hooks/use-toast'
 import { formatearMoneda, formatearFecha, calcularPrestamo, calcularPrestamoTasaFijaMensual, Frecuencia } from '@/lib/finanzas'
-import { FileText, Plus, Search, Eye, Check, X, ArrowRight, RefreshCw, PenTool, Shield, Trash2, Calendar } from 'lucide-react'
+import { calcularBloqueCorte, calcularFechaPrimerCorte, calcularDiasCausadosAntes, calcularValorDiasCausados, PeriodoCorte } from '@/lib/corte-fechas'
+import { FileText, Plus, Search, Eye, Check, X, ArrowRight, RefreshCw, PenTool, Shield, Trash2, Calendar, Scissors } from 'lucide-react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { ClientesView } from '@/components/views/ClientesView'
 import { CajasView } from '@/components/views/CajasView'
@@ -170,6 +171,23 @@ function PrestamosPanel({
     const dd = String(hoy.getDate()).padStart(2, '0')
     return `${yyyy}-${mm}-${dd}`
   })
+
+  // === Periodo de corte + días causados antes del corte ===
+  // Caso de uso: cliente solicita crédito ANTES de la fecha de corte.
+  // Ej: fechaPrestamo = 2/08/2026, periodo = "5-20" → corte = 5/08/2026.
+  // El sistema cobra 3 días de interés anticipado (valorDiasCausados) y las
+  // cuotas se programan desde el 5/08/2026 (fechaPrimerCorte), no desde el 2/08.
+  //
+  // - periodoCorte: "5-20" | "15-30" | "" (vacío = sin corte, comportamiento por defecto)
+  // - fechaPrimerCorte: auto-calculada al cambiar fechaPrestamo o periodoCorte
+  // - diasCausadosAntes: días entre fechaPrestamo y fechaPrimerCorte (editable manual)
+  // - valorDiasCausados: COP a cobrar por esos días (editable manual)
+  // - editarDiasCausadosManual: si true, el usuario editó manualmente y NO se auto-recalcula
+  const [periodoCorte, setPeriodoCorte] = useState<string>('')
+  const [fechaPrimerCorte, setFechaPrimerCorte] = useState<Date | null>(null)
+  const [diasCausadosAntes, setDiasCausadosAntes] = useState<number>(0)
+  const [valorDiasCausados, setValorDiasCausados] = useState<number>(0)
+  const [editarDiasCausadosManual, setEditarDiasCausadosManual] = useState(false)
 
   // === Renovación de crédito ===
   const [esRenovacion, setEsRenovacion] = useState(false)
@@ -324,6 +342,22 @@ function PrestamosPanel({
 
   // Cálculo según modalidad
   const calculo = useMemo(() => {
+    // === Resolución de fecha base para la tabla de amortización ===
+    // Si hay periodoCorte activo y fechaPrimerCorte calculada, las cuotas
+    // se programan desde fechaPrimerCorte (no desde fechaPrestamo).
+    // Esto implementa la regla: "las fechas de pago se iniciaran desde
+    // esa fecha corte" (ej: préstamo 2/08 con corte 5-20 → primera cuota
+    // se programa desde el 5/08).
+    let fechaBaseParaAmortizacion: Date | undefined = undefined
+    if (periodoCorte && fechaPrimerCorte) {
+      fechaBaseParaAmortizacion = fechaPrimerCorte
+    } else if (fechaPrestamo) {
+      const [yyyy, mm, dd] = fechaPrestamo.split('-').map(Number)
+      if (yyyy && mm && dd) {
+        fechaBaseParaAmortizacion = new Date(yyyy, mm - 1, dd, 12, 0, 0)
+      }
+    }
+
     // === Modalidad TASA_FIJA (Tasa Fija Mensual sobre capital inicial) ===
     if (modalidad === 'TASA_FIJA') {
       const monto = parseFloat(montoPrincipal)
@@ -331,22 +365,25 @@ function PrestamosPanel({
       const nCuotas = parseInt(numeroCuotasFija)
       if (!monto || !tasaMen || !nCuotas) return null
 
-      // Parsear fechaPrestamo para usar como fecha base de la tabla de amortización
-      let fechaBaseTf: Date | undefined = undefined
-      if (fechaPrestamo) {
-        const [yyyy, mm, dd] = fechaPrestamo.split('-').map(Number)
-        if (yyyy && mm && dd) {
-          fechaBaseTf = new Date(yyyy, mm - 1, dd, 12, 0, 0)
-        }
-      }
-
-      return calcularPrestamoTasaFijaMensual({
+      const resultado = calcularPrestamoTasaFijaMensual({
         montoPrincipal: monto,
         tasaMensualFija: tasaMen,
         numeroCuotas: nCuotas,
         frecuencia,
-        fechaDesembolso: fechaBaseTf,
+        fechaDesembolso: fechaBaseParaAmortizacion,
       })
+
+      // Si hay valorDiasCausados, sumarlo al total a pagar
+      if (valorDiasCausados > 0) {
+        return {
+          ...resultado,
+          totalPagar: Math.round((resultado.totalPagar + valorDiasCausados) * 100) / 100,
+          valorDiasCausados,
+          diasCausadosAntes,
+          fechaPrimerCorte: fechaPrimerCorte || undefined,
+        }
+      }
+      return resultado
     }
 
     if (modalidad === 'CUOTA_PERSONALIZADA') {
@@ -364,19 +401,11 @@ function PrestamosPanel({
 
       const interesPorCuota = (monto * tasaMen / 100) / cuotasPorMes
       const totalInteres = Math.round(interesPorCuota * nCuotas * 100) / 100
-      const totalPagar = Math.round((cuota * nCuotas) * 100) / 100
+      let totalPagar = Math.round((cuota * nCuotas) * 100) / 100
       const tasaAnual = tasaMen * 12
 
-      // === Parsear fechaPrestamo para usar como fecha base de la tabla de amortización ===
-      let fechaBase: Date | null = null
-      if (fechaPrestamo) {
-        const [yyyy, mm, dd] = fechaPrestamo.split('-').map(Number)
-        if (yyyy && mm && dd) {
-          fechaBase = new Date(yyyy, mm - 1, dd, 12, 0, 0)
-        }
-      }
-
-      // Generar tabla básica
+      // Generar tabla básica usando fechaBaseParaAmortizacion (corte o prestamo)
+      const fechaBase = fechaBaseParaAmortizacion || null
       const tabla: any[] = []
       let saldoCapital = monto
       for (let i = 1; i <= nCuotas; i++) {
@@ -402,6 +431,12 @@ function PrestamosPanel({
         })
       }
 
+      // Si hay valorDiasCausados, sumarlo al total a pagar
+      const valorDiasExtra = valorDiasCausados > 0 ? valorDiasCausados : 0
+      if (valorDiasExtra > 0) {
+        totalPagar = Math.round((totalPagar + valorDiasExtra) * 100) / 100
+      }
+
       return {
         numeroCuotas: nCuotas,
         montoCuota: cuota,
@@ -414,6 +449,9 @@ function PrestamosPanel({
         tipoCalculo: 'CUOTA_PERSONALIZADA',
         tasaMensual: tasaMen,
         tasaAnual,
+        valorDiasCausados: valorDiasExtra > 0 ? valorDiasExtra : undefined,
+        diasCausadosAntes: valorDiasExtra > 0 ? diasCausadosAntes : undefined,
+        fechaPrimerCorte: valorDiasExtra > 0 ? (fechaPrimerCorte || undefined) : undefined,
       }
     }
 
@@ -422,26 +460,32 @@ function PrestamosPanel({
     const tasa = parseFloat(tasaInteresAnual)
     const plazo = parseInt(plazoMeses)
     if (!monto || !tasa || !plazo) return null
-    // Parsear fechaPrestamo para usar como fecha base de la tabla de amortización
-    let fechaBaseFr: Date | undefined = undefined
-    if (fechaPrestamo) {
-      const [yyyy, mm, dd] = fechaPrestamo.split('-').map(Number)
-      if (yyyy && mm && dd) {
-        fechaBaseFr = new Date(yyyy, mm - 1, dd, 12, 0, 0)
-      }
-    }
-    return calcularPrestamo({
+
+    const resultado = calcularPrestamo({
       montoPrincipal: monto,
       tasaInteresAnual: tasa,
       tasaMoraAnual: parseFloat(tasaMoraAnual),
       plazoMeses: plazo,
       frecuencia,
-      fechaDesembolso: fechaBaseFr,
+      fechaDesembolso: fechaBaseParaAmortizacion,
     })
+
+    // Si hay valorDiasCausados, sumarlo al total a pagar
+    if (valorDiasCausados > 0) {
+      return {
+        ...resultado,
+        totalPagar: Math.round((resultado.totalPagar + valorDiasCausados) * 100) / 100,
+        valorDiasCausados,
+        diasCausadosAntes,
+        fechaPrimerCorte: fechaPrimerCorte || undefined,
+      }
+    }
+    return resultado
   }, [
     modalidad, montoPrincipal, tasaInteresAnual, tasaMoraAnual, plazoMeses, frecuencia,
     tasaMensualPersonalizada, montoCuotaPersonalizada, numeroCuotasPersonalizada,
     tasaMensualFija, numeroCuotasFija, fechaPrestamo,
+    periodoCorte, fechaPrimerCorte, valorDiasCausados, diasCausadosAntes,
   ])
 
   const prestamosFiltrados = prestamos.filter((p) => {
@@ -541,6 +585,114 @@ function PrestamosPanel({
     setModalAbierto(true)
   }, [simulacionInicial])
 
+  // === AUTO-CÁLCULO DEL BLOQUE DE CORTE ===
+  // Cuando cambian: fechaPrestamo, periodoCorte, montoPrincipal, o la tasa activa
+  // según modalidad, se recalculan automáticamente:
+  //   - fechaPrimerCorte (el corte más cercano forward desde fechaPrestamo)
+  //   - diasCausadosAntes (días entre fechaPrestamo y fechaPrimerCorte)
+  //   - valorDiasCausados (monto COP de interés anticipado por esos días)
+  //
+  // Si el usuario editó manualmente los días/valor (editarDiasCausadosManual=true),
+  // NO se sobreescribe su edición — pero la fechaPrimerCorte sí se mantiene sincronizada.
+  useEffect(() => {
+    if (!fechaPrestamo || !periodoCorte) {
+      setFechaPrimerCorte(null)
+      if (!editarDiasCausadosManual) {
+        setDiasCausadosAntes(0)
+        setValorDiasCausados(0)
+      }
+      return
+    }
+
+    // Determinar la tasa activa según la modalidad para el cálculo del valor
+    let tasaValor = 0
+    let tipoTasa: 'ANUAL' | 'MENSUAL' = 'ANUAL'
+    if (modalidad === 'FRANCES') {
+      tasaValor = parseFloat(tasaInteresAnual) || 0
+      tipoTasa = 'ANUAL'
+    } else if (modalidad === 'TASA_FIJA') {
+      tasaValor = parseFloat(tasaMensualFija) || 0
+      tipoTasa = 'MENSUAL'
+    } else if (modalidad === 'CUOTA_PERSONALIZADA') {
+      tasaValor = parseFloat(tasaMensualPersonalizada) || 0
+      tipoTasa = 'MENSUAL'
+    }
+
+    const bloque = calcularBloqueCorte({
+      fechaPrestamo,
+      periodo: periodoCorte as PeriodoCorte,
+      montoPrincipal,
+      tasaValor,
+      tipoTasa,
+    })
+
+    if (!bloque) {
+      setFechaPrimerCorte(null)
+      if (!editarDiasCausadosManual) {
+        setDiasCausadosAntes(0)
+        setValorDiasCausados(0)
+      }
+      return
+    }
+
+    setFechaPrimerCorte(prev => {
+      // Evitar re-render infinito: solo actualizar si la fecha realmente cambió
+      // (comparar timestamps, no referencias de objeto Date).
+      const nuevoTs = bloque.fechaPrimerCorte.getTime()
+      const prevTs = prev ? prev.getTime() : 0
+      return nuevoTs !== prevTs ? bloque.fechaPrimerCorte : prev
+    })
+    if (!editarDiasCausadosManual) {
+      setDiasCausadosAntes(prev => prev === bloque.diasCausadosAntes ? prev : bloque.diasCausadosAntes)
+      setValorDiasCausados(prev => prev === bloque.valorDiasCausados ? prev : bloque.valorDiasCausados)
+    }
+  }, [
+    fechaPrestamo,
+    periodoCorte,
+    montoPrincipal,
+    modalidad,
+    tasaInteresAnual,
+    tasaMensualFija,
+    tasaMensualPersonalizada,
+    editarDiasCausadosManual,
+  ])
+
+  // Helper: cuando el usuario edita manualmente los días o el valor,
+  // activamos el modo manual. Si quiere volver al auto-cálculo, debe
+  // presionar el botón "Recalcular auto".
+  const handleEditarDiasCausados = () => {
+    setEditarDiasCausadosManual(true)
+  }
+  const handleRecalcularDiasCausados = () => {
+    setEditarDiasCausadosManual(false)
+    // Forzar recálculo inmediato (no espera al próximo render)
+    if (!fechaPrestamo || !periodoCorte) return
+    let tasaValor = 0
+    let tipoTasa: 'ANUAL' | 'MENSUAL' = 'ANUAL'
+    if (modalidad === 'FRANCES') {
+      tasaValor = parseFloat(tasaInteresAnual) || 0
+      tipoTasa = 'ANUAL'
+    } else if (modalidad === 'TASA_FIJA') {
+      tasaValor = parseFloat(tasaMensualFija) || 0
+      tipoTasa = 'MENSUAL'
+    } else if (modalidad === 'CUOTA_PERSONALIZADA') {
+      tasaValor = parseFloat(tasaMensualPersonalizada) || 0
+      tipoTasa = 'MENSUAL'
+    }
+    const bloque = calcularBloqueCorte({
+      fechaPrestamo,
+      periodo: periodoCorte as PeriodoCorte,
+      montoPrincipal,
+      tasaValor,
+      tipoTasa,
+    })
+    if (bloque) {
+      setFechaPrimerCorte(bloque.fechaPrimerCorte)
+      setDiasCausadosAntes(bloque.diasCausadosAntes)
+      setValorDiasCausados(bloque.valorDiasCausados)
+    }
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!clienteId) {
@@ -580,6 +732,18 @@ function PrestamosPanel({
         // Se envía al backend para que el código del préstamo, fechaSolicitud,
         // fechaDesembolso y todos los documentos usen esta fecha como base.
         fechaPrestamo,
+      }
+
+      // === Periodo de corte + días causados antes del corte ===
+      // Solo se envían si el usuario seleccionó un periodo de corte.
+      // El backend los usa para:
+      //   - Programar las cuotas desde fechaPrimerCorte (no desde fechaPrestamo)
+      //   - Cobrar valorDiasCausados como interés anticipado (suma al totalPagar)
+      if (periodoCorte && fechaPrimerCorte) {
+        body.periodoCorte = periodoCorte
+        body.fechaPrimerCorte = fechaPrimerCorte.toISOString()
+        body.diasCausadosAntes = diasCausadosAntes
+        body.valorDiasCausados = valorDiasCausados
       }
 
       // === Renovación ===
@@ -815,6 +979,12 @@ ${linkFirmaCodeudor}
     const mm = String(hoy.getMonth() + 1).padStart(2, '0')
     const dd = String(hoy.getDate()).padStart(2, '0')
     setFechaPrestamo(`${yyyy}-${mm}-${dd}`)
+    // Reset periodo de corte + días causados
+    setPeriodoCorte('')
+    setFechaPrimerCorte(null)
+    setDiasCausadosAntes(0)
+    setValorDiasCausados(0)
+    setEditarDiasCausadosManual(false)
     // Reset renovación
     setEsRenovacion(false)
     setPrestamoARenovar('')
@@ -1308,6 +1478,192 @@ ${linkFirmaCodeudor}
                 <p className="text-xs text-amber-700 dark:text-amber-300 font-medium">
                   ⚠️ Estás registrando un préstamo con fecha retroactiva ({fechaPrestamo}). Verifica que sea correcto.
                 </p>
+              )}
+            </div>
+
+            {/* === PERIODO DE CORTE + DÍAS CAUSADOS ANTES DEL CORTE ===
+                Caso de uso: cliente solicita crédito ANTES de la fecha de corte.
+                Ej: préstamo 2/08/2026, periodo "5-20" → corte más cercano = 5/08/2026.
+                El sistema cobra 3 días de interés anticipado (valorDiasCausados) y
+                las cuotas se programan desde el 5/08/2026 (fechaPrimerCorte).
+
+                Si no se selecciona periodo, el préstamo se comporta normalmente
+                (las cuotas se programan desde fechaPrestamo).
+            */}
+            <div className="space-y-3 p-3 rounded-md bg-indigo-50 dark:bg-indigo-950/20 border border-indigo-200 dark:border-indigo-800">
+              <div className="flex items-center justify-between gap-2">
+                <Label className="text-sm font-medium flex items-center gap-1.5">
+                  <Scissors className="w-3.5 h-3.5 text-indigo-700 dark:text-indigo-300" />
+                  Periodo de corte (opcional)
+                </Label>
+                {periodoCorte && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPeriodoCorte('')
+                      setFechaPrimerCorte(null)
+                      setDiasCausadosAntes(0)
+                      setValorDiasCausados(0)
+                      setEditarDiasCausadosManual(false)
+                    }}
+                    className="text-xs text-indigo-700 dark:text-indigo-300 hover:underline"
+                  >
+                    Quitar corte
+                  </button>
+                )}
+              </div>
+              <Select value={periodoCorte} onValueChange={(v) => {
+                setPeriodoCorte(v === 'NINGUNO' ? '' : v)
+                // Reset modo manual al cambiar periodo (forzar recálculo)
+                setEditarDiasCausadosManual(false)
+                if (v === 'NINGUNO') {
+                  setFechaPrimerCorte(null)
+                  setDiasCausadosAntes(0)
+                  setValorDiasCausados(0)
+                }
+              }}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Sin periodo de corte (las cuotas inician en fechaPrestamo)" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="NINGUNO">Sin periodo de corte</SelectItem>
+                  <SelectItem value="5-20">📅 Periodo 5-20 (cortes los días 5 y 20 de cada mes)</SelectItem>
+                  <SelectItem value="15-30">📅 Periodo 15-30 (cortes los días 15 y 30 de cada mes)</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-indigo-800 dark:text-indigo-200">
+                💡 Para clientes que solicitan crédito <strong>antes</strong> de la fecha de corte.
+                El sistema calcula automáticamente los días causados hasta el corte más cercano y
+                programa los pagos desde esa fecha de corte.
+              </p>
+
+              {/* === Bloque de cálculo automático === */}
+              {periodoCorte && fechaPrestamo && (
+                <div className="space-y-3 p-3 rounded-md bg-white dark:bg-indigo-900/30 border border-indigo-300 dark:border-indigo-700">
+                  {/* Resumen automático */}
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+                    <div className="space-y-1">
+                      <div className="text-indigo-700 dark:text-indigo-300 font-medium">
+                        📅 Fecha del préstamo
+                      </div>
+                      <div className="font-bold text-foreground">
+                        {formatearFecha(new Date(fechaPrestamo + 'T12:00:00'))}
+                      </div>
+                    </div>
+                    <div className="space-y-1">
+                      <div className="text-indigo-700 dark:text-indigo-300 font-medium">
+                        🎯 Fecha del primer corte
+                      </div>
+                      <div className="font-bold text-foreground">
+                        {fechaPrimerCorte ? formatearFecha(fechaPrimerCorte) : '—'}
+                      </div>
+                    </div>
+                    <div className="space-y-1">
+                      <div className="text-indigo-700 dark:text-indigo-300 font-medium">
+                        ⏳ Días causados antes del corte
+                      </div>
+                      <div className="font-bold text-foreground">
+                        {diasCausadosAntes} día{diasCausadosAntes === 1 ? '' : 's'}
+                      </div>
+                    </div>
+                  </div>
+
+                  {fechaPrimerCorte && (
+                    <div className="text-xs text-indigo-800 dark:text-indigo-200 bg-indigo-100 dark:bg-indigo-900/40 rounded p-2">
+                      {diasCausadosAntes > 0 ? (
+                        <>
+                          📊 El préstamo se entrega el{' '}
+                          <strong>{formatearFecha(new Date(fechaPrestamo + 'T12:00:00'))}</strong>{' '}
+                          pero el corte más cercano es el{' '}
+                          <strong>{formatearFecha(fechaPrimerCorte)}</strong>. El sistema cobrará{' '}
+                          <strong>{diasCausadosAntes} día{diasCausadosAntes === 1 ? '' : 's'}</strong>{' '}
+                          de interés anticipado y las cuotas se programarán desde el{' '}
+                          <strong>{formatearFecha(fechaPrimerCorte)}</strong>.
+                        </>
+                      ) : (
+                        <>
+                          ✅ La fecha del préstamo cae <strong>justo en un día de corte</strong>{' '}
+                          ({formatearFecha(fechaPrimerCorte)}). No hay días causados adicionales y
+                          las cuotas se programarán desde esta fecha.
+                        </>
+                      )}
+                    </div>
+                  )}
+
+                  {/* === Campos editables: días causados y valor a cobrar === */}
+                  {diasCausadosAntes > 0 && (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-indigo-200 dark:border-indigo-700">
+                      <div className="space-y-1.5">
+                        <Label htmlFor="diasCausadosAntes" className="text-xs font-medium flex items-center gap-1.5">
+                          Días causados antes del corte
+                          {editarDiasCausadosManual && (
+                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200">
+                              ✏️ Manual
+                            </span>
+                          )}
+                        </Label>
+                        <Input
+                          id="diasCausadosAntes"
+                          type="number"
+                          min="0"
+                          value={diasCausadosAntes}
+                          onChange={(e) => {
+                            handleEditarDiasCausados()
+                            setDiasCausadosAntes(parseInt(e.target.value) || 0)
+                          }}
+                          className="bg-white dark:bg-indigo-900/40"
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label htmlFor="valorDiasCausados" className="text-xs font-medium flex items-center gap-1.5">
+                          Valor a cobrar por días causados (COP)
+                          {editarDiasCausadosManual && (
+                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200">
+                              ✏️ Manual
+                            </span>
+                          )}
+                        </Label>
+                        <Input
+                          id="valorDiasCausados"
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          value={valorDiasCausados}
+                          onChange={(e) => {
+                            handleEditarDiasCausados()
+                            setValorDiasCausados(parseFloat(e.target.value) || 0)
+                          }}
+                          className="bg-white dark:bg-indigo-900/40"
+                        />
+                      </div>
+                      {editarDiasCausadosManual && (
+                        <div className="sm:col-span-2">
+                          <button
+                            type="button"
+                            onClick={handleRecalcularDiasCausados}
+                            className="text-xs px-3 py-1.5 rounded-md bg-indigo-100 text-indigo-700 hover:bg-indigo-200 dark:bg-indigo-800 dark:text-indigo-100 dark:hover:bg-indigo-700 transition flex items-center gap-1.5"
+                          >
+                            <RefreshCw className="w-3 h-3" />
+                            Recalcular automáticamente
+                          </button>
+                          <p className="text-[11px] text-amber-700 dark:text-amber-300 mt-1">
+                            ⚠️ Estás usando valores editados manualmente. Si cambian el monto o la tasa,
+                            no se recalcularán hasta que presiones este botón.
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* === Aviso de cobro adicional === */}
+                  {valorDiasCausados > 0 && (
+                    <div className="p-2 rounded-md bg-emerald-100 dark:bg-emerald-900/40 border border-emerald-300 dark:border-emerald-700 text-xs text-emerald-900 dark:text-emerald-100">
+                      💰 Se cobrarán <strong>{formatearMoneda(valorDiasCausados)}</strong> adicionales
+                      por {diasCausadosAntes} día{diasCausadosAntes === 1 ? '' : 's'} de interés anticipado.
+                      Este valor se suma al total a pagar del préstamo.
+                    </div>
+                  )}
+                </div>
               )}
             </div>
 
@@ -1995,6 +2351,42 @@ ${linkFirmaCodeudor}
                   <p className="text-xs text-blue-700 font-medium">
                     🛡️ Fondo de Garantía (5% primer préstamo): {formatearMoneda(calculo.fondoGarantia)}
                   </p>
+                )}
+
+                {/* === Bloque de periodo de corte (solo si está activo) === */}
+                {(calculo as any).valorDiasCausados != null && (calculo as any).valorDiasCausados > 0 && (
+                  <div className="mt-2 pt-2 border-t border-primary/20 space-y-1.5">
+                    <div className="text-xs font-semibold text-indigo-700 dark:text-indigo-300 flex items-center gap-1.5">
+                      <Scissors className="w-3.5 h-3.5" />
+                      Periodo de corte: {periodoCorte}
+                    </div>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs">
+                      <div>
+                        <span className="text-muted-foreground">Días causados:</span>{' '}
+                        <strong className="text-indigo-700 dark:text-indigo-300">
+                          {(calculo as any).diasCausadosAntes} día{(calculo as any).diasCausadosAntes === 1 ? '' : 's'}
+                        </strong>
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground">Valor días causados:</span>{' '}
+                        <strong className="text-indigo-700 dark:text-indigo-300">
+                          {formatearMoneda((calculo as any).valorDiasCausados)}
+                        </strong>
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground">Inicia pagos:</span>{' '}
+                        <strong className="text-indigo-700 dark:text-indigo-300">
+                          {(calculo as any).fechaPrimerCorte
+                            ? formatearFecha((calculo as any).fechaPrimerCorte)
+                            : '—'}
+                        </strong>
+                      </div>
+                    </div>
+                    <p className="text-[11px] text-indigo-700 dark:text-indigo-300">
+                      💡 Las cuotas se programan desde la fecha de corte. El valor de los días causados
+                      se suma al total a pagar (no afecta el valor de la cuota).
+                    </p>
+                  </div>
                 )}
               </div>
             )}

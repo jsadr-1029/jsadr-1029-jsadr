@@ -280,6 +280,16 @@ model Prestamo {
   fondoGarantiaCargado Boolean @default(false)
   fondoGarantiaMonto  Float    @default(0)
 
+  // === Periodo de corte + días causados antes del corte ===
+  // Permite registrar créditos solicitados ANTES de la fecha de corte.
+  // Ej: cliente solicita el 2/08/2026, corte más cercano es el 5/08/2026,
+  // el sistema cobra 3 días de interés anticipado y las cuotas se programan
+  // desde el 5/08/2026 (fecha del corte), no desde el 2/08/2026.
+  periodoCorte        String?  // "5-20" | "15-30" — días de corte del periodo
+  diasCausadosAntes   Int?     // días entre fechaPrestamo y el corte más cercano
+  valorDiasCausados   Float?   // monto COP a cobrar por esos días (interés anticipado)
+  fechaPrimerCorte    DateTime? // fecha del primer corte (inicio real de pagos)
+
   notas               String?
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt

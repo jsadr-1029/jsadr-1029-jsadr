@@ -95,6 +95,15 @@ export async function POST(req: NextRequest) {
       // Todos los documentos generados (pagaré, carta, tabla de amortización) y el
       // código del préstamo usarán esta fecha como base.
       fechaPrestamo,
+      // === Periodo de corte + días causados antes del corte ===
+      // Caso de uso: cliente solicita crédito ANTES de la fecha de corte.
+      // Ej: préstamo 2/08/2026, periodo "5-20" → corte = 5/08/2026.
+      // El sistema cobra 3 días de interés anticipado (valorDiasCausados) y
+      // las cuotas se programan desde el 5/08/2026 (fechaPrimerCorte).
+      periodoCorte,
+      fechaPrimerCorte: fechaPrimerCorteRaw,
+      diasCausadosAntes,
+      valorDiasCausados,
     } = body
 
     // === Resolver la fecha del préstamo ===
@@ -113,6 +122,45 @@ export async function POST(req: NextRequest) {
         fechaBasePrestamo = new Date(Date.UTC(yyyy, mm - 1, dd, 12, 0, 0))
       }
     }
+
+    // === Resolver fechaPrimerCorte (si viene del frontend, la parseamos) ===
+    // El frontend la envía como ISO string (Date.toISOString()).
+    // Si no se proporciona, queda null y no se aplica el bloque de corte.
+    let fechaPrimerCorte: Date | null = null
+    if (fechaPrimerCorteRaw && typeof fechaPrimerCorteRaw === 'string') {
+      const parsed = new Date(fechaPrimerCorteRaw)
+      if (!isNaN(parsed.getTime())) {
+        fechaPrimerCorte = parsed
+      }
+    }
+
+    // === Determinar la fecha base para la tabla de amortización ===
+    // Si hay periodoCorte activo y fechaPrimerCorte calculada, las cuotas
+    // se programan desde fechaPrimerCorte (no desde fechaPrestamo).
+    // Esto implementa la regla: "las fechas de pago se iniciaran desde
+    // esa fecha corte" (ej: préstamo 2/08 con corte 5-20 → cuotas desde 5/08).
+    //
+    // NOTA: fechaBasePrestamo se sigue usando para fechaSolicitud, fechaDesembolso
+    // y el código del préstamo (representa la fecha real en que se entregó el dinero).
+    // Solo la tabla de amortización cambia su fecha base.
+    const fechaBaseParaAmortizacion: Date =
+      periodoCorte && fechaPrimerCorte ? fechaPrimerCorte : fechaBasePrestamo
+
+    // === Validar coherencia del bloque de corte ===
+    // Si viene periodoCorte pero no fechaPrimerCorte, o diasCausadosAntes sin
+    // valorDiasCausados (o viceversa), se rechaza la solicitud.
+    if (periodoCorte && !fechaPrimerCorte) {
+      return NextResponse.json(
+        { success: false, error: 'periodoCorte está activo pero falta fechaPrimerCorte' },
+        { status: 400 }
+      )
+    }
+    const valorDiasCausadosNum =
+      typeof valorDiasCausados === 'number' ? valorDiasCausados :
+      typeof valorDiasCausados === 'string' ? parseFloat(valorDiasCausados) || 0 : 0
+    const diasCausadosAntesNum =
+      typeof diasCausadosAntes === 'number' ? diasCausadosAntes :
+      typeof diasCausadosAntes === 'string' ? parseInt(diasCausadosAntes) || 0 : 0
 
     const esCuotaPersonalizada = modalidad === 'CUOTA_PERSONALIZADA'
     const esTasaFija = modalidad === 'TASA_FIJA'
@@ -209,8 +257,12 @@ export async function POST(req: NextRequest) {
       else if (frecuencia === 'SEMANAL') cuotasPorMes = 4
 
       const interesPorCuota = (monto * tasaMen / 100) / cuotasPorMes
-      const totalInteres = Math.round(interesPorCuota * nCuotas * 100) / 100
-      const totalPagar = Math.round((cuota * nCuotas) * 100) / 100
+      const totalInteresBase = Math.round(interesPorCuota * nCuotas * 100) / 100
+      // === Sumar valorDiasCausados al total a pagar si hay bloque de corte activo ===
+      const totalPagarBase = Math.round((cuota * nCuotas) * 100) / 100
+      const totalPagarConCorte = valorDiasCausadosNum > 0
+        ? Math.round((totalPagarBase + valorDiasCausadosNum) * 100) / 100
+        : totalPagarBase
 
       const tabla: any[] = []
       let saldoCapital = monto
@@ -221,9 +273,10 @@ export async function POST(req: NextRequest) {
         saldoCapital = Math.round((saldoCapital - capital) * 100) / 100
         if (saldoCapital < 0) saldoCapital = 0
 
-        // === Usar fechaBasePrestamo como fecha inicial de la cuota ===
-        // (antes era new Date() que siempre usaba la fecha actual del sistema)
-        const fechaVenc = new Date(fechaBasePrestamo.getTime())
+        // === Usar fechaBaseParaAmortizacion como fecha inicial de la cuota ===
+        // Si hay periodoCorte activo, fechaBaseParaAmortizacion = fechaPrimerCorte.
+        // Si no, fechaBaseParaAmortizacion = fechaBasePrestamo.
+        const fechaVenc = new Date(fechaBaseParaAmortizacion.getTime())
         if (frecuencia === 'MENSUAL') fechaVenc.setMonth(fechaVenc.getMonth() + i)
         else if (frecuencia === 'QUINCENAL') fechaVenc.setDate(fechaVenc.getDate() + 15 * i)
         else if (frecuencia === 'SEMANAL') fechaVenc.setDate(fechaVenc.getDate() + 7 * i)
@@ -234,12 +287,18 @@ export async function POST(req: NextRequest) {
       calculo = {
         numeroCuotas: nCuotas,
         montoCuota: cuota,
-        totalInteres,
-        totalPagar,
+        totalInteres: totalInteresBase,
+        totalPagar: totalPagarConCorte,
         tasaAplicada: tasaMen / 100 / cuotasPorMes,
         tablaAmortizacion: tabla,
         fechaVencimiento: tabla[tabla.length - 1]?.fechaVencimiento,
         fondoGarantia: Math.round(monto * 0.05 * 100) / 100,
+        // === Campos del bloque de corte (solo si hay valorDiasCausados) ===
+        ...(valorDiasCausadosNum > 0 ? {
+          valorDiasCausados: valorDiasCausadosNum,
+          diasCausadosAntes: diasCausadosAntesNum,
+          fechaPrimerCorte,
+        } : {}),
       }
     } else if (esTasaFija) {
       // === Modalidad TASA_FIJA (Tasa Fija Mensual sobre capital inicial) ===
@@ -260,10 +319,19 @@ export async function POST(req: NextRequest) {
         tasaMensualFija: tasaMen,
         numeroCuotas: nCuotas,
         frecuencia,
-        // === Pasar la fecha base del préstamo para que la tabla de amortización
-        //     se calcule desde la fecha asignada (no la fecha actual del sistema). ===
-        fechaDesembolso: fechaBasePrestamo,
+        // === Usar fechaBaseParaAmortizacion (corte si hay, si no fechaPrestamo) ===
+        fechaDesembolso: fechaBaseParaAmortizacion,
       })
+      // === Sumar valorDiasCausados al total a pagar si hay bloque de corte activo ===
+      if (valorDiasCausadosNum > 0) {
+        calculo = {
+          ...calculo,
+          totalPagar: Math.round((calculo.totalPagar + valorDiasCausadosNum) * 100) / 100,
+          valorDiasCausados: valorDiasCausadosNum,
+          diasCausadosAntes: diasCausadosAntesNum,
+          fechaPrimerCorte,
+        }
+      }
       cuotaFinal = calculo.montoCuota
       nCuotasFinal = calculo.numeroCuotas
     } else {
@@ -277,10 +345,19 @@ export async function POST(req: NextRequest) {
         tasaMoraAnual: tasaMoraFinal,
         plazoMeses: plazoFinal,
         frecuencia,
-        // === Pasar la fecha base del préstamo para que la tabla de amortización
-        //     se calcule desde la fecha asignada (no la fecha actual del sistema). ===
-        fechaDesembolso: fechaBasePrestamo,
+        // === Usar fechaBaseParaAmortizacion (corte si hay, si no fechaPrestamo) ===
+        fechaDesembolso: fechaBaseParaAmortizacion,
       })
+      // === Sumar valorDiasCausados al total a pagar si hay bloque de corte activo ===
+      if (valorDiasCausadosNum > 0) {
+        calculo = {
+          ...calculo,
+          totalPagar: Math.round((calculo.totalPagar + valorDiasCausadosNum) * 100) / 100,
+          valorDiasCausados: valorDiasCausadosNum,
+          diasCausadosAntes: diasCausadosAntesNum,
+          fechaPrimerCorte,
+        }
+      }
       cuotaFinal = calculo.montoCuota
       nCuotasFinal = calculo.numeroCuotas
     }
@@ -398,6 +475,11 @@ export async function POST(req: NextRequest) {
           saldoTotal: calculo.totalPagar,
           fondoGarantiaCargado: false,
           fondoGarantiaMonto: fondoGarantiaMonto,
+          // === Campos del bloque de corte (null si no hay periodo activo) ===
+          periodoCorte: periodoCorte || null,
+          diasCausadosAntes: diasCausadosAntesNum > 0 ? diasCausadosAntesNum : null,
+          valorDiasCausados: valorDiasCausadosNum > 0 ? valorDiasCausadosNum : null,
+          fechaPrimerCorte: fechaPrimerCorte || null,
           notas: notas || null,
         },
         include: { cliente: true },
