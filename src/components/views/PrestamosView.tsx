@@ -2014,36 +2014,43 @@ ${linkFirmaCodeudor}
                     </div>
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="tasaMoraAnual">Tasa Moratoria Diaria (%) *</Label>
+                    <Label htmlFor="tasaMoraAnual">Tasa Moratoria Anual (%) *</Label>
                     <Input
                       id="tasaMoraAnual"
                       type="number"
-                      step="0.0001"
+                      step="0.01"
                       value={tasaMoraAnual}
                       onChange={(e) => setTasaMoraAnual(e.target.value)}
                       required
                     />
                     <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs">
                       <p className="text-muted-foreground">
-                        Mora compuesta diaria sobre capital inicial. Ej: 1 = 1% diario.
+                        Mora <strong>compuesta diaria</strong>. Tú determinas el % anual; el sistema
+                        lo convierte automáticamente a tasa diaria (anual ÷ 360) y aplica
+                        interés compuesto cada día sobre la cuota vencida.
                       </p>
                       <p className="text-amber-700 font-medium">
-                        ≡ Mensual: <strong>{((parseFloat(tasaMoraAnual) || 0) * 30).toFixed(4)}%</strong>
+                        ≡ Mensual: <strong>{((parseFloat(tasaMoraAnual) || 0) / 12).toFixed(4)}%</strong>
                       </p>
                       <p className="text-amber-700 font-medium">
-                        ≡ Anual: <strong>{((parseFloat(tasaMoraAnual) || 0) * 365).toFixed(4)}%</strong>
+                        ≡ Diaria: <strong>{((parseFloat(tasaMoraAnual) || 0) / 360).toFixed(6)}%</strong>
                       </p>
                     </div>
                     {montoPrincipal && tasaMoraAnual && (
                       <p className="text-xs text-muted-foreground">
-                        Mora por día de atraso:{' '}
+                        Mora por día de atraso (sobre capital):{' '}
                         <strong className="text-amber-700">
                           {formatearMoneda(
-                            (parseFloat(montoPrincipal) || 0) * (parseFloat(tasaMoraAnual) || 0) / 100
+                            (parseFloat(montoPrincipal) || 0) * (parseFloat(tasaMoraAnual) || 0) / 100 / 360
                           )}
                         </strong>
                       </p>
                     )}
+                    <div className="rounded-md bg-amber-50 border border-amber-200 p-2 text-[11px] text-amber-800">
+                      <strong>Fórmula:</strong> M = S × [(1 + r/360)^d − 1]<br/>
+                      <strong>S</strong> = saldo de la cuota vencida · <strong>r</strong> = tasa anual ·{' '}
+                      <strong>d</strong> = días de mora
+                    </div>
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="plazoMeses">Plazo (meses) *</Label>

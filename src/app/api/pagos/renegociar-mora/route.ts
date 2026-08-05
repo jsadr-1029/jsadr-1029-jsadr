@@ -119,10 +119,19 @@ export async function POST(req: NextRequest) {
 
     let diasMora = 0
     let moraCalculadaActual = 0
-    if (fechaVencimiento) {
+    if (fechaVencimiento && cuotaPendiente) {
       diasMora = calcularDiasMora(fechaVencimiento)
+      // === Base de la mora: SALDO DE LA CUOTA VENCIDA (no el capital total) ===
+      // Pagos parciales previos sobre capital+interés de esa cuota reducen la base morosa.
+      const pagosCuotaPreview = prestamo.pagos.filter((pg) => pg.numeroCuota === proximaCuota && pg.estado === 'APLICADO')
+      const capitalPagadoCuota = pagosCuotaPreview.reduce((s, pg) => s + (pg.montoCapital || 0), 0)
+      const interesPagadoCuota = pagosCuotaPreview.reduce((s, pg) => s + (pg.montoInteres || 0), 0)
+      const saldoCuotaVencida = Math.max(
+        0,
+        (cuotaPendiente.montoCuota || 0) - capitalPagadoCuota - interesPagadoCuota
+      )
       moraCalculadaActual = diasMora > 0
-        ? calcularMoraCompuesta(prestamo.montoPrincipal, getTasaMoraAnual(prestamo), diasMora)
+        ? calcularMoraCompuesta(saldoCuotaVencida, getTasaMoraAnual(prestamo), diasMora)
         : 0
     }
 

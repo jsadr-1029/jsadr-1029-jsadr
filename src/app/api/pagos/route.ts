@@ -254,9 +254,28 @@ async function aplicarPago(body: any, user: any) {
 
   const tasaMoraEfectiva = getTasaMoraAnual(prestamo)
   const diasMora = calcularDiasMora(cuota.fechaVencimiento)
-  const moraGenerada = diasMora > 0
-    ? calcularMoraCompuesta(cuota.montoCuota, tasaMoraEfectiva, diasMora)
-    : 0
+
+  // === Mora renegociada tiene prioridad sobre el cálculo automático ===
+  // Si el gestor negoció o anuló la mora (POST /api/pagos/renegociar-mora),
+  // ese valor fijo reemplaza el cálculo compuesto diario para la cuota vencida.
+  const moraRenegociadaActiva =
+    prestamo.moraRenegociadaAccion &&
+    prestamo.moraRenegociadaFecha &&
+    prestamo.moraRenegociada !== null &&
+    prestamo.moraRenegociada !== undefined
+
+  let moraGenerada: number
+  let moraEsRenegociada = false
+  if (moraRenegociadaActiva) {
+    // Mora renegociada: valor fijo acordado con el cliente
+    moraGenerada = Number(prestamo.moraRenegociada) || 0
+    moraEsRenegociada = true
+  } else if (diasMora > 0) {
+    // Mora automática: interés compuesto diario sobre el saldo de la cuota vencida
+    moraGenerada = calcularMoraCompuesta(cuota.montoCuota, tasaMoraEfectiva, diasMora)
+  } else {
+    moraGenerada = 0
+  }
 
   const montoTotalNum = parseFloat(montoTotal)
   const totalCuotaConMora = cuota.montoCuota + moraGenerada
@@ -316,7 +335,7 @@ async function aplicarPago(body: any, user: any) {
     esPagoParcial = false
   }
 
-  const notasPago = excedente > 0
+  const notasPagoBase = excedente > 0
     ? `Pago con excedente de ${formatearMoneda(excedente)}. ` +
       `Recibido: ${formatearMoneda(montoTotalNum)}, distribuido: mora ${formatearMoneda(montoMoraPagada)} + interés ${formatearMoneda(montoInteresPagado)} + capital ${formatearMoneda(montoCapitalPagado)}. ` +
       `El gestor debe decidir: reembolsar o aplicar a cuota siguiente.`
@@ -325,6 +344,18 @@ async function aplicarPago(body: any, user: any) {
     : montoPagadoAnteriorEnCuota > 0
     ? `Pago final de ${formatearMoneda(montoTotalNum)}. Cuota completada con pagos parciales previos de ${formatearMoneda(montoPagadoAnteriorEnCuota)}. Total cuota: ${formatearMoneda(totalCuotaConMora)}.`
     : null
+
+  // Añadir nota de mora renegociada si aplica
+  const notaMoraRenegociada = moraEsRenegociada
+    ? `[MORA RENEGOCIADA] Se utilizó el valor acordado de ${formatearMoneda(moraGenerada)} ` +
+      `(acción: ${prestamo.moraRenegociadaAccion}) en lugar del cálculo compuesto diario. `
+    : diasMora > 0
+    ? `[MORA COMPUESTA DIARIA] ${diasMora} días de atraso × tasa ${(tasaMoraEfectiva / 360).toFixed(6)}% diario = ${formatearMoneda(moraGenerada)}. `
+    : null
+
+  const notasPago = notaMoraRenegociada
+    ? (notasPagoBase ? notaMoraRenegociada + notasPagoBase : notaMoraRenegociada)
+    : notasPagoBase
 
   // === TRANSACCIÓN atómica v4.0 ===
   // Pago create → caja movimiento → recálculo saldos son atómicos.

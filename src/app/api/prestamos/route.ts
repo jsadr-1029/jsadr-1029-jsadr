@@ -252,7 +252,8 @@ export async function POST(req: NextRequest) {
       const nCuotas = parseInt(numeroCuotasPersonalizada)
       const cuota = parseFloat(montoCuotaPersonalizada)
       tasaAnualFinal = tasaMen * 12
-      tasaMoraFinal = parseFloat(tasaMoraAnual || '1')
+      // Default unificado: si no se especifica mora, usar la tasa de interés anual del préstamo
+      tasaMoraFinal = parseFloat(tasaMoraAnual || tasaAnualFinal.toString())
       plazoFinal = frecuencia === 'MENSUAL' ? nCuotas : Math.ceil(nCuotas / (frecuencia === 'QUINCENAL' ? 2 : 4))
       cuotaFinal = cuota
       nCuotasFinal = nCuotas
@@ -314,7 +315,8 @@ export async function POST(req: NextRequest) {
       const nCuotas = parseInt(numeroCuotasFija)
 
       tasaAnualFinal = tasaMen * 12
-      tasaMoraFinal = parseFloat(tasaMoraAnual || '1')
+      // Default unificado: si no se especifica mora, usar la tasa de interés anual del préstamo
+      tasaMoraFinal = parseFloat(tasaMoraAnual || tasaAnualFinal.toString())
       // Calcular plazo en meses según la frecuencia
       if (frecuencia === 'MENSUAL') plazoFinal = nCuotas
       else if (frecuencia === 'QUINCENAL') plazoFinal = Math.max(1, Math.ceil(nCuotas / 2))
