@@ -2117,6 +2117,19 @@ function SimuladorCredito({
   const [enviando, setEnviando] = useState(false)
   const [resultado, setResultado] = useState<ResultadoCalculo | null>(null)
 
+  // === Flujo de Clave Dinámica (confirmación para enviar solicitud) ===
+  const [claveDinamicaSolicitada, setClaveDinamicaSolicitada] = useState(false)
+  const [claveDinamicaEnviando, setClaveDinamicaEnviando] = useState(false)
+  const [claveDinamicaValor, setClaveDinamicaValor] = useState<string>('')
+  const [claveDinamicaValidando, setClaveDinamicaValidando] = useState(false)
+  const [claveDinamicaVerificada, setClaveDinamicaVerificada] = useState(false)
+  const [otpRegistroId, setOtpRegistroId] = useState<string | null>(null)
+  const [codigoConfirmacion, setCodigoConfirmacion] = useState<string | null>(null)
+  const [emailEnmascarado, setEmailEnmascarado] = useState<string | null>(null)
+  const [expiraEn, setExpiraEn] = useState<string | null>(null)
+  const [segundosRestantes, setSegundosRestantes] = useState<number>(0)
+  const [intentosClave, setIntentosClave] = useState<number>(3)
+
   const tieneTasaPers = !!tasaPersonalizadaInicial?.tiene
   const tasaPersValor = tasaPersonalizadaInicial?.valor ?? 0
 
@@ -2163,11 +2176,120 @@ function SimuladorCredito({
     setResultado(res)
   }
 
+  // === Solicitar Clave Dinámica (envía OTP al correo del cliente) ===
+  const solicitarClaveDinamica = async () => {
+    if (!token) {
+      toast({
+        title: 'Sesión requerida',
+        description: 'Inicia sesión para solicitar la clave.',
+        variant: 'destructive',
+      })
+      return
+    }
+    try {
+      setClaveDinamicaEnviando(true)
+      setClaveDinamicaSolicitada(false)
+      setClaveDinamicaVerificada(false)
+      setClaveDinamicaValor('')
+      setCodigoConfirmacion(null)
+      setIntentosClave(3)
+
+      const res = await fetch('/api/portal/clave-dinamica/solicitar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ clienteId, token }),
+      })
+      const json = await res.json()
+
+      if (json.success) {
+        setClaveDinamicaSolicitada(true)
+        setOtpRegistroId(json.otpRegistroId)
+        setEmailEnmascarado(json.emailEnmascarado)
+        setExpiraEn(json.expiraEn)
+        toast({
+          title: 'Clave enviada',
+          description: `Hemos enviado tu clave dinámica al correo ${json.emailEnmascarado}. Válida por 5 minutos.`,
+        })
+      } else {
+        toast({
+          title: 'No se pudo enviar la clave',
+          description: json.error || 'Intenta nuevamente',
+          variant: 'destructive',
+        })
+      }
+    } catch (e: any) {
+      toast({ title: 'Error', description: e.message, variant: 'destructive' })
+    } finally {
+      setClaveDinamicaEnviando(false)
+    }
+  }
+
+  // === Validar Clave Dinámica (verifica OTP y obtiene codigoConfirmacion) ===
+  const validarClaveDinamica = async () => {
+    if (!token || !otpRegistroId) return
+    if (!claveDinamicaValor || claveDinamicaValor.trim().length !== 6) {
+      toast({
+        title: 'Clave inválida',
+        description: 'Ingresa los 6 dígitos de tu clave dinámica.',
+        variant: 'destructive',
+      })
+      return
+    }
+    try {
+      setClaveDinamicaValidando(true)
+      const res = await fetch('/api/portal/clave-dinamica/validar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          clienteId,
+          token,
+          otpRegistroId,
+          clave: claveDinamicaValor.trim(),
+        }),
+      })
+      const json = await res.json()
+
+      if (json.success) {
+        setClaveDinamicaVerificada(true)
+        setCodigoConfirmacion(json.codigoConfirmacion)
+        toast({
+          title: 'Clave verificada',
+          description: 'Ya puedes enviar tu solicitud de crédito.',
+        })
+      } else {
+        const restantes = json.intentosRestantes ?? 3
+        setIntentosClave(restantes)
+        if (json.bloqueado) {
+          setClaveDinamicaSolicitada(false)
+          setOtpRegistroId(null)
+        }
+        toast({
+          title: 'Clave incorrecta',
+          description: json.error || 'Intenta nuevamente',
+          variant: 'destructive',
+        })
+      }
+    } catch (e: any) {
+      toast({ title: 'Error', description: e.message, variant: 'destructive' })
+    } finally {
+      setClaveDinamicaValidando(false)
+    }
+  }
+
+  // === Enviar Solicitud (requiere codigoConfirmacion ya obtenido) ===
   const enviarSolicitud = async () => {
     if (!token) {
       toast({
         title: 'Sesión requerida',
         description: 'Inicia sesión para enviar tu solicitud.',
+        variant: 'destructive',
+      })
+      return
+    }
+    if (!claveDinamicaVerificada || !codigoConfirmacion) {
+      toast({
+        title: 'Verificación requerida',
+        description: 'Debes validar tu Clave Dinámica antes de enviar la solicitud.',
         variant: 'destructive',
       })
       return
@@ -2184,6 +2306,7 @@ function SimuladorCredito({
           numeroCuotas: parseInt(numeroCuotas, 10),
           frecuencia,
           primerPagoFecha: fechaPrimerPago,
+          codigoConfirmacion,
         }),
       })
       const json = await res.json()
@@ -2192,7 +2315,20 @@ function SimuladorCredito({
           title: 'Solicitud enviada',
           description: `Código: ${json.data?.codigo}. Un asesor la revisará pronto.`,
         })
+        // Reset del flujo de clave dinámica tras envío exitoso
+        setClaveDinamicaSolicitada(false)
+        setClaveDinamicaVerificada(false)
+        setClaveDinamicaValor('')
+        setCodigoConfirmacion(null)
+        setOtpRegistroId(null)
       } else {
+        // Si falla por codigoConfirmacion inválido, reset del flujo
+        if (json.code === 'INVALID_CODIGO_CONFIRMACION') {
+          setClaveDinamicaSolicitada(false)
+          setClaveDinamicaVerificada(false)
+          setCodigoConfirmacion(null)
+          setOtpRegistroId(null)
+        }
         toast({
           title: 'Error',
           description: json.error || 'No se pudo enviar la solicitud',
@@ -2367,14 +2503,139 @@ function SimuladorCredito({
             </p>
           </div>
 
-          <Button
-            onClick={enviarSolicitud}
-            disabled={enviando}
-            className="w-full gradient-premium gradient-premium-hover btn-press"
-          >
-            <Send className="w-4 h-4 mr-2" />
-            {enviando ? 'Enviando...' : 'Enviar Solicitud'}
-          </Button>
+          {/* === PASO 1: Solicitar Clave Dinámica === */}
+          {!claveDinamicaSolicitada && !claveDinamicaVerificada && (
+            <Card className="premium-card rounded-2xl border-violet-500/30">
+              <CardContent className="p-3.5 space-y-2.5">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center shadow-md">
+                    <KeyRound className="w-4 h-4 text-white" />
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-xs font-bold">Confirmar con Clave Dinámica</p>
+                    <p className="text-[10px] text-muted-foreground">
+                      Para enviar tu solicitud, verifica tu identidad
+                    </p>
+                  </div>
+                </div>
+                <p className="text-[10px] text-muted-foreground leading-relaxed">
+                  Te enviaremos una clave de 6 dígitos a tu correo registrado.
+                  Deberás ingresarla para confirmar el envío de tu solicitud.
+                </p>
+                <Button
+                  onClick={solicitarClaveDinamica}
+                  disabled={claveDinamicaEnviando}
+                  className="w-full gradient-premium gradient-premium-hover btn-press"
+                >
+                  {claveDinamicaEnviando ? (
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  ) : (
+                    <KeyRound className="w-4 h-4 mr-2" />
+                  )}
+                  {claveDinamicaEnviando ? 'Enviando clave...' : 'Solicitar Clave Dinámica'}
+                </Button>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* === PASO 2: Ingresar y validar Clave Dinámica === */}
+          {claveDinamicaSolicitada && !claveDinamicaVerificada && (
+            <Card className="premium-card rounded-2xl border-cyan-500/30 fade-scale">
+              <CardContent className="p-3.5 space-y-2.5">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center shadow-md">
+                    <Smartphone className="w-4 h-4 text-white" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-bold">Ingresa tu Clave</p>
+                    <p className="text-[10px] text-muted-foreground truncate">
+                      Enviada a: {emailEnmascarado}
+                    </p>
+                  </div>
+                </div>
+
+                <Input
+                  type="text"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  maxLength={6}
+                  value={claveDinamicaValor}
+                  onChange={(e) => {
+                    const v = e.target.value.replace(/\D/g, '').slice(0, 6)
+                    setClaveDinamicaValor(v)
+                  }}
+                  placeholder="______"
+                  className="input-premium text-center text-2xl font-mono tracking-[0.5em] font-bold"
+                  disabled={claveDinamicaValidando}
+                />
+
+                <div className="flex items-center justify-between text-[10px]">
+                  <span className="text-muted-foreground">
+                    Intentos restantes: <span className="font-bold text-amber-300">{intentosClave}</span>
+                  </span>
+                  <span className="text-muted-foreground">Expira en 5 min</span>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <Button
+                    onClick={solicitarClaveDinamica}
+                    disabled={claveDinamicaEnviando || claveDinamicaValidando}
+                    variant="outline"
+                    size="sm"
+                    className="border-white/20 hover:bg-white/5"
+                  >
+                    <RefreshCw className="w-3 h-3 mr-1.5" />
+                    Reenviar
+                  </Button>
+                  <Button
+                    onClick={validarClaveDinamica}
+                    disabled={claveDinamicaValidando || claveDinamicaValor.length !== 6}
+                    className="gradient-premium gradient-premium-hover btn-press"
+                    size="sm"
+                  >
+                    {claveDinamicaValidando ? (
+                      <Loader2 className="w-3 h-3 mr-1.5 animate-spin" />
+                    ) : (
+                      <CheckCircle className="w-3 h-3 mr-1.5" />
+                    )}
+                    {claveDinamicaValidando ? 'Validando...' : 'Validar Clave'}
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* === PASO 3: Clave verificada — Enviar solicitud === */}
+          {claveDinamicaVerificada && (
+            <Card className="premium-card rounded-2xl border-emerald-500/40 fade-scale">
+              <CardContent className="p-3.5 space-y-2.5">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center shadow-md">
+                    <ShieldCheck className="w-4 h-4 text-white" />
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-xs font-bold text-emerald-200">Identidad verificada</p>
+                    <p className="text-[10px] text-muted-foreground">
+                      Ya puedes enviar tu solicitud
+                    </p>
+                  </div>
+                  <CheckCircle className="w-5 h-5 text-emerald-400" />
+                </div>
+                <Button
+                  onClick={enviarSolicitud}
+                  disabled={enviando}
+                  className="w-full gradient-premium gradient-premium-hover btn-press"
+                >
+                  {enviando ? (
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  ) : (
+                    <Send className="w-4 h-4 mr-2" />
+                  )}
+                  {enviando ? 'Enviando...' : 'Enviar Solicitud de Crédito'}
+                </Button>
+              </CardContent>
+            </Card>
+          )}
         </div>
       )}
     </div>

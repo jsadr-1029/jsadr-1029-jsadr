@@ -22,6 +22,7 @@ import crypto from 'crypto'
 import { getPortalClientInfo } from '@/lib/acceso-portal'
 import { solicitudWebSchema, validateInput } from '@/lib/validators'
 import { safeCompare } from '@/lib/security'
+import { verificarOtp } from '@/lib/otp'
 
 // === CONSTANTES ===
 const TASA_GENERAL_DEFAULT = 24 // % anual si no hay configuración
@@ -147,6 +148,7 @@ export async function POST(req: NextRequest) {
       numeroCuotas,
       frecuencia,
       primerPagoFecha,
+      codigoConfirmacion,
     } = body || {}
 
     // Validar campos requeridos
@@ -157,6 +159,21 @@ export async function POST(req: NextRequest) {
           error:
             'clienteId, token, valorSolicitado, numeroCuotas y frecuencia son obligatorios',
           code: 'MISSING_FIELDS',
+        },
+        { status: 400 }
+      )
+    }
+
+    // === Validar codigoConfirmacion (Clave Dinámica verificada) ===
+    // El cliente debe haber solicitado y validado una clave dinámica
+    // en el simulador antes de poder enviar la solicitud.
+    if (!codigoConfirmacion) {
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            'Debes validar tu Clave Dinámica en el simulador antes de enviar la solicitud.',
+          code: 'MISSING_CODIGO_CONFIRMACION',
         },
         { status: 400 }
       )
@@ -248,6 +265,80 @@ export async function POST(req: NextRequest) {
         { status: 401 }
       )
     }
+
+    // === Verificar codigoConfirmacion (Clave Dinámica) ===
+    // Busca el OtpRegistro de tipo SOLICITUD_SIMULADOR que tenga
+    // sessionIdGenerado = hash(codigoConfirmacion) y que esté verificado,
+    // no usado, no expirado, y que pertenezca al cliente.
+    const clientInfoPre = getPortalClientInfo(req)
+    const codigoConfirmacionHash = crypto
+      .createHash('sha256')
+      .update(String(codigoConfirmacion))
+      .digest('hex')
+
+    const otpReg = await db.otpRegistro.findFirst({
+      where: {
+        clienteId: cliente.id,
+        tipo: 'SOLICITUD_SIMULADOR',
+        verificado: true,
+        usado: true,
+        bloqueado: false,
+        expiraEn: { gt: new Date() },
+      },
+      orderBy: { createdAt: 'desc' },
+    })
+
+    const codigoConfirmacionValido =
+      !!otpReg &&
+      !!otpReg.sessionIdGenerado &&
+      safeCompare(otpReg.sessionIdGenerado, codigoConfirmacionHash)
+
+    if (!codigoConfirmacionValido) {
+      try {
+        await db.auditLog.create({
+          data: {
+            usuarioId: null,
+            usuarioNombre: `Portal: ${cliente.nombre}`,
+            accion: 'CREATE',
+            modulo: 'solicitudes-web',
+            entidadId: cliente.id,
+            entidadNombre: cliente.nombre,
+            detalles: JSON.stringify({
+              error: 'codigoConfirmacion inválido o expirado',
+              clienteId,
+            }),
+            ipOrigen: clientInfoPre.ip,
+            userAgent: clientInfoPre.userAgent,
+            exito: false,
+            errorMessage: 'Clave dinámica inválida o expirada',
+          },
+        })
+      } catch (e) {
+        console.error('[solicitudes-web POST] Audit log error:', e)
+      }
+
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            'Clave Dinámica inválida o expirada. Solicita y valida una nueva clave en el simulador.',
+          code: 'INVALID_CODIGO_CONFIRMACION',
+        },
+        { status: 401 }
+      )
+    }
+
+    // === Invalidar el codigoConfirmacion (un solo uso) ===
+    // Al marcar usado=false y verificado=false, no podrá reutilizarse.
+    await db.otpRegistro.update({
+      where: { id: otpReg!.id },
+      data: {
+        usado: false,
+        verificado: false,
+        bloqueado: true,
+        fechaBloqueo: new Date(),
+      },
+    })
 
     // === Determinar tasa y calcular préstamo ===
     let resultado: ResultadoCalculo
