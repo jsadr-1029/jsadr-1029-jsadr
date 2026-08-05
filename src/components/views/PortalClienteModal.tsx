@@ -537,13 +537,23 @@ export function PortalClienteModal({
       })
       const json = await res.json()
       if (json.success) {
+        // Si la API real respondió con URL de Bancolombia, redirigir al banco.
+        // Si está en modo simulado, abrir la ruta interna de redirect.
+        const destino = json.data.bancolombiaRedirectUrl || json.data.redirectUrl
         toast({
-          title: 'Redirigiendo a Bancolombia',
-          description: `Intención de pago creada. Checkout ID: ${json.data.checkoutId.slice(0, 8)}…`,
+          title: json.data.modoSimulado ? 'Modo simulado' : 'Redirigiendo a Bancolombia',
+          description: json.data.modoSimulado
+            ? `Intención simulada. Checkout ID: ${json.data.checkoutId.slice(0, 8)}…`
+            : `Te redirigiremos a Bancolombia para autorizar el pago.`,
         })
-        // En producción redirigiría a Bancolombia; aquí abrimos el redirect URL
-        if (json.data.redirectUrl) {
-          window.open(json.data.redirectUrl, '_blank')
+        if (destino) {
+          // Si es URL absoluta de Bancolombia, redirigir la pestaña actual
+          // (mejor UX que window.open para flujos de pago)
+          if (destino.startsWith('http')) {
+            window.location.href = destino
+          } else {
+            window.open(destino, '_blank')
+          }
         }
       } else {
         toast({ title: 'Error al crear pago', description: json.error, variant: 'destructive' })

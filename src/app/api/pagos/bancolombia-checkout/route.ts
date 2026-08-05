@@ -9,7 +9,8 @@ import { db } from '@/lib/db'
 import { requireAuth } from '@/lib/auth-guard'
 import { errorResponse, logError } from '@/lib/error-handler'
 import { generarCodigoPago } from '@/lib/finanzas'
-import { safeCompare } from '@/lib/security'
+import { decryptSensitive } from '@/lib/security'
+import { crearPaymentIntent, credencialesDesdeConexion } from '@/lib/bancolombia'
 import crypto from 'crypto'
 
 export async function POST(req: NextRequest) {
@@ -131,13 +132,85 @@ export async function POST(req: NextRequest) {
       },
     })
 
-    // Generar intención de pago (simulado - en producción llamar a la API de Bancolombia)
-    const checkoutId = crypto.randomBytes(16).toString('hex')
+    // Construir referencia única y URL de redirect
     const referenciaComercio = `PAGO-${prestamo.codigo}-${pago.id.slice(-8)}`
-
-    // Construir URL de redirect (relativa para que pase por el gateway)
     const redirectPath = `/api/pagos/bancolombia-redirect`
-    const redirectUrl = `${redirectPath}?checkoutId=${checkoutId}&pagoId=${pago.id}&estado=`
+
+    // === Reconstruir credenciales Bancolombia desde ConexionAPI ===
+    const credenciales = credencialesDesdeConexion({
+      apiKey: configBancolombia.apiKey,
+      apiSecret: configBancolombia.apiSecret,
+      accountId: configBancolombia.accountId,
+      configuracionExtra: configBancolombia.configuracionExtra,
+    })
+
+    // Si el apiSecret está encriptado (formato moderno), desencriptar
+    if (credenciales) {
+      try {
+        credenciales.clientId = decryptSensitive(credenciales.clientId)
+        credenciales.clientSecret = decryptSensitive(credenciales.clientSecret)
+      } catch {
+        // Si falla el desencriptado, asumir que ya está en texto plano (legacy)
+      }
+    }
+
+    // URL absoluta para callback de Bancolombia
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL
+      || `${req.nextUrl.protocol}//${req.nextUrl.host}`
+    const redirectUrlAbsoluta = `${baseUrl}${redirectPath}?pagoId=${pago.id}&estado=`
+    const webhookUrlAbsoluta = `${baseUrl}/api/pagos/bancolombia-webhook`
+
+    let checkoutId: string
+    let redirectUrlFrontend: string
+    let bancolombiaRedirectUrl: string | null = null
+    let modoSimulado = false
+
+    if (credenciales && credenciales.clientId && credenciales.clientSecret) {
+      // === LLAMADA REAL A BANCOLOMBIA ===
+      const emailCliente = prestamo.cliente?.email || ''
+      const telefonoCliente = prestamo.cliente?.telefono || undefined
+
+      const intentRes = await crearPaymentIntent(credenciales, {
+        referencia: referenciaComercio,
+        monto: parseFloat(monto),
+        moneda: 'COP',
+        descripcion: descripcion || `Pago préstamo ${prestamo.codigo}`,
+        emailCliente,
+        telefonoCliente,
+        redirectUrl: redirectUrlAbsoluta,
+        webhookUrl: webhookUrlAbsoluta,
+        commerceId: credenciales.commerceId,
+      })
+
+      if (!intentRes.success) {
+        logError('/api/pagos/bancolombia-checkout — Bancolombia API falló', new Error(intentRes.error || 'unknown'))
+        // Marcar pago como error pero no exponer detalles al cliente
+        await db.pago.update({
+          where: { id: pago.id },
+          data: {
+            estado: 'ANULADO',
+            notas: `${pago.notas || ''}\n[Error Bancolombia API] ${intentRes.error}`,
+          },
+        })
+        return NextResponse.json(
+          {
+            success: false,
+            error: 'No se pudo crear la intención de pago en Bancolombia. Intenta nuevamente.',
+            code: 'BANCOLOMBIA_API_ERROR',
+          },
+          { status: 502 }
+        )
+      }
+
+      checkoutId = intentRes.checkoutId || crypto.randomBytes(16).toString('hex')
+      bancolombiaRedirectUrl = intentRes.redirectUrl || null
+      redirectUrlFrontend = bancolombiaRedirectUrl || `${redirectPath}?checkoutId=${checkoutId}&pagoId=${pago.id}&estado=`
+    } else {
+      // === MODO SIMULADO (no hay credenciales válidas) ===
+      modoSimulado = true
+      checkoutId = crypto.randomBytes(16).toString('hex')
+      redirectUrlFrontend = `${redirectPath}?checkoutId=${checkoutId}&pagoId=${pago.id}&estado=`
+    }
 
     // Guardar metadata en el pago (link de pago)
     await db.pago.update({
@@ -145,6 +218,7 @@ export async function POST(req: NextRequest) {
       data: {
         linkPago: checkoutId,
         referencia: referenciaComercio,
+        notas: `${pago.notas || ''}\n[Checkout creado${modoSimulado ? ' MODO SIMULADO' : ''}] txId=${checkoutId.slice(0, 16)}`,
       },
     })
 
@@ -158,14 +232,18 @@ export async function POST(req: NextRequest) {
         monto: pago.montoTotal,
         moneda: 'COP',
         descripcion: descripcion || `Pago préstamo ${prestamo.codigo}`,
-        redirectUrl,
+        // Si es llamada real, redirectUrl = URL absoluta de Bancolombia.
+        // Si es modo simulado, redirectUrl = ruta interna de redirect.
+        redirectUrl: redirectUrlFrontend,
+        bancolombiaRedirectUrl, // null en modo simulado
+        modoSimulado,
         expira: fechaExpiracion.toISOString(),
         // Datos para el formulario de Bancolombia (en producción)
         commerceData: {
           commerceId: configBancolombia.accountId || 'demo-commerce-id',
           apiKey: configBancolombia.apiKey ? '***REDACTED***' : null,
           urlNotificacion: `/api/pagos/bancolombia-webhook`,
-          urlRedirect: redirectUrl,
+          urlRedirect: redirectUrlAbsoluta,
         },
       },
     })

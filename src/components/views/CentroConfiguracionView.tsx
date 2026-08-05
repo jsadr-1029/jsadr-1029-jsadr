@@ -1947,9 +1947,13 @@ function IntegracionesPanel() {
   }
 
   return (
-    <Card>
+    <div className="space-y-6">
+      {/* === Tarjeta dedicada: Botón Bancolombia === */}
+      <BancolombiaCard />
+
+      <Card>
       <CardHeader className="flex flex-row items-center justify-between">
-        <CardTitle className="flex items-center gap-2"><Plug className="w-5 h-5" /> Integraciones</CardTitle>
+        <CardTitle className="flex items-center gap-2"><Plug className="w-5 h-5" /> Otras Integraciones</CardTitle>
         <Button onClick={abrirNuevo} size="sm"><Plus className="w-4 h-4 mr-1" /> Nueva</Button>
       </CardHeader>
       <CardContent>
@@ -2022,6 +2026,300 @@ function IntegracionesPanel() {
         recursoDetalle={pendienteEliminar?.detalle}
         cargando={eliminando}
       />
+    </Card>
+    </div>
+  )
+}
+
+// === 5b. BANCOLOMBIA BOTÓN DE PAGO (tarjeta dedicada) ===
+function BancolombiaCard() {
+  const [config, setConfig] = useState<{
+    configurada: boolean
+    id?: string
+    clientId?: string | null
+    commerceId?: string
+    ambiente?: 'sandbox' | 'produccion'
+    redirectUrl?: string
+    webhookUrl?: string
+    activa?: boolean
+    probada?: boolean
+    fechaUltimaPrueba?: string | null
+    resultadoUltimaPrueba?: string | null
+    updatedAt?: string
+  } | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [testing, setTesting] = useState(false)
+  const [showGuide, setShowGuide] = useState(false)
+  const [form, setForm] = useState({
+    clientId: '',
+    clientSecret: '',
+    commerceId: '',
+    ambiente: 'sandbox' as 'sandbox' | 'produccion',
+    redirectUrl: '',
+    webhookUrl: '',
+    activa: true,
+  })
+  const { toast } = useToast()
+
+  const API_BC = '/api/configuracion-global/bancolombia'
+
+  const cargar = useCallback(async () => {
+    setLoading(true)
+    try {
+      const res = await fetch(API_BC)
+      const json = await res.json()
+      if (json.success && json.data) {
+        setConfig(json.data)
+        if (json.data.configurada) {
+          setForm({
+            clientId: json.data.clientId || '', // viene con máscara "••••••••"
+            clientSecret: json.data.clientId ? '••••••••' : '', // también enmascarado
+            commerceId: json.data.commerceId || '',
+            ambiente: (json.data.ambiente as 'sandbox' | 'produccion') || 'sandbox',
+            redirectUrl: json.data.redirectUrl || '',
+            webhookUrl: json.data.webhookUrl || '',
+            activa: json.data.activa ?? true,
+          })
+        }
+      }
+    } catch (e) {
+      // ignore
+    }
+    setLoading(false)
+  }, [])
+
+  useEffect(() => { cargar() }, [cargar])
+
+  const guardar = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setSaving(true)
+    try {
+      const res = await fetch(API_BC, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(form),
+      })
+      const json = await res.json()
+      if (json.success) {
+        toast({ title: 'Credenciales de Bancolombia guardadas', description: `Ambiente: ${form.ambiente}` })
+        cargar()
+      } else {
+        toast({ title: 'Error al guardar', description: json.error, variant: 'destructive' })
+      }
+    } catch (e: any) {
+      toast({ title: 'Error', description: e.message, variant: 'destructive' })
+    }
+    setSaving(false)
+  }
+
+  const probar = async () => {
+    setTesting(true)
+    try {
+      // Si hay credenciales en el form sin guardar, probarlas; si no, probar las de BD
+      const body: Record<string, unknown> = {}
+      if (form.clientId && !form.clientId.startsWith('••••')) {
+        body.clientId = form.clientId
+        body.clientSecret = form.clientSecret
+        body.commerceId = form.commerceId
+        body.ambiente = form.ambiente
+      }
+      const res = await fetch(`${API_BC}/probar`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      })
+      const json = await res.json()
+      if (json.success) {
+        toast({
+          title: json.data.ok ? '✅ Conexión exitosa' : '❌ Conexión fallida',
+          description: json.data.mensaje,
+          variant: json.data.ok ? 'default' : 'destructive',
+        })
+        cargar()
+      } else {
+        toast({ title: 'Error al probar', description: json.error, variant: 'destructive' })
+      }
+    } catch (e: any) {
+      toast({ title: 'Error', description: e.message, variant: 'destructive' })
+    }
+    setTesting(false)
+  }
+
+  const ambienteBadge = config?.configurada
+    ? (config.ambiente === 'produccion'
+      ? <Badge className="bg-amber-500/15 text-amber-300 border-amber-400/30">PRODUCCIÓN</Badge>
+      : <Badge className="bg-sky-500/15 text-sky-300 border-sky-400/30">SANDBOX</Badge>)
+    : null
+
+  const estadoBadge = !config?.configurada
+    ? <Badge variant="outline">No configurada</Badge>
+    : config.activa
+      ? (config.probada
+        ? <Badge className="bg-emerald-500/15 text-emerald-300 border-emerald-400/30">Activa</Badge>
+        : <Badge className="bg-amber-500/15 text-amber-300 border-amber-400/30">Sin probar</Badge>)
+      : <Badge variant="outline">Inactiva</Badge>
+
+  return (
+    <Card className="border-yellow-500/30">
+      <CardHeader>
+        <CardTitle className="flex items-center justify-between gap-2 flex-wrap">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-lg bg-yellow-500/15 border border-yellow-400/30 flex items-center justify-center font-bold text-yellow-300 text-sm">
+              BC
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <span>Botón Bancolombia</span>
+                {ambienteBadge}
+                {estadoBadge}
+              </div>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Pasarela de pago para Persona Natural — redirige al cliente a Bancolombia para autorizar
+              </p>
+            </div>
+          </div>
+          <Button variant="ghost" size="sm" onClick={() => setShowGuide(!showGuide)}>
+            <BookOpen className="w-4 h-4 mr-1" />
+            {showGuide ? 'Ocultar guía' : 'Ver guía'}
+          </Button>
+        </CardTitle>
+      </CardHeader>
+
+      <CardContent className="space-y-4">
+        {showGuide && (
+          <div className="bg-sky-500/5 border border-sky-400/20 rounded-lg p-4 text-sm space-y-2">
+            <div className="font-semibold text-sky-300 flex items-center gap-1">
+              <Info className="w-4 h-4" /> Guía rápida — Cómo obtener tus credenciales
+            </div>
+            <ol className="list-decimal list-inside space-y-1 text-muted-foreground">
+              <li>Entra a <a href="https://developer.bancolombia.com" target="_blank" rel="noreferrer" className="text-sky-400 underline">developer.bancolombia.com</a> y crea una cuenta de desarrollador.</li>
+              <li>Crea una nueva aplicación y selecciona el producto <strong>Botón Bancolombia</strong>.</li>
+              <li>Bancolombia te entregará: <strong>Client ID</strong>, <strong>Client Secret</strong> y <strong>Commerce ID</strong>.</li>
+              <li>Configura las URLs de redirección y webhook en el portal de Bancolombia:
+                <ul className="list-disc list-inside ml-4 mt-1 text-xs">
+                  <li><strong>Redirect URL</strong>: la URL a la que vuelve el cliente tras pagar.</li>
+                  <li><strong>Webhook URL</strong>: la URL donde Bancolombia envía la confirmación asíncrona del pago.</li>
+                </ul>
+              </li>
+              <li>Para pruebas usa el ambiente <strong>Sandbox</strong>. Para cobros reales cambia a <strong>Producción</strong>.</li>
+              <li>Pega las credenciales en el formulario de abajo y haz clic en <strong>"Probar conexión"</strong> antes de guardar.</li>
+            </ol>
+            <div className="bg-amber-500/10 border border-amber-400/20 rounded p-2 text-xs text-amber-200 mt-2">
+              <AlertCircle className="w-3 h-3 inline mr-1" />
+              Las credenciales se guardan <strong>cifradas</strong> en la base de datos. El Client Secret nunca se muestra después de guardarlo.
+            </div>
+          </div>
+        )}
+
+        {loading ? (
+          <p className="text-muted-foreground">Cargando configuración…</p>
+        ) : (
+          <form onSubmit={guardar} className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div>
+              <Label className="text-xs">Client ID *</Label>
+              <Input
+                value={form.clientId}
+                onChange={(e) => setForm({ ...form, clientId: e.target.value })}
+                placeholder={config?.configurada ? '•••••••• (vacío = mantener)' : 'Tu Client ID de Bancolombia'}
+                required
+              />
+            </div>
+            <div>
+              <Label className="text-xs">Client Secret *</Label>
+              <Input
+                type="password"
+                value={form.clientSecret}
+                onChange={(e) => setForm({ ...form, clientSecret: e.target.value })}
+                placeholder={config?.configurada ? '•••••••• (vacío = mantener)' : 'Tu Client Secret'}
+                required={!config?.configurada}
+              />
+            </div>
+            <div>
+              <Label className="text-xs">Commerce ID</Label>
+              <Input
+                value={form.commerceId}
+                onChange={(e) => setForm({ ...form, commerceId: e.target.value })}
+                placeholder="Identificador del comercio (opcional)"
+              />
+            </div>
+            <div>
+              <Label className="text-xs">Ambiente</Label>
+              <Select value={form.ambiente} onValueChange={(v: 'sandbox' | 'produccion') => setForm({ ...form, ambiente: v })}>
+                <SelectTrigger className="mt-1">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="sandbox">Sandbox (pruebas)</SelectItem>
+                  <SelectItem value="produccion">Producción (real)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="md:col-span-2">
+              <Label className="text-xs">Redirect URL (a donde vuelve el cliente tras pagar)</Label>
+              <Input
+                value={form.redirectUrl}
+                onChange={(e) => setForm({ ...form, redirectUrl: e.target.value })}
+                placeholder="https://jsadr-jsadr.vercel.app/api/pagos/bancolombia-redirect"
+              />
+            </div>
+            <div className="md:col-span-2">
+              <Label className="text-xs">Webhook URL (donde Bancolombia confirma el pago)</Label>
+              <Input
+                value={form.webhookUrl}
+                onChange={(e) => setForm({ ...form, webhookUrl: e.target.value })}
+                placeholder="https://jsadr-jsadr.vercel.app/api/pagos/bancolombia-webhook"
+              />
+            </div>
+
+            <div className="md:col-span-2 flex items-center gap-2 pt-1">
+              <Switch
+                checked={form.activa}
+                onCheckedChange={(v) => setForm({ ...form, activa: v })}
+              />
+              <Label className="text-xs cursor-pointer" onClick={() => setForm({ ...form, activa: !form.activa })}>
+                Activar esta pasarela como método de pago en el Portal del Cliente
+              </Label>
+            </div>
+
+            <div className="md:col-span-2 flex flex-wrap gap-2 pt-3 border-t border-white/10">
+              <Button type="submit" disabled={saving}>
+                <Save className="w-4 h-4 mr-2" />
+                {saving ? 'Guardando…' : 'Guardar credenciales'}
+              </Button>
+              <Button type="button" variant="outline" onClick={probar} disabled={testing}>
+                {testing ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <TestTube2 className="w-4 h-4 mr-2" />}
+                {testing ? 'Probando…' : 'Probar conexión'}
+              </Button>
+              {config?.fechaUltimaPrueba && (
+                <span className="text-xs text-muted-foreground self-center ml-2">
+                  Última prueba: {formatearFechaHora(config.fechaUltimaPrueba)} —{' '}
+                  <span className={config.probada ? 'text-emerald-300' : 'text-red-300'}>
+                    {config.probada ? 'OK' : 'Falló'}
+                  </span>
+                  {config.resultadoUltimaPrueba && ` (${config.resultadoUltimaPrueba.slice(0, 60)})`}
+                </span>
+              )}
+            </div>
+          </form>
+        )}
+
+        <div className="bg-muted/30 border border-white/5 rounded-lg p-3 text-xs text-muted-foreground">
+          <div className="font-semibold mb-1 text-foreground">Endpoints del sistema:</div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-1 font-mono">
+            <div><span className="text-muted-foreground">Checkout:</span> POST /api/pagos/bancolombia-checkout</div>
+            <div><span className="text-muted-foreground">Redirect:</span> GET /api/pagos/bancolombia-redirect</div>
+            <div><span className="text-muted-foreground">Webhook:</span> POST /api/pagos/bancolombia-webhook</div>
+            <div><span className="text-muted-foreground">Test:</span> POST /api/configuracion-global/bancolombia/probar</div>
+          </div>
+          <div className="mt-2 pt-2 border-t border-white/5">
+            <span className="text-muted-foreground">Flujo:</span> Cliente hace clic en "Pagar con Bancolombia" →
+            servidor obtiene token OAuth2 → crea payment-intent con firma HMAC →
+            redirige a Bancolombia → cliente autoriza → Bancolombia llama webhook →
+            pago se marca como APLICADO en la BD.
+          </div>
+        </div>
+      </CardContent>
     </Card>
   )
 }
