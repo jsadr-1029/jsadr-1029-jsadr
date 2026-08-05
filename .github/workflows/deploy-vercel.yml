@@ -70,7 +70,7 @@ jobs:
         run: |
           npx vercel pull --yes --environment=production \
             --token="$VERCEL_TOKEN" \
-            --org="$VERCEL_ORG_ID" \
+            --scope="$VERCEL_ORG_ID" \
             --project="$VERCEL_PROJECT_ID"
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
@@ -84,7 +84,7 @@ jobs:
         run: |
           npx vercel build --prod \
             --token="$VERCEL_TOKEN" \
-            --org="$VERCEL_ORG_ID" \
+            --scope="$VERCEL_ORG_ID" \
             --project="$VERCEL_PROJECT_ID"
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
@@ -96,7 +96,7 @@ jobs:
         run: |
           DEPLOY_URL=$(npx vercel deploy --prebuilt --prod \
             --token="$VERCEL_TOKEN" \
-            --org="$VERCEL_ORG_ID" \
+            --scope="$VERCEL_ORG_ID" \
             --project="$VERCEL_PROJECT_ID")
           echo "deployment_url=$DEPLOY_URL" >> "$GITHUB_OUTPUT"
           echo "::notice::Deployment URL: $DEPLOY_URL"
