@@ -670,6 +670,14 @@ export function SeguridadView() {
       <RecuperacionClavesPanel />
 
       {/* =================================================
+          SECCIÓN 5: Historial de Ingresos al Portal del Cliente
+          Registra IP + tipo de dispositivo cada vez que un
+          cliente ingresa al portal. Visible únicamente desde
+          el módulo de Seguridad (orden obligatoria del usuario).
+          ================================================= */}
+      <HistorialIngresosPortalPanel />
+
+      {/* =================================================
           Modal de confirmación reforzada para eliminar credenciales
           Requiere la palabra exacta "Eliminar" (clave maestra,
           no caduca, no se almacena en BD).
@@ -1809,5 +1817,392 @@ function ValidadorFirmaPanel() {
         )}
       </div>
     </Card>
+  )
+}
+
+// =====================================================
+// SECCIÓN 5: Historial de Ingresos al Portal del Cliente
+// Muestra IP + tipo de dispositivo + usuario + fecha de
+// cada ingreso al portal. Vive únicamente dentro del
+// módulo de Seguridad (no accesible desde otros módulos).
+// =====================================================
+interface AccesoPortalItem {
+  id: string
+  clienteId: string | null
+  clienteCedula: string | null
+  clienteNombre: string | null
+  ipOrigen: string | null
+  userAgent: string | null
+  accion: string
+  exito: boolean
+  detalle: string | null
+  metadata: string | null
+  createdAt: string
+}
+
+interface AccesosData {
+  accesos: AccesoPortalItem[]
+  kpis: {
+    totalRegistros: number
+    totalHoy: number
+    intentosFallidosHoy: number
+    loginsExitososHoy: number
+    clientesUnicosHoy: number
+    clientesUnicosRango: number
+    intentosFallidosRango: number
+  }
+  resumen: {
+    topClientes: {
+      clienteCedula: string | null
+      clienteNombre: string | null
+      _count: number
+    }[]
+    porAccion: { accion: string; _count: number }[]
+    porDia: { fecha: string; logins: number; consultas: number; fallidos: number }[]
+    porDispositivo: { name: string; value: number }[]
+  }
+}
+
+const DIAS_HISTORIAL = [1, 7, 15, 30, 90]
+
+const ACCION_LABELS_SEG: Record<string, string> = {
+  LOGIN: 'Ingreso',
+  CONSULTA: 'Consulta',
+  INTENTO_FALLIDO: 'Intento fallido',
+  INTENTO_FALLIDO_CLAVE: 'Intento fallido (clave)',
+  LOGOUT: 'Cierre de sesión',
+  CAMBIO_PIN: 'Cambio de PIN',
+  CAMBIO_CLAVE: 'Cambio de clave',
+  VERIFICAR_CEDULA: 'Verificación de cédula',
+  VERIFICAR_CEDULA_CLAVE: 'Verificación de cédula (clave)',
+  CREAR_PIN: 'Creación de PIN',
+  PIN_EXPIRADO: 'PIN expirado',
+  CLAVE_EXPIRADA: 'Clave expirada',
+}
+
+function parsearDispositivoSeg(ua: string): { tipo: string; color: string } {
+  const u = (ua || '').toLowerCase()
+  if (/ipad|tablet/.test(u)) return { tipo: 'Tablet', color: 'text-amber-600' }
+  if (/mobile|android|iphone|ipod/.test(u)) return { tipo: 'Móvil', color: 'text-violet-600' }
+  if (/windows|macintosh|linux|cros/.test(u)) return { tipo: 'Escritorio', color: 'text-emerald-600' }
+  if (/bot|crawler|spider/.test(u)) return { tipo: 'Bot', color: 'text-red-600' }
+  return { tipo: 'Otro', color: 'text-slate-500' }
+}
+
+function parsearNavegadorSeg(ua: string): string {
+  const u = ua || ''
+  if (/edg\//i.test(u)) return 'Edge'
+  if (/opr\/|opera/i.test(u)) return 'Opera'
+  if (/chrome|crios/i.test(u)) return 'Chrome'
+  if (/firefox|fxios/i.test(u)) return 'Firefox'
+  if (/safari/i.test(u)) return 'Safari'
+  return '—'
+}
+
+function parsearSOsSeg(ua: string): string {
+  const u = ua || ''
+  if (/windows nt 10/i.test(u)) return 'Windows 10/11'
+  if (/windows nt/i.test(u)) return 'Windows'
+  if (/android/i.test(u)) return 'Android'
+  if (/iphone|ipad|ios/i.test(u)) return 'iOS'
+  if (/mac os x|macintosh/i.test(u)) return 'macOS'
+  if (/linux/i.test(u)) return 'Linux'
+  return '—'
+}
+
+function HistorialIngresosPortalPanel() {
+  const [data, setData] = useState<AccesosData | null>(null)
+  const [dias, setDias] = useState(7)
+  const [loading, setLoading] = useState(true)
+  const [filtroBusqueda, setFiltroBusqueda] = useState('')
+  const [filtroAccion, setFiltroAccion] = useState<string>('TODAS')
+  const [soloExitosos, setSoloExitosos] = useState(false)
+
+  const cargar = async () => {
+    setLoading(true)
+    try {
+      const res = await fetch(`/api/reportes/accesos-portal?dias=${dias}&limit=500`)
+      const json = await res.json()
+      if (json.success) {
+        setData({
+          accesos: json.data,
+          kpis: json.kpis,
+          resumen: json.resumen,
+        })
+      } else {
+        toast.error(json.error || 'Error al cargar historial')
+      }
+    } catch (e: any) {
+      toast.error(e.message || 'Error de red')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    cargar()
+  }, [dias])
+
+  // Filtrado en memoria (búsqueda por cédula / nombre / IP)
+  const accesosFiltrados = (data?.accesos || []).filter((a) => {
+    if (filtroAccion !== 'TODAS' && a.accion !== filtroAccion) return false
+    if (soloExitosos && !a.exito) return false
+    if (filtroBusqueda.trim()) {
+      const q = filtroBusqueda.trim().toLowerCase()
+      const txt = `${a.clienteCedula || ''} ${a.clienteNombre || ''} ${a.ipOrigen || ''}`.toLowerCase()
+      if (!txt.includes(q)) return false
+    }
+    return true
+  })
+
+  // Top dispositivos para los KPIs
+  const totalMovil = (data?.resumen.porDispositivo || []).find((d) => d.name === 'Móvil')?.value || 0
+  const totalEscritorio = (data?.resumen.porDispositivo || []).find((d) => d.name === 'Escritorio')?.value || 0
+  const totalTablet = (data?.resumen.porDispositivo || []).find((d) => d.name === 'Tablet')?.value || 0
+
+  return (
+    <Card className="glass-card">
+      <div className="p-5 border-b border-white/10">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div>
+            <h3 className="text-base font-semibold flex items-center gap-2">
+              <History className="w-4 h-4 text-primary" />
+              Historial de Ingresos al Portal del Cliente
+            </h3>
+            <p className="text-xs text-muted-foreground mt-1">
+              Registro automático de IP y dispositivo cada vez que un cliente ingresa al portal.
+              Información confidencial — visible únicamente desde el módulo de Seguridad.
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-muted-foreground">Periodo:</span>
+            <div className="flex gap-1 bg-white/5 rounded-lg p-1 border border-white/10">
+              {DIAS_HISTORIAL.map((d) => (
+                <Button
+                  key={d}
+                  size="sm"
+                  variant={dias === d ? 'default' : 'ghost'}
+                  onClick={() => setDias(d)}
+                  className={`h-7 px-3 text-xs ${
+                    dias === d
+                      ? 'gradient-primary text-white'
+                      : 'text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  {d === 1 ? 'Hoy' : `${d}d`}
+                </Button>
+              ))}
+            </div>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={cargar}
+              disabled={loading}
+              className="h-7"
+            >
+              <RefreshCw className={`w-3 h-3 ${loading ? 'animate-spin' : ''}`} />
+            </Button>
+          </div>
+        </div>
+      </div>
+
+      {/* KPIs */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 p-5 border-b border-white/10">
+        <KPIBox
+          label="Ingresos exitosos hoy"
+          value={data?.kpis.loginsExitososHoy ?? 0}
+          icon={<CheckCircle2 className="w-4 h-4" />}
+          color="text-emerald-600"
+        />
+        <KPIBox
+          label="Intentos fallidos hoy"
+          value={data?.kpis.intentosFallidosHoy ?? 0}
+          icon={<AlertTriangle className="w-4 h-4" />}
+          color="text-red-600"
+        />
+        <KPIBox
+          label="Clientes únicos (rango)"
+          value={data?.kpis.clientesUnicosRango ?? 0}
+          icon={<Users className="w-4 h-4" />}
+          color="text-violet-600"
+        />
+        <KPIBox
+          label="Registros totales"
+          value={data?.kpis.totalRegistros ?? 0}
+          icon={<Clock className="w-4 h-4" />}
+          color="text-slate-600"
+        />
+      </div>
+
+      {/* Desglose por dispositivo */}
+      <div className="grid grid-cols-3 gap-3 p-5 border-b border-white/10">
+        <div className="rounded-lg bg-violet-50 border border-violet-200 p-3 text-center">
+          <div className="text-2xl font-bold text-violet-700">{totalMovil}</div>
+          <div className="text-xs text-violet-600 mt-0.5">Móvil</div>
+        </div>
+        <div className="rounded-lg bg-emerald-50 border border-emerald-200 p-3 text-center">
+          <div className="text-2xl font-bold text-emerald-700">{totalEscritorio}</div>
+          <div className="text-xs text-emerald-600 mt-0.5">Escritorio</div>
+        </div>
+        <div className="rounded-lg bg-amber-50 border border-amber-200 p-3 text-center">
+          <div className="text-2xl font-bold text-amber-700">{totalTablet}</div>
+          <div className="text-xs text-amber-600 mt-0.5">Tablet</div>
+        </div>
+      </div>
+
+      {/* Filtros */}
+      <div className="p-4 border-b border-white/10 grid grid-cols-1 sm:grid-cols-4 gap-2">
+        <Input
+          placeholder="Buscar por cédula, nombre o IP..."
+          value={filtroBusqueda}
+          onChange={(e) => setFiltroBusqueda(e.target.value)}
+          className="h-9 text-sm"
+        />
+        <select
+          value={filtroAccion}
+          onChange={(e) => setFiltroAccion(e.target.value)}
+          className="h-9 text-sm rounded-md border border-input bg-background px-2"
+        >
+          <option value="TODAS">Todas las acciones</option>
+          {Object.entries(ACCION_LABELS_SEG).map(([k, v]) => (
+            <option key={k} value={k}>{v}</option>
+          ))}
+        </select>
+        <label className="flex items-center gap-2 text-xs text-muted-foreground">
+          <Switch checked={soloExitosos} onCheckedChange={setSoloExitosos} />
+          Solo exitosos
+        </label>
+        <div className="text-xs text-muted-foreground text-right self-center">
+          Mostrando {accesosFiltrados.length} de {data?.accesos.length || 0} registros
+        </div>
+      </div>
+
+      {/* Tabla de accesos */}
+      <div className="overflow-x-auto max-h-[480px] overflow-y-auto">
+        {loading ? (
+          <div className="p-10 text-center">
+            <Loader2 className="w-5 h-5 mx-auto mb-2 animate-spin text-primary" />
+            <p className="text-xs text-muted-foreground">Cargando historial de ingresos...</p>
+          </div>
+        ) : accesosFiltrados.length === 0 ? (
+          <div className="p-10 text-center text-sm text-muted-foreground">
+            No hay registros para los filtros seleccionados.
+          </div>
+        ) : (
+          <table className="w-full text-xs">
+            <thead className="bg-muted/30 sticky top-0 z-10">
+              <tr>
+                <th className="text-left font-medium p-2 text-muted-foreground">Fecha y hora</th>
+                <th className="text-left font-medium p-2 text-muted-foreground">Cliente</th>
+                <th className="text-left font-medium p-2 text-muted-foreground">Acción</th>
+                <th className="text-left font-medium p-2 text-muted-foreground">IP</th>
+                <th className="text-left font-medium p-2 text-muted-foreground">Dispositivo</th>
+                <th className="text-left font-medium p-2 text-muted-foreground">SO / Navegador</th>
+                <th className="text-left font-medium p-2 text-muted-foreground">Estado</th>
+                <th className="text-left font-medium p-2 text-muted-foreground">Detalle</th>
+              </tr>
+            </thead>
+            <tbody>
+              {accesosFiltrados.map((a) => {
+                const disp = parsearDispositivoSeg(a.userAgent || '')
+                const so = parsearSOsSeg(a.userAgent || '')
+                const nav = parsearNavegadorSeg(a.userAgent || '')
+                return (
+                  <tr key={a.id} className="border-t border-white/5 hover:bg-white/5">
+                    <td className="p-2 whitespace-nowrap text-muted-foreground">
+                      {new Date(a.createdAt).toLocaleString('es-CO', {
+                        day: '2-digit',
+                        month: '2-digit',
+                        year: 'numeric',
+                        hour: '2-digit',
+                        minute: '2-digit',
+                      })}
+                    </td>
+                    <td className="p-2 whitespace-nowrap">
+                      <div className="font-medium">{a.clienteNombre || '—'}</div>
+                      <div className="text-[10px] text-muted-foreground">
+                        {a.clienteCedula ? `CC ${a.clienteCedula}` : 'Anónimo'}
+                      </div>
+                    </td>
+                    <td className="p-2 whitespace-nowrap">
+                      <Badge
+                        variant="neutral"
+                        className="text-[10px] bg-slate-100/70 border-slate-200"
+                      >
+                        {ACCION_LABELS_SEG[a.accion] || a.accion}
+                      </Badge>
+                    </td>
+                    <td className="p-2 whitespace-nowrap font-mono text-[10px]">
+                      {a.ipOrigen || '—'}
+                    </td>
+                    <td className="p-2 whitespace-nowrap">
+                      <span className={`inline-flex items-center gap-1 ${disp.color}`}>
+                        {disp.tipo}
+                      </span>
+                    </td>
+                    <td className="p-2 whitespace-nowrap text-muted-foreground">
+                      <div>{so}</div>
+                      <div className="text-[10px] opacity-70">{nav}</div>
+                    </td>
+                    <td className="p-2">
+                      {a.exito ? (
+                        <span className="inline-flex items-center gap-1 text-emerald-600 text-[10px]">
+                          <CheckCircle2 className="w-3 h-3" /> OK
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 text-red-600 text-[10px]">
+                          <XCircle className="w-3 h-3" /> Falló
+                        </span>
+                      )}
+                    </td>
+                    <td className="p-2 text-muted-foreground text-[10px] max-w-[200px] truncate">
+                      {a.detalle || '—'}
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        )}
+      </div>
+
+      {/* Aviso de privacidad */}
+      <div className="p-4 border-t border-white/10 bg-blue-50/50 rounded-b-lg">
+        <div className="flex items-start gap-2 text-xs text-blue-800">
+          <ShieldCheck className="w-4 h-4 flex-shrink-0 mt-0.5" />
+          <div>
+            <p className="font-semibold">Uso confidencial</p>
+            <p className="mt-0.5">
+              Este registro se almacena automáticamente con fines de seguridad y trazabilidad.
+              Cada vez que un cliente ingresa al portal, el sistema identifica la IP de origen
+              y el tipo de dispositivo, preservando la integridad de la información del cliente.
+              Solo el equipo autorizado con acceso al módulo de Seguridad puede consultar este historial.
+            </p>
+          </div>
+        </div>
+      </div>
+    </Card>
+  )
+}
+
+function KPIBox({
+  label,
+  value,
+  icon,
+  color,
+}: {
+  label: string
+  value: number
+  icon: React.ReactNode
+  color: string
+}) {
+  return (
+    <div className="rounded-lg bg-white/5 border border-white/10 p-3">
+      <div className={`flex items-center gap-1.5 ${color} mb-1`}>
+        {icon}
+        <span className="text-[10px] font-medium uppercase tracking-wide opacity-80">{label}</span>
+      </div>
+      <div className="text-2xl font-bold">{value}</div>
+    </div>
   )
 }
