@@ -119,9 +119,46 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    const cliente = await db.cliente.findUnique({ where: { id: clienteId } })
+    const cliente = await db.cliente.findUnique({
+      where: { id: clienteId },
+      include: { categoria: true },
+    })
     if (!cliente) {
       return NextResponse.json({ success: false, error: 'Cliente no encontrado' }, { status: 404 })
+    }
+
+    // === Validación de monto por categoría ===
+    // Resuelve la categoría: la pasada en el body, o la del cliente, o la del préstamo anterior
+    let categoriaValidar: Awaited<ReturnType<typeof db.categoriaCliente.findUnique>> = null
+    if (categoriaId) {
+      categoriaValidar = await db.categoriaCliente.findUnique({ where: { id: categoriaId } })
+    } else if (cliente.categoriaId && cliente.categoria) {
+      categoriaValidar = cliente.categoria
+    }
+    if (categoriaValidar) {
+      const montoNumValidar = parseFloat(montoPrincipal)
+      const montoMaxCat = Number(categoriaValidar.montoMaximo)
+      const montoMinCat = Number(categoriaValidar.montoMinimo)
+      if (montoMaxCat > 0 && montoNumValidar > montoMaxCat) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: `El monto del préstamo (${montoNumValidar.toLocaleString('es-CO')}) supera el máximo permitido para la categoría "${categoriaValidar.nombre}" (${montoMaxCat.toLocaleString('es-CO')}). Para prestar un monto mayor, asigne al cliente una categoría superior.`,
+            codigo: 'MONTO_EXCEDE_CATEGORIA',
+          },
+          { status: 400 }
+        )
+      }
+      if (montoMinCat > 0 && montoNumValidar < montoMinCat) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: `El monto del préstamo (${montoNumValidar.toLocaleString('es-CO')}) es inferior al mínimo permitido para la categoría "${categoriaValidar.nombre}" (${montoMinCat.toLocaleString('es-CO')}).`,
+            codigo: 'MONTO_INFERIOR_CATEGORIA',
+          },
+          { status: 400 }
+        )
+      }
     }
 
     // === Cálculo según modalidad ===

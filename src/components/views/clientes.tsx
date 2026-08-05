@@ -1,10 +1,10 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { Card, PageHeader, Badge, EmptyState, LoadingState } from '@/components/shared/ui'
 import { useFetch, apiPost } from '@/hooks/use-fetch'
 import { formatCOP, formatDate, getInitials, maskPhone } from '@/lib/format'
-import { Users, Plus, Search, Eye, Phone, Mail, MapPin, Building, X } from 'lucide-react'
+import { Users, Plus, Search, Eye, Phone, Mail, MapPin, Building, X, Landmark, AlertCircle, Info } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -225,6 +225,26 @@ export function ClientesView({ navigate }: { navigate: (v: any) => void }) {
   )
 }
 
+type Categoria = {
+  id: string
+  codigo: string
+  nombre: string
+  montoMinimo: number
+  montoMaximo: number
+  tasaInteresAnual: number
+  tasaMoraAnual: number
+  descripcion: string | null
+  cuentaRecaudoId: string | null
+  cuentaRecaudo: {
+    id: string
+    codigo: string
+    banco: string
+    tipoCuenta: string
+    numeroCuenta: string
+    titular: string
+  } | null
+}
+
 function NuevoClienteModal({ open, onClose, onCreated }: { open: boolean; onClose: () => void; onCreated: () => void }) {
   const [form, setForm] = useState({
     nombre: '',
@@ -238,23 +258,39 @@ function NuevoClienteModal({ open, onClose, onCreated }: { open: boolean; onClos
     bancoCliente: '',
     tipoCuentaCliente: 'AHORROS',
     numeroCuentaCliente: '',
+    categoriaId: '',
   })
   const [saving, setSaving] = useState(false)
 
+  // Cargar categorías disponibles (con su cuenta de recaudo asignada)
+  const { data: categoriasData } = useFetch<{ success: boolean; data: Categoria[] }>('/api/categorias')
+  const categorias = useMemo(() => categoriasData?.data ?? [], [categoriasData])
+
+  const categoriaSeleccionada = useMemo(
+    () => categorias.find((c) => c.id === form.categoriaId) || null,
+    [categorias, form.categoriaId]
+  )
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (!form.categoriaId) {
+      toast.error('Debe seleccionar una categoría para el cliente')
+      return
+    }
     setSaving(true)
     try {
       await apiPost('/api/clientes', {
         ...form,
         salario: form.salario ? Number(form.salario) : null,
+        categoriaId: form.categoriaId,
+        cuentaRecaudoId: categoriaSeleccionada?.cuentaRecaudoId || null,
         activo: true,
       })
       onCreated()
       setForm({
         nombre: '', cedula: '', telefono: '', email: '', departamento: '',
         municipio: '', salario: '', direccion: '', bancoCliente: '',
-        tipoCuentaCliente: 'AHORROS', numeroCuentaCliente: '',
+        tipoCuentaCliente: 'AHORROS', numeroCuentaCliente: '', categoriaId: '',
       })
     } catch (e) {
       toast.error('Error: ' + (e as Error).message)
@@ -269,8 +305,81 @@ function NuevoClienteModal({ open, onClose, onCreated }: { open: boolean; onClos
         <DialogHeader>
           <DialogTitle>Nuevo Cliente</DialogTitle>
         </DialogHeader>
-        <form onSubmit={handleSubmit} className="space-y-3 max-h-[60vh] overflow-y-auto pr-2">
-          <div className="grid grid-cols-2 gap-3">
+        <form onSubmit={handleSubmit} className="space-y-3 max-h-[70vh] overflow-y-auto pr-2">
+          {/* === CATEGORÍA DEL CLIENTE (obligatoria) === */}
+          <div className="space-y-2">
+            <Label className="flex items-center gap-1.5">
+              <Landmark className="w-4 h-4 text-indigo-600" />
+              Categoría del cliente *
+            </Label>
+            <p className="text-xs text-slate-500">
+              La categoría define el monto máximo que puede solicitar, la tasa de interés
+              aplicable y la cuenta bancaria donde debe realizar los pagos.
+            </p>
+            <Select value={form.categoriaId} onValueChange={(v) => setForm({ ...form, categoriaId: v })}>
+              <SelectTrigger>
+                <SelectValue placeholder="Seleccione una categoría..." />
+              </SelectTrigger>
+              <SelectContent>
+                {categorias.map((c) => (
+                  <SelectItem key={c.id} value={c.id}>
+                    <div className="flex flex-col">
+                      <span className="font-medium">{c.nombre} ({c.codigo})</span>
+                      <span className="text-xs text-slate-500">
+                        {formatCOP(c.montoMinimo)} – {formatCOP(c.montoMaximo)} · {c.tasaInteresAnual}% anual
+                      </span>
+                    </div>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* === Resumen de la categoría seleccionada === */}
+          {categoriaSeleccionada && (
+            <div className="rounded-lg border border-indigo-200 bg-gradient-to-br from-indigo-50 to-purple-50 p-3 space-y-2">
+              <div className="flex items-center gap-2">
+                <Badge variant="info">{categoriaSeleccionada.codigo}</Badge>
+                <span className="font-semibold text-slate-900">{categoriaSeleccionada.nombre}</span>
+              </div>
+              <div className="grid grid-cols-3 gap-2 text-xs">
+                <div>
+                  <p className="text-slate-500">Monto mínimo</p>
+                  <p className="font-semibold text-slate-900">{formatCOP(categoriaSeleccionada.montoMinimo)}</p>
+                </div>
+                <div>
+                  <p className="text-slate-500">Monto máximo</p>
+                  <p className="font-semibold text-slate-900">{formatCOP(categoriaSeleccionada.montoMaximo)}</p>
+                </div>
+                <div>
+                  <p className="text-slate-500">Tasa anual</p>
+                  <p className="font-semibold text-slate-900">{categoriaSeleccionada.tasaInteresAnual}%</p>
+                </div>
+              </div>
+              {categoriaSeleccionada.cuentaRecaudo ? (
+                <div className="mt-2 rounded-md bg-amber-50 border border-amber-200 px-3 py-2 flex items-start gap-2">
+                  <Landmark className="w-4 h-4 text-amber-700 mt-0.5 flex-shrink-0" />
+                  <div className="text-xs">
+                    <p className="font-semibold text-amber-900">Cuenta de recaudo asignada</p>
+                    <p className="text-amber-800">
+                      {categoriaSeleccionada.cuentaRecaudo.banco} · {categoriaSeleccionada.cuentaRecaudo.tipoCuenta} ·{' '}
+                      <span className="font-mono font-semibold">{categoriaSeleccionada.cuentaRecaudo.numeroCuenta}</span>
+                    </p>
+                    <p className="text-amber-700">Titular: {categoriaSeleccionada.cuentaRecaudo.titular}</p>
+                  </div>
+                </div>
+              ) : (
+                <div className="mt-2 rounded-md bg-red-50 border border-red-200 px-3 py-2 flex items-start gap-2">
+                  <AlertCircle className="w-4 h-4 text-red-700 mt-0.5 flex-shrink-0" />
+                  <p className="text-xs text-red-800">
+                    Esta categoría <strong>no tiene cuenta de recaudo asignada</strong>. Configure la categoría antes de crear clientes en ella.
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
+
+          <div className="border-t border-slate-200 pt-3 grid grid-cols-2 gap-3">
             <div>
               <Label>Nombre completo *</Label>
               <Input value={form.nombre} onChange={(e) => setForm({ ...form, nombre: e.target.value })} required />
@@ -324,7 +433,9 @@ function NuevoClienteModal({ open, onClose, onCreated }: { open: boolean; onClos
           </div>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={onClose}>Cancelar</Button>
-            <Button type="submit" disabled={saving}>{saving ? 'Guardando...' : 'Crear Cliente'}</Button>
+            <Button type="submit" disabled={saving || !form.categoriaId}>
+              {saving ? 'Guardando...' : 'Crear Cliente'}
+            </Button>
           </DialogFooter>
         </form>
       </DialogContent>

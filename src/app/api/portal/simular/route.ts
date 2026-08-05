@@ -47,6 +47,34 @@ export async function POST(req: NextRequest) {
     const plazoNum = Number(plazoMeses)
     const frec = frecuencia || 'MENSUAL'
 
+    // === Validar monto dentro del rango permitido por la categoría ===
+    const montoMin = Number(categoria.montoMinimo)
+    const montoMax = Number(categoria.montoMaximo)
+    if (montoMax > 0 && montoNum > montoMax) {
+      return NextResponse.json(
+        {
+          error: `El monto solicitado (${montoNum.toLocaleString('es-CO')}) supera el máximo permitido para la categoría "${categoria.nombre}": ${montoMax.toLocaleString('es-CO')}.`,
+          codigo: 'MONTO_EXCEDE_CATEGORIA',
+          montoSolicitado: montoNum,
+          montoMaximo: montoMax,
+          categoria: { id: categoria.id, nombre: categoria.nombre, codigo: categoria.codigo },
+        },
+        { status: 400 }
+      )
+    }
+    if (montoMin > 0 && montoNum < montoMin) {
+      return NextResponse.json(
+        {
+          error: `El monto solicitado (${montoNum.toLocaleString('es-CO')}) es inferior al mínimo permitido para la categoría "${categoria.nombre}": ${montoMin.toLocaleString('es-CO')}.`,
+          codigo: 'MONTO_INFERIOR_CATEGORIA',
+          montoSolicitado: montoNum,
+          montoMinimo: montoMin,
+          categoria: { id: categoria.id, nombre: categoria.nombre, codigo: categoria.codigo },
+        },
+        { status: 400 }
+      )
+    }
+
     // Calcular tasa mensual desde la anual de la categoría
     const tasaMensual = Number(categoria.tasaInteresAnual) / 12
 

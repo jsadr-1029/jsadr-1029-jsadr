@@ -113,6 +113,35 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    // === Sincronizar cuenta de recaudo con la categoría asignada ===
+    // Si el usuario no seleccionó una cuenta específica, usar la cuenta de la categoría.
+    // Esto garantiza la relación 1:1 entre categoría y cuenta de recaudo del cliente.
+    let cuentaRecaudoFinal = cuentaRecaudoId || null
+    if (!cuentaRecaudoFinal && categoriaId) {
+      const cat = await db.categoriaCliente.findUnique({
+        where: { id: categoriaId },
+        select: { cuentaRecaudoId: true, nombre: true },
+      })
+      if (cat && cat.cuentaRecaudoId) {
+        cuentaRecaudoFinal = cat.cuentaRecaudoId
+      } else if (cat) {
+        // Categoría existe pero no tiene cuenta — avisar al admin
+        return NextResponse.json(
+          {
+            success: false,
+            error: `La categoría "${cat.nombre}" no tiene una cuenta de recaudo asignada. Configure la categoría antes de crear clientes en ella.`,
+            codigo: 'CATEGORIA_SIN_CUENTA',
+          },
+          { status: 400 }
+        )
+      } else {
+        return NextResponse.json(
+          { success: false, error: 'La categoría indicada no existe.' },
+          { status: 400 }
+        )
+      }
+    }
+
     const cliente = await db.cliente.create({
       data: {
         nombre,
@@ -138,7 +167,7 @@ export async function POST(req: NextRequest) {
             ? parseFloat(tasaPersonalizada)
             : null,
         // === Cuenta de recaudo asignada (v3.7) ===
-        cuentaRecaudoId: cuentaRecaudoId || null,
+        cuentaRecaudoId: cuentaRecaudoFinal,
         instruccionCuentaId: instruccionCuentaId || null,
         instruccionCuentaNota: instruccionCuentaNota || null,
         instruccionCuentaExpira: instruccionCuentaExpira ? new Date(instruccionCuentaExpira) : null,

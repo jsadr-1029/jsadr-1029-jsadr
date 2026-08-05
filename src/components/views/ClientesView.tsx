@@ -47,6 +47,7 @@ import {
   UserPlus,
   Landmark,
   Percent,
+  AlertCircle,
 } from 'lucide-react'
 
 interface ReferidorInfo {
@@ -331,6 +332,15 @@ export function ClientesView({ onChanged }: { onChanged: () => void }) {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (guardando) return
+    // === Validación obligatoria de categoría ===
+    if (!form.categoriaId) {
+      toast({
+        title: 'Categoría requerida',
+        description: 'Debe seleccionar una categoría antes de crear el cliente. La categoría define el monto máximo, la tasa y la cuenta de recaudo.',
+        variant: 'destructive',
+      })
+      return
+    }
     setGuardando(true)
 
     try {
@@ -930,28 +940,83 @@ export function ClientesView({ onChanged }: { onChanged: () => void }) {
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="categoriaId">Categoría</Label>
+                <Label htmlFor="categoriaId">
+                  Categoría <span className="text-destructive">*</span>
+                </Label>
                 <Select
                   value={form.categoriaId || 'none'}
                   onValueChange={(v) =>
                     setForm({
                       ...form,
                       categoriaId: v === 'none' ? '' : v,
+                      // Si el usuario no ha fijado manualmente la cuenta, limpiarla
+                      // para que se reasigne automáticamente a la de la categoría en el backend.
+                      cuentaRecaudoId: v === 'none' ? '' : form.cuentaRecaudoId,
                     })
                   }
                 >
                   <SelectTrigger id="categoriaId">
-                    <SelectValue placeholder="Sin categoría" />
+                    <SelectValue placeholder="Seleccione una categoría" />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="none">— Sin categoría —</SelectItem>
                     {categorias.map((c) => (
                       <SelectItem key={c.id} value={c.id}>
-                        {c.codigo} — {c.nombre}
+                        {c.codigo} — {c.nombre} ·{' '}
+                        {new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 }).format(c.montoMinimo)}–{new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 }).format(c.montoMaximo)} · {c.tasaInteresAnual}% anual
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
+                {/* === Resumen de la categoría seleccionada === */}
+                {form.categoriaId && (() => {
+                  const cat = categorias.find((c) => c.id === form.categoriaId)
+                  if (!cat) return null
+                  const fmtCOP = (n: number) =>
+                    new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 }).format(n)
+                  return (
+                    <div className="rounded-lg border border-indigo-200 bg-gradient-to-br from-indigo-50 to-purple-50 p-3 space-y-2">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <Badge variant="secondary">{cat.codigo}</Badge>
+                        <span className="font-semibold text-slate-900">{cat.nombre}</span>
+                      </div>
+                      <div className="grid grid-cols-3 gap-2 text-xs">
+                        <div>
+                          <p className="text-slate-500">Monto mín.</p>
+                          <p className="font-semibold text-slate-900">{fmtCOP(cat.montoMinimo)}</p>
+                        </div>
+                        <div>
+                          <p className="text-slate-500">Monto máx.</p>
+                          <p className="font-semibold text-slate-900">{fmtCOP(cat.montoMaximo)}</p>
+                        </div>
+                        <div>
+                          <p className="text-slate-500">Tasa anual</p>
+                          <p className="font-semibold text-slate-900">{cat.tasaInteresAnual}%</p>
+                        </div>
+                      </div>
+                      {cat.cuentaRecaudo ? (
+                        <div className="mt-1 rounded-md bg-amber-50 border border-amber-200 px-3 py-2 flex items-start gap-2">
+                          <Landmark className="w-4 h-4 text-amber-700 mt-0.5 shrink-0" />
+                          <div className="text-xs">
+                            <p className="font-semibold text-amber-900">Cuenta de recaudo asignada</p>
+                            <p className="text-amber-800">
+                              {cat.cuentaRecaudo.banco} · {cat.cuentaRecaudo.tipoCuenta} ·{' '}
+                              <span className="font-mono font-semibold">{cat.cuentaRecaudo.numeroCuenta}</span>
+                            </p>
+                            <p className="text-amber-700">Titular: {cat.cuentaRecaudo.titular}</p>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="mt-1 rounded-md bg-red-50 border border-red-200 px-3 py-2 flex items-start gap-2">
+                          <AlertCircle className="w-4 h-4 text-red-700 mt-0.5 shrink-0" />
+                          <p className="text-xs text-red-800">
+                            Esta categoría <strong>no tiene cuenta de recaudo asignada</strong>. Configúrela antes de crear clientes en ella.
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  )
+                })()}
               </div>
               <div className="space-y-2">
                 <Label htmlFor="salario">Salario</Label>
