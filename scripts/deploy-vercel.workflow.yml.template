@@ -58,9 +58,17 @@ jobs:
       - name: Install Vercel CLI
         run: npm install --no-save vercel@latest
 
+      - name: Verify Vercel CLI is available
+        run: |
+          echo "PATH=$PATH"
+          ls -la node_modules/.bin/vercel || echo "vercel bin not found"
+          npx vercel --version
+          # Add node_modules/.bin to PATH for subsequent steps
+          echo "$PWD/node_modules/.bin" >> "$GITHUB_PATH"
+
       - name: Pull Vercel environment (production)
         run: |
-          vercel pull --yes --environment=production \
+          npx vercel pull --yes --environment=production \
             --token="$VERCEL_TOKEN" \
             --org="$VERCEL_ORG_ID" \
             --project="$VERCEL_PROJECT_ID"
@@ -74,7 +82,7 @@ jobs:
 
       - name: Build project (Vercel)
         run: |
-          vercel build --prod \
+          npx vercel build --prod \
             --token="$VERCEL_TOKEN" \
             --org="$VERCEL_ORG_ID" \
             --project="$VERCEL_PROJECT_ID"
@@ -86,7 +94,7 @@ jobs:
       - name: Deploy to Vercel (production)
         id: deploy
         run: |
-          DEPLOY_URL=$(vercel deploy --prebuilt --prod \
+          DEPLOY_URL=$(npx vercel deploy --prebuilt --prod \
             --token="$VERCEL_TOKEN" \
             --org="$VERCEL_ORG_ID" \
             --project="$VERCEL_PROJECT_ID")
