@@ -1071,6 +1071,264 @@ MODULES["18. Campañas de Marketing"] = [
      "No se envían más mensajes. Ya enviados no se revierten."),
 ]
 
+# ============================================================
+# 19. SISTEMA DE CORREOS — COBERTURA EXHAUSTIVA E2E
+# ============================================================
+MODULES["19. Sistema de Correos (E2E Exhaustivo)"] = [
+    # Estado SMTP
+    ("Estado SMTP sin auth", "GET /api/email sin sesión",
+     "Positivo", "Alta",
+     "Dev server o Vercel funcionando",
+     "1. GET /api/email sin cookies",
+     "GET /api/email",
+     "200 OK con { smtpConfigurado, message }. En Vercel sin auth: 401.",
+     "Respuesta no revela credenciales. message es informativo."),
+    # Enviar prueba con auth
+    ("Enviar correo de prueba autenticado", "POST /api/email accion=enviar-prueba",
+     "Positivo", "Crítica",
+     "ADMIN autenticado, SMTP configurado",
+     "1. POST /api/email con body { accion:'enviar-prueba', to }",
+     '{"accion":"enviar-prueba","to":"test@example.com"}',
+     "200 OK con { success, messageId, isEthereal }. Si isEthereal=true, advertir.",
+     "Registro en EnvioCorreo con estado=ENVIADO. Si SMTP no configurado: isEthereal=true."),
+    # Enviar prueba sin auth
+    ("Enviar correo sin auth", "POST /api/email sin sesión",
+     "Seguridad", "Alta",
+     "Endpoint protegido",
+     "1. POST /api/email sin cookie",
+     '{"accion":"enviar-prueba"}',
+     "401 Unauthorized con code:'UNAUTHORIZED'",
+     "No se envía correo. No se crea registro en EnvioCorreo."),
+    # Recuperar clave — rate limit
+    ("Recuperar clave con rate limit", "POST /api/auth/recuperar-clave 2 veces en 5 min",
+     "Borde", "Alta",
+     "Rate limit configurado a 5 min por IP",
+     "1. POST /api/auth/recuperar-clave\n2. Esperar <5min\n3. POST de nuevo",
+     '{"identificador":"admin@jsadr.co"}',
+     "Primera: 200 OK. Segunda: 429 Too Many Requests con retryAfter.",
+     "Respuesta 429 incluye mensaje 'Demasiadas solicitudes. Intenta nuevamente en unos segundos.'"),
+    # OTP chat válido
+    ("OTP chat para cliente real", "POST /api/chat/otp accion=solicitar",
+     "Positivo", "Crítica",
+     "Cliente existe y tiene email",
+     "1. POST /api/chat/otp con clienteId válido\n2. Verificar email recibido",
+     '{"accion":"solicitar","clienteId":"<id>"}',
+     "200 OK con { envio:{exito:true}, metodo:'EMAIL', destinatario:'***' }",
+     "OTP 6 dígitos generado. Válido 5 min. EnvioCorreo creado."),
+    # OTP chat verificar
+    ("OTP chat verificar código correcto", "POST /api/chat/otp accion=verificar",
+     "Positivo", "Crítica",
+     "OTP generado previamente, no expirado",
+     "1. Solicitar OTP\n2. POST verificar con código correcto",
+     '{"accion":"verificar","clienteId":"...","codigo":"123456"}',
+     "200 OK con { verificado:true, otpRegistroId }",
+     "Estado OTP=VERIFICADO. No permite reutilizar."),
+    # OTP chat código expirado
+    ("OTP chat verificar código expirado", "POST /api/chat/otp verificar tras 5 min",
+     "Negativo", "Alta",
+     "OTP fue solicitado hace >5 min",
+     "1. Solicitar OTP\n2. Esperar 5+ min\n3. POST verificar",
+     '{"accion":"verificar","clienteId":"...","codigo":"123456"}',
+     "400 Bad Request con code:'OTP_EXPIRED'",
+     "Estado OTP=EXPIRADO. No permite verificar."),
+    # OTP portal firma
+    ("OTP portal firma válido", "POST /api/portal/solicitar-otp",
+     "Positivo", "Crítica",
+     "Firma existe, cliente autenticado en portal",
+     "1. POST /api/portal/solicitar-otp con firmaId",
+     '{"firmaId":"<id>"}',
+     "200 OK con { envio:{...}, firmaId }",
+     "OTP registrado. Email enviado al cliente. Válido 5 min."),
+    # OTP portal sin firmaId
+    ("OTP portal sin firmaId", "POST /api/portal/solicitar-otp sin body",
+     "Negativo", "Alta",
+     "Endpoint requiere firmaId",
+     "1. POST sin body",
+     '{}',
+     "400 Bad Request con code:'FIRMA_ID_REQUERIDO'",
+     "No se genera OTP. No se envía correo."),
+    # Notif activación préstamo
+    ("Notificación activación préstamo", "POST /api/prestamos/[id]/aceptar-tyc-otp",
+     "Positivo", "Alta",
+     "Préstamo PENDIENTE_ACEPTACION, cliente autenticado, OTP verificado",
+     "1. POST con accion=enviar_otp\n2. POST con accion=confirmar y OTP",
+     '{"accion":"confirmar","otp":"123456"}',
+     "200 OK. Préstamo estado=ACTIVO. Email enviado al cliente.",
+     "AuditLog registra PRESTAMO_ACTIVADO. NotificacionLog creado."),
+    # Ethereal detection
+    ("Detectar modo Ethereal", "Verificar isEthereal cuando SMTP no configurado",
+     "Borde", "Alta",
+     "API_ENCRYPTION_KEY de .env no desencripta credenciales en BD",
+     "1. POST /api/email enviar-prueba\n2. Verificar isEthereal en respuesta",
+     '{"accion":"enviar-prueba"}',
+     "200 OK con isEthereal=true. previewUrl con ethereal.email.",
+     "Test E2E debe reportar ADVERTENCIA cuando isEthereal=true. No crea EnvioCorreo."),
+    # Re-cifrar credenciales
+    ("Re-cifrar credenciales Brevo", "node scripts/save-brevo-creds.js",
+     "Positivo", "Crítica",
+     "Credenciales Brevo válidas (xkeysib-, xsmtpsib-)",
+     "1. BREVO_API_KEY=xkeysib-... BREVO_SMTP_KEY=xsmtpsib-... node scripts/save-brevo-creds.js\n2. Verificar desencriptación",
+     "BREVO_API_KEY=xkeysib-abc123 BREVO_SMTP_KEY=xsmtpsib-xyz789",
+     "Script actualiza ConexionAPI.EMAIL_SMTP y CorreoInstitucional.smtpPass. Validación incluida.",
+     "Credenciales re-cifradas con API_ENCRYPTION_KEY actual. SMTP funciona end-to-end."),
+    # Brevo HTTPS API
+    ("Envío vía Brevo HTTPS API", "POST directo a api.brevo.com/v3/smtp/email",
+     "Integración", "Crítica",
+     "API key Brevo válida",
+     "1. POST https://api.brevo.com/v3/smtp/email con api-key header",
+     '{"sender":{"email":"jsa@jsadr.com.co"},"to":[{"email":"test@test.com"}],"subject":"test"}',
+     "201 Created con messageId. No tiene restricción de IP.",
+     "Camino principal. Funciona en Vercel sin configurar IP whitelist."),
+    # SMTP fallback
+    ("Envío vía SMTP fallback", "Nodemailer con smtp-relay.brevo.com:587",
+     "Integración", "Alta",
+     "SMTP key Brevo válida, IP del servidor en whitelist Brevo",
+     "1. Brevo API cae\n2. Sistema cae a SMTP fallback\n3. enviarEmail() intenta SMTP",
+     "Credenciales: b3e8df001@smtp-brevo.com + xsmtpsib-...",
+     "Email enviado con messageId. EnvioCorreo con metadata via=SMTP_FALLBACK.",
+     "Si IP no está en whitelist Brevo: error 525 5.7.1 Unauthorized IP address."),
+]
+
+# ============================================================
+# 20. SINCRONIZACIÓN GITHUB / VERCEL / NEON
+# ============================================================
+MODULES["20. Sincronización GitHub/Vercel/Neon"] = [
+    # Git push
+    ("Git push a origin/main", "git push origin main",
+     "Positivo", "Crítica",
+     "Cambios locales commiteados, autenticación GitHub válida",
+     "1. git add -A\n2. git commit -m '...'\n3. git push origin main",
+     "git push origin main",
+     "Push exitoso. Ref origin/main actualizado al nuevo commit SHA.",
+     "git log origin/main muestra el nuevo commit en la cabeza."),
+    # Git pull
+    ("Git pull sin conflictos", "git pull origin main",
+     "Positivo", "Media",
+     "No hay cambios locales sin commitear",
+     "1. git pull origin main",
+     "git pull origin main",
+     "Pull exitoso. Local actualizado a origin/main.",
+     "git status: 'Your branch is up to date with origin/main'."),
+    # Vercel auto-deploy
+    ("Vercel auto-deploy tras push", "Verificar deploy automático en Vercel",
+     "Integración", "Crítica",
+     "Repositorio GitHub conectado a Vercel, push realizado",
+     "1. Push a GitHub\n2. Esperar 2-3 min\n3. Verificar deployment en Vercel dashboard\n4. curl https://jsadr-1029-jsadr.vercel.app/",
+     "GET https://jsadr-1029-jsadr.vercel.app/",
+     "HTTP 200 OK. Deployment status='Ready' en Vercel.",
+     "Build sin errores. Functions bundled correctamente."),
+    # Vercel env vars
+    ("Variables de entorno Vercel", "Verificar env vars en Vercel",
+     "Positivo", "Crítica",
+     "VERCEL_TOKEN, VERCEL_PROJECT_ID, VERCEL_TEAM_ID configurados",
+     "1. GET /v9/projects/{id}/env\n2. Verificar API_ENCRYPTION_KEY, DATABASE_URL, JWT_SECRET presentes",
+     "GET https://api.vercel.com/v9/projects/<id>/env",
+     "Lista de env vars incluye todas las requeridas con target=production.",
+     "API_ENCRYPTION_KEY en Vercel coincide con .env local."),
+    # Neon DB schema
+    ("Neon DB schema sincronizado", "npx prisma db push contra Neon",
+     "Positivo", "Crítica",
+     "DATABASE_URL apunta a Neon, schema.prisma actualizado",
+     "1. Editar schema.prisma\n2. npx prisma db push\n3. Verificar tablas en Neon",
+     "npx prisma db push",
+     "Schema aplicado. Nuevas columnas/tablas visibles en Neon console.",
+     "Migración no destructiva. Datos existentes preservados."),
+    # Neon conexión
+    ("Conexión Neon desde Vercel", "Prisma query desde Vercel serverless",
+     "Integración", "Crítica",
+     "DATABASE_URL con ?sslmode=require en Vercel env",
+     "1. Trigger endpoint en Vercel\n2. Endpoint hace query prisma.usuario.count()",
+     "Endpoint: GET /api/health",
+     "Respuesta 200 OK con datos. No hay errores de conexión SSL.",
+     "Pooler de Neon (port 5432) acepta conexiones serverless. Sin timeouts."),
+    # Sync env vars local→Vercel
+    ("Sync API_ENCRYPTION_KEY a Vercel", "node scripts/_sync-encryption-key.cjs",
+     "Positivo", "Alta",
+     "VERCEL_TOKEN configurado",
+     "1. node scripts/_sync-encryption-key.cjs\n2. Re-deploy Vercel",
+     "node scripts/_sync-encryption-key.cjs",
+     "Vercel env API_ENCRYPTION_KEY actualizada. Nuevo deploy usa la nueva llave.",
+     "Si llave cambia, credenciales en BD deben re-cifrarse con save-brevo-creds.js."),
+    # Verify all
+    ("Verificación integral de sync", "node scripts/verify-full-sync.cjs",
+     "Positivo", "Alta",
+     "Local limpio, deploy Vercel OK, Neon accesible",
+     "1. node scripts/verify-full-sync.cjs",
+     "node scripts/verify-full-sync.cjs",
+     "GitHub: local = origin/main. Vercel: HTTP 200. Neon: 10+ tablas accesibles.",
+     "Script imprime reporte con checks ✓ para cada plataforma."),
+]
+
+# ============================================================
+# 21. UI/UX MOBILE Y DESKTOP
+# ============================================================
+MODULES["21. UI/UX Mobile y Desktop"] = [
+    # Sidebar mobile drawer
+    ("Sidebar drawer en mobile", "Abrir/cerrar sidebar en viewport <1024px",
+     "Positivo", "Alta",
+     "Dev server corriendo, viewport mobile (375px)",
+     "1. Navegar a /login\n2. Login como Adm-Jsadr\n3. Verificar botón hamburguesa visible\n4. Click hamburguesa\n5. Verificar drawer se desliza desde izquierda",
+     "Viewport: 375x812 (iPhone X)",
+     "Drawer aparece con overlay z-[70]. Panel z-[71] se desliza translate-x 300ms.",
+     "Todos los módulos accesibles desde drawer. Botón cerrar funciona."),
+    # Bottom nav
+    ("Bottom nav en mobile", "Navegación inferior de 4 botones",
+     "Positivo", "Alta",
+     "Login cliente en mobile",
+     "1. Login como cliente\n2. Verificar bottom nav con 4 botones: Préstamos, Pagos, Inicio, Portal",
+     "Viewport: 375x812",
+     "Bottom nav fijo en parte inferior. Tap cada botón navega a su sección.",
+     "Sin Sheet que abra en mitad de pantalla. backdrop-filter removido para performance."),
+    # DPI/scroll
+    ("Scroll suave en mobile HiDPI", "Verificar scroll en pantalla retina",
+     "Performance", "Media",
+     "Device con DPI 2x+, iOS o Android",
+     "1. Abrir portal cliente\n2. Hacer scroll vertical\n3. Verificar sin lag",
+     "viewport: 414x896 con device-pixel-ratio: 3",
+     "Scroll fluido 60fps. Sin repaint costoso.",
+     "background-attachment: fixed removido. Animaciones GPU-friendly (transform: scale)."),
+    # Desktop responsive
+    ("Layout desktop responsive", "Verificar layout en desktop 1920px",
+     "Positivo", "Media",
+     "Dev server, viewport desktop",
+     "1. Navegar con viewport 1920x1080\n2. Verificar sidebar fijo a la izquierda",
+     "Viewport: 1920x1080",
+     "Sidebar fijo visible. Bottom nav oculto en desktop.",
+     "Área de contenido usa lg:ml-64 para no solaparse con sidebar."),
+    # Login redirect
+    ("Redirect post-login por rol", "Verificar redirección según rol",
+     "Positivo", "Alta",
+     "3 perfiles configurados: Adm-Jsadr, P_jsadr, Jd_jsadr",
+     "1. Login como Adm-Jsadr → redirige a /\n2. Login como P_jsadr → redirige a /?view=portal-admin\n3. Login como Jd_jsadr → redirige a portal jurídico",
+     "Credenciales de los 3 perfiles",
+     "Cada perfil redirige a su vista correspondiente.",
+     "permisos.ts valida vistas permitidas por rol."),
+    # Formulario registro
+    ("Formulario /register multi-paso", "Completar 6 pasos del registro público",
+     "Positivo", "Alta",
+     "Endpoint /register accesible públicamente",
+     "1. Navegar a /register\n2. Completar paso 1 (datos personales)\n3. Paso 2 (ubicación)\n4. Paso 3 (crédito)\n5. Paso 4 (referido)\n6. Paso 5 (fotos con cámara)\n7. Paso 6 (autorizaciones)",
+     "Cédula: 9000000099, email: test-register@test.com",
+     "Solicitud creada con código SNC-xxxxx. Fotos subidas como DocumentoGestor.",
+     "Validación por paso. Barra de progreso visible. Navegación entre pasos funciona."),
+    # Captura cámara
+    ("Captura foto con cámara webcam", "useCamera hook en paso 5",
+     "Positivo", "Alta",
+     "Browser con permisos de cámara",
+     "1. Llegar a paso 5\n2. Click 'Capturar' en cada una de las 3 fotos\n3. Verificar preview",
+     "Permisos de cámara concedidos",
+     "Cámara se activa con getUserMedia. Captura redimensionada a 1600px. Mirror para selfie.",
+     "Si no hay cámara: upload drag&drop como alternativa."),
+    # CSRF
+    ("CSRF check en endpoints públicos", "POST sin Origin header",
+     "Seguridad", "Alta",
+     "Endpoint público /api/solicitudes-nuevos-clientes",
+     "1. POST sin header Origin\n2. POST con Origin de dominio diferente",
+     "POST /api/solicitudes-nuevos-clientes sin Origin",
+     "403 Forbidden con code:'CSRF_DENIED'",
+     "POST con Origin válido (https://jsadr-1029-jsadr.vercel.app) pasa correctamente."),
+]
+
 
 # ============================================================
 # FUNCIÓN PARA ESCRIBIR UN SHEET DE MÓDULO
