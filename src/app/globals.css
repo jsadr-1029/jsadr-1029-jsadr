@@ -744,3 +744,153 @@
   background-image: linear-gradient(90deg, transparent, oklch(0.40 0.06 278 / 35%), transparent);
 }
 
+/* =====================================================
+   LETRERO ELECTRÓNICO — Aviso de cuenta de pago
+   Estilo LED/Neón parpadeante para resaltar la cuenta
+   bancaria donde el cliente debe realizar el pago.
+   ===================================================== */
+
+/* Contenedor principal del letrero (marco tipo LED) */
+.led-sign {
+  position: relative;
+  border-radius: 14px;
+  padding: 0.625rem 0.75rem 0.75rem;
+  background:
+    linear-gradient(180deg, oklch(0.12 0.04 240 / 95%) 0%, oklch(0.10 0.03 250 / 98%) 100%);
+  border: 1px solid oklch(0.55 0.20 200 / 45%);
+  box-shadow:
+    0 0 0 1px oklch(0.10 0.02 240 / 80%) inset,
+    0 0 14px -2px oklch(0.65 0.22 195 / 0.55),
+    0 4px 16px -4px oklch(0.30 0.10 240 / 0.6);
+  overflow: hidden;
+}
+
+/* Pantalla interior LED (efecto matriz de puntos) */
+.led-screen {
+  position: relative;
+  border-radius: 10px;
+  padding: 0.55rem 0.65rem;
+  background:
+    radial-gradient(circle at 20% 30%, oklch(0.08 0.02 200 / 80%) 0%, transparent 60%),
+    radial-gradient(circle at 80% 70%, oklch(0.08 0.02 220 / 70%) 0%, transparent 55%),
+    linear-gradient(180deg, oklch(0.05 0.02 195 / 95%) 0%, oklch(0.04 0.01 210 / 98%) 100%);
+  border: 1px solid oklch(0.30 0.10 200 / 60%);
+  overflow: hidden;
+}
+
+/* Texto neon del letrero (brillo LED) */
+.led-text {
+  color: oklch(0.92 0.20 195);
+  text-shadow:
+    0 0 4px oklch(0.70 0.22 195 / 0.95),
+    0 0 10px oklch(0.65 0.22 195 / 0.65),
+    0 0 18px oklch(0.60 0.22 195 / 0.45);
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Monaco, Consolas, monospace;
+  letter-spacing: 0.02em;
+}
+
+/* Variante del texto en ámbar (para destacados) */
+.led-text-amber {
+  color: oklch(0.92 0.18 75);
+  text-shadow:
+    0 0 4px oklch(0.78 0.20 75 / 0.95),
+    0 0 10px oklch(0.72 0.22 75 / 0.65),
+    0 0 18px oklch(0.65 0.22 75 / 0.45);
+}
+
+/* Etiqueta superior "AVISO IMPORTANTE" — parpadea suave */
+.led-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.15rem 0.5rem;
+  border-radius: 9999px;
+  font-size: 0.5625rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  background-color: oklch(0.20 0.05 35 / 70%);
+  border: 1px solid oklch(0.55 0.18 35 / 50%);
+  color: oklch(0.90 0.18 45);
+  text-shadow: 0 0 6px oklch(0.75 0.22 45 / 0.65);
+  animation: ledBlink 2.4s ease-in-out infinite;
+}
+
+/* Lateral izquierdo: barras LED decorativas (simulación de LEDs físicos) */
+.led-bars {
+  position: absolute;
+  top: 6px;
+  bottom: 6px;
+  left: 4px;
+  width: 3px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  pointer-events: none;
+}
+.led-bars::before,
+.led-bars::after,
+.led-bars > span {
+  content: '';
+  flex: 1;
+  border-radius: 2px;
+  background-color: oklch(0.65 0.22 195 / 0.85);
+  box-shadow: 0 0 4px oklch(0.65 0.22 195 / 0.7);
+}
+.led-bars > span:nth-child(2) {
+  background-color: oklch(0.72 0.20 75 / 0.85);
+  box-shadow: 0 0 4px oklch(0.72 0.20 75 / 0.7);
+  animation: ledBlink 1.8s ease-in-out infinite;
+}
+.led-bars > span:nth-child(3) {
+  background-color: oklch(0.65 0.22 195 / 0.85);
+  animation: ledBlink 2.2s ease-in-out infinite 0.4s;
+}
+
+/* Brillo de barrido horizontal que pasa por la pantalla (efecto scan) */
+.led-scan {
+  position: absolute;
+  top: 0;
+  left: -30%;
+  width: 30%;
+  height: 100%;
+  background: linear-gradient(
+    100deg,
+    transparent 0%,
+    oklch(0.80 0.18 195 / 0.18) 50%,
+    transparent 100%
+  );
+  animation: ledScan 4.5s linear infinite;
+  pointer-events: none;
+}
+
+/* Animación: parpadeo LED */
+@keyframes ledBlink {
+  0%, 92%, 100% { opacity: 1; }
+  94% { opacity: 0.45; }
+  96% { opacity: 1; }
+  98% { opacity: 0.55; }
+}
+
+/* Animación: barrido horizontal tipo display LED */
+@keyframes ledScan {
+  0% { left: -35%; }
+  100% { left: 110%; }
+}
+
+/* Pequeña etiqueta "EXCLUSIVA" dentro del letrero */
+.led-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  padding: 0.1rem 0.4rem;
+  border-radius: 6px;
+  font-size: 0.55rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  background-color: oklch(0.20 0.06 285 / 70%);
+  border: 1px solid oklch(0.55 0.18 285 / 55%);
+  color: oklch(0.88 0.16 290);
+}
+

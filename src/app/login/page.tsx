@@ -205,8 +205,16 @@ export default function LoginPage() {
         if (result.success) {
           const user = getUserData()
           setSuccess({ nombre: user?.nombre || idTrim })
+          // Enrutamiento por rol:
+          //   ABOGADO      → /juridico (portal del abogado)
+          //   CLIENTE      → /?portal=cliente
+          //   ADMIN/GESTOR/CONSULTOR → / (dashboard principal)
+          const rol = user?.rol
+          let ruta = '/'
+          if (rol === 'ABOGADO') ruta = '/juridico'
+          else if (rol === 'CLIENTE' || user?.esPortalCliente) ruta = '/?portal=cliente'
           setTimeout(() => {
-            router.replace('/')
+            router.replace(ruta)
             router.refresh()
           }, 1100)
           loginExitoso = true

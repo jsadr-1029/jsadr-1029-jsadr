@@ -1,6 +1,6 @@
 // =====================================================
 // /api/admin/portal/auth — Portal Administrador (Módulo 5)
-// Login con usuario 1214731649 y clave 731649 (bcrypt)
+// Login con usuario "Jsadr" y clave 731649 (bcrypt)
 //
 //   POST → { usuario, clave } → genera token de sesión admin portal
 //   GET  → verificar sesión (token en query)
@@ -104,7 +104,9 @@ export async function POST(req: NextRequest) {
     }
 
     // Credenciales del portal admin
-    const USUARIO_PORTAL_ADMIN = '1214731649'
+    // Usuario: "Jsadr"  ·  Clave: "731649"
+    // (clave persistida como hash bcrypt en Configuracion.portal_admin_hash)
+    const USUARIO_PORTAL_ADMIN = 'Jsadr'
     // Hash bcrypt precomputado para la clave "731649" (se persiste en Configuracion)
     // Si no existe en la BD, lo creamos en caliente la primera vez.
 
@@ -118,12 +120,13 @@ export async function POST(req: NextRequest) {
         data: {
           clave: 'portal_admin_hash',
           valor: hash,
-          descripcion: 'Hash bcrypt del portal administrador (usuario 1214731649)',
+          descripcion: 'Hash bcrypt del portal administrador (usuario Jsadr)',
         },
       })
     }
 
-    if (usuario.trim() !== USUARIO_PORTAL_ADMIN) {
+    // Comparación case-insensitive para evitar fricción al usuario
+    if (usuario.trim().toLowerCase() !== USUARIO_PORTAL_ADMIN.toLowerCase()) {
       return NextResponse.json(
         { success: false, error: 'Usuario o clave incorrectos' },
         { status: 401 }

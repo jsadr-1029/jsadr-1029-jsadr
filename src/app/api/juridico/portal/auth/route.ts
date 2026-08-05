@@ -1,8 +1,16 @@
 // =====================================================
 // /api/juridico/portal/auth — Portal Jurídico (Jsadr)
-//   POST  → login con cedula + clave (bcrypt, verifyPassword)
+//   POST  → login con cedula O username + clave (bcrypt, verifyPassword)
 //   GET   → verifica la sesión activa (token en query)
 //   DELETE → logout (cierra la sesión del portal)
+//
+// El identificador enviado en `cedula` puede ser:
+//   - la cédula numérica del abogado (ej: 1234567890)
+//   - el username interno (ej: "JD_jsadr")
+// El backend busca en ambos campos y devuelve el usuario con
+// rol ABOGADO o GESTOR. Anti-enumeración: misma respuesta
+// uniforme sin importar si el usuario no existe o la clave
+// es incorrecta.
 // =====================================================
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -20,7 +28,7 @@ const SESSION_EXPIRY_HOURS = 8
 
 // =====================================================
 // POST — Login del abogado/gestor del portal jurídico
-// Body: { cedula, clave }
+// Body: { cedula, clave }  (cedula puede ser cedula o username)
 // =====================================================
 export async function POST(req: NextRequest) {
   try {
@@ -38,16 +46,27 @@ export async function POST(req: NextRequest) {
 
     if (!cedula || !clave) {
       return NextResponse.json(
-        { success: false, error: 'Cédula y clave son requeridas' },
+        { success: false, error: 'Usuario y clave son requeridos' },
         { status: 400 }
       )
     }
 
-    // Buscar usuario por cédula con rol ABOGADO o GESTOR
+    // Buscar usuario por cedula O username (case-insensitive) con rol ABOGADO o GESTOR
+    const identificador = String(cedula).trim()
+    const identificadorLower = identificador.toLowerCase()
     const usuario = await db.usuario.findFirst({
       where: {
-        cedula: String(cedula).trim(),
-        rol: { in: ['ABOGADO', 'GESTOR'] },
+        AND: [
+          { rol: { in: ['ABOGADO', 'GESTOR'] } },
+          {
+            OR: [
+              { cedula: identificador },
+              { cedula: identificadorLower },
+              { username: identificador },
+              { username: identificadorLower },
+            ],
+          },
+        ],
       },
       select: {
         id: true,
@@ -65,7 +84,7 @@ export async function POST(req: NextRequest) {
     // Anti-enumeración: respuesta uniforme
     if (!usuario) {
       return NextResponse.json(
-        { success: false, error: 'Cédula o clave incorrecta' },
+        { success: false, error: 'Usuario o clave incorrecta' },
         { status: 401 }
       )
     }
@@ -101,7 +120,7 @@ export async function POST(req: NextRequest) {
     const claveValida = await verifyPassword(String(clave), usuario.claveHash)
     if (!claveValida) {
       return NextResponse.json(
-        { success: false, error: 'Cédula o clave incorrecta' },
+        { success: false, error: 'Usuario o clave incorrecta' },
         { status: 401 }
       )
     }

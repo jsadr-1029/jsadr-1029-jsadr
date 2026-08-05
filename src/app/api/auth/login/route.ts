@@ -46,9 +46,9 @@ export async function POST(req: NextRequest) {
 
     // === PASO 2: VERIFICAR OTP ===
     if (step === 2 && otp) {
-      // Buscar el usuario por username
-      const usuario = await db.usuario.findUnique({
-        where: { username: (username || '').toLowerCase() },
+      // Buscar el usuario por username (case-insensitive)
+      const usuario = await db.usuario.findFirst({
+        where: { username: { equals: (username || '').toLowerCase(), mode: 'insensitive' } },
       })
 
       if (!usuario) {
@@ -133,7 +133,11 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, error: 'Usuario y contraseña son obligatorios' }, { status: 400 })
     }
 
-    const usuario = await db.usuario.findUnique({ where: { username: username.toLowerCase() } })
+    // Búsqueda case-insensitive para que el usuario pueda ingresar
+    // "Jsadr", "jsadr", "JD_jsadr", "jd_jsadr", etc. y todos funcionen.
+    const usuario = await db.usuario.findFirst({
+      where: { username: { equals: username.toLowerCase(), mode: 'insensitive' } },
+    })
 
     if (!usuario) {
       await registrarAuditLog({

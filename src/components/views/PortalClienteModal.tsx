@@ -82,6 +82,7 @@ import {
   FileSignature,
   MessagesSquare,
   Clock3,
+  Lock,
 } from 'lucide-react'
 import { CentroComunicacionesPortal } from '@/components/views/CentroComunicacionesPortal'
 
@@ -129,6 +130,14 @@ interface PortalClienteInfo {
   tokenExpira?: string | null
 }
 
+interface CuentaRecaudoInfo {
+  banco: string
+  tipoCuenta: string
+  numeroCuenta: string
+  titular: string
+  nombreCuenta?: string | null
+}
+
 interface PortalData {
   cliente: PortalClienteInfo
   resumen: {
@@ -144,6 +153,7 @@ interface PortalData {
   campanas: any[]
   notificaciones?: NotificacionItem[]
   notificacionesStats?: NotificacionesStats
+  cuentaRecaudoPrincipal?: CuentaRecaudoInfo | null
 }
 
 // =====================================================
@@ -755,6 +765,7 @@ export function PortalClienteModal({
               resumen={resumen}
               hubItems={hubItems}
               onSelect={(id) => setVista(id)}
+              cuentaRecaudoPrincipal={data.cuentaRecaudoPrincipal}
             />
           )}
 
@@ -1254,6 +1265,94 @@ export function PortalClienteModal({
 }
 
 // =====================================================
+// LETRERO ELECTRÓNICO — Aviso de cuenta de pago
+// Muestra la cuenta bancaria asignada al cliente donde
+// debe realizar sus pagos (Bancolombia / Davivienda / etc.).
+// Se alimenta de `data.cuentaRecaudoPrincipal` que retorna
+// /api/portal/[cedula] según la categoría del cliente.
+// =====================================================
+function AvisoCuentaPago({ cuenta }: { cuenta?: CuentaRecaudoInfo | null }) {
+  // Si no hay cuenta asignada, no mostramos el letrero
+  if (!cuenta || !cuenta.numeroCuenta) {
+    return null
+  }
+
+  // Formatear el número de cuenta en grupos legibles
+  // ej: "42061620839" → "420-616208-39" si tiene 11 dígitos
+  const fmtCuenta = (num: string) => {
+    const clean = (num || '').replace(/\s+/g, '')
+    // Patrón Bancolombia típico: 3-6-2 dígitos
+    if (/^\d{11}$/.test(clean)) {
+      return `${clean.slice(0, 3)}-${clean.slice(3, 9)}-${clean.slice(9, 11)}`
+    }
+    // Otros formatos con guiones ya puestos: dejar igual
+    return clean
+  }
+
+  const bancoUpper = (cuenta.banco || '').toUpperCase()
+  const esBancolombia = bancoUpper.includes('BANCOLOMBIA')
+
+  return (
+    <div className="led-sign fade-scale" role="status" aria-live="polite">
+      {/* Pestaña superior — AVISO IMPORTANTE */}
+      <div className="flex items-center justify-between mb-1.5 pl-3">
+        <span className="led-tag">
+          <AlertTriangle className="w-2.5 h-2.5" />
+          AVISO IMPORTANTE
+        </span>
+        <span className="led-pill">
+          <Lock className="w-2.5 h-2.5" />
+          CUENTA EXCLUSIVA
+        </span>
+      </div>
+
+      {/* Pantalla LED interior */}
+      <div className="led-screen relative">
+        {/* Barras LED decorativas a la izquierda */}
+        <div className="led-bars">
+          <span></span>
+          <span></span>
+          <span></span>
+        </div>
+
+        {/* Barrido de scan LED */}
+        <div className="led-scan"></div>
+
+        {/* Contenido principal del letrero */}
+        <div className="pl-3 pr-1">
+          <p className="led-text text-[11px] sm:text-xs font-bold leading-tight mb-1">
+            RECUERDA QUE EL PAGO DE TUS CUOTAS
+          </p>
+          <p className="led-text text-[11px] sm:text-xs font-bold leading-tight mb-2">
+            DEBES REALIZARLO SOLO A LA CUENTA:
+          </p>
+
+          <div className="flex flex-col gap-0.5 mb-1.5">
+            <p className="led-text-amber text-[10px] font-semibold uppercase tracking-wider">
+              {cuenta.banco} · {cuenta.tipoCuenta}
+            </p>
+            <p className="led-text-amber text-base sm:text-lg font-black tracking-wider font-mono">
+              {fmtCuenta(cuenta.numeroCuenta)}
+            </p>
+          </div>
+
+          <div className="flex items-center justify-between gap-2 pt-1 border-t border-cyan-400/15">
+            <p className="text-[9px] text-cyan-200/70 leading-tight">
+              {esBancolombia
+                ? 'No recibas instrucciones de pago por otros canales.'
+                : 'Cuenta asignada según tu categoría.'}
+            </p>
+            <span className="led-text text-[9px] font-bold uppercase tracking-wider">
+              JSADR
+            </span>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// =====================================================
 // VISTA: HUB (pantalla principal)
 // =====================================================
 function HubView({
@@ -1262,15 +1361,20 @@ function HubView({
   resumen,
   hubItems,
   onSelect,
+  cuentaRecaudoPrincipal,
 }: {
   cliente: PortalClienteInfo
   kpis: PortalKPIS
   resumen: PortalData['resumen']
   hubItems: HubItemConfig[]
   onSelect: (id: HubItemId) => void
+  cuentaRecaudoPrincipal?: CuentaRecaudoInfo | null
 }) {
   return (
     <div className="space-y-5 fade-scale">
+      {/* === LETRERO ELECTRÓNICO — AVISO DE CUENTA DE PAGO === */}
+      <AvisoCuentaPago cuenta={cuentaRecaudoPrincipal} />
+
       {/* === HERO: HUB CIRCULAR === */}
       <div className="relative w-full aspect-square max-w-[340px] mx-auto hub-stage rounded-full">
         {/* Anillos orbitales decorativos */}

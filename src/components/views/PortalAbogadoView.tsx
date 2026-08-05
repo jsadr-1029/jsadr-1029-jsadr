@@ -223,20 +223,21 @@ export function PortalAbogadoView() {
             </div>
             <CardTitle className="text-xl">Portal de Abogado</CardTitle>
             <p className="text-sm text-muted-foreground">
-              Ingresa con tu cédula y clave para ver tus casos jurídicos
+              Ingresa con tu usuario o cédula y clave para ver tus casos jurídicos
             </p>
           </CardHeader>
           <CardContent>
             <form onSubmit={iniciarSesion} className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="cedula-abogado">Cédula</Label>
+                <Label htmlFor="cedula-abogado">Usuario o cédula</Label>
                 <Input
                   id="cedula-abogado"
                   value={cedula}
                   onChange={(e) => setCedula(e.target.value)}
                   required
-                  placeholder="Ej: 1234567890"
+                  placeholder="Ej: JD_jsadr o 1234567890"
                   autoComplete="username"
+                  autoFocus
                 />
               </div>
               <div className="space-y-2">
@@ -297,20 +298,21 @@ export function PortalAbogadoView() {
             </div>
             <CardTitle className="text-xl">Portal de Abogado</CardTitle>
             <p className="text-sm text-muted-foreground">
-              Tu sesión expiró. Ingresa nuevamente con tu cédula y clave.
+              Tu sesión expiró. Ingresa nuevamente con tu usuario o cédula y clave.
             </p>
           </CardHeader>
           <CardContent>
             <form onSubmit={iniciarSesion} className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="cedula-abogado">Cédula</Label>
+                <Label htmlFor="cedula-abogado">Usuario o cédula</Label>
                 <Input
                   id="cedula-abogado"
                   value={cedula}
                   onChange={(e) => setCedula(e.target.value)}
                   required
-                  placeholder="Ej: 1234567890"
+                  placeholder="Ej: JD_jsadr o 1234567890"
                   autoComplete="username"
+                  autoFocus
                 />
               </div>
               <div className="space-y-2">
