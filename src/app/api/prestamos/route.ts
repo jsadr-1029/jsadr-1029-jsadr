@@ -104,6 +104,13 @@ export async function POST(req: NextRequest) {
       fechaPrimerCorte: fechaPrimerCorteRaw,
       diasCausadosAntes,
       valorDiasCausados,
+      // === Flexibilidad Financiera ===
+      // Beneficio opcional que se ofrece cuando el número de cuotas >= 4.
+      // Costo adicional fijo de $10.000 COP. Permite al cliente:
+      //   1. Trasladar una cuota al final del crédito
+      //   2. Solicitar cambio de fecha de pago (genera documento "Otro Sí")
+      flexibilidadFinanciera,
+      flexibilidadCosto,
     } = body
 
     // === Resolver la fecha del préstamo ===
@@ -480,6 +487,16 @@ export async function POST(req: NextRequest) {
           diasCausadosAntes: diasCausadosAntesNum > 0 ? diasCausadosAntesNum : null,
           valorDiasCausados: valorDiasCausadosNum > 0 ? valorDiasCausadosNum : null,
           fechaPrimerCorte: fechaPrimerCorte || null,
+          // === Flexibilidad Financiera (beneficio opcional, cuotas >= 4) ===
+          flexibilidadFinanciera: !!flexibilidadFinanciera,
+          flexibilidadCosto:
+            flexibilidadFinanciera && flexibilidadCosto
+              ? parseFloat(flexibilidadCosto)
+              : flexibilidadFinanciera
+                ? 10000
+                : 0,
+          flexibilidadActivada: false,
+          flexibilidadFechaActivacion: null,
           notas: notas || null,
         },
         include: { cliente: true },

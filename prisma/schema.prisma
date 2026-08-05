@@ -290,6 +290,21 @@ model Prestamo {
   valorDiasCausados   Float?   // monto COP a cobrar por esos días (interés anticipado)
   fechaPrimerCorte    DateTime? // fecha del primer corte (inicio real de pagos)
 
+  // === Flexibilidad Financiera (beneficio opcional) ===
+  // Se ofrece cuando el número de cuotas >= 4. Costo adicional fijo de $10.000 COP.
+  // Permite al cliente:
+  //   1) Trasladar UNA cuota al final del crédito
+  //   2) Solicitar cambio de fecha de pago (genera documento "Otro Sí")
+  //
+  // - flexibilidadFinanciera: si el beneficio quedó adquirido en la solicitud
+  // - flexibilidadCosto: monto COP cobrado (por defecto 10000)
+  // - flexibilidadActivada: si el cliente ya exercised el derecho (pagó el costo)
+  //   Solo cuando esto es true se pueden generar Otros Síes.
+  flexibilidadFinanciera  Boolean @default(false)
+  flexibilidadCosto       Float   @default(0)
+  flexibilidadActivada    Boolean @default(false)
+  flexibilidadFechaActivacion DateTime?
+
   notas               String?
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
@@ -303,6 +318,60 @@ model Prestamo {
   firmas              FirmaElectronica[]
   tokensFirma         TokenFirma[] @relation("PrestamoTokenFirma")
   movimientosCaja     MovimientoCaja[]
+  otrosSi             OtroSiCambioFecha[]
+}
+
+// -----------------------------------------------------
+// OTRO SÍ — Acuerdo de cambio de fechas durante la vigencia
+// -----------------------------------------------------
+// Documento adicional que se anexa al pagare y carta de instrucciones
+// cuando el cliente con "Flexibilidad Financiera" activada solicita:
+//   - Cambio de fecha de pago
+//   - Trasladar una cuota al final del crédito
+//
+// NO modifica el pagare ni la carta originales. Se ve aparte y se exporta solo.
+// Requiere firma electrónica con OTP al correo del cliente.
+// -----------------------------------------------------
+model OtroSiCambioFecha {
+  id              String   @id @default(cuid())
+  prestamoId      String
+  prestamo        Prestamo @relation(fields: [prestamoId], references: [id])
+
+  // Código consecutivo: OS-001, OS-002, etc.
+  codigo          String
+
+  // Tipo de modificación
+  tipoModificacion String  // CAMBIO_FECHA | TRASLADO_CUOTA
+  // CAMBIO_FECHA: cambia la fecha de pago de una o varias cuotas
+  // TRASLADO_CUOTA: traslada una cuota al final del crédito
+
+  // === Fechas: las que tenía iniciales → a las que se programan ===
+  // Se guarda como JSON: [{ cuota: 3, fechaAnterior: "2026-08-05", fechaNueva: "2026-08-10" }, ...]
+  fechasAnteriores  String  // JSON serializado: [{ cuota, fechaAnterior, fechaNueva }]
+  fechasNuevas      String  // JSON serializado (alias para el mismo arreglo, para facilitar lectura)
+
+  // === Descripción textual del cambio (para mostrar en el documento) ===
+  descripcion     String
+
+  // === Estado del Otro Sí ===
+  estado          String   @default("PENDIENTE_FIRMA")
+  // PENDIENTE_FIRMA | FIRMADO | ANULADO
+
+  // === Firma electrónica (cuando el cliente firma con OTP) ===
+  firmaId         String?  @unique
+  firma           FirmaElectronica? @relation("OtroSiFirma", fields: [firmaId], references: [id])
+
+  // === Auditoría ===
+  solicitadoPor   String?  // nombre del usuario que lo generó
+  fechaSolicitud  DateTime @default(now())
+  fechaFirma      DateTime?
+  fechaAnulacion  DateTime?
+  motivoAnulacion String?
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([prestamoId, estado])
 }
 
 // -----------------------------------------------------
@@ -630,6 +699,7 @@ model FirmaElectronica {
   updatedAt       DateTime @updatedAt
 
   tokens          TokenFirma[]
+  otroSi          OtroSiCambioFecha? @relation("OtroSiFirma")
 }
 
 // -----------------------------------------------------

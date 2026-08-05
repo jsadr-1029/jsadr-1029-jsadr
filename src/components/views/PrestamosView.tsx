@@ -34,7 +34,7 @@ import {
 import { useToast } from '@/hooks/use-toast'
 import { formatearMoneda, formatearFecha, calcularPrestamo, calcularPrestamoTasaFijaMensual, Frecuencia } from '@/lib/finanzas'
 import { calcularBloqueCorte, calcularFechaPrimerCorte, calcularDiasCausadosAntes, calcularValorDiasCausados, PeriodoCorte } from '@/lib/corte-fechas'
-import { FileText, Plus, Search, Eye, Check, X, ArrowRight, RefreshCw, PenTool, Shield, Trash2, Calendar, Scissors } from 'lucide-react'
+import { FileText, Plus, Search, Eye, Check, X, ArrowRight, RefreshCw, PenTool, Shield, Trash2, Calendar, Scissors, Sparkles } from 'lucide-react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { ClientesView } from '@/components/views/ClientesView'
 import { CajasView } from '@/components/views/CajasView'
@@ -194,6 +194,17 @@ function PrestamosPanel({
   const [prestamoARenovar, setPrestamoARenovar] = useState('')
   const [saldoPendienteRenovacion, setSaldoPendienteRenovacion] = useState(0)
   const [infoPrestamoRenovacion, setInfoPrestamoRenovacion] = useState<any>(null)
+
+  // === Flexibilidad Financiera (beneficio opcional) ===
+  // Se ofrece cuando el número de cuotas >= 4. Costo adicional fijo de $10.000 COP.
+  // Permite al cliente:
+  //   1) Trasladar UNA cuota al final del crédito
+  //   2) Solicitar cambio de fecha de pago (genera documento "Otro Sí")
+  //
+  // - flexibilidadFinanciera: si el cliente adquirió el beneficio en esta solicitud
+  // - flexibilidadCosto: monto COP (por defecto 10000)
+  const [flexibilidadFinanciera, setFlexibilidadFinanciera] = useState(false)
+  const [flexibilidadCosto] = useState(10000)
 
   // === Función: cargar saldo pendiente del préstamo a renovar ===
   const seleccionarPrestamoARenovar = async (prestamoId: string) => {
@@ -594,6 +605,26 @@ function PrestamosPanel({
   //
   // Si el usuario editó manualmente los días/valor (editarDiasCausadosManual=true),
   // NO se sobreescribe su edición — pero la fechaPrimerCorte sí se mantiene sincronizada.
+
+  // === Calcular el número de cuotas actual según la modalidad ===
+  // (para mostrar/ocultar la opción de Flexibilidad Financiera cuando cuotas >= 4)
+  const cuotasActuales = useMemo(() => {
+    if (modalidad === 'TASA_FIJA') return parseInt(numeroCuotasFija) || 0
+    if (modalidad === 'CUOTA_PERSONALIZADA') return parseInt(numeroCuotasPersonalizada) || 0
+    // FRANCÉS: plazoMeses * cuotasPorMes según frecuencia
+    const plazo = parseInt(plazoMeses) || 0
+    if (frecuencia === 'MENSUAL') return plazo
+    if (frecuencia === 'QUINCENAL') return plazo * 2
+    if (frecuencia === 'SEMANAL') return plazo * 4
+    return plazo
+  }, [modalidad, numeroCuotasFija, numeroCuotasPersonalizada, plazoMeses, frecuencia])
+
+  // === Si el número de cuotas baja de 4, desactivar flexibilidad automáticamente ===
+  useEffect(() => {
+    if (cuotasActuales < 4 && flexibilidadFinanciera) {
+      setFlexibilidadFinanciera(false)
+    }
+  }, [cuotasActuales, flexibilidadFinanciera])
   useEffect(() => {
     if (!fechaPrestamo || !periodoCorte) {
       setFechaPrimerCorte(null)
@@ -744,6 +775,15 @@ function PrestamosPanel({
         body.fechaPrimerCorte = fechaPrimerCorte.toISOString()
         body.diasCausadosAntes = diasCausadosAntes
         body.valorDiasCausados = valorDiasCausados
+      }
+
+      // === Flexibilidad Financiera (beneficio opcional, cuotas >= 4) ===
+      // Solo se envía si el usuario activó el beneficio. El backend lo guarda
+      // en el préstamo y queda disponible para que el cliente lo active (pagando)
+      // y solicite Otros Síes después.
+      if (flexibilidadFinanciera) {
+        body.flexibilidadFinanciera = true
+        body.flexibilidadCosto = flexibilidadCosto
       }
 
       // === Renovación ===
@@ -993,6 +1033,8 @@ ${linkFirmaCodeudor}
     // Reset codeudor
     setTieneCodeudor(false)
     setCodeudorId('')
+    // Reset flexibilidad financiera
+    setFlexibilidadFinanciera(false)
   }
 
   const cambiarEstado = async (id: string, accion: string) => {
@@ -2388,6 +2430,100 @@ ${linkFirmaCodeudor}
                     </p>
                   </div>
                 )}
+
+                {/* === Bloque de Flexibilidad Financiera (solo si está activa) === */}
+                {flexibilidadFinanciera && cuotasActuales >= 4 && (
+                  <div className="mt-2 pt-2 border-t border-primary/20 space-y-1.5">
+                    <div className="text-xs font-semibold text-emerald-700 dark:text-emerald-300 flex items-center gap-1.5">
+                      <Sparkles className="w-3.5 h-3.5" />
+                      Flexibilidad Financiera: ADQUIRIDA
+                    </div>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs">
+                      <div>
+                        <span className="text-muted-foreground">Costo adicional:</span>{' '}
+                        <strong className="text-emerald-700 dark:text-emerald-300">
+                          {formatearMoneda(flexibilidadCosto)}
+                        </strong>
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground">Estado:</span>{' '}
+                        <strong className="text-amber-700 dark:text-amber-300">
+                          Pendiente de activación
+                        </strong>
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground">Beneficios:</span>{' '}
+                        <strong className="text-emerald-700 dark:text-emerald-300">
+                          Cambio de fecha + Traslado de cuota
+                        </strong>
+                      </div>
+                    </div>
+                    <p className="text-[11px] text-emerald-700 dark:text-emerald-300">
+                      ✨ El cliente podrá activar el beneficio pagando {formatearMoneda(flexibilidadCosto)}.
+                      Al activarse, podrá generar Otros Síes con firma electrónica OTP.
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* === FLEXIBILIDAD FINANCIERA (beneficio opcional, cuotas >= 4) === */}
+            {cuotasActuales >= 4 ? (
+              <div className={`space-y-3 p-4 rounded-lg border-2 transition-colors ${
+                flexibilidadFinanciera
+                  ? 'bg-emerald-100 dark:bg-emerald-900/40 border-emerald-500 dark:border-emerald-500'
+                  : 'bg-emerald-50 dark:bg-emerald-950/30 border-emerald-300 dark:border-emerald-800'
+              }`}>
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <Switch
+                      checked={flexibilidadFinanciera}
+                      onCheckedChange={setFlexibilidadFinanciera}
+                      id="flexibilidadFinanciera"
+                    />
+                    <Label
+                      htmlFor="flexibilidadFinanciera"
+                      className="text-sm cursor-pointer font-semibold text-emerald-900 dark:text-emerald-100 flex items-center gap-1.5"
+                    >
+                      <Sparkles className="w-4 h-4 text-emerald-600 dark:text-emerald-300" />
+                      Flexibilidad Financiera
+                    </Label>
+                  </div>
+                  <Badge
+                    variant="outline"
+                    className={
+                      flexibilidadFinanciera
+                        ? 'text-emerald-700 dark:text-emerald-200 border-emerald-400 dark:border-emerald-500 bg-emerald-200 dark:bg-emerald-800'
+                        : 'text-muted-foreground border-muted-foreground/30'
+                    }
+                  >
+                    {flexibilidadFinanciera
+                      ? `✨ ADQUIRIDO (+$${flexibilidadCosto.toLocaleString('es-CO')})`
+                      : `Opcional · $${flexibilidadCosto.toLocaleString('es-CO')}`}
+                  </Badge>
+                </div>
+                <p className="text-xs text-emerald-700 dark:text-emerald-300">
+                  {flexibilidadFinanciera
+                    ? '✅ Activo: el cliente podrá (previo pago del costo) trasladar una cuota al final del crédito o solicitar cambio de fecha de pago. Se generará un documento "Otro Sí" firmado electrónicamente con OTP.'
+                    : `Disponible porque el crédito tiene ${cuotasActuales} cuotas (≥ 4). Por un costo adicional de $${flexibilidadCosto.toLocaleString('es-CO')}, el cliente tendrá la posibilidad de:`}
+                </p>
+                {!flexibilidadFinanciera && (
+                  <ul className="list-disc list-inside text-xs text-emerald-800 dark:text-emerald-200 ml-2 space-y-0.5">
+                    <li>Trasladar UNA cuota al final del crédito</li>
+                    <li>Solicitar cambio de fecha de pago (se genera "Otro Sí" sin modificar pagare/carta originales)</li>
+                  </ul>
+                )}
+                {flexibilidadFinanciera && (
+                  <div className="mt-2 pt-2 border-t border-emerald-300 dark:border-emerald-700 text-[11px] text-emerald-700 dark:text-emerald-300">
+                    💡 El cliente deberá pagar el costo de <strong>${flexibilidadCosto.toLocaleString('es-CO')}</strong> para activar el beneficio.
+                    Una vez activado, podrá generar Otros Síes desde el detalle del préstamo.
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="p-3 rounded-md bg-muted/30 border border-dashed border-muted-foreground/30 text-xs text-muted-foreground">
+                ℹ️ <strong>Flexibilidad Financiera</strong> está disponible solo para créditos con
+                <strong> 4 o más cuotas</strong>. Actualmente: {cuotasActuales} cuota(s).
               </div>
             )}
 

@@ -27,6 +27,7 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Badge } from '@/components/ui/badge'
 import { EstadoBadge } from '@/components/ui-basics'
 import { BitacoraPanel } from '@/components/views/BitacoraPanel'
 import { useToast } from '@/hooks/use-toast'
@@ -47,6 +48,9 @@ import {
   FileText,
   Users,
   MessageCircle,
+  Sparkles,
+  Plus,
+  RefreshCw,
 } from 'lucide-react'
 
 interface PrestamoDetalle {
@@ -137,6 +141,19 @@ export function PrestamoDetalleModal({
   const [enviandoConfirmacion, setEnviandoConfirmacion] = useState(false)
   const { toast } = useToast()
 
+  // === Otro Sí — Flexibilidad Financiera ===
+  const [otrosSi, setOtrosSi] = useState<any[]>([])
+  const [flexInfo, setFlexInfo] = useState<any>(null) // info de flexibilidad del préstamo
+  const [cargandoOtrosSi, setCargandoOtrosSi] = useState(false)
+  const [modalNuevoOtroSi, setModalNuevoOtroSi] = useState(false)
+  const [otroSiTipo, setOtroSiTipo] = useState<'CAMBIO_FECHA' | 'TRASLADO_CUOTA'>('CAMBIO_FECHA')
+  const [otroSiCuota, setOtroSiCuota] = useState<string>('')
+  const [otroSiFechaNueva, setOtroSiFechaNueva] = useState<string>('')
+  const [otroSiDescripcion, setOtroSiDescripcion] = useState<string>('')
+  const [creandoOtroSi, setCreandoOtroSi] = useState(false)
+  const [activandoFlex, setActivandoFlex] = useState(false)
+  const [otroSiVistaPrevia, setOtroSiVistaPrevia] = useState<any>(null) // { html, codigo }
+
   useEffect(() => {
     // FIX C10: AbortController para cancelar fetches si el modal se cierra
     // antes de que terminen (evita setStates sobre componente desmontado).
@@ -144,6 +161,7 @@ export function PrestamoDetalleModal({
     cargar(ac.signal)
     cargarCuentas(ac.signal)
     cargarEstadoVerificacion(ac.signal)
+    cargarOtrosSi()
     return () => ac.abort()
   }, [prestamoId])
 
@@ -211,6 +229,177 @@ export function PrestamoDetalleModal({
     } catch (e: any) {
       if (e?.name !== 'AbortError') setEstadoVerificacion(null)
     }
+  }
+
+  // === Otro Sí — Cargar lista de Otros Síes del préstamo ===
+  const cargarOtrosSi = async () => {
+    try {
+      setCargandoOtrosSi(true)
+      const res = await fetch(`/api/prestamos/${prestamoId}/otro-si`)
+      const json = await res.json()
+      if (json.success) {
+        setOtrosSi(json.data || [])
+        setFlexInfo(json.prestamo || null)
+      }
+    } catch (e: any) {
+      console.error('[cargarOtrosSi] Error:', e)
+    } finally {
+      setCargandoOtrosSi(false)
+    }
+  }
+
+  // === Otro Sí — Activar Flexibilidad Financiera (marcar como pagado) ===
+  const activarFlexibilidad = async () => {
+    setActivandoFlex(true)
+    try {
+      const res = await fetch(`/api/prestamos/${prestamoId}/otro-si`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ accion: 'activar_flexibilidad' }),
+      })
+      const json = await res.json()
+      if (json.success) {
+        toast({
+          title: '✨ Flexibilidad Financiera activada',
+          description: json.mensaje,
+          duration: 8000,
+        })
+        cargarOtrosSi()
+        cargar()
+        onChanged()
+      } else {
+        toast({
+          title: 'Error al activar',
+          description: json.error,
+          variant: 'destructive',
+        })
+      }
+    } catch (e: any) {
+      toast({
+        title: 'Error',
+        description: e.message,
+        variant: 'destructive',
+      })
+    } finally {
+      setActivandoFlex(false)
+    }
+  }
+
+  // === Otro Sí — Crear nuevo Otro Sí ===
+  const crearOtroSi = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!otroSiCuota) {
+      toast({
+        title: 'Cuota requerida',
+        description: 'Selecciona la cuota que quieres modificar.',
+        variant: 'destructive',
+      })
+      return
+    }
+    if (!otroSiFechaNueva) {
+      toast({
+        title: 'Fecha nueva requerida',
+        description: 'Selecciona la nueva fecha de pago.',
+        variant: 'destructive',
+      })
+      return
+    }
+
+    // Buscar la cuota en la tabla de amortización para obtener la fecha anterior
+    const cuotaObj = data?.tablaAmortizacion?.find((c: any) => c.numero === parseInt(otroSiCuota))
+    if (!cuotaObj) {
+      toast({
+        title: 'Cuota no encontrada',
+        description: `No se encontró la cuota ${otroSiCuota} en la tabla de amortización.`,
+        variant: 'destructive',
+      })
+      return
+    }
+
+    // Formatear fechaAnterior como YYYY-MM-DD
+    const fechaAnterior = new Date(cuotaObj.fechaVencimiento)
+    const yyyyA = fechaAnterior.getFullYear()
+    const mmA = String(fechaAnterior.getMonth() + 1).padStart(2, '0')
+    const ddA = String(fechaAnterior.getDate()).padStart(2, '0')
+    const fechaAnteriorStr = `${yyyyA}-${mmA}-${ddA}`
+
+    setCreandoOtroSi(true)
+    try {
+      const res = await fetch(`/api/prestamos/${prestamoId}/otro-si`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          tipoModificacion: otroSiTipo,
+          modificaciones: [
+            {
+              cuota: parseInt(otroSiCuota),
+              fechaAnterior: fechaAnteriorStr,
+              fechaNueva: otroSiFechaNueva,
+            },
+          ],
+          descripcion: otroSiDescripcion || undefined,
+          activarFirma: true,
+        }),
+      })
+      const json = await res.json()
+      if (json.success) {
+        toast({
+          title: `✅ Otro Sí ${json.data.codigo} creado`,
+          description: json.mensaje,
+          duration: 10000,
+        })
+        // Limpiar form
+        setOtroSiCuota('')
+        setOtroSiFechaNueva('')
+        setOtroSiDescripcion('')
+        setModalNuevoOtroSi(false)
+        // Recargar lista
+        cargarOtrosSi()
+        // === ORDEN OBLIGATORIA 3: Abrir vista previa automáticamente ===
+        if (json.html) {
+          setOtroSiVistaPrevia({
+            html: json.html,
+            codigo: json.data.codigo,
+            firmaInfo: json.firma,
+          })
+        }
+      } else {
+        toast({
+          title: 'Error al crear Otro Sí',
+          description: json.error,
+          variant: 'destructive',
+        })
+      }
+    } catch (e: any) {
+      toast({
+        title: 'Error',
+        description: e.message,
+        variant: 'destructive',
+      })
+    } finally {
+      setCreandoOtroSi(false)
+    }
+  }
+
+  // === Otro Sí — Exportar (abrir en nueva ventana para imprimir/PDF) ===
+  const exportarOtroSi = (html: string, codigo: string) => {
+    const w = window.open('', '_blank', 'noopener,noreferrer')
+    if (!w) {
+      toast({
+        title: 'Bloqueado',
+        description: 'El navegador bloqueó la ventana emergente. Permite popups para exportar.',
+        variant: 'destructive',
+      })
+      return
+    }
+    w.document.open()
+    w.document.write(html)
+    w.document.close()
+    // Darle un momento y luego abrir el diálogo de impresión
+    setTimeout(() => {
+      w.focus()
+      w.print()
+    }, 500)
   }
 
   const registrarPago = async (e: React.FormEvent) => {
@@ -466,13 +655,14 @@ export function PrestamoDetalleModal({
         )}
 
         <Tabs defaultValue="info" className="w-full">
-          <TabsList className="grid grid-cols-6 w-full">
+          <TabsList className="grid grid-cols-7 w-full">
             <TabsTrigger value="info">Info</TabsTrigger>
             <TabsTrigger value="amortizacion">Amortización</TabsTrigger>
             <TabsTrigger value="pagos">Pagos</TabsTrigger>
             <TabsTrigger value="bitacora">Bitácora</TabsTrigger>
             <TabsTrigger value="notificaciones">WhatsApp</TabsTrigger>
             <TabsTrigger value="firma">Firma</TabsTrigger>
+            <TabsTrigger value="otro-si">Otro Sí</TabsTrigger>
           </TabsList>
 
           {/* INFO */}
@@ -1293,6 +1483,211 @@ export function PrestamoDetalleModal({
               </CardContent>
             </Card>
           </TabsContent>
+
+          {/* === OTRO SÍ — Flexibilidad Financiera === */}
+          <TabsContent value="otro-si" className="space-y-4">
+            {/* === Estado de Flexibilidad Financiera === */}
+            <Card className={flexInfo?.flexibilidadFinanciera ? 'border-emerald-300 bg-emerald-50/40' : 'border-muted'}>
+              <CardHeader>
+                <CardTitle className="text-base flex items-center gap-2">
+                  <Sparkles className="w-4 h-4 text-emerald-600" />
+                  Flexibilidad Financiera
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {flexInfo?.flexibilidadFinanciera ? (
+                  <>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <Badge
+                        variant="outline"
+                        className="bg-emerald-100 text-emerald-800 border-emerald-400"
+                      >
+                        ✨ ADQUIRIDA
+                      </Badge>
+                      {flexInfo?.flexibilidadActivada ? (
+                        <Badge variant="outline" className="bg-blue-100 text-blue-800 border-blue-400">
+                          ✓ ACTIVADA (cliente pagó)
+                        </Badge>
+                      ) : (
+                        <Badge variant="outline" className="bg-amber-100 text-amber-800 border-amber-400">
+                          ⏳ Pendiente de activación
+                        </Badge>
+                      )}
+                      <span className="text-xs text-muted-foreground">
+                        Costo: <strong>${(flexInfo?.flexibilidadCosto || 10000).toLocaleString('es-CO')}</strong>
+                      </span>
+                    </div>
+                    {!flexInfo?.flexibilidadActivada ? (
+                      <div className="p-3 rounded-md bg-amber-50 border border-amber-200 text-sm space-y-2">
+                        <p className="text-amber-900">
+                          💡 El cliente aún no ha pagado el costo del beneficio
+                          (<strong>${(flexInfo?.flexibilidadCosto || 10000).toLocaleString('es-CO')}</strong>).
+                          Una vez recibas el pago, marca el beneficio como activado para habilitar la generación de Otros Síes.
+                        </p>
+                        <Button
+                          size="sm"
+                          onClick={activarFlexibilidad}
+                          disabled={activandoFlex}
+                          className="bg-emerald-600 hover:bg-emerald-700 text-white"
+                        >
+                          {activandoFlex ? (
+                            <>
+                              <RefreshCw className="w-3.5 h-3.5 mr-1.5 animate-spin" />
+                              Activando...
+                            </>
+                          ) : (
+                            <>
+                              <CheckCircle2 className="w-3.5 h-3.5 mr-1.5" />
+                              Marcar como pagado y activar
+                            </>
+                          )}
+                        </Button>
+                      </div>
+                    ) : (
+                      <div className="p-3 rounded-md bg-emerald-50 border border-emerald-200 text-sm text-emerald-900">
+                        ✅ El beneficio está activado. El cliente puede generar Otros Síes para:
+                        <ul className="list-disc list-inside mt-1 ml-2 text-emerald-800">
+                          <li>Cambio de fecha de pago</li>
+                          <li>Traslado de una cuota al final del crédito</li>
+                        </ul>
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <div className="text-center py-6 text-muted-foreground text-sm">
+                    <Sparkles className="w-10 h-10 mx-auto mb-2 opacity-40" />
+                    <p>Este crédito <strong>no tiene</strong> adquirido el beneficio de Flexibilidad Financiera.</p>
+                    <p className="text-xs mt-1">
+                      Solo está disponible para créditos con 4 o más cuotas y debe activarse al crear la solicitud.
+                    </p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* === Lista de Otros Síes + Botón crear === */}
+            <Card>
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <FileText className="w-4 h-4" />
+                    Otros Síes Generados
+                  </CardTitle>
+                  {flexInfo?.flexibilidadFinanciera && flexInfo?.flexibilidadActivada && (
+                    <Button
+                      size="sm"
+                      onClick={() => {
+                        setOtroSiCuota('')
+                        setOtroSiFechaNueva('')
+                        setOtroSiDescripcion('')
+                        setModalNuevoOtroSi(true)
+                      }}
+                    >
+                      <Plus className="w-3.5 h-3.5 mr-1.5" />
+                      Generar Otro Sí
+                    </Button>
+                  )}
+                </div>
+              </CardHeader>
+              <CardContent>
+                {cargandoOtrosSi ? (
+                  <div className="text-center py-6 text-muted-foreground text-sm">
+                    Cargando Otros Síes...
+                  </div>
+                ) : otrosSi.length === 0 ? (
+                  <div className="text-center py-8 text-muted-foreground text-sm">
+                    <FileText className="w-10 h-10 mx-auto mb-2 opacity-40" />
+                    No hay Otros Síes generados para este préstamo.
+                    {flexInfo?.flexibilidadFinanciera && flexInfo?.flexibilidadActivada && (
+                      <p className="text-xs mt-2 text-emerald-700">
+                        Presiona "Generar Otro Sí" para crear el primer acuerdo de cambio de fechas.
+                      </p>
+                    )}
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {otrosSi.map((os) => {
+                      let modificaciones: any[] = []
+                      try {
+                        modificaciones = JSON.parse(os.fechasAnteriores || '[]')
+                      } catch {}
+                      return (
+                        <div
+                          key={os.id}
+                          className={`p-3 border rounded-md ${
+                            os.estado === 'FIRMADO'
+                              ? 'border-emerald-300 bg-emerald-50/50'
+                              : os.estado === 'ANULADO'
+                                ? 'border-red-300 bg-red-50/50 opacity-75'
+                                : 'border-amber-300 bg-amber-50/50'
+                          }`}
+                        >
+                          <div className="flex items-center justify-between mb-2">
+                            <div className="flex items-center gap-2">
+                              <span className="font-mono text-sm font-bold text-blue-700">
+                                {os.codigo}
+                              </span>
+                              <Badge
+                                variant="outline"
+                                className={
+                                  os.estado === 'FIRMADO'
+                                    ? 'bg-emerald-100 text-emerald-800 border-emerald-400'
+                                    : os.estado === 'ANULADO'
+                                      ? 'bg-red-100 text-red-800 border-red-400'
+                                      : 'bg-amber-100 text-amber-800 border-amber-400'
+                                }
+                              >
+                                {os.estado === 'FIRMADO'
+                                  ? '✓ Firmado'
+                                  : os.estado === 'ANULADO'
+                                    ? '✕ Anulado'
+                                    : '⏳ Pend. firma'}
+                              </Badge>
+                              <span className="text-xs text-muted-foreground">
+                                {os.tipoModificacion === 'CAMBIO_FECHA'
+                                  ? 'Cambio de fecha'
+                                  : 'Traslado de cuota'}
+                              </span>
+                            </div>
+                            <span className="text-xs text-muted-foreground">
+                              {formatearFechaHora(os.createdAt)}
+                            </span>
+                          </div>
+                          <div className="text-xs space-y-1">
+                            <p className="text-muted-foreground">
+                              <strong>Modificaciones:</strong>
+                            </p>
+                            <ul className="list-disc list-inside ml-2">
+                              {modificaciones.map((m, i) => (
+                                <li key={i}>
+                                  Cuota <strong>#{m.cuota}</strong>:{' '}
+                                  {new Date(m.fechaAnterior + 'T12:00:00').toLocaleDateString('es-CO')}{' '}
+                                  →{' '}
+                                  <strong className="text-blue-700">
+                                    {new Date(m.fechaNueva + 'T12:00:00').toLocaleDateString('es-CO')}
+                                  </strong>
+                                </li>
+                              ))}
+                            </ul>
+                            {os.descripcion && (
+                              <p className="mt-1 text-muted-foreground italic">
+                                "{os.descripcion}"
+                              </p>
+                            )}
+                            {os.firma && (
+                              <p className="mt-1 text-[11px] text-emerald-700">
+                                🔐 Firma: {os.firma.estadoFirma} · Canal: {os.firma.otpCanal || '—'}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
         </Tabs>
       </DialogContent>
 
@@ -1455,6 +1850,241 @@ export function PrestamoDetalleModal({
           {enviandoConfirmacion && (
             <p className="text-center text-sm text-muted-foreground">Enviando...</p>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* === MODAL: Crear nuevo Otro Sí === */}
+      <Dialog open={modalNuevoOtroSi} onOpenChange={(o) => !o && setModalNuevoOtroSi(false)}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <FileText className="w-5 h-5 text-emerald-600" />
+              Generar Otro Sí — Acuerdo de Cambio de Fechas
+            </DialogTitle>
+            <p className="text-sm text-muted-foreground mt-1">
+              Préstamo: <strong>{data?.codigo}</strong> · Cliente: <strong>{data?.cliente?.nombre}</strong>
+            </p>
+          </DialogHeader>
+          <form onSubmit={crearOtroSi} className="space-y-4">
+            {/* Tipo de modificación */}
+            <div className="space-y-2">
+              <Label className="text-sm font-medium">Tipo de modificación *</Label>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setOtroSiTipo('CAMBIO_FECHA')}
+                  className={`text-left p-3 border-2 rounded-lg transition ${
+                    otroSiTipo === 'CAMBIO_FECHA'
+                      ? 'border-emerald-500 bg-emerald-50'
+                      : 'border-border hover:border-emerald-300'
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    <span className={`w-3 h-3 rounded-full border-2 ${otroSiTipo === 'CAMBIO_FECHA' ? 'border-emerald-500 bg-emerald-500' : 'border-muted-foreground'}`} />
+                    <span className="text-sm font-semibold">Cambio de fecha de pago</span>
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-1 ml-5">
+                    Reprograma la fecha de vencimiento de una cuota.
+                  </p>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setOtroSiTipo('TRASLADO_CUOTA')}
+                  className={`text-left p-3 border-2 rounded-lg transition ${
+                    otroSiTipo === 'TRASLADO_CUOTA'
+                      ? 'border-blue-500 bg-blue-50'
+                      : 'border-border hover:border-blue-300'
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    <span className={`w-3 h-3 rounded-full border-2 ${otroSiTipo === 'TRASLADO_CUOTA' ? 'border-blue-500 bg-blue-500' : 'border-muted-foreground'}`} />
+                    <span className="text-sm font-semibold">Trasladar cuota al final</span>
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-1 ml-5">
+                    Mueve una cuota al final del crédito (inmediatamente después de la última).
+                  </p>
+                </button>
+              </div>
+            </div>
+
+            {/* Selección de cuota */}
+            <div className="space-y-2">
+              <Label htmlFor="otroSiCuota" className="text-sm font-medium">
+                Cuota a modificar *
+              </Label>
+              <Select value={otroSiCuota} onValueChange={setOtroSiCuota}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecciona la cuota" />
+                </SelectTrigger>
+                <SelectContent>
+                  {data?.tablaAmortizacion
+                    ?.filter((c: any) => !c.pagada)
+                    .map((c: any) => (
+                      <SelectItem key={c.numero} value={c.numero.toString()}>
+                        Cuota #{c.numero} · Vence: {formatearFecha(c.fechaVencimiento)} · {formatearMoneda(c.montoCuota)}
+                      </SelectItem>
+                    ))}
+                </SelectContent>
+              </Select>
+              {otroSiCuota && (() => {
+                const c = data?.tablaAmortizacion?.find((x: any) => x.numero === parseInt(otroSiCuota))
+                return c ? (
+                  <p className="text-xs text-muted-foreground bg-muted/40 p-2 rounded">
+                    📅 Fecha actual de la cuota #{c.numero}: <strong>{formatearFecha(c.fechaVencimiento)}</strong>
+                  </p>
+                ) : null
+              })()}
+            </div>
+
+            {/* Nueva fecha */}
+            <div className="space-y-2">
+              <Label htmlFor="otroSiFechaNueva" className="text-sm font-medium">
+                {otroSiTipo === 'TRASLADO_CUOTA'
+                  ? 'Nueva fecha (al final del crédito) *'
+                  : 'Nueva fecha de pago *'}
+              </Label>
+              <Input
+                id="otroSiFechaNueva"
+                type="date"
+                value={otroSiFechaNueva}
+                onChange={(e) => setOtroSiFechaNueva(e.target.value)}
+                required
+              />
+              <p className="text-xs text-muted-foreground">
+                {otroSiTipo === 'TRASLADO_CUOTA'
+                  ? '💡 Se recomienda poner una fecha inmediatamente después de la última cuota original.'
+                  : '💡 La nueva fecha debe ser posterior a la fecha actual de la cuota.'}
+              </p>
+            </div>
+
+            {/* Descripción (opcional) */}
+            <div className="space-y-2">
+              <Label htmlFor="otroSiDescripcion" className="text-sm font-medium">
+                Descripción del acuerdo (opcional)
+              </Label>
+              <textarea
+                id="otroSiDescripcion"
+                value={otroSiDescripcion}
+                onChange={(e) => setOtroSiDescripcion(e.target.value)}
+                rows={2}
+                placeholder="Ej: El cliente solicita cambiar la fecha porque su quincena se retrasó."
+                className="w-full px-3 py-2 rounded-md border border-input bg-background text-sm"
+              />
+              <p className="text-xs text-muted-foreground">
+                Si dejas este campo vacío, el sistema generará una descripción automática.
+              </p>
+            </div>
+
+            {/* Aviso sobre firma OTP */}
+            <div className="p-3 rounded-md bg-purple-50 border border-purple-200 text-xs text-purple-900 space-y-1">
+              <p className="font-semibold flex items-center gap-1.5">
+                <PenTool className="w-3.5 h-3.5" />
+                Firma electrónica con OTP
+              </p>
+              <p>
+                Al crear el Otro Sí, el sistema enviará automáticamente un código OTP al correo
+                del cliente (<strong>{data?.cliente?.email || 'sin correo'}</strong>). El cliente
+                deberá ingresar este código para firmar electrónicamente el documento.
+              </p>
+              <p className="text-purple-700">
+                ⚠️ El Otro Sí <strong>NO modifica</strong> el pagare ni la carta de instrucciones originales.
+                Se anexa como documento complementario y se puede ver y exportar por separado.
+              </p>
+            </div>
+
+            <div className="flex gap-2 pt-2 border-t">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setModalNuevoOtroSi(false)}
+                className="flex-1"
+                disabled={creandoOtroSi}
+              >
+                Cancelar
+              </Button>
+              <Button
+                type="submit"
+                disabled={creandoOtroSi}
+                className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white"
+              >
+                {creandoOtroSi ? (
+                  <>
+                    <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                    Generando...
+                  </>
+                ) : (
+                  <>
+                    <FileText className="w-4 h-4 mr-2" />
+                    Generar Otro Sí y enviar OTP
+                  </>
+                )}
+              </Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* === MODAL: Vista previa del Otro Sí generado === */}
+      <Dialog open={!!otroSiVistaPrevia} onOpenChange={(o) => !o && setOtroSiVistaPrevia(null)}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-emerald-700">
+              <CheckCircle2 className="w-5 h-5" />
+              Otro Sí {otroSiVistaPrevia?.codigo} generado
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 flex-1 overflow-hidden flex flex-col">
+            {otroSiVistaPrevia?.firmaInfo && (
+              <div className="p-3 rounded-md bg-purple-50 border border-purple-200 text-sm space-y-1">
+                <p className="font-semibold text-purple-900 flex items-center gap-1.5">
+                  <PenTool className="w-3.5 h-3.5" />
+                  Firma electrónica iniciada
+                </p>
+                {otroSiVistaPrevia.firmaInfo.otpEnviado ? (
+                  <p className="text-purple-800">
+                    ✅ Se envió un código OTP al correo <strong>{otroSiVistaPrevia.firmaInfo.emailDestino || 'del cliente'}</strong>.
+                    El cliente debe ingresar este código en el link de firma para completar el Otro Sí.
+                  </p>
+                ) : (
+                  <p className="text-amber-700">
+                    ⚠️ No se pudo enviar el OTP automáticamente. {otroSiVistaPrevia.firmaInfo.otpError || ''}
+                  </p>
+                )}
+                <p className="text-xs text-purple-700 mt-1">
+                  🔗 Link de firma: <a href={otroSiVistaPrevia.firmaInfo.linkFirma} target="_blank" rel="noopener noreferrer" className="underline break-all">{otroSiVistaPrevia.firmaInfo.linkFirma}</a>
+                </p>
+              </div>
+            )}
+            <div className="flex-1 overflow-auto border rounded-md bg-white">
+              <iframe
+                srcDoc={otroSiVistaPrevia?.html}
+                title={`Otro Sí ${otroSiVistaPrevia?.codigo || ''}`}
+                className="w-full h-full min-h-[500px]"
+              />
+            </div>
+            <div className="flex gap-2 pt-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setOtroSiVistaPrevia(null)}
+                className="flex-1"
+              >
+                Cerrar
+              </Button>
+              <Button
+                type="button"
+                onClick={() => {
+                  if (otroSiVistaPrevia?.html) {
+                    exportarOtroSi(otroSiVistaPrevia.html, otroSiVistaPrevia.codigo || 'OS')
+                  }
+                }}
+                className="flex-1"
+              >
+                <Printer className="w-4 h-4 mr-2" />
+                Imprimir / Exportar PDF
+              </Button>
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
     </Dialog>

@@ -6,13 +6,25 @@ import { calcularPrestamo, generarCronograma } from '@/lib/finance'
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
-    const { monto, categoriaId, plazoMeses, frecuencia, token } = body
+    const { monto, categoriaId, plazoMeses, frecuencia, token, flexibilidadFinanciera } = body
 
     if (!token) return NextResponse.json({ error: 'Token requerido' }, { status: 401 })
     const cliente = await db.cliente.findFirst({ where: { tokenSesion: token } })
     if (!cliente || !cliente.tokenExpira || new Date(cliente.tokenExpira) < new Date()) {
       return NextResponse.json({ error: 'Sesión expirada' }, { status: 401 })
     }
+
+    // === Flexibilidad Financiera ===
+    // Si el cliente la activó en la simulación, el sistema la incluye en el resultado.
+    // Solo está disponible si el número de cuotas >= 4.
+    const FLEXIBILIDAD_COSTO = 10000
+    const plazoNumFlex = Number(plazoMeses) || 1
+    const frecFlex = frecuencia || 'MENSUAL'
+    let cuotasSimuladas = plazoNumFlex
+    if (frecFlex === 'QUINCENAL') cuotasSimuladas = plazoNumFlex * 2
+    else if (frecFlex === 'SEMANAL') cuotasSimuladas = plazoNumFlex * 4
+    const flexElegible = cuotasSimuladas >= 4
+    const flexActivada = !!flexibilidadFinanciera && flexElegible
 
     let categoria: Awaited<ReturnType<typeof db.categoriaCliente.findUnique>> = null
     if (categoriaId) {
@@ -102,6 +114,11 @@ export async function POST(req: NextRequest) {
         frecuencia: frec,
         categoria: { id: categoria.id, nombre: categoria.nombre, codigo: categoria.codigo },
         ...calc,
+        // === Flexibilidad Financiera (solo si cuotas >= 4) ===
+        flexibilidadFinanciera: flexActivada,
+        flexibilidadElegible: flexElegible,
+        flexibilidadCosto: flexElegible ? FLEXIBILIDAD_COSTO : 0,
+        flexibilidadCuotasRequeridas: 4,
       },
       cronograma,
     })

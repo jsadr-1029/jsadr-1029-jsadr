@@ -5,6 +5,8 @@ import { PageHeader } from '@/components/ui-basics'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Switch } from '@/components/ui/switch'
+import { Badge } from '@/components/ui/badge'
 import {
   Select,
   SelectContent,
@@ -28,7 +30,7 @@ import {
   calcularPrestamoTasaFijaMensual,
   Frecuencia,
 } from '@/lib/finanzas'
-import { Calculator, Printer, TrendingDown, TrendingUp, Sparkles, User, Info } from 'lucide-react'
+import { Calculator, Printer, TrendingDown, TrendingUp, Sparkles, User, Info, Shield } from 'lucide-react'
 
 type MetodoCalculo = 'FRANCES' | 'TASA_FIJA'
 
@@ -60,6 +62,10 @@ export function SimuladorView() {
   const [clienteSeleccionadoId, setClienteSeleccionadoId] = useState<string>('')
   const [cargandoClientes, setCargandoClientes] = useState(true)
   const [tasaHeredadaDe, setTasaHeredadaDe] = useState<string>('') // nombre del cliente del cual se heredó
+
+  // === Flexibilidad Financiera (beneficio opcional, cuotas >= 4) ===
+  const [flexibilidadFinanciera, setFlexibilidadFinanciera] = useState(false)
+  const FLEXIBILIDAD_COSTO = 10000
 
   useEffect(() => {
     let cancelado = false
@@ -422,6 +428,60 @@ export function SimuladorView() {
               </Select>
             </div>
 
+            {/* === Flexibilidad Financiera (beneficio opcional, cuotas >= 4) === */}
+            {calculo && calculo.numeroCuotas >= 4 ? (
+              <div className={`space-y-2 p-3 rounded-lg border-2 transition-colors ${
+                flexibilidadFinanciera
+                  ? 'bg-emerald-50 border-emerald-400'
+                  : 'bg-emerald-50/30 border-emerald-200'
+              }`}>
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <Switch
+                      checked={flexibilidadFinanciera}
+                      onCheckedChange={setFlexibilidadFinanciera}
+                      id="flexFlex"
+                    />
+                    <Label
+                      htmlFor="flexFlex"
+                      className="text-sm cursor-pointer font-semibold text-emerald-900 flex items-center gap-1.5"
+                    >
+                      <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
+                      Flexibilidad Financiera
+                    </Label>
+                  </div>
+                  <Badge
+                    variant="outline"
+                    className={
+                      flexibilidadFinanciera
+                        ? 'text-emerald-700 border-emerald-400 bg-emerald-100'
+                        : 'text-muted-foreground'
+                    }
+                  >
+                    {flexibilidadFinanciera
+                      ? `✨ +${formatearMoneda(FLEXIBILIDAD_COSTO)}`
+                      : `Opcional · ${formatearMoneda(FLEXIBILIDAD_COSTO)}`}
+                  </Badge>
+                </div>
+                <p className="text-xs text-emerald-800">
+                  {flexibilidadFinanciera
+                    ? '✅ Activo: el cliente podrá (previo pago) trasladar una cuota al final del crédito o solicitar cambio de fecha de pago.'
+                    : `Disponible porque la simulación tiene ${calculo.numeroCuotas} cuotas (≥ 4). El cliente podrá:`}
+                </p>
+                {!flexibilidadFinanciera && (
+                  <ul className="list-disc list-inside text-[11px] text-emerald-800 ml-2 space-y-0.5">
+                    <li>Trasladar UNA cuota al final del crédito</li>
+                    <li>Solicitar cambio de fecha de pago (genera "Otro Sí")</li>
+                  </ul>
+                )}
+              </div>
+            ) : (
+              <div className="p-2.5 rounded-md bg-muted/30 border border-dashed border-muted-foreground/30 text-xs text-muted-foreground">
+                ℹ️ <strong>Flexibilidad Financiera</strong> está disponible solo para simulaciones con
+                <strong> 4 o más cuotas</strong>.{calculo ? ` Actual: ${calculo.numeroCuotas} cuota(s).` : ''}
+              </div>
+            )}
+
             <div className="pt-2 border-t">
               <div className="flex items-center gap-2 text-xs text-muted-foreground">
                 <Sparkles className="w-3 h-3" />
@@ -493,6 +553,32 @@ export function SimuladorView() {
                     ✓ Tasa efectiva por período: {(calculo.tasaAplicada * 100).toFixed(4)}%
                   </p>
                 </div>
+
+                {/* === Bloque de Flexibilidad Financiera (solo si está activa) === */}
+                {flexibilidadFinanciera && calculo.numeroCuotas >= 4 && (
+                  <div className="p-3 rounded-md bg-emerald-50 border border-emerald-200 text-sm space-y-2">
+                    <div className="flex items-center gap-2 text-emerald-800">
+                      <Sparkles className="w-4 h-4" />
+                      <strong className="text-emerald-900">Flexibilidad Financiera adquirida</strong>
+                      <Badge variant="outline" className="text-emerald-700 border-emerald-400 bg-emerald-100 ml-auto">
+                        +{formatearMoneda(FLEXIBILIDAD_COSTO)}
+                      </Badge>
+                    </div>
+                    <p className="text-xs text-emerald-800">
+                      El cliente podrá activar el beneficio pagando{' '}
+                      <strong>{formatearMoneda(FLEXIBILIDAD_COSTO)}</strong> adicionales.
+                      Al activarse, tendrá derecho a:
+                    </p>
+                    <ul className="list-disc list-inside text-xs text-emerald-800 ml-2 space-y-0.5">
+                      <li>Trasladar UNA cuota al final del crédito</li>
+                      <li>Solicitar cambio de fecha de pago (genera "Otro Sí" firmado con OTP)</li>
+                    </ul>
+                    <p className="text-[11px] text-emerald-700 mt-1 pt-1 border-t border-emerald-200">
+                      💡 Los Otros Síes <strong>NO modifican</strong> el pagare ni la carta de instrucciones
+                      originales — se anexan como documentos complementarios.
+                    </p>
+                  </div>
+                )}
 
                 {/* Tabla de amortización */}
                 <div>

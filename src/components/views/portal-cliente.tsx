@@ -5,7 +5,7 @@ import { apiPost } from '@/hooks/use-fetch'
 import { Card, PageHeader, Badge, EmptyState, LoadingState } from '@/components/shared/ui'
 import { formatCOP, formatDate, formatPercent, getInitials, estadoPrestamoColor } from '@/lib/format'
 import { calcularPrestamo, generarCronograma } from '@/lib/finance'
-import { LogIn, ArrowLeft, Phone, Lock, Calculator, FileCheck, Send, KeyRound, ShieldCheck, Eye, EyeOff, QrCode, Copy, Check } from 'lucide-react'
+import { LogIn, ArrowLeft, Phone, Lock, Calculator, FileCheck, Send, KeyRound, ShieldCheck, Eye, EyeOff, QrCode, Copy, Check, Sparkles } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -551,6 +551,9 @@ function SimuladorPrestamo({ token }: { token: string }) {
   })
   const [categorias, setCategorias] = useState<any[]>([])
   const [resultado, setResultado] = useState<any>(null)
+  // === Flexibilidad Financiera (beneficio opcional, cuotas >= 4) ===
+  const [flexibilidadFinanciera, setFlexibilidadFinanciera] = useState(false)
+  const FLEXIBILIDAD_COSTO = 10000
 
   useEffect(() => {
     fetch('/api/categorias').then(r => r.json()).then(d => setCategorias(d.categorias || []))
@@ -563,11 +566,21 @@ function SimuladorPrestamo({ token }: { token: string }) {
         ...form,
         monto: Number(form.monto),
         plazoMeses: Number(form.plazoMeses),
+        flexibilidadFinanciera,
         token,
       })
       setResultado(res)
     } catch (e) { toast.error((e as Error).message) }
   }
+
+  // === Calcular cuotas para mostrar/ocultar la opción de Flexibilidad ===
+  const cuotasSimuladas = (() => {
+    const plazo = parseInt(form.plazoMeses) || 0
+    if (form.frecuencia === 'MENSUAL') return plazo
+    if (form.frecuencia === 'QUINCENAL') return plazo * 2
+    if (form.frecuencia === 'SEMANAL') return plazo * 4
+    return plazo
+  })()
 
   return (
     <Card title="Simulador de Préstamo">
@@ -602,6 +615,56 @@ function SimuladorPrestamo({ token }: { token: string }) {
             </Select>
           </div>
         </div>
+
+        {/* === Flexibilidad Financiera (solo si cuotas >= 4) === */}
+        {cuotasSimuladas >= 4 ? (
+          <div className={`p-3 rounded-lg border-2 transition-colors ${
+            flexibilidadFinanciera
+              ? 'bg-emerald-50 border-emerald-400'
+              : 'bg-emerald-50/30 border-emerald-200'
+          }`}>
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  id="flexFlexPortal"
+                  checked={flexibilidadFinanciera}
+                  onChange={(e) => setFlexibilidadFinanciera(e.target.checked)}
+                  className="w-4 h-4 accent-emerald-600"
+                />
+                <label
+                  htmlFor="flexFlexPortal"
+                  className="text-sm font-semibold text-emerald-900 flex items-center gap-1.5 cursor-pointer"
+                >
+                  <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
+                  Flexibilidad Financiera
+                </label>
+              </div>
+              <Badge className={flexibilidadFinanciera
+                ? 'bg-emerald-100 text-emerald-800 border-emerald-400'
+                : 'bg-slate-100 text-slate-600 border-slate-300'}>
+                {flexibilidadFinanciera ? `✨ +${formatCOP(FLEXIBILIDAD_COSTO)}` : `Opcional · ${formatCOP(FLEXIBILIDAD_COSTO)}`}
+              </Badge>
+            </div>
+            <p className="text-xs text-emerald-800 mt-1.5">
+              {flexibilidadFinanciera
+                ? '✅ Activo: podrás (previo pago) trasladar una cuota al final del crédito o solicitar cambio de fecha de pago.'
+                : `Disponible porque la simulación tiene ${cuotasSimuladas} cuotas (≥ 4). Podrás:`}
+            </p>
+            {!flexibilidadFinanciera && (
+              <ul className="list-disc list-inside text-[11px] text-emerald-800 ml-2 mt-1 space-y-0.5">
+                <li>Trasladar UNA cuota al final del crédito</li>
+                <li>Solicitar cambio de fecha de pago (genera "Otro Sí" firmado con OTP)</li>
+              </ul>
+            )}
+          </div>
+        ) : (
+          <div className="p-2 rounded-md bg-slate-50 border border-dashed border-slate-300 text-xs text-slate-500">
+            ℹ️ <strong>Flexibilidad Financiera</strong> está disponible para simulaciones con
+            <strong> 4 o más cuotas</strong>. Actual: {cuotasSimuladas} cuota(s).
+          </div>
+        )}
+
         <Button type="submit"><Calculator className="w-4 h-4 mr-1" />Simular</Button>
       </form>
 
@@ -627,6 +690,31 @@ function SimuladorPrestamo({ token }: { token: string }) {
               </div>
             </div>
           </div>
+
+          {/* === Bloque de Flexibilidad Financiera en el resultado === */}
+          {flexibilidadFinanciera && resultado?.simulacion?.numeroCuotas >= 4 && (
+            <div className="p-3 rounded-lg bg-emerald-50 border border-emerald-200 text-sm space-y-2">
+              <div className="flex items-center gap-2 text-emerald-900">
+                <Sparkles className="w-4 h-4" />
+                <strong>Flexibilidad Financiera adquirida</strong>
+                <span className="ml-auto text-xs px-2 py-0.5 rounded-full bg-emerald-200 text-emerald-900 font-semibold">
+                  +{formatCOP(FLEXIBILIDAD_COSTO)}
+                </span>
+              </div>
+              <p className="text-xs text-emerald-800">
+                Al aprobarse tu préstamo, podrás activar el beneficio pagando{' '}
+                <strong>{formatCOP(FLEXIBILIDAD_COSTO)}</strong> adicionales. Tendrás derecho a:
+              </p>
+              <ul className="list-disc list-inside text-xs text-emerald-800 ml-2 space-y-0.5">
+                <li>Trasladar UNA cuota al final del crédito</li>
+                <li>Solicitar cambio de fecha de pago (genera "Otro Sí" firmado con OTP)</li>
+              </ul>
+              <p className="text-[11px] text-emerald-700 mt-1 pt-1 border-t border-emerald-200">
+                💡 Los Otros Síes <strong>NO modifican</strong> el pagaré ni la carta de instrucciones
+                originales — se anexan como documentos complementarios.
+              </p>
+            </div>
+          )}
 
           {resultado.cronograma && (
             <div>
