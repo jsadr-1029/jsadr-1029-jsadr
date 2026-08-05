@@ -232,3 +232,318 @@
   0% { background-position: -200% 0; }
   100% { background-position: 200% 0; }
 }
+
+/* =====================================================
+   PORTAL CLIENTE — REDISEÑO FINTECH PREMIUM (Hub Circular)
+   ===================================================== */
+
+/* --- Tarjeta premium refinada --- */
+@utility premium-card {
+  background-color: oklch(0.22 0.05 270 / 70%);
+  backdrop-filter: blur(20px) saturate(160%);
+  -webkit-backdrop-filter: blur(20px) saturate(160%);
+  border: 1px solid oklch(0.40 0.06 278 / 35%);
+  box-shadow:
+    0 10px 40px -12px oklch(0.08 0.04 270 / 0.7),
+    0 2px 8px -2px oklch(0.10 0.04 270 / 0.4),
+    inset 0 1px 0 0 oklch(1 0 0 / 0.06);
+}
+
+@utility premium-card-hover {
+  transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.25s ease, border-color 0.25s ease;
+}
+@media (hover: hover) {
+  .premium-card-hover:hover {
+    transform: translateY(-2px);
+    border-color: oklch(0.55 0.20 280 / 55%);
+    box-shadow:
+      0 18px 56px -12px oklch(0.10 0.10 280 / 0.75),
+      0 4px 12px -2px oklch(0.10 0.10 280 / 0.5),
+      inset 0 1px 0 0 oklch(1 0 0 / 0.08);
+  }
+}
+
+/* --- Botón con gradiente refinado (indigo → violeta → fucsia) --- */
+@utility gradient-premium {
+  background-image: linear-gradient(135deg, oklch(0.58 0.22 275) 0%, oklch(0.55 0.24 295) 50%, oklch(0.60 0.24 312) 100%);
+}
+
+@utility gradient-premium-hover {
+  transition: filter 0.2s ease, transform 0.15s ease, box-shadow 0.25s ease;
+}
+@media (hover: hover) {
+  .gradient-premium-hover:hover {
+    filter: brightness(1.08) saturate(1.1);
+    box-shadow: 0 8px 28px -6px oklch(0.55 0.22 285 / 0.6);
+  }
+}
+
+/* --- Glow suave (resplandor violeta alrededor) --- */
+@utility glow-soft {
+  box-shadow:
+    0 0 0 1px oklch(0.55 0.22 280 / 0.25),
+    0 8px 32px -6px oklch(0.55 0.22 285 / 0.45),
+    0 0 60px -10px oklch(0.60 0.22 290 / 0.35);
+}
+
+/* --- Fondo del hub con anillos concéntricos --- */
+@utility hub-stage {
+  background:
+    radial-gradient(circle at center, oklch(0.30 0.10 280 / 0.15) 0%, transparent 60%),
+    radial-gradient(circle at center, oklch(0.40 0.15 285 / 0.10) 0%, transparent 40%);
+}
+
+/* --- Item del hub circular --- */
+@utility hub-item {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.25rem;
+  cursor: pointer;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+@media (hover: hover) {
+  .hub-item:hover {
+    transform: translate(-50%, -50%) scale(1.08) !important;
+  }
+}
+.hub-item:active {
+  transform: translate(-50%, -50%) scale(0.94) !important;
+  transition: transform 0.1s ease;
+}
+
+/* --- Logo central del hub --- */
+@utility hub-center {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9999px;
+  background-image: linear-gradient(135deg, oklch(0.58 0.22 275) 0%, oklch(0.55 0.24 295) 50%, oklch(0.60 0.24 312) 100%);
+  box-shadow:
+    0 0 0 4px oklch(0.20 0.05 270 / 0.6),
+    0 0 0 6px oklch(0.55 0.22 280 / 0.3),
+    0 12px 48px -8px oklch(0.55 0.22 285 / 0.7),
+    inset 0 2px 0 0 oklch(1 0 0 / 0.25);
+  z-index: 2;
+}
+
+/* --- Anillos orbitales del hub (líneas concéntricas) --- */
+.hub-ring {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  border-radius: 9999px;
+  border: 1px solid oklch(0.45 0.10 280 / 0.18);
+  pointer-events: none;
+}
+.hub-ring-outer {
+  border: 1px dashed oklch(0.45 0.10 280 / 0.10);
+}
+
+/* --- Barra inferior fija --- */
+@utility bottom-nav {
+  background-color: oklch(0.18 0.05 268 / 85%);
+  backdrop-filter: blur(24px) saturate(160%);
+  -webkit-backdrop-filter: blur(24px) saturate(160%);
+  border-top: 1px solid oklch(0.35 0.05 275 / 30%);
+  box-shadow: 0 -8px 32px -8px oklch(0.05 0.02 270 / 0.5);
+}
+
+@utility bottom-nav-item {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.125rem;
+  padding: 0.5rem 0.75rem;
+  border-radius: 0.75rem;
+  color: oklch(0.65 0.03 265);
+  cursor: pointer;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  transition: color 0.2s ease, background-color 0.2s ease, transform 0.15s ease;
+}
+.bottom-nav-item:active {
+  transform: scale(0.92);
+}
+@media (hover: hover) {
+  .bottom-nav-item:hover {
+    color: oklch(0.88 0.04 270);
+    background-color: oklch(0.30 0.06 278 / 35%);
+  }
+}
+.bottom-nav-item.active {
+  color: oklch(0.85 0.18 285);
+}
+
+/* --- Microanimación: ripple --- */
+@keyframes ripple {
+  0% { transform: scale(0); opacity: 0.6; }
+  100% { transform: scale(4); opacity: 0; }
+}
+.ripple {
+  position: absolute;
+  border-radius: 9999px;
+  background-color: oklch(0.85 0.18 285 / 0.4);
+  pointer-events: none;
+  animation: ripple 0.6s ease-out;
+}
+
+/* --- Microanimación: fade + scale (entradas) --- */
+@keyframes fadeScale {
+  from { opacity: 0; transform: scale(0.96) translateY(8px); }
+  to { opacity: 1; transform: scale(1) translateY(0); }
+}
+.fade-scale {
+  animation: fadeScale 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+/* --- Microanimación: slide-up --- */
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(16px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.slide-up {
+  animation: slideUp 0.4s ease-out;
+}
+
+/* --- Microanimación: pulse-glow para badges --- */
+@keyframes pulseGlow {
+  0%, 100% { box-shadow: 0 0 0 0 oklch(0.62 0.24 22 / 0.6); }
+  50% { box-shadow: 0 0 0 6px oklch(0.62 0.24 22 / 0); }
+}
+.pulse-glow {
+  animation: pulseGlow 2s ease-in-out infinite;
+}
+
+/* --- Microanimación: hub-center breathe --- */
+@keyframes hubBreathe {
+  0%, 100% {
+    box-shadow:
+      0 0 0 4px oklch(0.20 0.05 270 / 0.6),
+      0 0 0 6px oklch(0.55 0.22 280 / 0.3),
+      0 12px 48px -8px oklch(0.55 0.22 285 / 0.7),
+      inset 0 2px 0 0 oklch(1 0 0 / 0.25);
+  }
+  50% {
+    box-shadow:
+      0 0 0 4px oklch(0.20 0.05 270 / 0.6),
+      0 0 0 8px oklch(0.55 0.22 280 / 0.45),
+      0 16px 60px -8px oklch(0.55 0.22 285 / 0.85),
+      inset 0 2px 0 0 oklch(1 0 0 / 0.30);
+  }
+}
+.hub-breathe {
+  animation: hubBreathe 3.5s ease-in-out infinite;
+}
+
+/* --- Microanimación: rotate-slow para anillo orbital externo --- */
+@keyframes rotateSlow {
+  from { transform: translate(-50%, -50%) rotate(0deg); }
+  to { transform: translate(-50%, -50%) rotate(360deg); }
+}
+.rotate-slow {
+  animation: rotateSlow 60s linear infinite;
+}
+
+/* --- Microanimación: progress bar shimmer --- */
+@keyframes progressShimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+.progress-shimmer {
+  background-image: linear-gradient(
+    90deg,
+    oklch(0.55 0.22 280) 0%,
+    oklch(0.65 0.24 295) 50%,
+    oklch(0.55 0.22 280) 100%
+  );
+  background-size: 200% 100%;
+  animation: progressShimmer 2s linear infinite;
+}
+
+/* --- Microanimación: estado vacío (icono flotante) --- */
+@keyframes floatY {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-6px); }
+}
+.float-y {
+  animation: floatY 3s ease-in-out infinite;
+}
+
+/* --- Botón premium (presión táctil) --- */
+.btn-press {
+  transition: transform 0.1s ease, filter 0.15s ease;
+}
+.btn-press:active {
+  transform: scale(0.96);
+  filter: brightness(0.95);
+}
+
+/* --- Input premium (foco refinado) --- */
+@utility input-premium {
+  background-color: oklch(0.20 0.04 268 / 60%);
+  border: 1px solid oklch(0.35 0.05 275 / 35%);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, background-color 0.2s ease;
+}
+.input-premium:focus {
+  border-color: oklch(0.55 0.22 280 / 0.7);
+  box-shadow: 0 0 0 3px oklch(0.55 0.22 280 / 0.18);
+  background-color: oklch(0.22 0.05 268 / 75%);
+}
+
+/* --- Texto con gradiente (para títulos premium) --- */
+@utility text-gradient {
+  background-image: linear-gradient(135deg, oklch(0.85 0.10 270) 0%, oklch(0.80 0.18 290) 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* --- Scroll horizontal sin scrollbar visible (para chips/badges) --- */
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+/* --- Etiqueta premium (chip) --- */
+@utility chip-premium {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.25rem 0.625rem;
+  border-radius: 9999px;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  border: 1px solid oklch(0.40 0.06 278 / 35%);
+  background-color: oklch(0.28 0.05 270 / 55%);
+  color: oklch(0.92 0.04 270);
+}
+
+/* --- Fondo del portal (gradiente refinado móvil-first) --- */
+.portal-bg {
+  background-color: oklch(0.16 0.04 265);
+  background-image:
+    radial-gradient(at 20% -10%, oklch(0.32 0.14 280 / 0.50) 0px, transparent 55%),
+    radial-gradient(at 90% 5%, oklch(0.28 0.16 250 / 0.35) 0px, transparent 50%),
+    radial-gradient(at 50% 110%, oklch(0.25 0.14 305 / 0.30) 0px, transparent 55%),
+    linear-gradient(170deg, oklch(0.14 0.04 260) 0%, oklch(0.17 0.05 275) 60%, oklch(0.15 0.05 290) 100%);
+  background-attachment: fixed;
+}
+
+/* --- Línea separador sutil --- */
+.divider-soft {
+  height: 1px;
+  background-image: linear-gradient(90deg, transparent, oklch(0.40 0.06 278 / 35%), transparent);
+}
+

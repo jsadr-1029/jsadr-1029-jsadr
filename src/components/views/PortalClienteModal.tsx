@@ -8,6 +8,7 @@ import {
   DialogTitle,
   DialogFooter,
 } from '@/components/ui/dialog'
+import { VisuallyHidden } from '@radix-ui/react-visually-hidden'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -20,7 +21,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import {
   Table,
   TableBody,
@@ -69,11 +69,18 @@ import {
   FileDown,
   Printer,
   LogOut,
+  Home,
+  ArrowLeft,
+  Sparkles,
+  TrendingUp,
+  Wallet,
+  History,
+  Plus,
 } from 'lucide-react'
 import { CentroComunicacionesPortal } from '@/components/views/CentroComunicacionesPortal'
 
 // =====================================================
-// Tipos
+// Tipos (sin cambios — preserva contrato de API)
 // =====================================================
 interface PortalKPIS {
   scorePago: number
@@ -133,6 +140,21 @@ interface PortalData {
   notificacionesStats?: NotificacionesStats
 }
 
+// =====================================================
+// Configuración visual del Hub Circular
+// =====================================================
+type HubItemId = 'prestamos' | 'proximos' | 'simulador' | 'solicitudes' | 'comunicaciones' | 'historial'
+
+interface HubItemConfig {
+  id: HubItemId
+  label: string
+  icon: typeof FileText
+  color: string
+  gradient: string
+  position: { x: number; y: number } // traslación desde el centro en px
+  badge?: number
+}
+
 export function PortalClienteModal({
   cedula,
   token,
@@ -146,16 +168,13 @@ export function PortalClienteModal({
   const [loading, setLoading] = useState(true)
   const { toast } = useToast()
 
-  // === Flujo de aceptación TyC con OTP + Selfie ===
-  // Flujo v5.0:
-  //   Paso 1: enviar OTP (canal a elegir: WhatsApp/Email/Ambos — modalidad de préstamo)
-  //   Paso 2: validar OTP
-  //   Paso 3: subir foto de la cédula
-  //   Paso 4: tomar selfie sosteniendo la cédula
-  //   Paso 5: confirmar y activar préstamo (envía ambas fotos al backend)
+  // === Vista activa del portal: 'hub' ( pantalla principal) o un HubItemId / secciones inferiores
+  const [vista, setVista] = useState<'hub' | HubItemId | 'avisos' | 'campanas'>('hub')
+
+  // === Flujo de aceptación TyC con OTP + Selfie (PRESERVADO) ===
   const [tycPrestamoId, setTycPrestamoId] = useState<string | null>(null)
   const [tycPrestamoCodigo, setTycPrestamoCodigo] = useState<string>('')
-  const [tycPaso, setTycPaso] = useState<1 | 2 | 3 | 4>(1) // 1: OTP, 2: validar, 3: cédula, 4: selfie
+  const [tycPaso, setTycPaso] = useState<1 | 2 | 3 | 4>(1)
   const [tycCanal, setTycCanal] = useState<'WHATSAPP' | 'EMAIL' | 'AMBOS'>('EMAIL')
   const [tycOtpIngresado, setTycOtpIngresado] = useState<string>('')
   const [tycSegundosRestantes, setTycSegundosRestantes] = useState<number>(0)
@@ -190,7 +209,7 @@ export function PortalClienteModal({
     }
   }
 
-  // === Abrir flujo TyC completo (OTP + foto cédula + selfie) ===
+  // === Abrir flujo TyC completo (OTP + foto cédula + selfie) — PRESERVADO ===
   const abrirFlujoTyC = async (prestamoId: string, codigo: string) => {
     setTycPrestamoId(prestamoId)
     setTycPrestamoCodigo(codigo)
@@ -199,7 +218,6 @@ export function PortalClienteModal({
     setTycFotoDocumento(null)
     setTycFotoSelfie(null)
     setTycSegundosRestantes(0)
-    // Verificar si ya hay OTP activo (no generar uno nuevo en ese caso)
     try {
       const res = await fetch(`/api/prestamos/${prestamoId}/aceptar-tyc-otp`, {
         headers: portalHeaders(),
@@ -211,7 +229,6 @@ export function PortalClienteModal({
         setTycSegundosRestantes(json.data.segundosRestantes || 300)
         iniciarCuentaRegresiva(json.data.segundosRestantes || 300)
         if (json.data.otpValidado) {
-          // Saltar a paso 3 (subir cédula) — el OTP ya está validado
           setTycPaso(3)
         }
       }
@@ -285,7 +302,6 @@ export function PortalClienteModal({
       })
       const json = await res.json()
       if (json.success) {
-        // Avanzar a paso 3: subir foto de la cédula primero
         setTycPaso(3)
         if (tycIntervalRef.current) clearInterval(tycIntervalRef.current)
         toast({
@@ -313,18 +329,18 @@ export function PortalClienteModal({
       video.playsInline = true
       const modal = document.createElement('div')
       modal.style.cssText =
-        'position:fixed;inset:0;background:rgba(0,0,0,0.9);z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:20px;'
-      video.style.cssText = 'max-width:90vw;max-height:70vh;border-radius:12px;'
+        'position:fixed;inset:0;background:rgba(0,0,0,0.92);z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:20px;'
+      video.style.cssText = 'max-width:90vw;max-height:70vh;border-radius:16px;'
       const btnContainer = document.createElement('div')
       btnContainer.style.cssText = 'margin-top:16px;display:flex;gap:12px;'
       const btnCapturar = document.createElement('button')
-      btnCapturar.textContent = '📸 Capturar'
+      btnCapturar.textContent = 'Capturar'
       btnCapturar.style.cssText =
-        'padding:10px 24px;background:#6366f1;color:white;border:none;border-radius:8px;font-size:16px;cursor:pointer;'
+        'padding:12px 28px;background:linear-gradient(135deg,#6366f1,#a855f7);color:white;border:none;border-radius:12px;font-size:16px;font-weight:600;cursor:pointer;box-shadow:0 8px 24px -6px rgba(99,102,241,0.5);'
       const btnCancelar = document.createElement('button')
       btnCancelar.textContent = 'Cancelar'
       btnCancelar.style.cssText =
-        'padding:10px 24px;background:#475569;color:white;border:none;border-radius:8px;font-size:16px;cursor:pointer;'
+        'padding:12px 28px;background:rgba(255,255,255,0.1);color:white;border:1px solid rgba(255,255,255,0.2);border-radius:12px;font-size:16px;cursor:pointer;'
       btnContainer.appendChild(btnCancelar)
       btnContainer.appendChild(btnCapturar)
       modal.appendChild(video)
@@ -361,7 +377,6 @@ export function PortalClienteModal({
       toast({ title: 'Archivo inválido', description: 'Debe ser una imagen.', variant: 'destructive' })
       return
     }
-    // Validar formato (no SVG por seguridad)
     if (file.type === 'image/svg+xml') {
       toast({ title: 'Formato no permitido', description: 'Usa JPG, PNG o WebP.', variant: 'destructive' })
       return
@@ -388,15 +403,15 @@ export function PortalClienteModal({
       video.autoplay = true
       video.playsInline = true
       const overlay = document.createElement('div')
-      overlay.style.cssText = `position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:20px;`
+      overlay.style.cssText = `position:fixed;inset:0;background:rgba(0,0,0,0.88);z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:20px;`
       overlay.appendChild(video)
-      video.style.cssText = `max-width:90vw;max-height:60vh;border-radius:8px;`
+      video.style.cssText = `max-width:90vw;max-height:60vh;border-radius:12px;`
       const captureBtn = document.createElement('button')
       captureBtn.textContent = 'Capturar foto de la cédula'
-      captureBtn.style.cssText = `padding:10px 24px;background:#1e40af;color:white;border:none;border-radius:6px;font-size:14px;cursor:pointer;`
+      captureBtn.style.cssText = `padding:12px 28px;background:linear-gradient(135deg,#6366f1,#a855f7);color:white;border:none;border-radius:12px;font-size:14px;font-weight:600;cursor:pointer;box-shadow:0 8px 24px -6px rgba(99,102,241,0.5);`
       const cancelBtn = document.createElement('button')
       cancelBtn.textContent = 'Cancelar'
-      cancelBtn.style.cssText = `padding:10px 24px;background:#6b7280;color:white;border:none;border-radius:6px;font-size:14px;cursor:pointer;`
+      cancelBtn.style.cssText = `padding:12px 28px;background:rgba(255,255,255,0.1);color:white;border:1px solid rgba(255,255,255,0.2);border-radius:12px;font-size:14px;cursor:pointer;`
       const hint = document.createElement('p')
       hint.textContent = 'Coloca tu cédula en el cuadro y asegúrate de que se vea nítida.'
       hint.style.cssText = `color:#e5e7eb;font-size:12px;text-align:center;max-width:480px;`
@@ -483,8 +498,6 @@ export function PortalClienteModal({
     }
   }
 
-  // === Fin flujo TyC ===
-
   const aceptarTyC = async (prestamoId: string) => {
     try {
       const res = await fetch(`/api/prestamos/${prestamoId}`, {
@@ -537,8 +550,6 @@ export function PortalClienteModal({
       })
       const json = await res.json()
       if (json.success) {
-        // Si la API real respondió con URL de Bancolombia, redirigir al banco.
-        // Si está en modo simulado, abrir la ruta interna de redirect.
         const destino = json.data.bancolombiaRedirectUrl || json.data.redirectUrl
         toast({
           title: json.data.modoSimulado ? 'Modo simulado' : 'Redirigiendo a Bancolombia',
@@ -547,8 +558,6 @@ export function PortalClienteModal({
             : `Te redirigiremos a Bancolombia para autorizar el pago.`,
         })
         if (destino) {
-          // Si es URL absoluta de Bancolombia, redirigir la pestaña actual
-          // (mejor UX que window.open para flujos de pago)
           if (destino.startsWith('http')) {
             window.location.href = destino
           } else {
@@ -563,11 +572,21 @@ export function PortalClienteModal({
     }
   }
 
+  // ============ LOADING STATE ============
   if (loading || !data) {
     return (
       <Dialog open={true} onOpenChange={onClose}>
-        <DialogContent className="max-w-4xl">
-          <div className="py-8 text-center text-muted-foreground">Cargando portal...</div>
+        <DialogContent className="max-w-md w-full" showCloseButton={false}>
+          <VisuallyHidden>
+            <DialogTitle>Cargando portal</DialogTitle>
+          </VisuallyHidden>
+          <div className="py-16 flex flex-col items-center gap-4">
+            <div className="relative w-16 h-16">
+              <div className="absolute inset-0 rounded-full border-4 border-primary/20"></div>
+              <div className="absolute inset-0 rounded-full border-4 border-primary border-t-transparent animate-spin"></div>
+            </div>
+            <p className="text-sm text-muted-foreground tracking-wide">Cargando tu portal…</p>
+          </div>
         </DialogContent>
       </Dialog>
     )
@@ -586,552 +605,175 @@ export function PortalClienteModal({
   const notificaciones = data.notificaciones || []
   const notifStats = data.notificacionesStats || { total: 0, noLeidas: 0, pendientes: 0 }
 
+  // Configuración del Hub (6 items alrededor del logo)
+  const hubItems: HubItemConfig[] = [
+    {
+      id: 'prestamos',
+      label: 'Créditos',
+      icon: FileText,
+      color: 'text-indigo-300',
+      gradient: 'from-indigo-500 to-violet-600',
+      position: { x: 0, y: -110 },
+      badge: prestamos.filter(p => p.estado === 'PENDIENTE_ACEPTACION').length || undefined,
+    },
+    {
+      id: 'proximos',
+      label: 'Próximos',
+      icon: CalendarClock,
+      color: 'text-cyan-300',
+      gradient: 'from-cyan-500 to-blue-600',
+      position: { x: 95, y: -55 },
+    },
+    {
+      id: 'simulador',
+      label: 'Simulador',
+      icon: Calculator,
+      color: 'text-violet-300',
+      gradient: 'from-violet-500 to-purple-600',
+      position: { x: 95, y: 55 },
+    },
+    {
+      id: 'solicitudes',
+      label: 'Solicitudes',
+      icon: ClipboardList,
+      color: 'text-amber-300',
+      gradient: 'from-amber-500 to-orange-600',
+      position: { x: 0, y: 110 },
+    },
+    {
+      id: 'comunicaciones',
+      label: 'Chat',
+      icon: MessageSquare,
+      color: 'text-emerald-300',
+      gradient: 'from-emerald-500 to-teal-600',
+      position: { x: -95, y: 55 },
+    },
+    {
+      id: 'historial',
+      label: 'Historial',
+      icon: History,
+      color: 'text-fuchsia-300',
+      gradient: 'from-fuchsia-500 to-pink-600',
+      position: { x: -95, y: -55 },
+    },
+  ]
+
+  // Helper para obtener config por id (incluye secciones extras: avisos, campañas)
+  const hubConfig = (id: 'hub' | HubItemId | 'avisos' | 'campanas') => {
+    if (id === 'avisos') return { label: 'Avisos', icon: Bell, gradient: 'from-red-500 to-rose-600', color: 'text-red-300' }
+    if (id === 'campanas') return { label: 'Campañas', icon: Megaphone, gradient: 'from-indigo-500 to-violet-600', color: 'text-indigo-300' }
+    return hubItems.find(h => h.id === id)!
+  }
+
   return (
     <Dialog open={true} onOpenChange={onClose}>
-      <DialogContent className="max-w-[95vw] w-[1400px] h-[95vh] flex flex-col p-0 gap-0 overflow-hidden">
-        {/* === HEADER FIJO (sin scroll) === */}
-        <div className="px-3 sm:px-5 pt-3 sm:pt-4 pb-2 border-b border-white/10 shrink-0 bg-gradient-to-r from-indigo-500/10 via-purple-500/10 to-fuchsia-500/10">
-          <div className="flex items-center justify-between gap-2">
-            <div className="flex items-center gap-3 min-w-0 flex-1">
-              <div className="relative w-10 h-10 sm:w-12 sm:h-12 rounded-xl gradient-logo flex items-center justify-center shadow-lg shrink-0">
-                <User className="w-5 h-5 sm:w-6 sm:h-6 text-white" />
-              </div>
-              <div className="min-w-0 flex-1">
-                <DialogTitle className="flex items-center gap-2 text-sm sm:text-base">
-                  <span className="truncate font-bold">{cliente.nombre}</span>
-                </DialogTitle>
-                <p className="text-[10px] sm:text-xs text-muted-foreground mt-0.5 truncate flex items-center gap-2 flex-wrap">
-                  <span className="inline-flex items-center gap-1">
-                    <FileCheck className="w-3 h-3" />
-                    C.C. {cliente.cedula}
+      <DialogContent
+        className="max-w-md w-full h-[100vh] sm:h-[95vh] sm:max-h-[860px] flex flex-col p-0 gap-0 overflow-hidden portal-bg border-0 sm:rounded-3xl"
+        showCloseButton={false}
+      >
+        <VisuallyHidden>
+          <DialogTitle>Portal del Cliente — {cliente.nombre}</DialogTitle>
+        </VisuallyHidden>
+        {/* === HEADER COMPACTO (App-like) === */}
+        <div className="px-4 pt-4 pb-3 shrink-0 fade-scale">
+          <div className="flex items-center justify-between gap-3">
+            {vista !== 'hub' ? (
+              <button
+                onClick={() => setVista('hub')}
+                className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors btn-press"
+              >
+                <ArrowLeft className="w-4 h-4" />
+                <span>Hub</span>
+              </button>
+            ) : (
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div className="relative w-9 h-9 rounded-full gradient-premium flex items-center justify-center shadow-md shrink-0">
+                  <span className="text-xs font-bold text-white">
+                    {cliente.nombre.charAt(0).toUpperCase()}
                   </span>
-                  <span className="opacity-50">·</span>
-                  <span className="inline-flex items-center gap-1">
-                    <Smartphone className="w-3 h-3" />
-                    {cliente.telefono}
-                  </span>
-                  {cliente.categoria && (
-                    <>
-                      <span className="opacity-50">·</span>
-                      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-primary/15 text-primary text-[10px] font-semibold">
-                        {cliente.categoria.nombre}
-                      </span>
-                    </>
-                  )}
-                </p>
-              </div>
-            </div>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={onClose}
-              className="shrink-0 border-red-500/30 text-red-300 hover:bg-red-500/10 hover:text-red-200 h-9"
-              title="Cerrar sesión del portal"
-            >
-              <LogOut className="w-4 h-4 sm:mr-1.5" />
-              <span className="hidden sm:inline">Salir del portal</span>
-            </Button>
-          </div>
-        </div>
-
-        {/* === BODY CON SCROLL INTERNO === */}
-        <div className="flex-1 overflow-y-auto px-3 sm:px-5 py-3 space-y-3">
-
-        {/* ============ KPIs BÁSICOS (4 tarjetas) ============ */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-          <Card className="glass-card">
-            <CardContent className="p-2.5 text-center">
-              <FileText className="w-5 h-5 mx-auto mb-0.5 text-primary" />
-              <p className="text-[10px] text-muted-foreground">Total Créditos</p>
-              <p className="text-base font-bold">{resumen.totalPrestamos}</p>
-            </CardContent>
-          </Card>
-          <Card className="glass-card">
-            <CardContent className="p-2.5 text-center">
-              <Clock className="w-5 h-5 mx-auto mb-0.5 text-emerald-400" />
-              <p className="text-[10px] text-muted-foreground">Activos</p>
-              <p className="text-base font-bold text-emerald-300">{resumen.prestamosActivos}</p>
-            </CardContent>
-          </Card>
-          <Card className="glass-card">
-            <CardContent className="p-2.5 text-center">
-              <CheckCircle className="w-5 h-5 mx-auto mb-0.5 text-cyan-400" />
-              <p className="text-[10px] text-muted-foreground">Cancelados</p>
-              <p className="text-base font-bold text-cyan-300">{resumen.prestamosCancelados}</p>
-            </CardContent>
-          </Card>
-          <Card className="glass-card">
-            <CardContent className="p-2.5 text-center">
-              <DollarSign className="w-5 h-5 mx-auto mb-0.5 text-amber-400" />
-              <p className="text-[10px] text-muted-foreground">Saldo Activos</p>
-              <p className="text-sm font-bold text-amber-300">
-                {formatearMoneda(resumen.saldoTotalActivos)}
-              </p>
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* ============ KPIs AVANZADOS (3 tarjetas) ============ */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-          {/* Score de Pago (circular SVG) */}
-          <Card className="glass-card">
-            <CardContent className="p-2.5 flex flex-col items-center">
-              <div className="flex items-center gap-1.5 mb-1 self-start">
-                <Award className="w-3.5 h-3.5 text-violet-300" />
-                <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-                  Score de Pago
-                </p>
-              </div>
-              <ScoreCircular score={kpis.scorePago} />
-            </CardContent>
-          </Card>
-
-          {/* Próximo Pago */}
-          <Card className="glass-card">
-            <CardContent className="p-2.5">
-              <div className="flex items-center gap-1.5 mb-1">
-                <CalendarClock className="w-3.5 h-3.5 text-cyan-300" />
-                <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-                  Próximo Pago
-                </p>
-              </div>
-              <div className="flex items-end justify-between">
-                <div>
-                  <p className="text-sm font-bold text-cyan-300">
-                    {formatearMoneda(kpis.montoProximoPago)}
-                  </p>
-                  <p className="text-[10px] text-muted-foreground mt-0.5">
-                    {kpis.proximoVencimiento ? formatearFecha(kpis.proximoVencimiento) : 'Sin vencimientos'}
+                  <span className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full bg-emerald-400 border-2 border-background"></span>
+                </div>
+                <div className="min-w-0">
+                  <p className="text-[10px] text-muted-foreground leading-tight">Hola,</p>
+                  <p className="text-sm font-semibold truncate leading-tight">
+                    {cliente.nombre.split(' ')[0]}
                   </p>
                 </div>
-                <DiasRestantesBadge dias={kpis.diasProximoPago} />
               </div>
-              <div className="mt-2 pt-1.5 border-t border-white/10">
-                <p className="text-[10px] text-muted-foreground">
-                  Cuotas pendientes: <span className="font-bold text-foreground">{kpis.totalCuotasPendientes}</span>
-                </p>
-              </div>
-            </CardContent>
-          </Card>
+            )}
 
-          {/* Estado de Salud */}
-          <Card className="glass-card">
-            <CardContent className="p-2.5">
-              <div className="flex items-center gap-1.5 mb-1">
-                <HeartPulse className="w-3.5 h-3.5 text-emerald-300" />
-                <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-                  Estado de Salud
-                </p>
-              </div>
-              <div className="flex items-end justify-between mb-1.5">
-                <p className="text-sm font-bold text-emerald-300">{kpis.estadoSalud}</p>
-                <span className="text-[10px] text-muted-foreground">
-                  {kpis.porcentajeAvancePromedio.toFixed(1)}% pagado
+            <div className="flex items-center gap-1.5">
+              {cliente.categoria && (
+                <span className="chip-premium !text-[10px] !py-0.5 !px-2">
+                  <Sparkles className="w-2.5 h-2.5" />
+                  {cliente.categoria.nombre}
                 </span>
+              )}
+              <button
+                onClick={onClose}
+                className="w-9 h-9 rounded-full flex items-center justify-center bg-red-500/10 hover:bg-red-500/20 text-red-300 border border-red-500/20 btn-press transition-colors"
+                title="Cerrar sesión"
+              >
+                <LogOut className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+
+          {/* Título de la sección actual */}
+          {vista !== 'hub' && (
+            <div className="mt-3 slide-up">
+              <div className="flex items-center gap-2.5">
+                <div className={`w-8 h-8 rounded-xl bg-gradient-to-br ${hubConfig(vista).gradient} flex items-center justify-center shadow-md`}>
+                  {(() => {
+                    const Icon = hubConfig(vista).icon
+                    return <Icon className="w-4 h-4 text-white" />
+                  })()}
+                </div>
+                <div>
+                  <h2 className="text-base font-bold tracking-tight">{hubConfig(vista).label}</h2>
+                  <p className="text-[10px] text-muted-foreground">Sección del portal</p>
+                </div>
               </div>
-              <div className="h-2 w-full rounded-full bg-white/10 overflow-hidden">
-                <div
-                  className="h-full bg-gradient-to-r from-emerald-500 to-cyan-500 transition-all duration-700"
-                  style={{ width: `${Math.min(100, kpis.porcentajeAvancePromedio)}%` }}
-                />
-              </div>
-              <p className="text-[10px] text-muted-foreground mt-1">
-                Avance promedio en tus créditos activos
-              </p>
-            </CardContent>
-          </Card>
+            </div>
+          )}
         </div>
 
-        <Tabs defaultValue="prestamos" className="flex flex-col gap-3">
-          {/* === MENÚ HORIZONTAL ARRIBA — 2 LÍNEAS === */}
-          <TabsList className="grid grid-cols-4 w-full h-auto p-1.5 gap-1 bg-white/5 rounded-xl border border-white/10">
-              <TabsTrigger
-                value="prestamos"
-                className="rounded-md data-[state=active]:bg-primary/20 data-[state=active]:text-primary px-2 py-2 text-xs justify-center overflow-hidden"
-              >
-                <FileText className="w-4 h-4 mr-1.5 shrink-0" />
-                <span className="truncate">Créditos</span>
-              </TabsTrigger>
-              <TabsTrigger
-                value="proximos"
-                className="rounded-md data-[state=active]:bg-primary/20 data-[state=active]:text-primary px-2 py-2 text-xs justify-center overflow-hidden"
-              >
-                <CalendarClock className="w-4 h-4 mr-1.5 shrink-0" />
-                <span className="truncate">Próximos</span>
-              </TabsTrigger>
-              <TabsTrigger
-                value="historial"
-                className="rounded-md data-[state=active]:bg-primary/20 data-[state=active]:text-primary px-2 py-2 text-xs justify-center overflow-hidden"
-              >
-                <DollarSign className="w-4 h-4 mr-1.5 shrink-0" />
-                <span className="truncate">Historial</span>
-              </TabsTrigger>
-              <TabsTrigger
-                value="simulador"
-                className="rounded-md data-[state=active]:bg-primary/20 data-[state=active]:text-primary px-2 py-2 text-xs justify-center overflow-hidden"
-              >
-                <Calculator className="w-4 h-4 mr-1.5 shrink-0" />
-                <span className="truncate">Simulador</span>
-              </TabsTrigger>
-              <TabsTrigger
-                value="solicitudes"
-                className="rounded-md data-[state=active]:bg-primary/20 data-[state=active]:text-primary px-2 py-2 text-xs justify-center overflow-hidden"
-              >
-                <ClipboardList className="w-4 h-4 mr-1.5 shrink-0" />
-                <span className="truncate">Solicitudes</span>
-              </TabsTrigger>
-              <TabsTrigger
-                value="comunicaciones"
-                className="rounded-md data-[state=active]:bg-primary/20 data-[state=active]:text-primary px-2 py-2 text-xs justify-center overflow-hidden"
-              >
-                <MessageSquare className="w-4 h-4 mr-1.5 shrink-0" />
-                <span className="truncate">Chat</span>
-              </TabsTrigger>
-              <TabsTrigger
-                value="campanas"
-                className="rounded-md data-[state=active]:bg-primary/20 data-[state=active]:text-primary px-2 py-2 text-xs justify-center overflow-hidden"
-              >
-                <Megaphone className="w-4 h-4 mr-1.5 shrink-0" />
-                <span className="truncate">Campañas</span>
-              </TabsTrigger>
-              <TabsTrigger
-                value="avisos"
-                className="rounded-md data-[state=active]:bg-primary/20 data-[state=active]:text-primary px-2 py-2 text-xs justify-center overflow-hidden relative"
-              >
-                <Bell className="w-4 h-4 mr-1.5 shrink-0" />
-                <span className="truncate">Avisos</span>
-                {notifStats.noLeidas > 0 && (
-                  <span className="absolute top-0.5 right-0.5 bg-red-500 text-white text-[10px] rounded-full w-4 h-4 flex items-center justify-center font-bold shrink-0">
-                    {notifStats.noLeidas}
-                  </span>
-                )}
-              </TabsTrigger>
-          </TabsList>
+        <div className="divider-soft shrink-0"></div>
 
-          {/* === CONTENIDO DE LAS PESTAÑAS (ancho completo) === */}
-          <div className="flex-1 min-w-0 space-y-3">
+        {/* === BODY CON SCROLL === */}
+        <div className="flex-1 overflow-y-auto px-4 py-4">
+          {vista === 'hub' && (
+            <HubView
+              cliente={cliente}
+              kpis={kpis}
+              resumen={resumen}
+              hubItems={hubItems}
+              onSelect={(id) => setVista(id)}
+            />
+          )}
 
-          {/* ============ TAB: Mis Créditos ============ */}
-          <TabsContent value="prestamos" className="space-y-3">
-            {prestamos.length === 0 ? (
-              <Card>
-                <CardContent className="py-8 text-center text-muted-foreground">
-                  No tienes créditos registrados.
-                </CardContent>
-              </Card>
-            ) : (
-              <>
-              {/* Banner de descarga de estado de cuenta global */}
-              <Card className="border-primary/30 bg-primary/5">
-                <CardContent className="p-4 flex items-center justify-between gap-3 flex-wrap">
-                  <div className="flex items-center gap-3">
-                    <div className="p-2 rounded-lg bg-primary/10">
-                      <FileDown className="w-5 h-5 text-primary" />
-                    </div>
-                    <div>
-                      <p className="text-sm font-semibold text-primary">
-                        Estado de Cuenta Completo
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        Descarga un documento imprimible con todos tus créditos, pagos y saldos.
-                      </p>
-                    </div>
-                  </div>
-                  <Button
-                    size="sm"
-                    onClick={() => descargarEstadoCuenta()}
-                    className="bg-primary hover:bg-primary/90"
-                  >
-                    <Printer className="w-4 h-4 mr-2" />
-                    Descargar / Imprimir
-                  </Button>
-                </CardContent>
-              </Card>
+          {vista === 'prestamos' && (
+            <PrestamosView
+              prestamos={prestamos}
+              onAbrirTyC={abrirFlujoTyC}
+              onAceptarTyC={aceptarTyC}
+              onPazYSalvo={generarPazYSalvo}
+              onEstadoCuenta={descargarEstadoCuenta}
+            />
+          )}
 
-              {prestamos.map((p) => {
-                const avance = p.numeroCuotas > 0 ? (p.cuotasPagadas / p.numeroCuotas) * 100 : 0
-                const cancelado = p.estado === 'CANCELADO'
-                return (
-                  <Card
-                    key={p.id}
-                    className={
-                      p.estado === 'PENDIENTE_ACEPTACION'
-                        ? 'border-amber-400/50 bg-amber-500/5'
-                        : cancelado
-                        ? 'border-emerald-400/30 bg-emerald-500/5'
-                        : ''
-                    }
-                  >
-                    <CardContent className="p-3">
-                      {/* === Header compacto: código + estado + saldo === */}
-                      <div className="flex items-start justify-between gap-2 mb-2">
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <span className="font-semibold text-sm truncate">{p.codigo}</span>
-                            <EstadoBadge estado={p.estado} />
-                          </div>
-                          <p className="text-[11px] text-muted-foreground mt-0.5 truncate">
-                            Solicitado: {formatearFecha(p.fechaSolicitud)}
-                            {p.fechaDesembolso && ` · Desembolsado: ${formatearFecha(p.fechaDesembolso)}`}
-                          </p>
-                        </div>
-                        <div className="text-right shrink-0">
-                          <p className="text-[11px] text-muted-foreground">Saldo Pendiente</p>
-                          <p className="font-bold text-amber-300 text-sm">{formatearMoneda(p.saldoTotal)}</p>
-                        </div>
-                      </div>
+          {vista === 'proximos' && (
+            <ProximosPagosView
+              prestamos={prestamos}
+              onPagar={pagarBancolombia}
+            />
+          )}
 
-                      {/* === Grid denso de datos financieros === */}
-                      <div className="grid grid-cols-3 sm:grid-cols-5 gap-2 text-xs">
-                        <div>
-                          <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Principal</p>
-                          <p className="font-medium">{formatearMoneda(p.montoPrincipal)}</p>
-                        </div>
-                        <div>
-                          <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Cuota</p>
-                          <p className="font-medium">{formatearMoneda(p.montoCuota)}</p>
-                        </div>
-                        <div>
-                          <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Pagadas</p>
-                          <p className="font-medium">{p.cuotasPagadas}/{p.numeroCuotas}</p>
-                        </div>
-                        <div>
-                          <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Frec.</p>
-                          <p className="font-medium capitalize">{p.frecuencia.toLowerCase().slice(0, 5)}</p>
-                        </div>
-                        <div>
-                          <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Total</p>
-                          <p className="font-medium">{formatearMoneda(p.totalPagar)}</p>
-                        </div>
-                      </div>
+          {vista === 'historial' && (
+            <HistorialView prestamos={prestamos} />
+          )}
 
-                      {/* === Barra de progreso compacta === */}
-                      <div className="mt-2 flex items-center gap-2">
-                        <span className="text-[10px] text-muted-foreground shrink-0">Avance</span>
-                        <div className="h-1.5 flex-1 rounded-full bg-white/10 overflow-hidden">
-                          <div
-                            className="h-full bg-gradient-to-r from-emerald-500 to-cyan-500 transition-all duration-700"
-                            style={{ width: `${Math.min(100, avance)}%` }}
-                          />
-                        </div>
-                        <span className="text-[10px] font-semibold text-emerald-300 shrink-0 w-10 text-right">
-                          {avance.toFixed(0)}%
-                        </span>
-                      </div>
-
-                      {p.estado === 'PENDIENTE_ACEPTACION' && (
-                        <div className="mt-2 p-2 bg-amber-500/10 rounded-md border border-amber-400/30">
-                          <p className="text-xs font-semibold text-amber-200 mb-0.5">
-                            ⚠️ Requiere tu aceptación
-                          </p>
-                          <p className="text-[11px] text-amber-100/80 mb-2">
-                            Para activar tu préstamo debes aceptar los Términos y Condiciones mediante
-                            verificación OTP (WhatsApp/correo) y foto selfie con tu cédula en mano.
-                          </p>
-                          <Button size="sm" onClick={() => abrirFlujoTyC(p.id, p.codigo)}>
-                            <ShieldCheck className="w-4 h-4 mr-2" />
-                            Acepto Términos y Condiciones
-                          </Button>
-                        </div>
-                      )}
-
-                      {p.diasMora > 0 && p.estado === 'EN_MORA' && (
-                        <div className="mt-2 p-1.5 bg-red-500/10 rounded-md border border-red-400/30 flex items-center gap-2">
-                          <AlertTriangle className="w-3.5 h-3.5 text-red-400 shrink-0" />
-                          <p className="text-[11px] text-red-200">
-                            <strong>En mora:</strong> {p.diasMora} días · Mora acumulada:{' '}
-                            {formatearMoneda(p.montoMora)}
-                          </p>
-                        </div>
-                      )}
-
-                      {/* Botón Paz y Salvo para préstamos cancelados */}
-                      {cancelado && (
-                        <div className="mt-3">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => generarPazYSalvo(p.id, p.codigo)}
-                            className="border-emerald-400/40 text-emerald-300 hover:bg-emerald-500/10"
-                          >
-                            <FileCheck className="w-4 h-4 mr-2" />
-                            Generar Paz y Salvo
-                          </Button>
-                        </div>
-                      )}
-
-                      {/* Cuenta de recaudo donde debe pagar */}
-                      {p.cuentaRecaudoPago && (p.estado === 'ACTIVO' || p.estado === 'EN_MORA' || p.estado === 'PENDIENTE_ACEPTACION') && (
-                        <div className="mt-3 p-3 bg-cyan-500/5 rounded-md border border-cyan-400/20">
-                          <p className="text-xs font-semibold text-cyan-200 mb-1.5 flex items-center gap-1">
-                            🏦 Cuenta donde debes pagar
-                          </p>
-                          <div className="grid grid-cols-2 gap-2 text-xs">
-                            <div>
-                              <span className="text-cyan-300/70">Banco:</span>{' '}
-                              <strong>{p.cuentaRecaudoPago.banco}</strong>
-                            </div>
-                            <div>
-                              <span className="text-cyan-300/70">Tipo:</span>{' '}
-                              <strong>{p.cuentaRecaudoPago.tipoCuenta}</strong>
-                            </div>
-                            <div className="col-span-2">
-                              <span className="text-cyan-300/70">N° Cuenta:</span>{' '}
-                              <strong className="font-mono">{p.cuentaRecaudoPago.numeroCuenta}</strong>
-                            </div>
-                            <div className="col-span-2">
-                              <span className="text-cyan-300/70">Titular:</span>{' '}
-                              <strong>{p.cuentaRecaudoPago.titular}</strong>
-                            </div>
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Acciones por préstamo */}
-                      <div className="mt-3 pt-3 border-t border-border/50 flex flex-wrap items-center gap-2">
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => descargarEstadoCuenta(p.id)}
-                          className="text-xs"
-                        >
-                          <FileDown className="w-3.5 h-3.5 mr-1.5" />
-                          Estado de cuenta de este crédito
-                        </Button>
-                        {p.estado === 'CANCELADO' && (
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => generarPazYSalvo(p.id, p.codigo)}
-                            className="text-xs"
-                          >
-                            <FileText className="w-3.5 h-3.5 mr-1.5" />
-                            Paz y salvo
-                          </Button>
-                        )}
-                      </div>
-                    </CardContent>
-                  </Card>
-                )
-              })}
-              </>
-            )}
-          </TabsContent>
-
-          {/* ============ TAB: Próximos Pagos ============ */}
-          <TabsContent value="proximos" className="space-y-3">
-            {(() => {
-              const proximos = prestamos
-                .filter((p) => p.estado === 'ACTIVO' || p.estado === 'EN_MORA')
-                .flatMap((p) =>
-                  (p.pagos || [])
-                    .filter((pg: any) => pg.estado === 'PENDIENTE')
-                    .map((pg: any) => ({ ...pg, prestamo: p }))
-                )
-                .sort((a, b) => new Date(a.fechaVencimiento).getTime() - new Date(b.fechaVencimiento).getTime())
-
-              if (proximos.length === 0) {
-                return (
-                  <Card>
-                    <CardContent className="py-8 text-center text-muted-foreground">
-                      <CalendarClock className="w-12 h-12 mx-auto mb-2 opacity-40" />
-                      No tienes pagos pendientes. ¡Estás al día!
-                    </CardContent>
-                  </Card>
-                )
-              }
-              return proximos.map((pg: any) => {
-                const venc = new Date(pg.fechaVencimiento)
-                const hoy = new Date()
-                const dias = Math.ceil((venc.getTime() - hoy.getTime()) / (1000 * 60 * 60 * 24))
-                const vencido = dias < 0
-                return (
-                  <Card key={pg.id} className={vencido ? 'border-red-400/40 bg-red-500/5' : ''}>
-                    <CardContent className="p-4">
-                      <div className="flex items-start justify-between gap-3">
-                        <div>
-                          <div className="flex items-center gap-2 mb-1">
-                            <span className="font-mono text-sm font-semibold">{pg.prestamo.codigo}</span>
-                            <Badge variant="outline" className="text-xs">Cuota {pg.numeroCuota}</Badge>
-                            {vencido && (
-                              <Badge variant="destructive" className="text-xs">Vencido</Badge>
-                            )}
-                          </div>
-                          <p className="text-xs text-muted-foreground">
-                            Vence: <strong>{formatearFecha(pg.fechaVencimiento)}</strong>
-                            {vencido ? ` (${Math.abs(dias)} días atrás)` : ` (en ${dias} días)`}
-                          </p>
-                          <p className="text-lg font-bold text-amber-300 mt-1">
-                            {formatearMoneda(pg.montoTotal)}
-                          </p>
-                        </div>
-                        <div className="flex flex-col gap-2 items-end">
-                          <Button
-                            size="sm"
-                            onClick={() => pagarBancolombia(pg.prestamo.id, pg.montoTotal, pg.numeroCuota)}
-                          >
-                            <CreditCard className="w-4 h-4 mr-1.5" />
-                            Pagar con Bancolombia
-                          </Button>
-                          <span className="text-xs text-muted-foreground">Botón de pago seguro</span>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                )
-              })
-            })()}
-          </TabsContent>
-
-          {/* ============ TAB: Historial de Pagos ============ */}
-          <TabsContent value="historial">
-            <Card>
-              <CardContent className="p-0">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Préstamo</TableHead>
-                      <TableHead>Cuota</TableHead>
-                      <TableHead>Vencimiento</TableHead>
-                      <TableHead>Fecha Pago</TableHead>
-                      <TableHead className="text-right">Monto</TableHead>
-                      <TableHead>Método</TableHead>
-                      <TableHead>Estado</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {prestamos.flatMap((p) =>
-                      (p.pagos || []).map((pg: any) => (
-                        <TableRow key={pg.id}>
-                          <TableCell className="font-mono text-xs">{p.codigo}</TableCell>
-                          <TableCell>{pg.numeroCuota}</TableCell>
-                          <TableCell className="text-xs">{formatearFecha(pg.fechaVencimiento)}</TableCell>
-                          <TableCell className="text-xs">{formatearFecha(pg.fechaPago)}</TableCell>
-                          <TableCell className="font-semibold text-right text-emerald-300">
-                            {formatearMoneda(pg.montoTotal)}
-                          </TableCell>
-                          <TableCell className="text-xs">{pg.metodoPago}</TableCell>
-                          <TableCell>
-                            <Badge variant="outline">{pg.estado}</Badge>
-                          </TableCell>
-                        </TableRow>
-                      ))
-                    )}
-                    {prestamos.flatMap((p) => p.pagos || []).length === 0 && (
-                      <TableRow>
-                        <TableCell colSpan={7} className="text-center py-6 text-muted-foreground">
-                          No hay pagos registrados
-                        </TableCell>
-                      </TableRow>
-                    )}
-                  </TableBody>
-                </Table>
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          {/* ============ TAB: Simulador de Crédito ============ */}
-          <TabsContent value="simulador" className="space-y-3">
+          {vista === 'simulador' && (
             <SimuladorCredito
               clienteId={cliente.id}
               token={token}
@@ -1140,164 +782,109 @@ export function PortalClienteModal({
                 valor: cliente.tasaPersonalizada ?? null,
               }}
             />
-          </TabsContent>
+          )}
 
-          {/* ============ TAB: Mis Solicitudes ============ */}
-          <TabsContent value="solicitudes" className="space-y-3">
+          {vista === 'solicitudes' && (
             <MisSolicitudesPanel cedula={cliente.cedula} token={token} />
-          </TabsContent>
+          )}
 
-          {/* ============ TAB: Chat ============ */}
-          <TabsContent value="comunicaciones" className="space-y-3">
+          {vista === 'comunicaciones' && (
             <CentroComunicacionesPortal
               clienteId={cliente.id}
               cedula={cliente.cedula}
               token={token}
             />
-          </TabsContent>
+          )}
 
-          {/* ============ TAB: Campañas ============ */}
-          <TabsContent value="campanas" className="space-y-3">
-            {campanas.length === 0 ? (
-              <Card>
-                <CardContent className="py-8 text-center text-muted-foreground">
-                  <Megaphone className="w-12 h-12 mx-auto mb-2 opacity-40" />
-                  No hay campañas activas en este momento.
-                </CardContent>
-              </Card>
-            ) : (
-              campanas.map((c) => (
-                <Card key={c.id}>
-                  <CardContent className="p-4">
-                    <div className="flex items-center gap-2 mb-2">
-                      <Megaphone className="w-4 h-4 text-primary" />
-                      <span className="text-xs px-2 py-0.5 rounded bg-primary/10 text-primary font-medium">
-                        {c.tipo}
-                      </span>
-                    </div>
-                    <h4 className="font-semibold">{c.titulo}</h4>
-                    <p className="text-sm text-muted-foreground mt-1">{c.descripcion}</p>
-                    {c.contenido && (
-                      <p className="text-xs mt-2 text-foreground/80 whitespace-pre-wrap">
-                        {c.contenido}
-                      </p>
-                    )}
-                  </CardContent>
-                </Card>
-              ))
-            )}
-          </TabsContent>
+          {vista === 'avisos' && (
+            <AvisosView
+              notificaciones={notificaciones}
+              notifStats={notifStats}
+            />
+          )}
 
-          {/* ============ TAB: Avisos (Notificaciones) ============ */}
-          <TabsContent value="avisos" className="space-y-3">
-            {/* Stats de notificaciones */}
-            <div className="grid grid-cols-3 gap-2 sm:gap-3">
-              <Card className="glass-card">
-                <CardContent className="p-2 sm:p-3 text-center">
-                  <Bell className="w-4 h-4 sm:w-5 sm:h-5 mx-auto mb-1 text-primary" />
-                  <p className="text-[10px] sm:text-xs text-muted-foreground">Total</p>
-                  <p className="text-base sm:text-lg font-bold">{notifStats.total}</p>
-                </CardContent>
-              </Card>
-              <Card className="glass-card">
-                <CardContent className="p-2 sm:p-3 text-center">
-                  <AlertTriangle className="w-4 h-4 sm:w-5 sm:h-5 mx-auto mb-1 text-amber-400" />
-                  <p className="text-[10px] sm:text-xs text-muted-foreground">No leídas</p>
-                  <p className="text-base sm:text-lg font-bold text-amber-300">{notifStats.noLeidas}</p>
-                </CardContent>
-              </Card>
-              <Card className="glass-card">
-                <CardContent className="p-2 sm:p-3 text-center">
-                  <Clock className="w-4 h-4 sm:w-5 sm:h-5 mx-auto mb-1 text-cyan-400" />
-                  <p className="text-[10px] sm:text-xs text-muted-foreground">Pendientes</p>
-                  <p className="text-base sm:text-lg font-bold text-cyan-300">{notifStats.pendientes}</p>
-                </CardContent>
-              </Card>
-            </div>
+          {vista === 'campanas' && (
+            <CampanasView campanas={campanas} />
+          )}
+        </div>
 
-            {/* Lista de notificaciones */}
-            {notificaciones.length === 0 ? (
-              <Card>
-                <CardContent className="py-8 text-center text-muted-foreground">
-                  <Bell className="w-12 h-12 mx-auto mb-2 opacity-40" />
-                  No tienes notificaciones registradas.
-                </CardContent>
-              </Card>
-            ) : (
-              <Card>
-                <CardContent className="p-0">
-                  <div className="max-h-96 overflow-y-auto">
-                    <Table>
-                      <TableHeader className="sticky top-0 bg-background/95 backdrop-blur z-10">
-                        <TableRow>
-                          <TableHead>Tipo</TableHead>
-                          <TableHead>Mensaje</TableHead>
-                          <TableHead>Fecha</TableHead>
-                          <TableHead>Estado</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {notificaciones.map((n) => (
-                          <TableRow key={n.id}>
-                            <TableCell>
-                              <Badge variant="outline" className="text-xs">
-                                {n.tipo}
-                              </Badge>
-                            </TableCell>
-                            <TableCell className="text-xs max-w-xs">{n.mensaje}</TableCell>
-                            <TableCell className="text-xs">
-                              {formatearFecha(n.fechaEnvio)}
-                            </TableCell>
-                            <TableCell>
-                              <Badge
-                                variant={
-                                  n.estado === 'ENVIADO' ? 'default' :
-                                  n.estado === 'FALLIDO' ? 'destructive' :
-                                  'secondary'
-                                }
-                                className="text-xs"
-                              >
-                                {n.estado}
-                              </Badge>
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  </div>
-                </CardContent>
-              </Card>
-            )}
-          </TabsContent>
-          </div>{/* === FIN CONTENIDO PESTAÑAS === */}
-        </Tabs>
+        {/* === BARRA INFERIOR FIJA === */}
+        <div className="bottom-nav shrink-0 px-2 pt-1.5 pb-2 safe-bottom">
+          <div className="grid grid-cols-4 gap-1">
+            <button
+              onClick={() => setVista('hub')}
+              className={`bottom-nav-item ${vista === 'hub' ? 'active' : ''}`}
+            >
+              <Home className="w-5 h-5" />
+              <span className="text-[10px] font-medium">Hub</span>
+            </button>
 
-        {/* === MODAL DE ACEPTACIÓN TyC (OTP + Selfie) — 3 pasos === */}
+            <button
+              onClick={() => setVista('avisos')}
+              className={`bottom-nav-item ${vista === 'avisos' ? 'active' : ''}`}
+            >
+              <div className="relative">
+                <Bell className="w-5 h-5" />
+                {notifStats.noLeidas > 0 && (
+                  <span className="absolute -top-1.5 -right-2 bg-red-500 text-white text-[9px] rounded-full min-w-[15px] h-[15px] px-1 flex items-center justify-center font-bold pulse-glow">
+                    {notifStats.noLeidas > 9 ? '9+' : notifStats.noLeidas}
+                  </span>
+                )}
+              </div>
+              <span className="text-[10px] font-medium">Avisos</span>
+            </button>
+
+            <button
+              onClick={() => setVista('campanas')}
+              className={`bottom-nav-item ${vista === 'campanas' ? 'active' : ''}`}
+            >
+              <Megaphone className="w-5 h-5" />
+              <span className="text-[10px] font-medium">Campañas</span>
+            </button>
+
+            <a
+              href="https://wa.me/573103674546"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="bottom-nav-item"
+            >
+              <MessageSquare className="w-5 h-5" />
+              <span className="text-[10px] font-medium">Soporte</span>
+            </a>
+          </div>
+        </div>
+
+        {/* === MODAL TyC (4 pasos) — PRESERVADO, solo rediseño visual === */}
         {tycPrestamoId && (
           <Dialog open={true} onOpenChange={(o) => { if (!o && !tycGuardando) cerrarFlujoTyC() }}>
-            <DialogContent className="max-w-lg">
+            <DialogContent className="max-w-md">
               <DialogHeader>
                 <DialogTitle className="flex items-center gap-2">
-                  <ShieldCheck className="w-5 h-5 text-primary" />
-                  Aceptación T&C · {tycPrestamoCodigo}
+                  <div className="w-8 h-8 rounded-lg gradient-premium flex items-center justify-center">
+                    <ShieldCheck className="w-4 h-4 text-white" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-bold">Aceptación T&C</p>
+                    <p className="text-[10px] text-muted-foreground font-normal">{tycPrestamoCodigo}</p>
+                  </div>
                 </DialogTitle>
               </DialogHeader>
 
-              {/* Stepper visual */}
+              {/* Stepper visual premium */}
               <div className="flex items-center justify-between mb-4 px-2">
                 {[
-                  { n: 1, label: 'Enviar OTP', icon: KeyRound },
+                  { n: 1, label: 'OTP', icon: KeyRound },
                   { n: 2, label: 'Validar', icon: CheckCircle },
-                  { n: 3, label: 'Foto Cédula', icon: CreditCard },
-                  { n: 4, label: 'Selfie+Cédula', icon: Camera },
+                  { n: 3, label: 'Cédula', icon: CreditCard },
+                  { n: 4, label: 'Selfie', icon: Camera },
                 ].map((s, idx) => (
                   <div key={s.n} className="flex items-center flex-1 last:flex-none">
                     <div className="flex flex-col items-center">
                       <div
-                        className={`w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold transition-colors ${
+                        className={`w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold transition-all duration-300 ${
                           tycPaso >= s.n
-                            ? 'bg-primary text-primary-foreground'
-                            : 'bg-muted text-muted-foreground'
+                            ? 'gradient-premium text-white shadow-md'
+                            : 'bg-white/5 text-muted-foreground border border-white/10'
                         }`}
                       >
                         {tycPaso > s.n ? <CheckCircle className="w-4 h-4" /> : s.n}
@@ -1306,8 +893,8 @@ export function PortalClienteModal({
                     </div>
                     {idx < 3 && (
                       <div
-                        className={`h-0.5 flex-1 mx-2 transition-colors ${
-                          tycPaso > s.n ? 'bg-primary' : 'bg-muted'
+                        className={`h-0.5 flex-1 mx-2 transition-colors duration-300 ${
+                          tycPaso > s.n ? 'bg-primary' : 'bg-white/10'
                         }`}
                       />
                     )}
@@ -1317,10 +904,13 @@ export function PortalClienteModal({
 
               {/* Paso 1: Enviar OTP */}
               {tycPaso === 1 && (
-                <div className="space-y-4">
-                  <div className="p-3 bg-blue-50 dark:bg-blue-950/30 rounded-md text-sm text-blue-800 dark:text-blue-200 border border-blue-200 dark:border-blue-800">
-                    <p className="font-semibold mb-1">🔐 Verificación de identidad</p>
-                    <p className="text-xs">
+                <div className="space-y-4 fade-scale">
+                  <div className="p-3 rounded-xl bg-blue-500/10 border border-blue-400/20 text-sm">
+                    <p className="font-semibold mb-1 text-blue-200 flex items-center gap-1.5">
+                      <KeyRound className="w-4 h-4" />
+                      Verificación de identidad
+                    </p>
+                    <p className="text-xs text-blue-100/80">
                       Te enviaremos un código de un solo uso (OTP) para confirmar tu identidad antes
                       de aceptar los Términos y Condiciones.
                     </p>
@@ -1329,47 +919,34 @@ export function PortalClienteModal({
                   <div className="space-y-2">
                     <Label>Canal de envío</Label>
                     <div className="grid grid-cols-3 gap-2">
-                      <button
-                        type="button"
-                        onClick={() => setTycCanal('WHATSAPP')}
-                        className={`flex flex-col items-center gap-1 p-3 rounded-md border-2 text-xs transition-all ${
-                          tycCanal === 'WHATSAPP'
-                            ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-300'
-                            : 'border-border hover:border-emerald-300'
-                        }`}
-                      >
-                        <Smartphone className="w-4 h-4" />
-                        WhatsApp
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setTycCanal('EMAIL')}
-                        className={`flex flex-col items-center gap-1 p-3 rounded-md border-2 text-xs transition-all ${
-                          tycCanal === 'EMAIL'
-                            ? 'border-blue-500 bg-blue-50 dark:bg-blue-950/30 text-blue-700 dark:text-blue-300'
-                            : 'border-border hover:border-blue-300'
-                        }`}
-                      >
-                        <Mail className="w-4 h-4" />
-                        Correo
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setTycCanal('AMBOS')}
-                        className={`flex flex-col items-center gap-1 p-3 rounded-md border-2 text-xs transition-all ${
-                          tycCanal === 'AMBOS'
-                            ? 'border-purple-500 bg-purple-50 dark:bg-purple-950/30 text-purple-700 dark:text-purple-300'
-                            : 'border-border hover:border-purple-300'
-                        }`}
-                      >
-                        <Send className="w-4 h-4" />
-                        Ambos
-                      </button>
+                      {([
+                        { v: 'WHATSAPP', icon: Smartphone, label: 'WhatsApp', color: 'emerald' },
+                        { v: 'EMAIL', icon: Mail, label: 'Correo', color: 'blue' },
+                        { v: 'AMBOS', icon: Send, label: 'Ambos', color: 'purple' },
+                      ] as const).map((opt) => {
+                        const Icon = opt.icon
+                        const active = tycCanal === opt.v
+                        return (
+                          <button
+                            key={opt.v}
+                            type="button"
+                            onClick={() => setTycCanal(opt.v)}
+                            className={`flex flex-col items-center gap-1 p-3 rounded-xl border-2 text-xs transition-all btn-press ${
+                              active
+                                ? `border-${opt.color}-500 bg-${opt.color}-500/10 text-${opt.color}-300`
+                                : 'border-white/10 hover:border-white/20 text-muted-foreground'
+                            }`}
+                          >
+                            <Icon className="w-4 h-4" />
+                            {opt.label}
+                          </button>
+                        )
+                      })}
                     </div>
                   </div>
 
                   <Button
-                    className="w-full"
+                    className="w-full gradient-premium gradient-premium-hover btn-press"
                     onClick={enviarOTPTyC}
                     disabled={tycEnviandoOtp}
                   >
@@ -1390,9 +967,9 @@ export function PortalClienteModal({
 
               {/* Paso 2: Validar OTP */}
               {tycPaso === 2 && (
-                <div className="space-y-4">
-                  <div className="p-3 bg-amber-50 dark:bg-amber-950/30 rounded-md text-sm text-amber-800 dark:text-amber-200 border border-amber-200 dark:border-amber-800">
-                    <p className="font-semibold mb-1 flex items-center gap-2">
+                <div className="space-y-4 fade-scale">
+                  <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-400/20 text-sm">
+                    <p className="font-semibold mb-1 text-amber-200 flex items-center gap-2">
                       <Clock className="w-4 h-4" />
                       Tiempo restante:{' '}
                       <span className="font-mono">
@@ -1400,7 +977,7 @@ export function PortalClienteModal({
                         {(tycSegundosRestantes % 60).toString().padStart(2, '0')}
                       </span>
                     </p>
-                    <p className="text-xs">
+                    <p className="text-xs text-amber-100/80">
                       Ingresa el código de 6 dígitos que enviamos por{' '}
                       {tycCanal === 'WHATSAPP' ? 'WhatsApp' : tycCanal === 'EMAIL' ? 'correo' : 'WhatsApp y correo'}.
                     </p>
@@ -1416,13 +993,13 @@ export function PortalClienteModal({
                       value={tycOtpIngresado}
                       onChange={(e) => setTycOtpIngresado(e.target.value.replace(/\D/g, ''))}
                       placeholder="000000"
-                      className="text-center text-2xl tracking-[0.5em] font-mono"
+                      className="text-center text-2xl tracking-[0.5em] font-mono input-premium"
                       autoFocus
                     />
                   </div>
 
                   <Button
-                    className="w-full"
+                    className="w-full gradient-premium gradient-premium-hover btn-press"
                     onClick={validarOTPTyC}
                     disabled={tycValidandoOtp || tycOtpIngresado.length !== 6 || tycSegundosRestantes === 0}
                   >
@@ -1465,13 +1042,13 @@ export function PortalClienteModal({
 
               {/* Paso 3: Foto de la Cédula */}
               {tycPaso === 3 && (
-                <div className="space-y-4">
-                  <div className="p-3 bg-emerald-50 dark:bg-emerald-950/30 rounded-md text-sm text-emerald-800 dark:text-emerald-200 border border-emerald-200 dark:border-emerald-800">
-                    <p className="font-semibold mb-1 flex items-center gap-2">
+                <div className="space-y-4 fade-scale">
+                  <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-400/20 text-sm">
+                    <p className="font-semibold mb-1 text-emerald-200 flex items-center gap-2">
                       <CheckCircle className="w-4 h-4" />
                       Identidad verificada
                     </p>
-                    <p className="text-xs">
+                    <p className="text-xs text-emerald-100/80">
                       Ahora sube una foto clara de tu cédula de ciudadanía. Asegúrate
                       de que se vean todos los datos (frente completo).
                     </p>
@@ -1479,7 +1056,7 @@ export function PortalClienteModal({
 
                   {tycFotoDocumento ? (
                     <div className="space-y-2">
-                      <div className="relative rounded-md overflow-hidden border-2 border-emerald-300">
+                      <div className="relative rounded-xl overflow-hidden border-2 border-emerald-400/50">
                         <img
                           src={tycFotoDocumento}
                           alt="Foto de la cédula"
@@ -1494,7 +1071,7 @@ export function PortalClienteModal({
                           Cambiar
                         </Button>
                       </div>
-                      <p className="text-xs text-emerald-700 dark:text-emerald-300 flex items-center gap-1">
+                      <p className="text-xs text-emerald-300 flex items-center gap-1">
                         <CheckCircle className="w-3 h-3" />
                         Foto de cédula lista
                       </p>
@@ -1504,12 +1081,12 @@ export function PortalClienteModal({
                       <Button
                         variant="outline"
                         onClick={tomarFotoDocumento}
-                        className="flex flex-col items-center gap-2 h-24"
+                        className="flex flex-col items-center gap-2 h-24 rounded-xl border-dashed input-premium"
                       >
                         <Camera className="w-6 h-6" />
                         <span className="text-xs">Tomar foto</span>
                       </Button>
-                      <label className="flex flex-col items-center gap-2 h-24 justify-center rounded-md border border-dashed border-border hover:border-primary cursor-pointer transition-colors">
+                      <label className="flex flex-col items-center gap-2 h-24 justify-center rounded-xl border border-dashed border-white/15 hover:border-primary cursor-pointer transition-colors">
                         <Upload className="w-6 h-6" />
                         <span className="text-xs">Subir archivo</span>
                         <input
@@ -1522,18 +1099,17 @@ export function PortalClienteModal({
                     </div>
                   )}
 
-                  <div className="p-2.5 bg-muted/50 rounded-md text-xs text-muted-foreground">
-                    <p className="font-semibold mb-1">📋 Requisitos de la foto de cédula:</p>
+                  <div className="p-2.5 rounded-lg bg-white/5 text-xs text-muted-foreground">
+                    <p className="font-semibold mb-1 text-foreground/80">Requisitos de la foto:</p>
                     <ul className="space-y-0.5 ml-3 list-disc">
                       <li>Cédula completa y legible (frente)</li>
                       <li>Sin reflejos ni sombras</li>
-                      <li>Buena iluminación</li>
-                      <li>Máximo 5MB · formato JPG/PNG/WebP</li>
+                      <li>Buena iluminación · Máximo 5MB</li>
                     </ul>
                   </div>
 
                   <Button
-                    className="w-full"
+                    className="w-full gradient-premium gradient-premium-hover btn-press"
                     onClick={() => setTycPaso(4)}
                     disabled={!tycFotoDocumento}
                   >
@@ -1545,34 +1121,34 @@ export function PortalClienteModal({
 
               {/* Paso 4: Selfie sosteniendo la Cédula */}
               {tycPaso === 4 && (
-                <div className="space-y-4">
-                  <div className="p-3 bg-blue-50 dark:bg-blue-950/30 rounded-md text-sm text-blue-800 dark:text-blue-200 border border-blue-200 dark:border-blue-800">
-                    <p className="font-semibold mb-1 flex items-center gap-2">
+                <div className="space-y-4 fade-scale">
+                  <div className="p-3 rounded-xl bg-blue-500/10 border border-blue-400/20 text-sm">
+                    <p className="font-semibold mb-1 text-blue-200 flex items-center gap-2">
                       <Camera className="w-4 h-4" />
                       Último paso: selfie con cédula
                     </p>
-                    <p className="text-xs">
+                    <p className="text-xs text-blue-100/80">
                       Toma una foto sosteniendo tu cédula junto a tu rostro. Esta
                       imagen se usará como respaldo de tu firma electrónica en el pagaré.
                     </p>
                   </div>
 
                   {/* Resumen: foto cédula ya cargada */}
-                  <div className="flex items-center gap-3 p-2 bg-muted/40 rounded-md">
+                  <div className="flex items-center gap-3 p-2 rounded-lg bg-white/5">
                     <img
                       src={tycFotoDocumento || ''}
                       alt="Cédula"
-                      className="w-12 h-12 object-cover rounded border"
+                      className="w-12 h-12 object-cover rounded-lg border border-white/10"
                     />
                     <div className="flex-1">
-                      <p className="text-xs font-semibold text-emerald-700 dark:text-emerald-300 flex items-center gap-1">
+                      <p className="text-xs font-semibold text-emerald-300 flex items-center gap-1">
                         <CheckCircle className="w-3 h-3" />
                         Foto de cédula cargada
                       </p>
                       <button
                         type="button"
                         onClick={() => setTycPaso(3)}
-                        className="text-[10px] text-blue-600 hover:underline"
+                        className="text-[10px] text-blue-300 hover:underline"
                       >
                         Volver a editar cédula
                       </button>
@@ -1581,7 +1157,7 @@ export function PortalClienteModal({
 
                   {tycFotoSelfie ? (
                     <div className="space-y-2">
-                      <div className="relative rounded-md overflow-hidden border-2 border-emerald-300">
+                      <div className="relative rounded-xl overflow-hidden border-2 border-emerald-400/50">
                         <img
                           src={tycFotoSelfie}
                           alt="Selfie con cédula"
@@ -1596,7 +1172,7 @@ export function PortalClienteModal({
                           Cambiar
                         </Button>
                       </div>
-                      <p className="text-xs text-emerald-700 dark:text-emerald-300 flex items-center gap-1">
+                      <p className="text-xs text-emerald-300 flex items-center gap-1">
                         <CheckCircle className="w-3 h-3" />
                         Selfie lista para enviar
                       </p>
@@ -1606,12 +1182,12 @@ export function PortalClienteModal({
                       <Button
                         variant="outline"
                         onClick={tomarFotoSelfie}
-                        className="flex flex-col items-center gap-2 h-24"
+                        className="flex flex-col items-center gap-2 h-24 rounded-xl border-dashed input-premium"
                       >
                         <Camera className="w-6 h-6" />
                         <span className="text-xs">Tomar foto</span>
                       </Button>
-                      <label className="flex flex-col items-center gap-2 h-24 justify-center rounded-md border border-dashed border-border hover:border-primary cursor-pointer transition-colors">
+                      <label className="flex flex-col items-center gap-2 h-24 justify-center rounded-xl border border-dashed border-white/15 hover:border-primary cursor-pointer transition-colors">
                         <Upload className="w-6 h-6" />
                         <span className="text-xs">Subir archivo</span>
                         <input
@@ -1624,18 +1200,17 @@ export function PortalClienteModal({
                     </div>
                   )}
 
-                  <div className="p-2.5 bg-muted/50 rounded-md text-xs text-muted-foreground">
-                    <p className="font-semibold mb-1">📋 Requisitos del selfie:</p>
+                  <div className="p-2.5 rounded-lg bg-white/5 text-xs text-muted-foreground">
+                    <p className="font-semibold mb-1 text-foreground/80">Requisitos del selfie:</p>
                     <ul className="space-y-0.5 ml-3 list-disc">
                       <li>Rostro completo sin lentes/gorra</li>
                       <li>Cédula visible junto al rostro</li>
-                      <li>Buena iluminación</li>
-                      <li>Máximo 5MB · formato JPG/PNG/WebP</li>
+                      <li>Buena iluminación · Máximo 5MB</li>
                     </ul>
                   </div>
 
                   <Button
-                    className="w-full"
+                    className="w-full gradient-premium gradient-premium-hover btn-press"
                     onClick={confirmarAceptacionTyC}
                     disabled={tycGuardando || !tycFotoSelfie}
                   >
@@ -1667,34 +1242,712 @@ export function PortalClienteModal({
             </DialogContent>
           </Dialog>
         )}
-        </div>{/* === FIN BODY CON SCROLL INTERNO === */}
-
-        {/* === FOOTER FIJO ABAJO (sin scroll) === */}
-        <div className="px-5 py-2 border-t border-white/10 shrink-0 flex items-center justify-between gap-3 bg-black/20">
-          <a
-            href="https://wa.me/573103674546"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-1.5 text-xs text-emerald-300 hover:text-emerald-200 hover:underline"
-          >
-            <MessageSquare className="w-3.5 h-3.5" />
-            Soporte WhatsApp
-          </a>
-          <Button variant="outline" size="sm" onClick={onClose}>
-            Cerrar
-          </Button>
-        </div>
       </DialogContent>
     </Dialog>
   )
 }
 
 // =====================================================
-// Componente: Score Circular (SVG)
+// VISTA: HUB (pantalla principal)
+// =====================================================
+function HubView({
+  cliente,
+  kpis,
+  resumen,
+  hubItems,
+  onSelect,
+}: {
+  cliente: PortalClienteInfo
+  kpis: PortalKPIS
+  resumen: PortalData['resumen']
+  hubItems: HubItemConfig[]
+  onSelect: (id: HubItemId) => void
+}) {
+  return (
+    <div className="space-y-5 fade-scale">
+      {/* === HERO: HUB CIRCULAR === */}
+      <div className="relative w-full aspect-square max-w-[340px] mx-auto hub-stage rounded-full">
+        {/* Anillos orbitales decorativos */}
+        <div
+          className="hub-ring"
+          style={{ width: '92%', height: '92%' }}
+        ></div>
+        <div
+          className="hub-ring hub-ring-outer rotate-slow"
+          style={{ width: '100%', height: '100%' }}
+        ></div>
+
+        {/* Logo central (Jsadr) */}
+        <div className="hub-center hub-breathe w-20 h-20 sm:w-24 sm:h-24">
+          <div className="flex flex-col items-center justify-center">
+            <span className="text-2xl sm:text-3xl font-black text-white tracking-tighter leading-none">J</span>
+            <span className="text-[8px] text-white/80 tracking-[0.25em] mt-0.5">JSADR</span>
+          </div>
+        </div>
+
+        {/* Items del hub alrededor */}
+        {hubItems.map((item) => {
+          const Icon = item.icon
+          return (
+            <button
+              key={item.id}
+              onClick={() => onSelect(item.id)}
+              className="hub-item"
+              style={{
+                transform: `translate(-50%, -50%) translate(${item.position.x}px, ${item.position.y}px)`,
+              }}
+            >
+              <div className="relative">
+                <div className={`w-14 h-14 sm:w-16 sm:h-16 rounded-2xl bg-gradient-to-br ${item.gradient} flex items-center justify-center shadow-lg`}>
+                  <Icon className="w-6 h-6 sm:w-7 sm:h-7 text-white" />
+                </div>
+                {item.badge && item.badge > 0 && (
+                  <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] rounded-full min-w-[18px] h-[18px] px-1 flex items-center justify-center font-bold pulse-glow border-2 border-background">
+                    {item.badge}
+                  </span>
+                )}
+              </div>
+              <span className={`text-[10px] sm:text-xs font-semibold ${item.color}`}>
+                {item.label}
+              </span>
+            </button>
+          )
+        })}
+      </div>
+
+      {/* === KPI: SALDO DESTACADO === */}
+      <Card className="premium-card premium-card-hover rounded-2xl overflow-hidden">
+        <CardContent className="p-4">
+          <div className="flex items-start justify-between mb-3">
+            <div>
+              <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold flex items-center gap-1">
+                <Wallet className="w-3 h-3" />
+                Saldo Total Activos
+              </p>
+              <p className="text-2xl font-black text-amber-300 mt-0.5 tracking-tight">
+                {formatearMoneda(resumen.saldoTotalActivos)}
+              </p>
+            </div>
+            <div className="flex flex-col items-end gap-1">
+              <span className="chip-premium !text-[9px] !py-0.5">
+                <TrendingUp className="w-2.5 h-2.5" />
+                {resumen.prestamosActivos} activos
+              </span>
+              {resumen.prestamosCancelados > 0 && (
+                <span className="text-[10px] text-emerald-300 flex items-center gap-1">
+                  <CheckCircle className="w-2.5 h-2.5" />
+                  {resumen.prestamosCancelados} cancelados
+                </span>
+              )}
+            </div>
+          </div>
+
+          {/* Barra de progreso del avance promedio */}
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between text-[10px]">
+              <span className="text-muted-foreground">Avance promedio</span>
+              <span className="font-bold text-emerald-300">
+                {kpis.porcentajeAvancePromedio.toFixed(1)}%
+              </span>
+            </div>
+            <div className="h-2 w-full rounded-full bg-white/10 overflow-hidden">
+              <div
+                className="h-full progress-shimmer rounded-full transition-all duration-700"
+                style={{ width: `${Math.min(100, kpis.porcentajeAvancePromedio)}%` }}
+              />
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* === 3 KPIs premium en grid === */}
+      <div className="grid grid-cols-3 gap-2">
+        {/* Score */}
+        <Card className="premium-card premium-card-hover rounded-2xl">
+          <CardContent className="p-2.5 flex flex-col items-center">
+            <div className="flex items-center gap-1 mb-1 self-start">
+              <Award className="w-3 h-3 text-violet-300" />
+              <p className="text-[9px] font-semibold uppercase tracking-wide text-muted-foreground">
+                Score
+              </p>
+            </div>
+            <ScoreCircular score={kpis.scorePago} />
+          </CardContent>
+        </Card>
+
+        {/* Próximo pago */}
+        <Card className="premium-card premium-card-hover rounded-2xl">
+          <CardContent className="p-2.5">
+            <div className="flex items-center gap-1 mb-1.5">
+              <CalendarClock className="w-3 h-3 text-cyan-300" />
+              <p className="text-[9px] font-semibold uppercase tracking-wide text-muted-foreground">
+                Próx. Pago
+              </p>
+            </div>
+            <p className="text-sm font-bold text-cyan-300 leading-tight">
+              {formatearMoneda(kpis.montoProximoPago)}
+            </p>
+            <p className="text-[9px] text-muted-foreground mt-0.5 leading-tight">
+              {kpis.proximoVencimiento ? formatearFecha(kpis.proximoVencimiento) : 'Sin vencim.'}
+            </p>
+            <div className="mt-1.5">
+              <DiasRestantesBadge dias={kpis.diasProximoPago} />
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Estado salud */}
+        <Card className="premium-card premium-card-hover rounded-2xl">
+          <CardContent className="p-2.5">
+            <div className="flex items-center gap-1 mb-1.5">
+              <HeartPulse className="w-3 h-3 text-emerald-300" />
+              <p className="text-[9px] font-semibold uppercase tracking-wide text-muted-foreground">
+                Salud
+              </p>
+            </div>
+            <p className="text-sm font-bold text-emerald-300 leading-tight">
+              {kpis.estadoSalud}
+            </p>
+            <div className="mt-1.5 h-1.5 w-full rounded-full bg-white/10 overflow-hidden">
+              <div
+                className="h-full bg-gradient-to-r from-emerald-500 to-cyan-500 transition-all duration-700"
+                style={{ width: `${Math.min(100, kpis.porcentajeAvancePromedio)}%` }}
+              />
+            </div>
+            <p className="text-[9px] text-muted-foreground mt-1">
+              {kpis.totalCuotasPendientes} cuotas pend.
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* === Acceso rápido: Paz y salvo / Estado cuenta === */}
+      <Card className="premium-card premium-card-hover rounded-2xl">
+        <CardContent className="p-3">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center shrink-0">
+              <FileDown className="w-4 h-4 text-white" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-xs font-semibold">Estado de Cuenta Completo</p>
+              <p className="text-[10px] text-muted-foreground truncate">
+                Documento imprimible con todos tus créditos
+              </p>
+            </div>
+            <Button
+              size="sm"
+              className="gradient-premium gradient-premium-hover btn-press h-8 text-[11px]"
+              onClick={() => {
+                const tokenParam = typeof window !== 'undefined' ? '' : ''
+                const url = `/api/estado-cuenta?cedula=${encodeURIComponent(cliente.cedula)}${tokenParam}`
+                window.open(url, '_blank')
+              }}
+            >
+              <Printer className="w-3 h-3 mr-1" />
+              Ver
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  )
+}
+
+// =====================================================
+// VISTA: MIS CRÉDITOS
+// =====================================================
+function PrestamosView({
+  prestamos,
+  onAbrirTyC,
+  onAceptarTyC,
+  onPazYSalvo,
+  onEstadoCuenta,
+}: {
+  prestamos: any[]
+  onAbrirTyC: (prestamoId: string, codigo: string) => void
+  onAceptarTyC: (prestamoId: string) => Promise<void>
+  onPazYSalvo: (prestamoId: string, codigo: string) => void
+  onEstadoCuenta: (prestamoId?: string) => void
+}) {
+  if (prestamos.length === 0) {
+    return (
+      <EmptyStatePremium
+        icon={FileText}
+        title="No tienes créditos registrados"
+        subtitle="Cuando tengas un crédito activo, aparecerá aquí."
+      />
+    )
+  }
+
+  return (
+    <div className="space-y-3 fade-scale">
+      {/* Banner estado cuenta global */}
+      <Card className="premium-card rounded-2xl border-cyan-400/30">
+        <CardContent className="p-3 flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center shrink-0">
+            <FileDown className="w-5 h-5 text-white" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-semibold text-cyan-200">Estado de Cuenta</p>
+            <p className="text-[10px] text-muted-foreground">Descarga el documento completo</p>
+          </div>
+          <Button
+            size="sm"
+            onClick={() => onEstadoCuenta()}
+            className="gradient-premium gradient-premium-hover btn-press h-8"
+          >
+            <Printer className="w-3.5 h-3.5 mr-1" />
+            PDF
+          </Button>
+        </CardContent>
+      </Card>
+
+      {prestamos.map((p) => {
+        const avance = p.numeroCuotas > 0 ? (p.cuotasPagadas / p.numeroCuotas) * 100 : 0
+        const cancelado = p.estado === 'CANCELADO'
+        const pendienteAcept = p.estado === 'PENDIENTE_ACEPTACION'
+        return (
+          <Card
+            key={p.id}
+            className={`premium-card premium-card-hover rounded-2xl ${
+              pendienteAcept
+                ? 'border-amber-400/50'
+                : cancelado
+                ? 'border-emerald-400/40'
+                : ''
+            }`}
+          >
+            <CardContent className="p-3.5">
+              {/* Header: código + estado + saldo */}
+              <div className="flex items-start justify-between gap-2 mb-3">
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="font-mono text-sm font-bold">{p.codigo}</span>
+                    <EstadoBadge estado={p.estado} />
+                  </div>
+                  <p className="text-[10px] text-muted-foreground mt-1">
+                    Solicitado: {formatearFecha(p.fechaSolicitud)}
+                    {p.fechaDesembolso && ` · Desembolso: ${formatearFecha(p.fechaDesembolso)}`}
+                  </p>
+                </div>
+                <div className="text-right shrink-0">
+                  <p className="text-[9px] text-muted-foreground uppercase tracking-wide">Saldo</p>
+                  <p className="font-bold text-amber-300 text-sm">{formatearMoneda(p.saldoTotal)}</p>
+                </div>
+              </div>
+
+              {/* Grid denso financiero */}
+              <div className="grid grid-cols-3 gap-2 text-xs mb-2.5">
+                <div className="p-2 rounded-lg bg-white/5">
+                  <p className="text-[9px] text-muted-foreground uppercase tracking-wide">Principal</p>
+                  <p className="font-semibold text-[11px]">{formatearMoneda(p.montoPrincipal)}</p>
+                </div>
+                <div className="p-2 rounded-lg bg-white/5">
+                  <p className="text-[9px] text-muted-foreground uppercase tracking-wide">Cuota</p>
+                  <p className="font-semibold text-[11px]">{formatearMoneda(p.montoCuota)}</p>
+                </div>
+                <div className="p-2 rounded-lg bg-white/5">
+                  <p className="text-[9px] text-muted-foreground uppercase tracking-wide">Pagadas</p>
+                  <p className="font-semibold text-[11px]">{p.cuotasPagadas}/{p.numeroCuotas}</p>
+                </div>
+              </div>
+
+              {/* Barra de avance */}
+              <div className="flex items-center gap-2 mb-2">
+                <span className="text-[10px] text-muted-foreground shrink-0">Avance</span>
+                <div className="h-1.5 flex-1 rounded-full bg-white/10 overflow-hidden">
+                  <div
+                    className="h-full progress-shimmer rounded-full transition-all duration-700"
+                    style={{ width: `${Math.min(100, avance)}%` }}
+                  />
+                </div>
+                <span className="text-[10px] font-bold text-emerald-300 shrink-0 w-9 text-right">
+                  {avance.toFixed(0)}%
+                </span>
+              </div>
+
+              {/* Banner mora */}
+              {p.diasMora > 0 && p.estado === 'EN_MORA' && (
+                <div className="mb-2 p-2 rounded-lg bg-red-500/10 border border-red-400/30 flex items-center gap-2">
+                  <AlertTriangle className="w-3.5 h-3.5 text-red-400 shrink-0" />
+                  <p className="text-[11px] text-red-200">
+                    <strong>En mora:</strong> {p.diasMora} días · {formatearMoneda(p.montoMora)}
+                  </p>
+                </div>
+              )}
+
+              {/* Banner pendiente aceptación */}
+              {pendienteAcept && (
+                <div className="mb-2.5 p-2.5 rounded-lg bg-amber-500/10 border border-amber-400/30">
+                  <p className="text-xs font-semibold text-amber-200 mb-0.5 flex items-center gap-1">
+                    <AlertTriangle className="w-3.5 h-3.5" />
+                    Requiere tu aceptación
+                  </p>
+                  <p className="text-[10px] text-amber-100/80 mb-2">
+                    Activa tu préstamo con verificación OTP + foto selfie con cédula.
+                  </p>
+                  <Button
+                    size="sm"
+                    onClick={() => onAbrirTyC(p.id, p.codigo)}
+                    className="gradient-premium gradient-premium-hover btn-press w-full h-8"
+                  >
+                    <ShieldCheck className="w-3.5 h-3.5 mr-1.5" />
+                    Acepto Términos y Condiciones
+                  </Button>
+                </div>
+              )}
+
+              {/* Cuenta de recaudo */}
+              {p.cuentaRecaudoPago && (p.estado === 'ACTIVO' || p.estado === 'EN_MORA' || p.estado === 'PENDIENTE_ACEPTACION') && (
+                <div className="mb-2.5 p-2.5 rounded-lg bg-cyan-500/5 border border-cyan-400/20">
+                  <p className="text-[10px] font-semibold text-cyan-200 mb-1.5 flex items-center gap-1">
+                    <Smartphone className="w-3 h-3" />
+                    Cuenta para pagar
+                  </p>
+                  <div className="grid grid-cols-2 gap-1.5 text-[11px]">
+                    <div>
+                      <span className="text-muted-foreground">Banco:</span>{' '}
+                      <strong>{p.cuentaRecaudoPago.banco}</strong>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground">Tipo:</span>{' '}
+                      <strong>{p.cuentaRecaudoPago.tipoCuenta}</strong>
+                    </div>
+                    <div className="col-span-2">
+                      <span className="text-muted-foreground">N°:</span>{' '}
+                      <strong className="font-mono">{p.cuentaRecaudoPago.numeroCuenta}</strong>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Botones acción */}
+              <div className="pt-2 border-t border-white/10 flex flex-wrap items-center gap-1.5">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => onEstadoCuenta(p.id)}
+                  className="text-[10px] h-7 input-premium"
+                >
+                  <FileDown className="w-3 h-3 mr-1" />
+                  Estado cuenta
+                </Button>
+                {cancelado && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => onPazYSalvo(p.id, p.codigo)}
+                    className="text-[10px] h-7 border-emerald-400/40 text-emerald-300 hover:bg-emerald-500/10"
+                  >
+                    <FileCheck className="w-3 h-3 mr-1" />
+                    Paz y salvo
+                  </Button>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        )
+      })}
+    </div>
+  )
+}
+
+// =====================================================
+// VISTA: PRÓXIMOS PAGOS
+// =====================================================
+function ProximosPagosView({
+  prestamos,
+  onPagar,
+}: {
+  prestamos: any[]
+  onPagar: (prestamoId: string, monto: number, numeroCuota: number) => void
+}) {
+  const proximos = prestamos
+    .filter((p) => p.estado === 'ACTIVO' || p.estado === 'EN_MORA')
+    .flatMap((p) =>
+      (p.pagos || [])
+        .filter((pg: any) => pg.estado === 'PENDIENTE')
+        .map((pg: any) => ({ ...pg, prestamo: p }))
+    )
+    .sort((a, b) => new Date(a.fechaVencimiento).getTime() - new Date(b.fechaVencimiento).getTime())
+
+  if (proximos.length === 0) {
+    return (
+      <EmptyStatePremium
+        icon={CalendarClock}
+        title="No tienes pagos pendientes"
+        subtitle="¡Estás al día con tus obligaciones!"
+      />
+    )
+  }
+
+  return (
+    <div className="space-y-3 fade-scale">
+      {proximos.map((pg: any) => {
+        const venc = new Date(pg.fechaVencimiento)
+        const hoy = new Date()
+        const dias = Math.ceil((venc.getTime() - hoy.getTime()) / (1000 * 60 * 60 * 24))
+        const vencido = dias < 0
+        return (
+          <Card
+            key={pg.id}
+            className={`premium-card premium-card-hover rounded-2xl ${
+              vencido ? 'border-red-400/40' : ''
+            }`}
+          >
+            <CardContent className="p-3.5">
+              <div className="flex items-start justify-between gap-2 mb-2.5">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <span className="font-mono text-xs font-bold">{pg.prestamo.codigo}</span>
+                    <Badge variant="outline" className="text-[10px] h-5">Cuota {pg.numeroCuota}</Badge>
+                    {vencido && (
+                      <Badge variant="destructive" className="text-[10px] h-5">Vencido</Badge>
+                    )}
+                  </div>
+                  <p className="text-[10px] text-muted-foreground mt-1">
+                    Vence: <strong>{formatearFecha(pg.fechaVencimiento)}</strong>
+                    {vencido ? ` · ${Math.abs(dias)}d atrás` : ` · en ${dias}d`}
+                  </p>
+                </div>
+                <DiasRestantesBadge dias={dias} />
+              </div>
+
+              <p className="text-xl font-black text-amber-300 mb-2.5">
+                {formatearMoneda(pg.montoTotal)}
+              </p>
+
+              <Button
+                size="sm"
+                onClick={() => onPagar(pg.prestamo.id, pg.montoTotal, pg.numeroCuota)}
+                className="gradient-premium gradient-premium-hover btn-press w-full h-9"
+              >
+                <CreditCard className="w-4 h-4 mr-2" />
+                Pagar con Bancolombia
+              </Button>
+            </CardContent>
+          </Card>
+        )
+      })}
+    </div>
+  )
+}
+
+// =====================================================
+// VISTA: HISTORIAL DE PAGOS
+// =====================================================
+function HistorialView({ prestamos }: { prestamos: any[] }) {
+  const pagos = prestamos.flatMap((p) => (p.pagos || []).map((pg: any) => ({ ...pg, prestamo: p })))
+
+  if (pagos.length === 0) {
+    return (
+      <EmptyStatePremium
+        icon={History}
+        title="No hay pagos registrados"
+        subtitle="Tu historial de pagos aparecerá aquí."
+      />
+    )
+  }
+
+  return (
+    <div className="space-y-2 fade-scale">
+      {pagos.map((pg) => (
+        <Card key={pg.id} className="premium-card premium-card-hover rounded-2xl">
+          <CardContent className="p-3">
+            <div className="flex items-center justify-between gap-2 mb-1.5">
+              <div className="flex items-center gap-2 min-w-0">
+                <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-emerald-500 to-cyan-600 flex items-center justify-center shrink-0">
+                  <CheckCircle className="w-3.5 h-3.5 text-white" />
+                </div>
+                <div className="min-w-0">
+                  <p className="font-mono text-xs font-bold truncate">{pg.prestamo.codigo}</p>
+                  <p className="text-[10px] text-muted-foreground">
+                    Cuota {pg.numeroCuota} · {pg.metodoPago}
+                  </p>
+                </div>
+              </div>
+              <div className="text-right shrink-0">
+                <p className="text-sm font-bold text-emerald-300">
+                  {formatearMoneda(pg.montoTotal)}
+                </p>
+                <p className="text-[9px] text-muted-foreground">
+                  {formatearFecha(pg.fechaPago)}
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center justify-between">
+              <Badge variant="outline" className="text-[10px] h-5">{pg.estado}</Badge>
+              <span className="text-[9px] text-muted-foreground">
+                Venc: {formatearFecha(pg.fechaVencimiento)}
+              </span>
+            </div>
+          </CardContent>
+        </Card>
+      ))}
+    </div>
+  )
+}
+
+// =====================================================
+// VISTA: AVISOS (Notificaciones)
+// =====================================================
+function AvisosView({
+  notificaciones,
+  notifStats,
+}: {
+  notificaciones: NotificacionItem[]
+  notifStats: NotificacionesStats
+}) {
+  return (
+    <div className="space-y-3 fade-scale">
+      {/* Stats */}
+      <div className="grid grid-cols-3 gap-2">
+        <Card className="premium-card rounded-2xl">
+          <CardContent className="p-2.5 text-center">
+            <Bell className="w-4 h-4 mx-auto mb-0.5 text-primary" />
+            <p className="text-[9px] text-muted-foreground">Total</p>
+            <p className="text-base font-bold">{notifStats.total}</p>
+          </CardContent>
+        </Card>
+        <Card className="premium-card rounded-2xl">
+          <CardContent className="p-2.5 text-center">
+            <AlertTriangle className="w-4 h-4 mx-auto mb-0.5 text-amber-400" />
+            <p className="text-[9px] text-muted-foreground">No leídas</p>
+            <p className="text-base font-bold text-amber-300">{notifStats.noLeidas}</p>
+          </CardContent>
+        </Card>
+        <Card className="premium-card rounded-2xl">
+          <CardContent className="p-2.5 text-center">
+            <Clock className="w-4 h-4 mx-auto mb-0.5 text-cyan-400" />
+            <p className="text-[9px] text-muted-foreground">Pendientes</p>
+            <p className="text-base font-bold text-cyan-300">{notifStats.pendientes}</p>
+          </CardContent>
+        </Card>
+      </div>
+
+      {notificaciones.length === 0 ? (
+        <EmptyStatePremium
+          icon={Bell}
+          title="No tienes notificaciones"
+          subtitle="Las alertas y avisos aparecerán aquí."
+        />
+      ) : (
+        <div className="space-y-2">
+          {notificaciones.map((n) => (
+            <Card key={n.id} className="premium-card premium-card-hover rounded-2xl">
+              <CardContent className="p-3">
+                <div className="flex items-start gap-2">
+                  <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${
+                    n.estado === 'ENVIADO' ? 'bg-emerald-500/15' :
+                    n.estado === 'FALLIDO' ? 'bg-red-500/15' : 'bg-white/5'
+                  }`}>
+                    <Bell className={`w-3.5 h-3.5 ${
+                      n.estado === 'ENVIADO' ? 'text-emerald-300' :
+                      n.estado === 'FALLIDO' ? 'text-red-300' : 'text-muted-foreground'
+                    }`} />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between gap-2 mb-0.5">
+                      <Badge variant="outline" className="text-[9px] h-4">{n.tipo}</Badge>
+                      <span className="text-[9px] text-muted-foreground">
+                        {formatearFecha(n.fechaEnvio)}
+                      </span>
+                    </div>
+                    <p className="text-xs text-foreground/90 leading-snug">{n.mensaje}</p>
+                    <Badge
+                      variant={
+                        n.estado === 'ENVIADO' ? 'default' :
+                        n.estado === 'FALLIDO' ? 'destructive' :
+                        'secondary'
+                      }
+                      className="text-[9px] h-4 mt-1"
+                    >
+                      {n.estado}
+                    </Badge>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// =====================================================
+// VISTA: CAMPAÑAS
+// =====================================================
+function CampanasView({ campanas }: { campanas: any[] }) {
+  if (campanas.length === 0) {
+    return (
+      <EmptyStatePremium
+        icon={Megaphone}
+        title="No hay campañas activas"
+        subtitle="Las promociones y campañas aparecerán aquí."
+      />
+    )
+  }
+
+  return (
+    <div className="space-y-3 fade-scale">
+      {campanas.map((c) => (
+        <Card key={c.id} className="premium-card premium-card-hover rounded-2xl overflow-hidden">
+          <CardContent className="p-0">
+            <div className="h-1.5 bg-gradient-to-r from-indigo-500 via-violet-500 to-fuchsia-500"></div>
+            <div className="p-3.5">
+              <div className="flex items-center gap-2 mb-2">
+                <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center">
+                  <Megaphone className="w-3.5 h-3.5 text-white" />
+                </div>
+                <span className="chip-premium !text-[9px] !py-0.5">
+                  {c.tipo}
+                </span>
+              </div>
+              <h4 className="font-bold text-sm">{c.titulo}</h4>
+              <p className="text-xs text-muted-foreground mt-1">{c.descripcion}</p>
+              {c.contenido && (
+                <p className="text-[11px] mt-2 text-foreground/80 whitespace-pre-wrap p-2 rounded-lg bg-white/5">
+                  {c.contenido}
+                </p>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      ))}
+    </div>
+  )
+}
+
+// =====================================================
+// COMPONENTE: Estado vacío premium
+// =====================================================
+function EmptyStatePremium({
+  icon: Icon,
+  title,
+  subtitle,
+}: {
+  icon: typeof FileText
+  title: string
+  subtitle: string
+}) {
+  return (
+    <div className="flex flex-col items-center justify-center py-16 text-center fade-scale">
+      <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-indigo-500/20 to-violet-500/20 border border-white/10 flex items-center justify-center mb-4 float-y">
+        <Icon className="w-7 h-7 text-muted-foreground" />
+      </div>
+      <p className="text-sm font-semibold">{title}</p>
+      <p className="text-xs text-muted-foreground mt-1 max-w-[240px]">{subtitle}</p>
+    </div>
+  )
+}
+
+// =====================================================
+// Componente: Score Circular (SVG) — PRESERVADO con rediseño
 // =====================================================
 function ScoreCircular({ score }: { score: number }) {
   const pct = Math.max(0, Math.min(100, score))
-  const radio = 36
+  const radio = 32
   const circunferencia = 2 * Math.PI * radio
   const offset = circunferencia - (pct / 100) * circunferencia
   const color =
@@ -1704,36 +1957,34 @@ function ScoreCircular({ score }: { score: number }) {
 
   return (
     <div className="relative">
-      <svg width="100" height="100" viewBox="0 0 100 100">
-        {/* Anillo de fondo */}
+      <svg width="80" height="80" viewBox="0 0 80 80">
         <circle
-          cx="50"
-          cy="50"
+          cx="40"
+          cy="40"
           r={radio}
           fill="none"
           stroke="rgba(255,255,255,0.1)"
-          strokeWidth="8"
+          strokeWidth="6"
         />
-        {/* Anillo de progreso */}
         <circle
-          cx="50"
-          cy="50"
+          cx="40"
+          cy="40"
           r={radio}
           fill="none"
           stroke={color}
-          strokeWidth="8"
+          strokeWidth="6"
           strokeLinecap="round"
           strokeDasharray={circunferencia}
           strokeDashoffset={offset}
-          transform="rotate(-90 50 50)"
+          transform="rotate(-90 40 40)"
           style={{ transition: 'stroke-dashoffset 0.8s ease-out' }}
         />
       </svg>
       <div className="absolute inset-0 flex flex-col items-center justify-center">
-        <span className="text-2xl font-bold" style={{ color }}>
+        <span className="text-lg font-bold" style={{ color }}>
           {Math.round(pct)}
         </span>
-        <span className="text-[10px] text-muted-foreground uppercase tracking-wide">
+        <span className="text-[8px] text-muted-foreground uppercase tracking-wide">
           {etiqueta}
         </span>
       </div>
@@ -1742,44 +1993,44 @@ function ScoreCircular({ score }: { score: number }) {
 }
 
 // =====================================================
-// Componente: Badge de días restantes
+// Componente: Badge de días restantes — PRESERVADO con rediseño
 // =====================================================
 function DiasRestantesBadge({ dias }: { dias: number }) {
   if (dias < 0) {
     return (
-      <Badge variant="destructive" className="text-xs">
+      <Badge variant="destructive" className="text-[9px] h-4">
         Vencido {Math.abs(dias)}d
       </Badge>
     )
   }
   if (dias <= 3) {
     return (
-      <Badge className="bg-red-500/20 text-red-300 border-red-400/30 text-xs">
+      <Badge className="bg-red-500/20 text-red-300 border-red-400/30 text-[9px] h-4">
         {dias === 0 ? 'Hoy' : `${dias}d`}
       </Badge>
     )
   }
   if (dias <= 7) {
     return (
-      <Badge className="bg-amber-500/20 text-amber-300 border-amber-400/30 text-xs">
+      <Badge className="bg-amber-500/20 text-amber-300 border-amber-400/30 text-[9px] h-4">
         {dias}d
       </Badge>
     )
   }
   return (
-    <Badge className="bg-emerald-500/20 text-emerald-300 border-emerald-400/30 text-xs">
+    <Badge className="bg-emerald-500/20 text-emerald-300 border-emerald-400/30 text-[9px] h-4">
       {dias}d
     </Badge>
   )
 }
 
 // =====================================================
-// Badge de estado
+// Badge de estado — PRESERVADO
 // =====================================================
 function EstadoBadge({ estado }: { estado: string }) {
   const config: Record<string, { label: string; className: string }> = {
     SOLICITUD: { label: 'Solicitud', className: 'bg-cyan-500/15 text-cyan-300 border-cyan-400/30' },
-    PENDIENTE_ACEPTACION: { label: 'Pendiente Aceptación', className: 'bg-amber-500/15 text-amber-300 border-amber-400/30' },
+    PENDIENTE_ACEPTACION: { label: 'Pendiente', className: 'bg-amber-500/15 text-amber-300 border-amber-400/30' },
     ACTIVO: { label: 'Activo', className: 'bg-emerald-500/15 text-emerald-300 border-emerald-400/30' },
     EN_MORA: { label: 'En Mora', className: 'bg-red-500/15 text-red-300 border-red-400/30' },
     JURIDICO: { label: 'Jurídico', className: 'bg-orange-500/15 text-orange-300 border-orange-400/30' },
@@ -1788,14 +2039,14 @@ function EstadoBadge({ estado }: { estado: string }) {
   }
   const cfg = config[estado] || { label: estado, className: 'bg-white/10 text-foreground border-white/20' }
   return (
-    <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-xs font-semibold border ${cfg.className}`}>
+    <span className={`inline-flex items-center px-1.5 py-0.5 rounded-md text-[10px] font-semibold border ${cfg.className}`}>
       {cfg.label}
     </span>
   )
 }
 
 // =====================================================
-// Helper: plazo en meses desde cuotas y frecuencia
+// Helper: plazo en meses desde cuotas y frecuencia — PRESERVADO
 // =====================================================
 function plazoMesesDesdeCuotas(numeroCuotas: number, frecuencia: Frecuencia): number {
   switch (frecuencia) {
@@ -1813,9 +2064,9 @@ function plazoMesesDesdeCuotas(numeroCuotas: number, frecuencia: Frecuencia): nu
 }
 
 // =====================================================
-// Componente: Simulador de Crédito
+// Componente: Simulador de Crédito — PRESERVADO con rediseño
 // =====================================================
-const TASA_GENERAL_DEFAULT_SIM = 24 // % anual si no hay configuración
+const TASA_GENERAL_DEFAULT_SIM = 24
 
 function SimuladorCredito({
   clienteId,
@@ -1908,7 +2159,7 @@ function SimuladorCredito({
       const json = await res.json()
       if (json.success) {
         toast({
-          title: '✅ Solicitud enviada',
+          title: 'Solicitud enviada',
           description: `Código: ${json.data?.codigo}. Un asesor la revisará pronto.`,
         })
       } else {
@@ -1926,13 +2177,13 @@ function SimuladorCredito({
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3 fade-scale">
       {/* Banner tasa aplicable */}
-      <Card className="glass-card">
-        <CardContent className="p-4">
+      <Card className="premium-card rounded-2xl">
+        <CardContent className="p-3">
           <div className="flex items-center gap-2 mb-1">
-            <Lightbulb className="w-4 h-4 text-amber-300" />
-            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            <Lightbulb className="w-3.5 h-3.5 text-amber-300" />
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
               Tasa aplicable
             </p>
           </div>
@@ -1949,11 +2200,11 @@ function SimuladorCredito({
       </Card>
 
       {/* Formulario */}
-      <Card className="glass-card">
-        <CardContent className="p-4 space-y-4">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="space-y-1.5">
-              <Label htmlFor="sim-valor">Valor solicitado (COP)</Label>
+      <Card className="premium-card rounded-2xl">
+        <CardContent className="p-3.5 space-y-3">
+          <div className="grid grid-cols-1 gap-3">
+            <div className="space-y-1">
+              <Label htmlFor="sim-valor" className="text-xs">Valor solicitado (COP)</Label>
               <Input
                 id="sim-valor"
                 type="number"
@@ -1961,44 +2212,52 @@ function SimuladorCredito({
                 onChange={(e) => setValorSolicitado(e.target.value)}
                 min={0}
                 step={10000}
+                className="input-premium"
               />
             </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="sim-cuotas">Número de cuotas</Label>
-              <Input
-                id="sim-cuotas"
-                type="number"
-                value={numeroCuotas}
-                onChange={(e) => setNumeroCuotas(e.target.value)}
-                min={1}
-                step={1}
-              />
+            <div className="grid grid-cols-2 gap-2">
+              <div className="space-y-1">
+                <Label htmlFor="sim-cuotas" className="text-xs">Cuotas</Label>
+                <Input
+                  id="sim-cuotas"
+                  type="number"
+                  value={numeroCuotas}
+                  onChange={(e) => setNumeroCuotas(e.target.value)}
+                  min={1}
+                  step={1}
+                  className="input-premium"
+                />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Frecuencia</Label>
+                <Select value={frecuencia} onValueChange={(v) => setFrecuencia(v as Frecuencia)}>
+                  <SelectTrigger className="input-premium">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="MENSUAL">Mensual</SelectItem>
+                    <SelectItem value="QUINCENAL">Quincenal</SelectItem>
+                    <SelectItem value="SEMANAL">Semanal</SelectItem>
+                    <SelectItem value="DIARIO">Diario</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
-            <div className="space-y-1.5">
-              <Label>Frecuencia</Label>
-              <Select value={frecuencia} onValueChange={(v) => setFrecuencia(v as Frecuencia)}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="MENSUAL">Mensual</SelectItem>
-                  <SelectItem value="QUINCENAL">Quincenal</SelectItem>
-                  <SelectItem value="SEMANAL">Semanal</SelectItem>
-                  <SelectItem value="DIARIO">Diario</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="sim-fecha">Fecha primer pago</Label>
+            <div className="space-y-1">
+              <Label htmlFor="sim-fecha" className="text-xs">Fecha primer pago</Label>
               <Input
                 id="sim-fecha"
                 type="date"
                 value={fechaPrimerPago}
                 onChange={(e) => setFechaPrimerPago(e.target.value)}
+                className="input-premium"
               />
             </div>
           </div>
-          <Button onClick={calcularSimulacion} className="w-full">
+          <Button
+            onClick={calcularSimulacion}
+            className="w-full gradient-premium gradient-premium-hover btn-press"
+          >
             <Calculator className="w-4 h-4 mr-2" />
             Simular crédito
           </Button>
@@ -2007,28 +2266,28 @@ function SimuladorCredito({
 
       {/* Resultados */}
       {resultado && (
-        <>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <Card className="glass-card">
-              <CardContent className="p-4 text-center">
-                <p className="text-xs text-muted-foreground">Cuota estimada</p>
-                <p className="text-xl font-bold text-cyan-300">
+        <div className="space-y-3 fade-scale">
+          <div className="grid grid-cols-3 gap-2">
+            <Card className="premium-card rounded-2xl">
+              <CardContent className="p-2.5 text-center">
+                <p className="text-[9px] text-muted-foreground uppercase tracking-wide">Cuota</p>
+                <p className="text-sm font-bold text-cyan-300 mt-0.5">
                   {formatearMoneda(resultado.montoCuota)}
                 </p>
               </CardContent>
             </Card>
-            <Card className="glass-card">
-              <CardContent className="p-4 text-center">
-                <p className="text-xs text-muted-foreground">Total intereses</p>
-                <p className="text-xl font-bold text-amber-300">
+            <Card className="premium-card rounded-2xl">
+              <CardContent className="p-2.5 text-center">
+                <p className="text-[9px] text-muted-foreground uppercase tracking-wide">Interés</p>
+                <p className="text-sm font-bold text-amber-300 mt-0.5">
                   {formatearMoneda(resultado.totalInteres)}
                 </p>
               </CardContent>
             </Card>
-            <Card className="glass-card">
-              <CardContent className="p-4 text-center">
-                <p className="text-xs text-muted-foreground">Total a pagar</p>
-                <p className="text-xl font-bold text-emerald-300">
+            <Card className="premium-card rounded-2xl">
+              <CardContent className="p-2.5 text-center">
+                <p className="text-[9px] text-muted-foreground uppercase tracking-wide">Total</p>
+                <p className="text-sm font-bold text-emerald-300 mt-0.5">
                   {formatearMoneda(resultado.totalPagar)}
                 </p>
               </CardContent>
@@ -2036,33 +2295,33 @@ function SimuladorCredito({
           </div>
 
           {/* Tabla amortización */}
-          <Card>
+          <Card className="premium-card rounded-2xl">
             <CardContent className="p-0">
-              <div className="max-h-80 overflow-y-auto">
+              <div className="max-h-72 overflow-y-auto">
                 <Table>
                   <TableHeader className="sticky top-0 bg-background/95 backdrop-blur z-10">
                     <TableRow>
-                      <TableHead>#</TableHead>
-                      <TableHead>Vencimiento</TableHead>
-                      <TableHead className="text-right">Cuota</TableHead>
-                      <TableHead className="text-right">Capital</TableHead>
-                      <TableHead className="text-right">Interés</TableHead>
-                      <TableHead className="text-right">Saldo</TableHead>
+                      <TableHead className="text-[10px] h-8">#</TableHead>
+                      <TableHead className="text-[10px] h-8">Venc.</TableHead>
+                      <TableHead className="text-[10px] h-8 text-right">Cuota</TableHead>
+                      <TableHead className="text-[10px] h-8 text-right">Interés</TableHead>
+                      <TableHead className="text-[10px] h-8 text-right">Saldo</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {resultado.tablaAmortizacion.map((c) => (
                       <TableRow key={c.numero}>
-                        <TableCell>{c.numero}</TableCell>
-                        <TableCell className="text-xs">{formatearFecha(c.fechaVencimiento)}</TableCell>
-                        <TableCell className="text-right font-semibold">
+                        <TableCell className="text-[10px] py-1.5">{c.numero}</TableCell>
+                        <TableCell className="text-[10px] py-1.5">{formatearFecha(c.fechaVencimiento)}</TableCell>
+                        <TableCell className="text-[10px] py-1.5 text-right font-semibold">
                           {formatearMoneda(c.montoCuota)}
                         </TableCell>
-                        <TableCell className="text-right text-xs">{formatearMoneda(c.capital)}</TableCell>
-                        <TableCell className="text-right text-xs text-amber-300">
+                        <TableCell className="text-[10px] py-1.5 text-right text-amber-300">
                           {formatearMoneda(c.interes)}
                         </TableCell>
-                        <TableCell className="text-right text-xs">{formatearMoneda(c.saldoCapital)}</TableCell>
+                        <TableCell className="text-[10px] py-1.5 text-right">
+                          {formatearMoneda(c.saldoCapital)}
+                        </TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
@@ -2071,27 +2330,29 @@ function SimuladorCredito({
             </CardContent>
           </Card>
 
-          {/* Aviso */}
-          <div className="p-3 bg-amber-500/10 rounded-md border border-amber-400/30 flex items-start gap-2">
-            <AlertTriangle className="w-4 h-4 text-amber-400 mt-0.5 shrink-0" />
-            <p className="text-xs text-amber-100/80">
-              Esta simulación es una estimación referencial. La aprobación final está sujeta al estudio de crédito.
+          <div className="p-2.5 rounded-lg bg-amber-500/10 border border-amber-400/30 flex items-start gap-2">
+            <AlertTriangle className="w-3.5 h-3.5 text-amber-400 mt-0.5 shrink-0" />
+            <p className="text-[10px] text-amber-100/80">
+              Esta simulación es referencial. La aprobación final está sujeta a estudio de crédito.
             </p>
           </div>
 
-          {/* Botón enviar solicitud */}
-          <Button onClick={enviarSolicitud} disabled={enviando} className="w-full">
+          <Button
+            onClick={enviarSolicitud}
+            disabled={enviando}
+            className="w-full gradient-premium gradient-premium-hover btn-press"
+          >
             <Send className="w-4 h-4 mr-2" />
             {enviando ? 'Enviando...' : 'Enviar Solicitud'}
           </Button>
-        </>
+        </div>
       )}
     </div>
   )
 }
 
 // =====================================================
-// Componente: Mis Solicitudes (panel del cliente)
+// Componente: Mis Solicitudes (panel del cliente) — PRESERVADO con rediseño
 // =====================================================
 interface SolicitudWebItem {
   id: string
@@ -2149,26 +2410,23 @@ function MisSolicitudesPanel({ cedula, token }: { cedula: string; token?: string
 
   if (!token) {
     return (
-      <Card>
-        <CardContent className="py-8 text-center text-muted-foreground">
-          <ClipboardList className="w-12 h-12 mx-auto mb-2 opacity-40" />
-          Inicia sesión en el portal para ver tus solicitudes.
-        </CardContent>
-      </Card>
+      <EmptyStatePremium
+        icon={ClipboardList}
+        title="Inicia sesión"
+        subtitle="Inicia sesión en el portal para ver tus solicitudes."
+      />
     )
   }
 
   if (loading) {
     return (
-      <Card>
-        <CardContent className="py-8 text-center text-muted-foreground">
-          Cargando solicitudes...
-        </CardContent>
-      </Card>
+      <div className="flex flex-col items-center justify-center py-16">
+        <Loader2 className="w-8 h-8 animate-spin text-primary mb-2" />
+        <p className="text-xs text-muted-foreground">Cargando solicitudes…</p>
+      </div>
     )
   }
 
-  // KPIs
   const total = solicitudes.length
   const pendientes = solicitudes.filter((s) => s.estado === 'PENDIENTE').length
   const enProceso = solicitudes.filter((s) => s.estado === 'EN_REVISION').length
@@ -2177,89 +2435,77 @@ function MisSolicitudesPanel({ cedula, token }: { cedula: string; token?: string
   ).length
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3 fade-scale">
       {/* KPIs */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <Card className="glass-card">
-          <CardContent className="p-3 text-center">
-            <ClipboardList className="w-5 h-5 mx-auto mb-1 text-primary" />
-            <p className="text-xs text-muted-foreground">Total</p>
-            <p className="text-lg font-bold">{total}</p>
+      <div className="grid grid-cols-4 gap-1.5">
+        <Card className="premium-card rounded-xl">
+          <CardContent className="p-2 text-center">
+            <ClipboardList className="w-3.5 h-3.5 mx-auto mb-0.5 text-primary" />
+            <p className="text-[8px] text-muted-foreground">Total</p>
+            <p className="text-sm font-bold">{total}</p>
           </CardContent>
         </Card>
-        <Card className="glass-card">
-          <CardContent className="p-3 text-center">
-            <Clock className="w-5 h-5 mx-auto mb-1 text-amber-400" />
-            <p className="text-xs text-muted-foreground">Pendientes</p>
-            <p className="text-lg font-bold text-amber-300">{pendientes}</p>
+        <Card className="premium-card rounded-xl">
+          <CardContent className="p-2 text-center">
+            <Clock className="w-3.5 h-3.5 mx-auto mb-0.5 text-amber-400" />
+            <p className="text-[8px] text-muted-foreground">Pend.</p>
+            <p className="text-sm font-bold text-amber-300">{pendientes}</p>
           </CardContent>
         </Card>
-        <Card className="glass-card">
-          <CardContent className="p-3 text-center">
-            <FileText className="w-5 h-5 mx-auto mb-1 text-cyan-400" />
-            <p className="text-xs text-muted-foreground">En proceso</p>
-            <p className="text-lg font-bold text-cyan-300">{enProceso}</p>
+        <Card className="premium-card rounded-xl">
+          <CardContent className="p-2 text-center">
+            <FileText className="w-3.5 h-3.5 mx-auto mb-0.5 text-cyan-400" />
+            <p className="text-[8px] text-muted-foreground">Proc.</p>
+            <p className="text-sm font-bold text-cyan-300">{enProceso}</p>
           </CardContent>
         </Card>
-        <Card className="glass-card">
-          <CardContent className="p-3 text-center">
-            <CheckCircle className="w-5 h-5 mx-auto mb-1 text-emerald-400" />
-            <p className="text-xs text-muted-foreground">Finalizadas</p>
-            <p className="text-lg font-bold text-emerald-300">{finalizadas}</p>
+        <Card className="premium-card rounded-xl">
+          <CardContent className="p-2 text-center">
+            <CheckCircle className="w-3.5 h-3.5 mx-auto mb-0.5 text-emerald-400" />
+            <p className="text-[8px] text-muted-foreground">Fin.</p>
+            <p className="text-sm font-bold text-emerald-300">{finalizadas}</p>
           </CardContent>
         </Card>
       </div>
 
-      {/* Lista */}
       {solicitudes.length === 0 ? (
-        <Card>
-          <CardContent className="py-8 text-center text-muted-foreground">
-            <ClipboardList className="w-12 h-12 mx-auto mb-2 opacity-40" />
-            No tienes solicitudes registradas.
-          </CardContent>
-        </Card>
+        <EmptyStatePremium
+          icon={ClipboardList}
+          title="No tienes solicitudes"
+          subtitle="Cuando envíes una solicitud de crédito, aparecerá aquí."
+        />
       ) : (
         solicitudes.map((s) => {
           const expanded = expandida === s.id
           return (
-            <Card key={s.id} className="glass-card">
-              <CardContent className="p-4">
+            <Card key={s.id} className="premium-card premium-card-hover rounded-2xl">
+              <CardContent className="p-3">
                 <button
                   type="button"
                   onClick={() => setExpandida(expanded ? null : s.id)}
                   className="w-full text-left"
                 >
-                  <div className="flex items-start justify-between mb-2 gap-3">
+                  <div className="flex items-start justify-between mb-2 gap-2">
                     <div className="min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span className="font-mono text-sm font-semibold truncate">{s.codigo}</span>
+                      <div className="flex items-center gap-1.5">
+                        <span className="font-mono text-xs font-bold truncate">{s.codigo}</span>
                         <EstadoSolicitudBadge estado={s.estado} />
                       </div>
-                      <p className="text-xs text-muted-foreground mt-1">
+                      <p className="text-[10px] text-muted-foreground mt-0.5">
                         {formatearFechaHora(s.fechaCreacion)}
                       </p>
                     </div>
                     <div className="text-right shrink-0">
-                      <p className="text-xs text-muted-foreground">Valor solicitado</p>
-                      <p className="font-bold text-amber-300">
+                      <p className="text-[9px] text-muted-foreground">Solicitado</p>
+                      <p className="font-bold text-amber-300 text-xs">
                         {formatearMoneda(s.valorSolicitado)}
                       </p>
                     </div>
                   </div>
-                  <div className="grid grid-cols-3 sm:grid-cols-5 gap-2 text-xs">
+                  <div className="grid grid-cols-3 gap-1.5 text-[10px]">
                     <div>
                       <p className="text-muted-foreground">Cuotas</p>
-                      <p className="font-medium">
-                        {s.numeroCuotas} ({s.frecuencia.toLowerCase()})
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-muted-foreground">Tasa</p>
-                      <p className="font-medium">
-                        {s.tasaOrigen === 'PERSONALIZADA'
-                          ? `${s.tasaUtilizada}% mensual`
-                          : `${s.tasaUtilizada}% anual`}
-                      </p>
+                      <p className="font-medium">{s.numeroCuotas}</p>
                     </div>
                     <div>
                       <p className="text-muted-foreground">Cuota est.</p>
@@ -2267,14 +2513,8 @@ function MisSolicitudesPanel({ cedula, token }: { cedula: string; token?: string
                         {formatearMoneda(s.cuotaEstimada)}
                       </p>
                     </div>
-                    <div className="hidden sm:block">
-                      <p className="text-muted-foreground">Total intereses</p>
-                      <p className="font-medium text-amber-300">
-                        {formatearMoneda(s.totalIntereses)}
-                      </p>
-                    </div>
-                    <div className="hidden sm:block">
-                      <p className="text-muted-foreground">Total a pagar</p>
+                    <div>
+                      <p className="text-muted-foreground">Total</p>
                       <p className="font-medium text-emerald-300">
                         {formatearMoneda(s.totalPagar)}
                       </p>
@@ -2282,15 +2522,13 @@ function MisSolicitudesPanel({ cedula, token }: { cedula: string; token?: string
                   </div>
                 </button>
 
-                {/* Timeline visual */}
-                <div className="mt-3 pt-3 border-t border-white/10">
+                <div className="mt-2.5 pt-2 border-t border-white/10">
                   <SolicitudTimeline estado={s.estado} />
                 </div>
 
-                {/* Detalle expandible */}
                 {expanded && (
-                  <div className="mt-3 pt-3 border-t border-white/10 space-y-3">
-                    <div className="grid grid-cols-2 gap-3 text-xs">
+                  <div className="mt-2.5 pt-2 border-t border-white/10 space-y-2 fade-scale">
+                    <div className="grid grid-cols-2 gap-2 text-[10px]">
                       <div>
                         <p className="text-muted-foreground">Primer pago</p>
                         <p className="font-medium">
@@ -2298,43 +2536,32 @@ function MisSolicitudesPanel({ cedula, token }: { cedula: string; token?: string
                         </p>
                       </div>
                       <div>
-                        <p className="text-muted-foreground">Fecha revisión</p>
-                        <p className="font-medium">
-                          {s.fechaRevision ? formatearFechaHora(s.fechaRevision) : '—'}
-                        </p>
+                        <p className="text-muted-foreground">Frecuencia</p>
+                        <p className="font-medium capitalize">{s.frecuencia.toLowerCase()}</p>
                       </div>
                       <div>
-                        <p className="text-muted-foreground">Fecha conversión</p>
-                        <p className="font-medium">
-                          {s.fechaConversion ? formatearFechaHora(s.fechaConversion) : '—'}
-                        </p>
+                        <p className="text-muted-foreground">Tasa ({s.tasaOrigen === 'PERSONALIZADA' ? 'mensual' : 'anual'})</p>
+                        <p className="font-medium">{s.tasaUtilizada}%</p>
                       </div>
                       <div>
-                        <p className="text-muted-foreground">Préstamo creado</p>
-                        <p className="font-medium font-mono text-xs">
-                          {s.prestamoCreadoId || '—'}
+                        <p className="text-muted-foreground">Total intereses</p>
+                        <p className="font-medium text-amber-300">
+                          {formatearMoneda(s.totalIntereses)}
                         </p>
                       </div>
                     </div>
 
-                    {/* Observaciones del asesor */}
                     {s.observaciones && (
-                      <div className="p-3 bg-white/5 rounded-md border border-white/10">
-                        <p className="text-xs font-semibold text-muted-foreground mb-1 flex items-center gap-1">
-                          <MessageSquare className="w-3 h-3" />
+                      <div className="p-2 rounded-lg bg-white/5 border border-white/10">
+                        <p className="text-[10px] font-semibold text-muted-foreground mb-1 flex items-center gap-1">
+                          <MessageSquare className="w-2.5 h-2.5" />
                           Observaciones del asesor
                         </p>
-                        <p className="text-xs whitespace-pre-wrap text-foreground/90">
+                        <p className="text-[10px] whitespace-pre-wrap text-foreground/90">
                           {s.observaciones}
                         </p>
                       </div>
                     )}
-
-                    {/* Nota informativa */}
-                    <p className="text-xs text-muted-foreground">
-                      ℹ️ La tabla de amortización detallada y el historial completo de cambios
-                      estarán disponibles cuando un asesor revise tu solicitud.
-                    </p>
                   </div>
                 )}
               </CardContent>
@@ -2347,41 +2574,40 @@ function MisSolicitudesPanel({ cedula, token }: { cedula: string; token?: string
 }
 
 // =====================================================
-// Componente: Timeline visual de una solicitud
+// Componente: Timeline visual de una solicitud — PRESERVADO
 // =====================================================
 function SolicitudTimeline({ estado }: { estado: string }) {
   const pasos = [
     { key: 'ENVIADA', label: 'Enviada' },
-    { key: 'EN_REVISION', label: 'En Revisión' },
-    { key: 'EN_ESTUDIO', label: 'En Estudio' },
+    { key: 'EN_REVISION', label: 'Revisión' },
+    { key: 'EN_ESTUDIO', label: 'Estudio' },
     { key: 'APROBADA', label: 'Aprobada' },
-    { key: 'CONVERTIDA', label: 'Convertida' },
+    { key: 'CONVERTIDA', label: 'Activada' },
   ]
 
-  // Mapear estado actual a índice del paso alcanzado
   const orden: Record<string, number> = {
     PENDIENTE: 0,
     EN_REVISION: 1,
     APROBADA: 3,
     CONVERTIDA: 4,
-    RECHAZADA: 1, // se rechaza después de la revisión
+    RECHAZADA: 1,
   }
   const actualIdx = orden[estado] ?? 0
   const rechazada = estado === 'RECHAZADA'
 
   return (
-    <div className="flex items-center gap-1 overflow-x-auto">
+    <div className="flex items-center gap-1 overflow-x-auto no-scrollbar">
       {pasos.map((p, i) => {
         const completado = i <= actualIdx && !rechazada
         const activo = i === actualIdx && !rechazada
         return (
           <div key={p.key} className="flex items-center flex-1 min-w-0">
-            <div className="flex flex-col items-center gap-1 min-w-0">
+            <div className="flex flex-col items-center gap-0.5 min-w-0">
               <div
-                className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold border ${
+                className={`w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold border transition-all duration-300 ${
                   completado
                     ? activo
-                      ? 'bg-emerald-500 text-white border-emerald-400'
+                      ? 'bg-emerald-500 text-white border-emerald-400 shadow-md shadow-emerald-500/40'
                       : 'bg-emerald-500/30 text-emerald-200 border-emerald-400/40'
                     : 'bg-white/5 text-muted-foreground border-white/10'
                 }`}
@@ -2389,7 +2615,7 @@ function SolicitudTimeline({ estado }: { estado: string }) {
                 {completado && !activo ? '✓' : i + 1}
               </div>
               <span
-                className={`text-[10px] truncate ${
+                className={`text-[8px] truncate ${
                   completado ? 'text-emerald-300' : 'text-muted-foreground'
                 }`}
               >
@@ -2398,7 +2624,7 @@ function SolicitudTimeline({ estado }: { estado: string }) {
             </div>
             {i < pasos.length - 1 && (
               <div
-                className={`h-0.5 flex-1 mx-1 ${
+                className={`h-0.5 flex-1 mx-0.5 transition-colors ${
                   i < actualIdx && !rechazada ? 'bg-emerald-500/40' : 'bg-white/10'
                 }`}
               />
@@ -2407,7 +2633,7 @@ function SolicitudTimeline({ estado }: { estado: string }) {
         )
       })}
       {rechazada && (
-        <Badge variant="destructive" className="ml-2 text-[10px]">
+        <Badge variant="destructive" className="ml-1 text-[9px] h-4">
           Rechazada
         </Badge>
       )}
@@ -2416,19 +2642,19 @@ function SolicitudTimeline({ estado }: { estado: string }) {
 }
 
 // =====================================================
-// Componente: Badge de estado de solicitud web
+// Componente: Badge de estado de solicitud web — PRESERVADO
 // =====================================================
 function EstadoSolicitudBadge({ estado }: { estado: string }) {
   const config: Record<string, { label: string; className: string }> = {
     PENDIENTE: { label: 'Pendiente', className: 'bg-amber-500/15 text-amber-300 border-amber-400/30' },
-    EN_REVISION: { label: 'En Revisión', className: 'bg-cyan-500/15 text-cyan-300 border-cyan-400/30' },
+    EN_REVISION: { label: 'Revisión', className: 'bg-cyan-500/15 text-cyan-300 border-cyan-400/30' },
     APROBADA: { label: 'Aprobada', className: 'bg-emerald-500/15 text-emerald-300 border-emerald-400/30' },
     RECHAZADA: { label: 'Rechazada', className: 'bg-red-500/15 text-red-300 border-red-400/30' },
-    CONVERTIDA: { label: 'Convertida', className: 'bg-violet-500/15 text-violet-300 border-violet-400/30' },
+    CONVERTIDA: { label: 'Activada', className: 'bg-violet-500/15 text-violet-300 border-violet-400/30' },
   }
   const cfg = config[estado] || { label: estado, className: 'bg-white/10 text-foreground border-white/20' }
   return (
-    <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-xs font-semibold border ${cfg.className}`}>
+    <span className={`inline-flex items-center px-1.5 py-0.5 rounded-md text-[10px] font-semibold border ${cfg.className}`}>
       {cfg.label}
     </span>
   )
