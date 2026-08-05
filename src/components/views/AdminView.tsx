@@ -137,6 +137,10 @@ function CuentasPanel({ onChanged }: { onChanged: () => void }) {
   const [loading, setLoading] = useState(true)
   const [modal, setModal] = useState(false)
   const [editando, setEditando] = useState<any | null>(null)
+  // === Vista previa de cuenta (ORDEN OBLIGATORIA 3) ===
+  // Tras crear/editar una cuenta, se abre este modal para mostrar el resultado
+  // (incluyendo el QR cargado) y permitir verificar visualmente.
+  const [cuentaPreview, setCuentaPreview] = useState<any | null>(null)
   const { toast } = useToast()
 
   // === Estado del formulario ===
@@ -253,6 +257,14 @@ function CuentasPanel({ onChanged }: { onChanged: () => void }) {
         setModal(false)
         cargar()
         onChanged()
+        // === ORDEN OBLIGATORIA 3: Abrir vista previa siempre que se termina un proceso ===
+        // Tras crear/actualizar la cuenta, abrir el modal de vista previa para que el
+        // administrador verifique los datos y el QR cargado (igual que lo verá el cliente).
+        if (json.data) {
+          setTimeout(() => {
+            setCuentaPreview(json.data)
+          }, 300)
+        }
       } else {
         toast({ title: 'Error', description: json.error, variant: 'destructive' })
       }
@@ -492,6 +504,79 @@ function CuentasPanel({ onChanged }: { onChanged: () => void }) {
               <Button type="submit">Guardar</Button>
             </DialogFooter>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* === VISTA PREVIA DE CUENTA (ORDEN OBLIGATORIA 3) ===
+          Tras guardar, mostrar la cuenta tal como la verá el cliente en el portal:
+          QR grande, datos bancarios, código y estado. Permite verificar visualmente
+          antes de cerrar. */}
+      <Dialog open={!!cuentaPreview} onOpenChange={(open) => !open && setCuentaPreview(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <QrCode className="w-5 h-5 text-primary" />
+              Vista previa de la cuenta
+            </DialogTitle>
+          </DialogHeader>
+          {cuentaPreview && (
+            <div className="space-y-4">
+              <div className="text-center">
+                <Badge variant="outline" className="font-mono mb-2">
+                  {cuentaPreview.codigo}
+                </Badge>
+                <h3 className="font-bold text-lg">{cuentaPreview.nombre}</h3>
+                <p className="text-sm text-muted-foreground">
+                  {cuentaPreview.banco} · {cuentaPreview.tipoCuenta}
+                </p>
+              </div>
+
+              {cuentaPreview.qrImagen ? (
+                <div className="flex flex-col items-center">
+                  <div className="bg-white p-4 rounded-xl shadow-sm border border-border">
+                    <img
+                      src={cuentaPreview.qrImagen}
+                      alt={`QR ${cuentaPreview.codigo}`}
+                      className="w-56 h-56 object-contain"
+                    />
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-2 text-center max-w-xs">
+                    Este QR será visible para los clientes en el portal al realizar pagos.
+                  </p>
+                </div>
+              ) : (
+                <div className="flex flex-col items-center p-6 bg-muted/30 rounded-lg border border-border">
+                  <QrCode className="w-12 h-12 text-muted-foreground mb-2" />
+                  <p className="text-sm text-muted-foreground text-center">
+                    Esta cuenta aún no tiene QR cargado.
+                  </p>
+                </div>
+              )}
+
+              <div className="bg-muted/30 rounded-lg p-4 space-y-2 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Número de cuenta:</span>
+                  <span className="font-mono font-semibold">{cuentaPreview.numeroCuenta}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Titular:</span>
+                  <span className="font-semibold">{cuentaPreview.titular}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Estado:</span>
+                  <Badge variant={cuentaPreview.activa ? 'default' : 'secondary'}>
+                    {cuentaPreview.activa ? 'Activa' : 'Inactiva'}
+                  </Badge>
+                </div>
+              </div>
+
+              <DialogFooter>
+                <Button type="button" onClick={() => setCuentaPreview(null)}>
+                  Cerrar
+                </Button>
+              </DialogFooter>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
     </Card>

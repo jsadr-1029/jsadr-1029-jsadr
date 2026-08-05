@@ -9,7 +9,7 @@ import { ResponsiveViewToggle } from '@/components/ResponsiveViewToggle'
 import { MobileNav } from '@/components/mobile-nav'
 import { useToast } from '@/hooks/use-toast'
 import { isAuthenticated, getUserData, logout } from '@/lib/api-client'
-import { puedeAcceder, vistasPermitidas, vistaPorDefecto } from '@/lib/permisos'
+import { puedeAcceder, vistasPermitidas, vistaPorDefecto, puedeAccederUsuario, vistasPermitidasUsuario } from '@/lib/permisos'
 import { useAuthReactive } from '@/hooks/use-auth-reactive'
 import { useResponsiveView } from '@/hooks/use-responsive-view'
 import { cn } from '@/lib/utils'
@@ -86,6 +86,8 @@ export default function Home() {
   // Hook reactivo: cuando el rol cambia (switch-user, refresh, login),
   // re-validamos que la vista actual esté permitida.
   const { rol: reactiveRol } = useAuthReactive()
+  // Datos del usuario actual (para verificar bloqueo por portal dedicado, ej: P_jsadr)
+  const user = getUserData()
 
   // Modo de vista responsiva preferido por el usuario (Auto/Móvil/Tablet/PC).
   // Solo aplica a usuarios internos (ADMIN/GESTOR/CONSULTOR); el portal
@@ -121,11 +123,18 @@ export default function Home() {
       setView('portal')
     } else {
       // Si es usuario interno (ADMIN/GESTOR/CONSULTOR), validar que la
-      // vista inicial esté permitida para su rol. Si no, ir a la vista
-      // por defecto del rol.
-      const permitidas = vistasPermitidas(u?.rol || reactiveRol)
+      // vista inicial esté permitida para su rol/usuario. Si no, ir a la vista
+      // por defecto.
+      // Considera el bloqueo por usuario (P_jsadr → solo 'portal-admin').
+      const permitidas = vistasPermitidasUsuario(u?.username, u?.rol || reactiveRol)
       if (permitidas.length > 0 && !permitidas.includes('prestamos' as ViewKey)) {
-        setView(vistaPorDefecto(u?.rol || reactiveRol))
+        // Si el usuario está bloqueado a un portal específico, ir a ese portal
+        const vistaBloqueada = permitidas.length === 1 ? permitidas[0] : null
+        if (vistaBloqueada) {
+          setView(vistaBloqueada)
+        } else {
+          setView(vistaPorDefecto(u?.rol || reactiveRol))
+        }
       }
     }
     setAuthChecked(true)
@@ -136,9 +145,13 @@ export default function Home() {
   // un mensaje de "Acceso denegado" en lugar de renderizar el módulo.
   // Esto bloquea el acceso directo por URL (?view=usuarios) a roles no
   // autorizados, incluso si el Sidebar no muestra el ítem.
+  //
+  // Además, considera el bloqueo por usuario: P_jsadr solo puede ver 'portal-admin'
+  // aunque su rol GESTOR permita otros módulos. Esto implementa la restricción de
+  // chat: P_jsadr y Jd_jsadr solo interactúan con el admin principal vía su portal.
   const vistaPermitida = esPortalCliente
     ? view === 'portal'
-    : puedeAcceder(reactiveRol, view)
+    : puedeAccederUsuario(user?.username, reactiveRol, view)
 
   // Detectar query params para portal cliente (?tyc=token o ?pay=codigo o ?portal=cliente)
   // y para redirección post-login (?view=portal-admin para P_jsadr)
@@ -156,9 +169,9 @@ export default function Home() {
       setView('portal')
     } else if (viewParam) {
       // Redirección post-login (ej: ?view=portal-admin para P_jsadr)
-      // Solo aplicar si la vista está permitida para el rol del usuario.
+      // Solo aplicar si la vista está permitida para el rol/usuario.
       const u = getUserData()
-      if (u && puedeAcceder(u.rol, viewParam)) {
+      if (u && puedeAccederUsuario(u.username, u.rol, viewParam)) {
         setView(viewParam as ViewKey)
       }
     }
@@ -331,7 +344,15 @@ export default function Home() {
                   permiso para acceder a este módulo. Si crees que es un error, contacta al administrador.
                 </p>
                 <button
-                  onClick={() => setView(vistaPorDefecto(reactiveRol))}
+                  onClick={() => {
+                    // Si el usuario está bloqueado a un portal, ir a ese portal
+                    const permitidas = vistasPermitidasUsuario(user?.username, reactiveRol)
+                    if (permitidas.length === 1) {
+                      setView(permitidas[0])
+                    } else {
+                      setView(vistaPorDefecto(reactiveRol))
+                    }
+                  }}
                   className="mt-6 px-4 py-2 rounded-lg text-sm font-semibold text-white gradient-primary hover:opacity-90 transition-opacity"
                 >
                   Ir a mi módulo principal

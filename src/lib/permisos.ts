@@ -140,6 +140,68 @@ export function vistaPorDefecto(rol: string | undefined | null): ViewKey {
   return permitidas[0]
 }
 
+// =====================================================
+// RESTRICCIÓN POR USUARIO — PORTALES DEDICADOS
+// -----------------------------------------------------
+// Algunos usuarios tienen un portal dedicado y NO deben poder
+// navegar a otros módulos del sistema aunque su rol lo permita:
+//
+//   P_jsadr  → SOLO 'portal-admin' (acompañante administrativo)
+//   Jd_jsadr → SOLO portal jurídico (rol ABOGADO, ya restringido)
+//
+// Esto implementa la "restricción de chat" del usuario:
+// P_jsadr y Jd_jsadr solo interactúan con el administrador principal
+// a través de sus portales dedicados, sin acceso al resto del sistema.
+// =====================================================
+
+const USUARIOS_BLOQUEADOS_A_PORTAL: Record<string, ViewKey> = {
+  p_jsadr: 'portal-admin',
+  // Jd_jsadr es ABOGADO y ya tiene VISTAS_POR_ROL vacío (usa /juridico),
+  // así que no necesita bloqueo adicional aquí.
+}
+
+/**
+ * Verifica si un usuario específico (por username) está bloqueado a un
+ * portal dedicado. Si lo está, solo puede acceder a ese portal.
+ */
+export function getVistaBloqueadaUsuario(username: string | undefined | null): ViewKey | null {
+  if (!username) return null
+  const u = username.toLowerCase().trim()
+  return USUARIOS_BLOQUEADOS_A_PORTAL[u] || null
+}
+
+/**
+ * Verifica si un usuario específico puede acceder a una vista,
+ * considerando además del rol el bloqueo por portal dedicado.
+ */
+export function puedeAccederUsuario(
+  username: string | undefined | null,
+  rol: string | undefined | null,
+  view: ViewKey | string
+): boolean {
+  const bloqueada = getVistaBloqueadaUsuario(username)
+  if (bloqueada) {
+    // Si el usuario está bloqueado a un portal, SOLO puede acceder a ese portal
+    return view === bloqueada
+  }
+  return puedeAcceder(rol, view)
+}
+
+/**
+ * Devuelve la lista de vistas permitidas para un usuario específico,
+ * considerando el bloqueo por portal dedicado.
+ */
+export function vistasPermitidasUsuario(
+  username: string | undefined | null,
+  rol: string | undefined | null
+): ViewKey[] {
+  const bloqueada = getVistaBloqueadaUsuario(username)
+  if (bloqueada) {
+    return [bloqueada]
+  }
+  return vistasPermitidas(rol)
+}
+
 /**
  * REGLA DEL MANUAL:
  * Indica si el rol puede ver la pestaña "Configuración del

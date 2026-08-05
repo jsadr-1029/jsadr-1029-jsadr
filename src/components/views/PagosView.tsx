@@ -475,6 +475,14 @@ export function PagosView({ onChanged }: { onChanged: () => void }) {
         setReferencia('')
         cargarPagos()
         onChanged()
+        // === ORDEN OBLIGATORIA 3: Abrir vista previa siempre que se termina un proceso ===
+        // Tras aplicar el pago, abrir automáticamente el recibo preview para que el
+        // usuario pueda imprimirlo, descargarlo o enviarlo al cliente.
+        if (json.data?.id) {
+          setTimeout(() => {
+            setReciboPagoId(json.data.id)
+          }, 400)
+        }
       } else {
         toast({ title: 'Error', description: json.error, variant: 'destructive' })
       }

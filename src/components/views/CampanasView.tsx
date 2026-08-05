@@ -44,6 +44,10 @@ export function CampanasView({ onChanged }: { onChanged: () => void }) {
   const [campanas, setCampanas] = useState<Campana[]>([])
   const [loading, setLoading] = useState(true)
   const [modalCrear, setModalCrear] = useState(false)
+  // === Vista previa de campaña (ORDEN OBLIGATORIA 3) ===
+  // Tras crear una campaña, se abre este modal para mostrar cómo la verán
+  // los clientes (título, descripción, contenido, destinatarios).
+  const [campanaPreview, setCampanaPreview] = useState<Campana | null>(null)
   const { toast } = useToast()
 
   const [titulo, setTitulo] = useState('')
@@ -97,6 +101,14 @@ export function CampanasView({ onChanged }: { onChanged: () => void }) {
         limpiarForm()
         cargar()
         onChanged()
+        // === ORDEN OBLIGATORIA 3: Abrir vista previa siempre que se termina un proceso ===
+        // Tras crear la campaña, abrir el modal de vista previa para que el usuario
+        // verifique cómo la verán los clientes (título, contenido, destinatarios).
+        if (json.data) {
+          setTimeout(() => {
+            setCampanaPreview(json.data)
+          }, 400)
+        }
       } else {
         toast({ title: 'Error', description: json.error, variant: 'destructive' })
       }
@@ -311,6 +323,47 @@ export function CampanasView({ onChanged }: { onChanged: () => void }) {
               <Button type="submit">Publicar Campaña</Button>
             </DialogFooter>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* === VISTA PREVIA DE CAMPAÑA (ORDEN OBLIGATORIA 3) ===
+          Tras crear la campaña, mostrar cómo la verán los clientes. */}
+      <Dialog open={!!campanaPreview} onOpenChange={(open) => !open && setCampanaPreview(null)}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Vista previa de la campaña</DialogTitle>
+          </DialogHeader>
+          {campanaPreview && (
+            <div className="space-y-4">
+              <div className="rounded-lg border border-border overflow-hidden">
+                <div className="bg-primary/10 p-4 border-b border-border">
+                  <Badge variant="outline" className="mb-2">
+                    {campanaPreview.tipo}
+                  </Badge>
+                  <h3 className="font-bold text-lg">{campanaPreview.titulo}</h3>
+                  <p className="text-sm text-muted-foreground">{campanaPreview.descripcion}</p>
+                </div>
+                <div className="p-4 bg-background">
+                  <p className="text-sm whitespace-pre-wrap">{campanaPreview.contenido}</p>
+                </div>
+                <div className="p-3 bg-muted/30 text-xs text-muted-foreground flex justify-between">
+                  <span>Destinatarios: {campanaPreview.destinatarios}</span>
+                  <span>
+                    {new Date(campanaPreview.createdAt).toLocaleDateString('es-CO', {
+                      year: 'numeric',
+                      month: 'short',
+                      day: 'numeric',
+                    })}
+                  </span>
+                </div>
+              </div>
+              <DialogFooter>
+                <Button type="button" onClick={() => setCampanaPreview(null)}>
+                  Cerrar
+                </Button>
+              </DialogFooter>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
     </div>

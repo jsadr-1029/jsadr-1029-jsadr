@@ -772,6 +772,14 @@ ${linkFirmaCodeudor}
         limpiarForm()
         cargar()
         onChanged()
+        // === ORDEN OBLIGATORIA 3: Abrir vista previa siempre que se termine un proceso ===
+        // Después de crear el préstamo, abrir automáticamente el modal de detalle
+        // para que el usuario vea el resultado (código, cuotas, documentos generados, etc.)
+        if (json.data?.id) {
+          setTimeout(() => {
+            onAbrirPrestamo(json.data.id)
+          }, 400)
+        }
       } else {
         toast({ title: 'Error', description: json.error, variant: 'destructive' })
       }

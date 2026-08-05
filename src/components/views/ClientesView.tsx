@@ -364,6 +364,15 @@ export function ClientesView({ onChanged }: { onChanged: () => void }) {
         setEditandoId(null)
         cargar()
         onChanged()
+        // === ORDEN OBLIGATORIA 3: Abrir vista previa siempre que se termina un proceso ===
+        // Tras crear/actualizar el cliente, abrir automáticamente el modal de detalle
+        // para que el usuario vea los datos guardados (categoría, cuenta, saldos, etc.)
+        if (json.data?.id) {
+          const nuevoCliente: Cliente = json.data
+          setTimeout(() => {
+            abrirModalDetalle(nuevoCliente)
+          }, 400)
+        }
       } else {
         toast({ title: 'Error', description: json.error, variant: 'destructive' })
       }

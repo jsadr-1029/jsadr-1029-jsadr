@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import { ViewKey } from '@/app/page'
 import { cn } from '@/lib/utils'
 import { getUserData } from '@/lib/api-client'
-import { vistasPermitidas } from '@/lib/permisos'
+import { vistasPermitidasUsuario } from '@/lib/permisos'
 import { useAuthReactive } from '@/hooks/use-auth-reactive'
 import {
   FileText,
@@ -115,13 +115,15 @@ export function Sidebar({ view, onChange, forceVisible = false, mobileOpen = fal
   const { rol: reactiveRol } = useAuthReactive()
   const user = getUserData()
   const rol = reactiveRol || user?.rol || ''
+  const username = user?.username
 
-  // Filtrar items según rol usando la matriz centralizada.
+  // Filtrar items según rol/usuario usando la matriz centralizada.
   // Para los nodos con hijos: se incluye si el padre está permitido
   // O si al menos un hijo está permitido. Se filtran los hijos que no
   // estén permitidos.
+  // Considera el bloqueo por usuario (P_jsadr → solo 'portal-admin').
   const menuItems = useMemo(() => {
-    const permitidas = vistasPermitidas(rol)
+    const permitidas = vistasPermitidasUsuario(username, rol)
     return ALL_ITEMS.map((item) => {
       if (item.children) {
         const hijosPermitidos = item.children.filter((c) => permitidas.includes(c.key))
@@ -132,7 +134,7 @@ export function Sidebar({ view, onChange, forceVisible = false, mobileOpen = fal
       }
       return permitidas.includes(item.key) ? item : null
     }).filter((x): x is MenuNode => x !== null)
-  }, [rol])
+  }, [rol, username])
 
   // Estado de expansión por grupo
   const [expanded, setExpanded] = useState<Record<string, boolean>>({})

@@ -3,6 +3,8 @@
 import * as React from 'react'
 import { ViewKey } from '@/app/page'
 import { cn } from '@/lib/utils'
+import { getUserData } from '@/lib/api-client'
+import { puedeAccederUsuario } from '@/lib/permisos'
 import {
   FileText,
   DollarSign,
@@ -121,6 +123,13 @@ export function MobileNav({ current, onChange, forceVisible = false }: MobileNav
   const [open, setOpen] = React.useState(false)
   const [expanded, setExpanded] = React.useState<Record<string, boolean>>({})
 
+  // === Permisos por usuario ===
+  // Verifica si el usuario actual puede acceder a cada vista.
+  // Esto permite que P_jsadr (bloqueado a portal-admin) NO vea los botones
+  // de Préstamos/Pagos/Portal que no puede usar.
+  const user = getUserData()
+  const puedeAcceder = (v: ViewKey) => puedeAccederUsuario(user?.username, user?.rol, v)
+
   const handleSelect = (view: ViewKey) => {
     onChange(view)
     setOpen(false)
@@ -176,25 +185,35 @@ export function MobileNav({ current, onChange, forceVisible = false }: MobileNav
       aria-label="Navegación principal móvil"
     >
       <div className="grid grid-cols-4 items-center gap-1 px-2 pt-2 pb-2">
-        {/* --- Préstamos --- */}
-        <NavButton
-          item={primaryItems[0]}
-          active={current === primaryItems[0].key}
-          onClick={() => handleSelect(primaryItems[0].key)}
-        />
+        {/* --- Préstamos (solo si el usuario tiene acceso) --- */}
+        {puedeAcceder('prestamos') ? (
+          <NavButton
+            item={primaryItems[0]}
+            active={current === primaryItems[0].key}
+            onClick={() => handleSelect(primaryItems[0].key)}
+          />
+        ) : (
+          <div />
+        )}
 
-        {/* --- Pagos --- */}
-        <NavButton
-          item={primaryItems[1]}
-          active={current === primaryItems[1].key}
-          onClick={() => handleSelect(primaryItems[1].key)}
-        />
+        {/* --- Pagos (solo si el usuario tiene acceso) --- */}
+        {puedeAcceder('pagos') ? (
+          <NavButton
+            item={primaryItems[1]}
+            active={current === primaryItems[1].key}
+            onClick={() => handleSelect(primaryItems[1].key)}
+          />
+        ) : (
+          <div />
+        )}
 
-        {/* --- Inicio / Dashboard (botón central destacado) --- */}
+        {/* --- Inicio / Dashboard (botón central destacado) ---
+            Si el usuario no tiene dashboard (ej: P_jsadr), mostrar el portal
+            dedicado al que sí tiene acceso. */}
         <div className="flex justify-center">
           <button
             type="button"
-            onClick={() => handleSelect('dashboard')}
+            onClick={() => handleSelect(puedeAcceder('dashboard') ? 'dashboard' : (current !== 'dashboard' ? current : 'dashboard'))}
             aria-label="Inicio"
             aria-current={current === 'dashboard' ? 'page' : undefined}
             className={cn(
@@ -210,12 +229,16 @@ export function MobileNav({ current, onChange, forceVisible = false }: MobileNav
           </button>
         </div>
 
-        {/* --- Portal --- */}
-        <NavButton
-          item={primaryItems[2]}
-          active={current === primaryItems[2].key}
-          onClick={() => handleSelect(primaryItems[2].key)}
-        />
+        {/* --- Portal (solo si el usuario tiene acceso) --- */}
+        {puedeAcceder('portal') ? (
+          <NavButton
+            item={primaryItems[2]}
+            active={current === primaryItems[2].key}
+            onClick={() => handleSelect(primaryItems[2].key)}
+          />
+        ) : (
+          <div />
+        )}
 
         {/* El botón "Más" fue eliminado.
             Ahora TODOS los módulos están en el botón hamburguesa superior-izquierdo

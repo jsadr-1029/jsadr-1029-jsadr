@@ -135,6 +135,14 @@ export function JuridicoView({ onChanged }: { onChanged: () => void }) {
         limpiarForm()
         cargar()
         onChanged()
+        // === ORDEN OBLIGATORIA 3: Abrir vista previa siempre que se termina un proceso ===
+        // Tras crear el caso jurídico, abrir el modal de detalle para que el usuario
+        // verifique los datos del caso, el abogado asignado y el radicado.
+        if (json.data) {
+          setTimeout(() => {
+            setCasoSeleccionado(json.data)
+          }, 400)
+        }
       } else {
         toast({ title: 'Error', description: json.error, variant: 'destructive' })
       }
