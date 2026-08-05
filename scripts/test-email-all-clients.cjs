@@ -111,6 +111,10 @@ function isSuccessStatus(status, expected) {
   return expected.includes(status)
 }
 
+// Bandera global para detectar si los envíos van a Ethereal (modo prueba)
+let etherealModeDetectado = false
+let etherealReason = ''
+
 async function testEstadoSmtp() {
   console.log('\n=========================================')
   console.log('  FLUJO 1: ESTADO SMTP — GET /api/email')
@@ -129,6 +133,11 @@ async function testEstadoSmtp() {
       detalle = `Auth requerida (esperado en producción sin sesión)`
     } else {
       detalle = `smtpConfigurado=${j.smtpConfigurado} | ${j.message || ''}`
+      // Detectar si está en modo Ethereal (no se enviarán correos reales)
+      if (j.smtpConfigurado === false) {
+        etherealModeDetectado = true
+        etherealReason = `GET /api/email reporta smtpConfigurado=false — los envíos caerán a Ethereal (modo prueba). Causa probable: API_ENCRYPTION_KEY de .env no desencripta las credenciales Brevo en BD. Ejecutar: BREVO_API_KEY=xkeysib-... BREVO_SMTP_KEY=xsmtpsib-... node scripts/save-brevo-creds.js`
+      }
     }
   } catch {
     detalle = `body no JSON: ${(r.body || '').slice(0, 100)}`
@@ -317,6 +326,12 @@ async function testEnviarPrueba() {
     const j = JSON.parse(r.body)
     success = r.status === 200 || r.status === 401 // 401 = auth required (esperado)
     detalle = j.message || j.error || ''
+    // Detectar si la respuesta indica Ethereal
+    if (j.isEthereal === true) {
+      etherealModeDetectado = true
+      etherealReason = `POST /api/email respondió isEthereal=true (modo prueba). Los correos NO se entregan a buzones reales. Para activar entrega real: BREVO_API_KEY=xkeysib-... BREVO_SMTP_KEY=xsmtpsib-... node scripts/save-brevo-creds.js`
+      detalle += ' [⚠️ ETHEREAL — sin entrega real]'
+    }
   } catch {
     detalle = r.body.slice(0, 150)
   }
@@ -444,6 +459,25 @@ async function main() {
 
   // Reporte
   const stats = await generateReport()
+
+  // Aviso de Ethereal mode si se detectó
+  if (etherealModeDetectado) {
+    console.log('\n=========================================')
+    console.log('  ⚠️  ADVERTENCIA: MODO ETHEREAL DETECTADO')
+    console.log('=========================================')
+    console.log('  Los tests HTTP pasan pero los correos NO se entregan a buzones reales.')
+    console.log('  Razón: ' + etherealReason)
+    console.log()
+    console.log('  ACCIÓN REQUERIDA POR EL ADMIN:')
+    console.log('    1. Obtener las credenciales Brevo del panel https://app.brevo.com/')
+    console.log('       - API KEY (empieza con xkeysib-)')
+    console.log('       - SMTP KEY (empieza con xsmtpsib-)')
+    console.log('    2. Ejecutar en /home/z/my-project:')
+    console.log('       BREVO_API_KEY=xkeysib-... BREVO_SMTP_KEY=xsmtpsib-... node scripts/save-brevo-creds.js')
+    console.log('    3. Re-ejecutar este test para verificar la entrega real:')
+    console.log('       node scripts/test-email-all-clients.cjs')
+    console.log()
+  }
 
   console.log('\n=========================================')
   console.log('  FIN DEL TEST')
