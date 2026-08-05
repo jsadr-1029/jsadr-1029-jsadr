@@ -62,8 +62,8 @@ const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS ||
   .map(o => o.trim())
   .filter(Boolean)
 
-// === Límite de cuerpo de petición (10 MB) ===
-const MAX_BODY_BYTES = 10 * 1024 * 1024
+// === Límite de cuerpo de petición (25 MB — permite 3 fotos base64 + datos del formulario) ===
+const MAX_BODY_BYTES = 25 * 1024 * 1024
 
 // === Endpoints públicos: NO requieren JWT ===
 function isPublicEndpoint(pathname: string): boolean {
@@ -78,7 +78,8 @@ function isPublicEndpoint(pathname: string): boolean {
     pathname.startsWith('/api/juridico/portal/auth') || // login del portal jurídico (abogados con cédula + clave)
     pathname.startsWith('/api/chat/iniciar') || // inicio de chat con cédula+teléfono (sin token previo)
     pathname.startsWith('/api/chat/otp') || // solicitud/verificación OTP del chat
-    pathname === '/api/simulador' // simulador público
+    pathname === '/api/simulador' || // simulador público
+    pathname === '/api/solicitudes-nuevos-clientes' // POST público: registro de nuevos clientes desde /register
   )
 }
 
