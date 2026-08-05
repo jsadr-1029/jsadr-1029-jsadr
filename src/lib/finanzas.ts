@@ -167,22 +167,28 @@ export function calcularPrestamo(parametros: ParametrosPrestamo): ResultadoCalcu
 
 /**
  * Cálculo de mora COMPUESTA DIARIA
- * Fórmula: M = S * (1 + r/360)^d - S
+ *
+ * Fórmula: M = S * (1 + r)^d - S
  * donde:
- *   S = saldo de la cuota vencida
- *   r = tasa moratoria anual (decimal)
+ *   S = saldo base (capital inicial prestado según política del usuario)
+ *   r = tasa moratoria DIARIA en decimal (ej: 0.01 para 1% diario)
  *   d = días de mora
- * Mora compuesta: cada día se calcula sobre el saldo + mora acumulada
+ *
+ * Mora compuesta: cada día se calcula sobre el saldo + mora acumulada del día anterior.
+ *
+ * ⚠️ IMPORTANTE: La tasa que se pasa aquí es DIARIA (no anual).
+ * El admin determina directamente el % diario en el formulario del préstamo
+ * (ej: "1" significa 1% diario sobre el capital inicial prestado).
  */
 export function calcularMoraCompuesta(
   saldoPendiente: number,
-  tasaMoraAnual: number,  // % anual (ej: 36 para 36%)
+  tasaMoraDiaria: number,  // % DIARIO (ej: 1 para 1% diario)
   diasMora: number
 ): number {
   if (diasMora <= 0 || saldoPendiente <= 0) return 0
-  const tasaDiaria = tasaMoraAnual / 100 / 360
+  const tasaDiariaDecimal = tasaMoraDiaria / 100
   // Mora compuesta: M = S * [(1 + r)^d - 1]
-  const mora = saldoPendiente * (Math.pow(1 + tasaDiaria, diasMora) - 1)
+  const mora = saldoPendiente * (Math.pow(1 + tasaDiariaDecimal, diasMora) - 1)
   return Math.round(mora * 100) / 100
 }
 
@@ -196,30 +202,37 @@ export function calcularDiasMora(fechaVencimiento: Date, fechaActual: Date = new
 }
 
 /**
- * Devuelve la tasa moratoria ANUAL efectiva de un préstamo.
+ * Devuelve la tasa moratoria DIARIA efectiva de un préstamo.
  *
- * NOTA HISTÓRICA (bug crítico corregido 2026-08-01):
- * El campo Prisma `Prestamo.tasaMoraDiaria` está mal nombrado: en realidad
- * contiene la tasa ANUAL (ej. 36 = 36% anual). Esto se debe a que el POST
- * de creación guarda directamente `tasaMoraAnual` del input en dicho campo.
+ * El campo Prisma `Prestamo.tasaMoraDiaria` almacena la tasa DIARIA configurada
+ * por el admin (ej: 1 = 1% diario). El admin puede sobrescribirla por préstamo
+ * vía `tasaMoraPersonalizada` (PATCH actualizar_tasa_mora).
  *
- * Antes, los consumidores hacían `prestamo.tasaMoraDiaria * 360` para
- * "convertir a anual", lo que producía 12,960% anual efectivo (×360 error).
- *
- * Ahora todos deben usar este helper. Si en el futuro se renombra el campo
- * schema a `tasaMoraAnual`, solo se cambia el cuerpo de esta función.
+ * Orden de prioridad:
+ *   1. tasaMoraPersonalizada (override del admin, también diario)
+ *   2. tasaMoraDiaria (valor guardado al crear el préstamo)
  *
  * @param prestamo Objeto préstamo con campos tasaMoraPersonalizada y tasaMoraDiaria
- * @returns Tasa moratoria anual efectiva (ej. 36 = 36%)
+ * @returns Tasa moratoria diaria efectiva (ej: 1 = 1% diario)
+ */
+export function getTasaMoraDiaria(prestamo: {
+  tasaMoraPersonalizada?: number | null
+  tasaMoraDiaria: number
+}): number {
+  const tasa = prestamo.tasaMoraPersonalizada ?? prestamo.tasaMoraDiaria
+  return Number.isFinite(tasa) ? tasa : 0
+}
+
+/**
+ * @deprecated Usar getTasaMoraDiaria.
+ * Mantenido por compatibilidad con código que aún referencia el nombre antiguo.
+ * Internamente delega a getTasaMoraDiaria.
  */
 export function getTasaMoraAnual(prestamo: {
   tasaMoraPersonalizada?: number | null
   tasaMoraDiaria: number
 }): number {
-  // Si hay una tasa personalizada (renegociada), esa gana. Si no, se usa
-  // tasaMoraDiaria que — pese al nombre — contiene la tasa anual.
-  const tasa = prestamo.tasaMoraPersonalizada ?? prestamo.tasaMoraDiaria
-  return Number.isFinite(tasa) ? tasa : 0
+  return getTasaMoraDiaria(prestamo)
 }
 
 /**

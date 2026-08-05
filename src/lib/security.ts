@@ -436,7 +436,16 @@ export function decryptSensitive(encryptedText: string): string {
     let decrypted = decipher.update(encrypted, 'hex', 'utf8')
     decrypted += decipher.final('utf8')
     return decrypted
-  } catch {
+  } catch (err: any) {
+    // ⚠️ Si la desencripción falla, significa que API_ENCRYPTION_KEY de .env
+    // no coincide con la llave usada al cifrar. Registrar para que el
+    // administrador pueda detectar la causa raíz de fallos de correo/auth.
+    console.error('[decryptSensitive] Falló desencripción:', {
+      errorCode: err?.code || 'UNKNOWN',
+      message: err?.message || String(err),
+      inputPrefix: encryptedText.substring(0, 16) + '...',
+      hint: 'Verifica que API_ENCRYPTION_KEY en .env coincida con la usada al cifrar las credenciales.',
+    })
     return encryptedText // si falla, devolver original
   }
 }

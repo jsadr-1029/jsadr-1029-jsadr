@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { enviarWhatsApp, mensajeRecordatorioPago, mensajeMora, guardarNotificacion } from '@/lib/whatsapp'
-import { calcularPrestamo, calcularDiasMora, getTasaMoraAnual, calcularMoraCompuesta } from '@/lib/finanzas'
+import { calcularPrestamo, calcularDiasMora, getTasaMoraDiaria, calcularMoraCompuesta } from '@/lib/finanzas'
 import { requireRole } from '@/lib/auth-guard'
 import { sanitizeError } from '@/lib/error-handler'
 
@@ -55,7 +55,7 @@ export async function POST(req: NextRequest) {
       const calculo = calcularPrestamo({
         montoPrincipal: prestamo.montoPrincipal,
         tasaInteresAnual: prestamo.tasaInteresAnual,
-        tasaMoraAnual: getTasaMoraAnual(prestamo), // convertir diaria a anual
+        tasaMoraAnual: getTasaMoraDiaria(prestamo),
         plazoMeses: prestamo.plazoMeses,
         frecuencia: prestamo.frecuencia as any,
         fechaDesembolso: prestamo.fechaDesembolso || undefined,
@@ -88,7 +88,8 @@ export async function POST(req: NextRequest) {
           tipoNotificacion = 'RECORDATORIO'
         }
       } else if (accion === 'mora' && diasMora > 0) {
-        const moraGenerada = calcularMoraCompuesta(proximaCuota.montoCuota, getTasaMoraAnual(prestamo), diasMora)
+        // Mora sobre CAPITAL INICIAL PRESTADO (política: % diario sobre capital inicial)
+        const moraGenerada = calcularMoraCompuesta(prestamo.montoPrincipal, getTasaMoraDiaria(prestamo), diasMora)
         mensaje = mensajeMora({
           nombreCliente: prestamo.cliente.nombre,
           codigoPrestamo: prestamo.codigo,
@@ -96,7 +97,7 @@ export async function POST(req: NextRequest) {
           diasMora,
           montoMora: moraGenerada,
           totalAdeudado: proximaCuota.montoCuota + moraGenerada,
-          tasaMora: getTasaMoraAnual(prestamo),
+          tasaMora: getTasaMoraDiaria(prestamo),
         })
         tipoNotificacion = 'MORA'
 

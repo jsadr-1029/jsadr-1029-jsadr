@@ -4,7 +4,7 @@ import { recalcularSaldosPrestamo } from '@/lib/recalcular-saldos'
 import {
   calcularPrestamo,
   calcularMoraCompuesta,
-  calcularDiasMora, getTasaMoraAnual,
+  calcularDiasMora, getTasaMoraDiaria,
   calcularFechaVencimiento,
   generarCodigoPago,
   formatearFecha,
@@ -110,7 +110,7 @@ async function generarLinkPago(body: any, user: any) {
   const calculo = calcularPrestamo({
     montoPrincipal: prestamo.montoPrincipal,
     tasaInteresAnual: prestamo.tasaInteresAnual,
-    tasaMoraAnual: getTasaMoraAnual(prestamo),
+    tasaMoraAnual: getTasaMoraDiaria(prestamo),
     plazoMeses: prestamo.plazoMeses,
     frecuencia: prestamo.frecuencia as any,
     fechaDesembolso: prestamo.fechaDesembolso || undefined,
@@ -243,7 +243,7 @@ async function aplicarPago(body: any, user: any) {
   const calculo = calcularPrestamo({
     montoPrincipal: prestamo.montoPrincipal,
     tasaInteresAnual: prestamo.tasaInteresAnual,
-    tasaMoraAnual: getTasaMoraAnual(prestamo),
+    tasaMoraAnual: getTasaMoraDiaria(prestamo),
     plazoMeses: prestamo.plazoMeses,
     frecuencia: prestamo.frecuencia as any,
     fechaDesembolso: prestamo.fechaDesembolso || undefined,
@@ -252,7 +252,7 @@ async function aplicarPago(body: any, user: any) {
   const cuota = calculo.tablaAmortizacion.find((c) => c.numero === parseInt(numeroCuota))
   if (!cuota) return NextResponse.json({ success: false, error: 'Cuota no encontrada' }, { status: 400 })
 
-  const tasaMoraEfectiva = getTasaMoraAnual(prestamo)
+  const tasaMoraEfectiva = getTasaMoraDiaria(prestamo)
   const diasMora = calcularDiasMora(cuota.fechaVencimiento)
 
   // === Mora renegociada tiene prioridad sobre el cálculo automático ===
@@ -271,8 +271,9 @@ async function aplicarPago(body: any, user: any) {
     moraGenerada = Number(prestamo.moraRenegociada) || 0
     moraEsRenegociada = true
   } else if (diasMora > 0) {
-    // Mora automática: interés compuesto diario sobre el saldo de la cuota vencida
-    moraGenerada = calcularMoraCompuesta(cuota.montoCuota, tasaMoraEfectiva, diasMora)
+    // Mora automática: interés compuesto DIARIO sobre el CAPITAL INICIAL PRESTADO
+    // (política del usuario: "1% diario sobre el capital inicial prestado")
+    moraGenerada = calcularMoraCompuesta(prestamo.montoPrincipal, tasaMoraEfectiva, diasMora)
   } else {
     moraGenerada = 0
   }
@@ -350,7 +351,7 @@ async function aplicarPago(body: any, user: any) {
     ? `[MORA RENEGOCIADA] Se utilizó el valor acordado de ${formatearMoneda(moraGenerada)} ` +
       `(acción: ${prestamo.moraRenegociadaAccion}) en lugar del cálculo compuesto diario. `
     : diasMora > 0
-    ? `[MORA COMPUESTA DIARIA] ${diasMora} días de atraso × tasa ${(tasaMoraEfectiva / 360).toFixed(6)}% diario = ${formatearMoneda(moraGenerada)}. `
+    ? `[MORA COMPUESTA DIARIA] ${diasMora} días de atraso × tasa ${tasaMoraEfectiva}% diario sobre capital inicial ${formatearMoneda(prestamo.montoPrincipal)} = ${formatearMoneda(moraGenerada)}. `
     : null
 
   const notasPago = notaMoraRenegociada
@@ -621,7 +622,7 @@ async function aplicarSoloIntereses(body: any, user: any) {
   const calculo = calcularPrestamo({
     montoPrincipal: prestamo.montoPrincipal,
     tasaInteresAnual: prestamo.tasaInteresAnual,
-    tasaMoraAnual: getTasaMoraAnual(prestamo),
+    tasaMoraAnual: getTasaMoraDiaria(prestamo),
     plazoMeses: prestamo.plazoMeses,
     frecuencia: prestamo.frecuencia as any,
     fechaDesembolso: prestamo.fechaDesembolso || undefined,

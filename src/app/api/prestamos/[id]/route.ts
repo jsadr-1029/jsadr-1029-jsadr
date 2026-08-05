@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { calcularPrestamo, calcularMoraCompuesta, calcularDiasMora, getTasaMoraAnual, debeIrAJuridico } from '@/lib/finanzas'
+import { calcularPrestamo, calcularMoraCompuesta, calcularDiasMora, getTasaMoraDiaria, debeIrAJuridico } from '@/lib/finanzas'
 import { sanitizeError } from '@/lib/error-handler'
 import { requireRole as requireRoleAuth } from '@/lib/auth-guard'
 import { rateLimit, getClientInfo } from '@/lib/security'
@@ -40,20 +40,22 @@ export async function GET(
     const calculo = calcularPrestamo({
       montoPrincipal: prestamo.montoPrincipal,
       tasaInteresAnual: prestamo.tasaInteresAnual,
-      tasaMoraAnual: getTasaMoraAnual(prestamo), // convertir diaria a anual
+      tasaMoraAnual: getTasaMoraDiaria(prestamo),
       plazoMeses: prestamo.plazoMeses,
       frecuencia: prestamo.frecuencia as any,
       fechaDesembolso: prestamo.fechaDesembolso || undefined,
     })
 
-    const tasaMoraEfectiva = getTasaMoraAnual(prestamo)
+    const tasaMoraEfectiva = getTasaMoraDiaria(prestamo)
 
     const tablaConEstado = calculo.tablaAmortizacion.map((cuota) => {
       const pago = prestamo.pagos.find((p) => p.numeroCuota === cuota.numero)
       const diasMora = pago ? 0 : calcularDiasMora(cuota.fechaVencimiento)
+      // Mora sobre CAPITAL INICIAL PRESTADO (política del usuario: % diario sobre capital inicial)
       const moraGenerada =
+        pago ? 0 :
         diasMora > 0
-          ? calcularMoraCompuesta(cuota.montoCuota, tasaMoraEfectiva, diasMora)
+          ? calcularMoraCompuesta(prestamo.montoPrincipal, tasaMoraEfectiva, diasMora)
           : 0
       return {
         ...cuota,

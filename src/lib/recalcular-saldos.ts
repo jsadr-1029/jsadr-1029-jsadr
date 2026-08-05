@@ -1,5 +1,5 @@
 import { db } from './db'
-import { calcularPrestamo, calcularMoraCompuesta, calcularDiasMora, getTasaMoraAnual } from './finanzas'
+import { calcularPrestamo, calcularMoraCompuesta, calcularDiasMora, getTasaMoraDiaria } from './finanzas'
 
 /**
  * Recalcula automáticamente todos los saldos del préstamo en base a los pagos
@@ -73,7 +73,7 @@ export async function recalcularSaldosPrestamo(prestamoId: string) {
   let moraPendiente = 0
   let diasMoraMaximo = 0
   try {
-    const tasaMoraEfectiva = getTasaMoraAnual(prestamo)
+    const tasaMoraEfectiva = getTasaMoraDiaria(prestamo)
     const calc = calcularPrestamo({
       montoPrincipal: prestamo.montoPrincipal,
       tasaInteresAnual: prestamo.tasaInteresAnual,
@@ -83,12 +83,13 @@ export async function recalcularSaldosPrestamo(prestamoId: string) {
       fechaDesembolso: prestamo.fechaDesembolso || undefined,
     })
     // Para cada cuota NO pagada (sin APLICADO), calcular mora si está vencida
+    // Mora sobre CAPITAL INICIAL PRESTADO (política: % diario sobre capital inicial)
     for (const cuota of calc.tablaAmortizacion) {
       const pagada = cuotasCompletamentePagadas.has(cuota.numero)
       if (pagada) continue
       const diasMora = calcularDiasMora(cuota.fechaVencimiento)
       if (diasMora > 0) {
-        const moraCuota = calcularMoraCompuesta(cuota.montoCuota, tasaMoraEfectiva, diasMora)
+        const moraCuota = calcularMoraCompuesta(prestamo.montoPrincipal, tasaMoraEfectiva, diasMora)
         moraPendiente += moraCuota
         if (diasMora > diasMoraMaximo) diasMoraMaximo = diasMora
       }
@@ -109,7 +110,7 @@ export async function recalcularSaldosPrestamo(prestamoId: string) {
       const calc = calcularPrestamo({
         montoPrincipal: prestamo.montoPrincipal,
         tasaInteresAnual: prestamo.tasaInteresAnual,
-        tasaMoraAnual: getTasaMoraAnual(prestamo),
+        tasaMoraAnual: getTasaMoraDiaria(prestamo),
         plazoMeses: prestamo.plazoMeses,
         frecuencia: prestamo.frecuencia as any,
         fechaDesembolso: prestamo.fechaDesembolso || undefined,

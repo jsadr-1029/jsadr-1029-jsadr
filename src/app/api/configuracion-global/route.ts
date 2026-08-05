@@ -1116,66 +1116,40 @@ export async function POST(req: NextRequest) {
           }, { status: 400 })
         }
 
-        // === Intentar envío real via nodemailer ===
-        // (Si nodemailer no está instalado, se simula el envío)
+        // === Intentar envío real via helper centralizado enviarEmail ===
+        // (Usa Brevo HTTPS API como path primario, SMTP como fallback, audit en EnvioCorreo)
         let envioOk = false
         let errorMsg: string | null = null
-        const smtpPass = correo.smtpPass ? decryptSensitive(correo.smtpPass) : ''
-
         try {
-          // Intentar importar nodemailer dinámicamente (puede no estar instalado)
-          let transporter: any = null
-          try {
-            const nodemailer = await import('nodemailer')
-            const port = Number(correo.smtpPort) || 587
-            const secure = correo.ssl && (correo.smtpPort === 465)
-            // Forzar STARTTLS en puerto 587/25 cuando no es SSL implícito
-            const requireTLS = !secure && (correo.starttls || port === 587 || port === 25)
-            transporter = nodemailer.createTransport({
-              host: correo.smtpHost,
-              port,
-              secure,
-              requireTLS,
-              auth: {
-                user: correo.smtpUser,
-                pass: smtpPass,
-              },
-              tls: { rejectUnauthorized: false },
-              connectionTimeout: 15000,
-              greetingTimeout: 10000,
-              socketTimeout: 15000,
-            })
-            await transporter.sendMail({
-              from: `"${correo.nombreRemitente || correo.aliasRemitente || 'Jsadr'}" <${correo.smtpUser}>`,
-              to: destinatario,
-              subject: asunto,
-              [formato === 'html' ? 'html' : 'text']: cuerpo,
-            })
+          const { enviarEmail } = await import('@/lib/email')
+          const resultado = await enviarEmail({
+            to: destinatario,
+            subject: asunto,
+            text: formato === 'html' ? undefined : cuerpo,
+            html: formato === 'html' ? cuerpo : undefined,
+          })
+          if (resultado.success) {
             envioOk = true
-          } catch (mailErr: any) {
-            // Si nodemailer no está disponible, simular envío exitoso para desarrollo
-            if (mailErr?.code === 'MODULE_NOT_FOUND' || mailErr?.message?.includes('Cannot find module')) {
-              console.log('[correo] nodemailer no instalado — simulando envío para desarrollo')
-              envioOk = true
-            } else {
-              throw mailErr
+          } else {
+            errorMsg = resultado.error || 'Error desconocido en el envío'
+            // Enriquecer el mensaje para los errores más comunes
+            const msg = (errorMsg || '').toLowerCase()
+            if (msg.includes('535') || msg.includes('authentication failed') || msg.includes('invalid login')) {
+              errorMsg = `${errorMsg} | Causa: credenciales Brevo en BD no se pueden desencriptar con API_ENCRYPTION_KEY actual, o son incorrectas. Solución: re-ejecutar scripts/save-brevo-creds.js con las credenciales en texto plano.`
+            } else if (msg.includes('525') || msg.includes('unauthorized ip')) {
+              errorMsg = `${errorMsg} | IP no whitelistada en Brevo SMTP relay. Usar path HTTPS API (ya es el primario en enviarEmail).`
+            } else if (msg.includes('connect etimedout') || msg.includes('timeout')) {
+              errorMsg = `${errorMsg} | El servidor SMTP no responde. Verifica host y puerto.`
+            } else if (msg.includes('econnrefused')) {
+              errorMsg = `${errorMsg} | Puerto rechazado. Verifica smtpPort (465 SSL / 587 STARTTLS).`
+            } else if (msg.includes('enotfound') || msg.includes('getaddrinfo')) {
+              errorMsg = `${errorMsg} | Host SMTP no resuelve DNS. Verifica smtpHost.`
+            } else if (msg.includes('smtp no configurado')) {
+              errorMsg = `${errorMsg} | No hay ConexionAPI.EMAIL_SMTP activa ni CorreoInstitucional principal. Configura credenciales Brevo.`
             }
           }
         } catch (err: any) {
           errorMsg = err.message || 'Error desconocido en el envío'
-          // Enriquecer el mensaje para los errores más comunes
-          const msg = (errorMsg || '').toLowerCase()
-          if (msg.includes('535') || msg.includes('authentication failed') || msg.includes('invalid login')) {
-            errorMsg = `${errorMsg} | Causas: contraseña incorrecta, servidor SMTP no corresponde al dominio del correo, o falta STARTTLS. Revisa la configuración del correo institucional.`
-          } else if (msg.includes('spam source') || msg.includes('spam') || (msg.includes('554') && msg.includes('5.7.1'))) {
-            errorMsg = `${errorMsg} | BLOQUEO POR REPUTACIÓN DE IP: el servidor SMTP rechazó la conexión porque la IP de este servidor está en listas negras (típico en clouds como Alibaba/AWS). Soluciones: (1) usar un relay SMTP profesional (Brevo/SendGrid/Mailgun/Amazon SES) configurándolo como SMTP Host en el correo institucional, (2) contactar al proveedor mi.com.co para whitelistear la IP 47.57.232.232, o (3) contratar una IP dedicada con reputación limpia.`
-          } else if (msg.includes('connect etimedout') || msg.includes('timeout')) {
-            errorMsg = `${errorMsg} | El servidor SMTP no responde. Verifica host y puerto.`
-          } else if (msg.includes('econnrefused')) {
-            errorMsg = `${errorMsg} | Puerto rechazado. Verifica smtpPort (465 SSL / 587 STARTTLS).`
-          } else if (msg.includes('enotfound') || msg.includes('getaddrinfo')) {
-            errorMsg = `${errorMsg} | Host SMTP no resuelve DNS. Verifica smtpHost.`
-          }
           envioOk = false
         }
 

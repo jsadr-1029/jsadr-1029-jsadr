@@ -134,7 +134,7 @@ function PrestamosPanel({
   const [modalidad, setModalidad] = useState<'FRANCES' | 'TASA_FIJA' | 'CUOTA_PERSONALIZADA'>('FRANCES')
   const [montoPrincipal, setMontoPrincipal] = useState('')
   const [tasaInteresAnual, setTasaInteresAnual] = useState('24')
-  const [tasaMoraAnual, setTasaMoraAnual] = useState('36')
+  const [tasaMoraAnual, setTasaMoraAnual] = useState('1')
   const [tasaMensualPersonalizada, setTasaMensualPersonalizada] = useState('20')
   const [tasaMensualFija, setTasaMensualFija] = useState('15')
   const [numeroCuotasFija, setNumeroCuotasFija] = useState('2')
@@ -2014,41 +2014,41 @@ ${linkFirmaCodeudor}
                     </div>
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="tasaMoraAnual">Tasa Moratoria Anual (%) *</Label>
+                    <Label htmlFor="tasaMoraAnual">Tasa Moratoria Diaria (%) *</Label>
                     <Input
                       id="tasaMoraAnual"
                       type="number"
-                      step="0.01"
+                      step="0.0001"
                       value={tasaMoraAnual}
                       onChange={(e) => setTasaMoraAnual(e.target.value)}
                       required
                     />
                     <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs">
                       <p className="text-muted-foreground">
-                        Mora <strong>compuesta diaria</strong>. Tú determinas el % anual; el sistema
-                        lo convierte automáticamente a tasa diaria (anual ÷ 360) y aplica
-                        interés compuesto cada día sobre la cuota vencida.
+                        Mora <strong>compuesta diaria</strong> sobre el <strong>capital inicial prestado</strong>.
+                        Ej: <strong>1 = 1% diario</strong>. Cada día de atraso se calcula sobre
+                        capital + mora acumulada del día anterior.
                       </p>
                       <p className="text-amber-700 font-medium">
-                        ≡ Mensual: <strong>{((parseFloat(tasaMoraAnual) || 0) / 12).toFixed(4)}%</strong>
+                        ≡ Mensual: <strong>{((parseFloat(tasaMoraAnual) || 0) * 30).toFixed(4)}%</strong>
                       </p>
                       <p className="text-amber-700 font-medium">
-                        ≡ Diaria: <strong>{((parseFloat(tasaMoraAnual) || 0) / 360).toFixed(6)}%</strong>
+                        ≡ Anual: <strong>{((parseFloat(tasaMoraAnual) || 0) * 360).toFixed(4)}%</strong>
                       </p>
                     </div>
                     {montoPrincipal && tasaMoraAnual && (
                       <p className="text-xs text-muted-foreground">
-                        Mora por día de atraso (sobre capital):{' '}
+                        Mora por día de atraso (sobre capital inicial):{' '}
                         <strong className="text-amber-700">
                           {formatearMoneda(
-                            (parseFloat(montoPrincipal) || 0) * (parseFloat(tasaMoraAnual) || 0) / 100 / 360
+                            (parseFloat(montoPrincipal) || 0) * (parseFloat(tasaMoraAnual) || 0) / 100
                           )}
                         </strong>
                       </p>
                     )}
                     <div className="rounded-md bg-amber-50 border border-amber-200 p-2 text-[11px] text-amber-800">
-                      <strong>Fórmula:</strong> M = S × [(1 + r/360)^d − 1]<br/>
-                      <strong>S</strong> = saldo de la cuota vencida · <strong>r</strong> = tasa anual ·{' '}
+                      <strong>Fórmula compuesta diaria:</strong> M = S × [(1 + r)^d − 1]<br/>
+                      <strong>S</strong> = capital inicial prestado · <strong>r</strong> = tasa diaria (ej: 0.01) ·{' '}
                       <strong>d</strong> = días de mora
                     </div>
                   </div>

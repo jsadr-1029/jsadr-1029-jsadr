@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { formatearMoneda, formatearFecha, formatearFechaHora, getTasaMoraAnual } from '@/lib/finanzas'
+import { formatearMoneda, formatearFecha, formatearFechaHora, getTasaMoraDiaria } from '@/lib/finanzas'
 import { sanitizeError } from '@/lib/error-handler'
 
 // GET - exportar historial completo de caso jurídico en HTML imprimible (PDF/Word)
@@ -154,7 +154,7 @@ function generarHTMLCaso(caso: any): string {
       <div class="info-item"><strong>Días de Mora</strong><span>${p.diasMora}</span></div>
       <div class="info-item"><strong>Monto en Mora</strong><span>${formatearMoneda(p.montoMora)}</span></div>
       <div class="info-item"><strong>Tasa Anual</strong><span>${p.tasaInteresAnual}%</span></div>
-      <div class="info-item"><strong>Tasa Moratoria</strong><span>${getTasaMoraAnual(p)}% anual</span></div>
+      <div class="info-item"><strong>Tasa Moratoria</strong><span>${getTasaMoraDiaria(p)}% diario (compuesto)</span></div>
     </div>
     ${caso.descripcion ? `<p><strong>Descripción del caso:</strong> ${caso.descripcion}</p>` : ''}
   </div>

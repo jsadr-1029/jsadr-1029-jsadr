@@ -3,7 +3,7 @@ import { db } from '@/lib/db'
 import {
   calcularPrestamo,
   calcularMoraCompuesta,
-  calcularDiasMora, getTasaMoraAnual,
+  calcularDiasMora, getTasaMoraDiaria,
 } from '@/lib/finanzas'
 import { sanitizeError } from '@/lib/error-handler'
 import { rateLimit, getClientInfo } from '@/lib/security'
@@ -109,7 +109,7 @@ export async function POST(req: NextRequest) {
     const calculo = calcularPrestamo({
       montoPrincipal: prestamo.montoPrincipal,
       tasaInteresAnual: prestamo.tasaInteresAnual,
-      tasaMoraAnual: getTasaMoraAnual(prestamo),
+      tasaMoraAnual: getTasaMoraDiaria(prestamo),
       plazoMeses: prestamo.plazoMeses,
       frecuencia: prestamo.frecuencia as any,
       fechaDesembolso: prestamo.fechaDesembolso || prestamo.fechaSolicitud,
@@ -121,17 +121,11 @@ export async function POST(req: NextRequest) {
     let moraCalculadaActual = 0
     if (fechaVencimiento && cuotaPendiente) {
       diasMora = calcularDiasMora(fechaVencimiento)
-      // === Base de la mora: SALDO DE LA CUOTA VENCIDA (no el capital total) ===
-      // Pagos parciales previos sobre capital+interés de esa cuota reducen la base morosa.
-      const pagosCuotaPreview = prestamo.pagos.filter((pg) => pg.numeroCuota === proximaCuota && pg.estado === 'APLICADO')
-      const capitalPagadoCuota = pagosCuotaPreview.reduce((s, pg) => s + (pg.montoCapital || 0), 0)
-      const interesPagadoCuota = pagosCuotaPreview.reduce((s, pg) => s + (pg.montoInteres || 0), 0)
-      const saldoCuotaVencida = Math.max(
-        0,
-        (cuotaPendiente.montoCuota || 0) - capitalPagadoCuota - interesPagadoCuota
-      )
+      // === Base de la mora: CAPITAL INICIAL PRESTADO ===
+      // Política del usuario: "1% diario sobre el capital inicial prestado".
+      // La mora se calcula sobre el montoPrincipal, no sobre la cuota.
       moraCalculadaActual = diasMora > 0
-        ? calcularMoraCompuesta(saldoCuotaVencida, getTasaMoraAnual(prestamo), diasMora)
+        ? calcularMoraCompuesta(prestamo.montoPrincipal, getTasaMoraDiaria(prestamo), diasMora)
         : 0
     }
 
