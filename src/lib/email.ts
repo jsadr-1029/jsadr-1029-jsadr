@@ -81,15 +81,32 @@ async function obtenerConfigSmtp(): Promise<SmtpConfig | null> {
     const user = conexion.usuario || ''
     let pass = ''
     if (conexion.password) {
-      try {
-        pass = decryptSensitive(conexion.password)
-      } catch {
-        pass = conexion.password // quizás no está encriptado
+      if (esCifradoAES(conexion.password)) {
+        const decrypted = decryptSensitive(conexion.password)
+        if (decrypted === conexion.password) {
+          // desencripción falló — la llave de .env no coincide
+          console.error(
+            '[email][SMTP] password cifrado en ConexionAPI pero API_ENCRYPTION_KEY de .env no coincide. ' +
+              'Ejecuta: BREVO_API_KEY=xkeysib-... BREVO_SMTP_KEY=xsmtpsib-... node scripts/save-brevo-creds.js'
+          )
+          return null
+        }
+        pass = decrypted
+      } else {
+        // texto plano (compatibilidad)
+        pass = conexion.password
       }
     }
 
     // fromEmail: usar conexion.apiKey si existe, o configuracionExtra.fromEmail
-    if (!fromEmail) fromEmail = conexion.apiKey || user
+    // Nota: apiKey puede ser la API key de Brevo (xkeysib-...) que NO es un email.
+    // Solo usar como fromEmail si parece un email.
+    if (!fromEmail) {
+      const maybeEmail = conexion.apiKey || user
+      if (maybeEmail && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(maybeEmail)) {
+        fromEmail = maybeEmail
+      }
+    }
 
     if (!user || !pass || !fromEmail) return null
 
@@ -114,7 +131,19 @@ async function obtenerConfigSmtpFromCorreoInstitucional(): Promise<SmtpConfig | 
     if (!correo.smtpHost || !correo.smtpPort || !correo.smtpUser || !correo.email) return null
     let pass = ''
     if (correo.smtpPass) {
-      try { pass = decryptSensitive(correo.smtpPass) } catch { pass = correo.smtpPass }
+      if (esCifradoAES(correo.smtpPass)) {
+        const decrypted = decryptSensitive(correo.smtpPass)
+        if (decrypted === correo.smtpPass) {
+          console.error(
+            '[email][SMTP-CorreoInstitucional] smtpPass cifrado pero API_ENCRYPTION_KEY de .env no coincide. ' +
+              'Ejecuta: BREVO_API_KEY=xkeysib-... BREVO_SMTP_KEY=xsmtpsib-... node scripts/save-brevo-creds.js'
+          )
+          return null
+        }
+        pass = decrypted
+      } else {
+        pass = correo.smtpPass
+      }
     }
     if (!pass) return null
     return {
@@ -142,11 +171,25 @@ async function obtenerConfigSmtpFromCorreoInstitucional(): Promise<SmtpConfig | 
 // =====================================================
 
 /**
+ * Verifica si una cadena tiene formato iv:encrypted_hex (cifrado AES-256-CBC).
+ */
+function esCifradoAES(s: string | null | undefined): boolean {
+  if (!s) return false
+  const parts = s.split(':')
+  return parts.length === 2 && /^[0-9a-fA-F]+$/.test(parts[0]) && /^[0-9a-fA-F]+$/.test(parts[1])
+}
+
+/**
  * Obtiene la API key de Brevo desde:
  *   1. process.env.BREVO_API_KEY (Vercel env var)
  *   2. ConexionAPI.EMAIL_SMTP.apiKey (BD, cifrada)
  *
  * Retorna null si no hay API key configurada.
+ *
+ * Si la clave en BD está cifrada pero API_ENCRYPTION_KEY no coincide
+ * (p. ej. .env fue regenerado), se detecta el fallo de desencripción
+ * y se emite un warning claro en logs para que el admin pueda correr
+ * `node scripts/save-brevo-creds.js` y re-cifrar con la llave actual.
  */
 async function obtenerBrevoApiKey(): Promise<string | null> {
   // 1. Intentar desde env var (más rápido, evita query a BD)
@@ -167,10 +210,28 @@ async function obtenerBrevoApiKey(): Promise<string | null> {
     if (!conexion?.apiKey) return null
 
     // Verificar si es un valor cifrado (formato iv:encrypted) o texto plano
-    const parts = conexion.apiKey.split(':')
-    if (parts.length === 2 && /^[0-9a-fA-F]+$/.test(parts[0]) && /^[0-9a-fA-F]+$/.test(parts[1])) {
+    if (esCifradoAES(conexion.apiKey)) {
       // Cifrado AES-256-CBC — desencriptar
       const decrypted = decryptSensitive(conexion.apiKey)
+      // Verificar que la desencripción realmente funcionó.
+      // decryptSensitive devuelve el texto original si falla — detectar eso.
+      if (decrypted === conexion.apiKey) {
+        console.error(
+          '[email][BREVO] apiKey cifrada en BD pero API_ENCRYPTION_KEY de .env no coincide. ' +
+            'Ejecuta: BREVO_API_KEY=xkeysib-... BREVO_SMTP_KEY=xsmtpsib-... node scripts/save-brevo-creds.js'
+        )
+        return null
+      }
+      // Validar que tenga el prefijo correcto de Brevo
+      if (!decrypted.startsWith('xkeysib-')) {
+        console.error(
+          '[email][BREVO] apiKey desencriptada no empieza con "xkeysib-". ' +
+            'Valor recibido (primeros 12 chars): "' +
+            decrypted.slice(0, 12) +
+            '". Revisa las credenciales en panel Brevo.'
+        )
+        return null
+      }
       const hash = decrypted.slice(-6)
       if (cachedBrevoApiKeyHash !== hash) {
         cachedBrevoApiKey = decrypted
@@ -178,7 +239,15 @@ async function obtenerBrevoApiKey(): Promise<string | null> {
       }
       return cachedBrevoApiKey
     }
-    // Texto plano (no debería pasar, pero por compatibilidad)
+    // Texto plano — validar prefijo
+    if (!conexion.apiKey.startsWith('xkeysib-')) {
+      console.error(
+        '[email][BREVO] apiKey en texto plano no empieza con "xkeysib-". Valor actual (primeros 12 chars): "' +
+          conexion.apiKey.slice(0, 12) +
+          '"'
+      )
+      return null
+    }
     return conexion.apiKey
   } catch (error) {
     console.error('[email] Error obteniendo Brevo API key:', error)
