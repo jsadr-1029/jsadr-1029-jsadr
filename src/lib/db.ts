@@ -4,6 +4,29 @@
 // =====================================================
 
 import { PrismaClient } from '@prisma/client'
+import { config } from 'dotenv'
+
+// FIX-CRÍTICO: Cargar .env explícitamente y forzar DATABASE_URL desde archivo.
+// En algunos entornos, process.env.DATABASE_URL viene pre-seteado (por ejemplo
+// a SQLite) y dotenv no lo sobreescribe. Esto rompe la conexión a Neon Postgres.
+// Forzamos la lectura del .env y aplicamos el valor del archivo si está presente.
+config({ path: '.env' })
+try {
+  const fs = require('fs')
+  const envPath = require('path').resolve(process.cwd(), '.env')
+  if (fs.existsSync(envPath)) {
+    const envContent = fs.readFileSync(envPath, 'utf8')
+    const match = envContent.match(/^DATABASE_URL=(.+)$/m)
+    if (match && match[1]) {
+      const url = match[1].trim().replace(/^["']|["']$/g, '')
+      if (url.startsWith('postgresql://') || url.startsWith('postgres://')) {
+        process.env.DATABASE_URL = url
+      }
+    }
+  }
+} catch (e) {
+  // Silenciar: si falla la lectura del .env, Prisma usará process.env.DATABASE_URL existente
+}
 
 // ⚠️ Cambiar este valor cuando se actualice el schema y se quiera forzar
 // la regeneración del cliente en caliente (dev server).
