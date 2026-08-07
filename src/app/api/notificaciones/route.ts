@@ -4,6 +4,7 @@ import { enviarWhatsApp, mensajeRecordatorioPago, mensajeMora, guardarNotificaci
 import { calcularPrestamo, calcularDiasMora, getTasaMoraDiaria, calcularMoraCompuesta } from '@/lib/finanzas'
 import { requireRole } from '@/lib/auth-guard'
 import { sanitizeError } from '@/lib/error-handler'
+import { enviarEmail } from '@/lib/email'
 
 // GET - listar todas las notificaciones
 export async function GET(req: NextRequest) {
@@ -43,6 +44,9 @@ export async function POST(req: NextRequest) {
 
     let notificacionesEnviadas = 0
     let notificacionesFallidas = 0
+    let notificacionesOmitidasOptOut = 0
+    let notificacionesOmitidasDuplicado = 0
+    let notificacionesEnviadasEmail = 0  // fallback WhatsApp→Email
     const resultados: any[] = []
 
     // Obtener préstamos activos
@@ -50,6 +54,9 @@ export async function POST(req: NextRequest) {
       where: { estado: { in: ['ACTIVO', 'EN_MORA'] } },
       include: { cliente: true, pagos: true },
     })
+
+    // v4.12 (TC-NOT-012): ventana de deduplicación 24h
+    const HACE_24H = new Date(Date.now() - 24 * 60 * 60 * 1000)
 
     for (const prestamo of prestamosActivos) {
       const calculo = calcularPrestamo({
@@ -110,7 +117,76 @@ export async function POST(req: NextRequest) {
         }
       }
 
-      if (mensaje && prestamo.cliente.telefono) {
+      if (!mensaje) continue
+
+      // v4.12 (TC-NOT-015): respetar opt-out del cliente
+      if (prestamo.cliente.optOutNotificaciones) {
+        notificacionesOmitidasOptOut++
+        // Log de skip por opt-out (auditoría)
+        await db.notificacionLog.create({
+          data: {
+            prestamoId: prestamo.id,
+            clienteTelefono: prestamo.cliente.telefono,
+            tipo: tipoNotificacion,
+            mensaje,
+            estado: 'OMITIDO_OPT_OUT',
+            error: 'Cliente desuscrito de notificaciones (optOutNotificaciones=true)',
+            canal: 'SKIP',
+            fechaEnvio: new Date(),
+          },
+        })
+        resultados.push({
+          cliente: prestamo.cliente.nombre,
+          telefono: prestamo.cliente.telefono,
+          tipo: tipoNotificacion,
+          exito: false,
+          omitido: 'OPT_OUT',
+        })
+        continue
+      }
+
+      // v4.12 (TC-NOT-012): deduplicación 24h por tipo+prestamoId
+      const duplicado = await db.notificacionLog.findFirst({
+        where: {
+          tipo: tipoNotificacion,
+          prestamoId: prestamo.id,
+          fechaEnvio: { gte: HACE_24H },
+          // Solo contar si fue enviada o quedó pendiente manual (no FALLIDO)
+          estado: { in: ['ENVIADO', 'PENDIENTE_MANUAL'] },
+        },
+        orderBy: { fechaEnvio: 'desc' },
+      })
+      if (duplicado) {
+        notificacionesOmitidasDuplicado++
+        // Log de skip por duplicado (auditoría)
+        await db.notificacionLog.create({
+          data: {
+            prestamoId: prestamo.id,
+            clienteTelefono: prestamo.cliente.telefono,
+            tipo: tipoNotificacion,
+            mensaje,
+            estado: 'OMITIDO_DUPLICADO_24H',
+            error: `Duplicado: ya se envió una notificación igual en las últimas 24h (id=${duplicado.id})`,
+            canal: 'SKIP',
+            fechaEnvio: new Date(),
+          },
+        })
+        resultados.push({
+          cliente: prestamo.cliente.nombre,
+          telefono: prestamo.cliente.telefono,
+          tipo: tipoNotificacion,
+          exito: false,
+          omitido: 'DUPLICADO_24H',
+          duplicadoDe: duplicado.id,
+        })
+        continue
+      }
+
+      // Intentar WhatsApp si hay teléfono
+      let envioExitoso = false
+      let canalUsado: string | null = null
+
+      if (prestamo.cliente.telefono) {
         const resultado = await enviarWhatsApp(prestamo.cliente.telefono, mensaje)
 
         await guardarNotificacion({
@@ -122,16 +198,80 @@ export async function POST(req: NextRequest) {
           envio: resultado,
         })
 
-        if (resultado.exito) notificacionesEnviadas++
-        else notificacionesFallidas++
+        if (resultado.exito) {
+          envioExitoso = true
+          canalUsado = resultado.canal || 'WHATSAPP'
+        }
 
         resultados.push({
           cliente: prestamo.cliente.nombre,
           telefono: prestamo.cliente.telefono,
           tipo: tipoNotificacion,
           exito: resultado.exito,
+          canal: resultado.canal,
           error: resultado.error,
         })
+      }
+
+      // v4.12 (TC-NOT-014): Fallback WhatsApp → Email si WhatsApp falló
+      if (!envioExitoso && prestamo.cliente.email) {
+        try {
+          const asunto = tipoNotificacion === 'MORA'
+            ? `⚠️ Aviso de mora - Préstamo ${prestamo.codigo}`
+            : `⏰ Recordatorio de pago - Préstamo ${prestamo.codigo}`
+
+          const emailResult = await enviarEmail({
+            to: prestamo.cliente.email,
+            subject: asunto,
+            text: mensaje,
+            html: `<pre style="font-family: Arial, sans-serif; white-space: pre-wrap;">${mensaje.replace(/</g, '&lt;')}</pre>`,
+          })
+
+          if (emailResult.success) {
+            notificacionesEnviadasEmail++
+            envioExitoso = true
+            canalUsado = 'EMAIL'
+
+            // Log del fallback
+            await db.notificacionLog.create({
+              data: {
+                prestamoId: prestamo.id,
+                clienteTelefono: prestamo.cliente.telefono || prestamo.cliente.email,
+                tipo: tipoNotificacion,
+                mensaje,
+                estado: 'ENVIADO',
+                canal: 'EMAIL',
+                error: null,
+                fechaEnvio: new Date(),
+              },
+            })
+            resultados.push({
+              cliente: prestamo.cliente.nombre,
+              email: prestamo.cliente.email,
+              tipo: tipoNotificacion,
+              exito: true,
+              canal: 'EMAIL',
+              fallback: 'WhatsApp falló, enviado por email',
+            })
+          } else {
+            resultados.push({
+              cliente: prestamo.cliente.nombre,
+              email: prestamo.cliente.email,
+              tipo: tipoNotificacion,
+              exito: false,
+              canal: 'EMAIL_FALLIDO',
+              error: emailResult.error,
+            })
+          }
+        } catch (emailErr: any) {
+          console.error('[notificaciones] Fallback email falló:', emailErr?.message)
+        }
+      }
+
+      if (envioExitoso) {
+        notificacionesEnviadas++
+      } else {
+        notificacionesFallidas++
       }
     }
 
@@ -140,6 +280,9 @@ export async function POST(req: NextRequest) {
       data: {
         notificacionesEnviadas,
         notificacionesFallidas,
+        notificacionesOmitidasOptOut,
+        notificacionesOmitidasDuplicado,
+        notificacionesEnviadasEmail,
         resultados,
       },
     })

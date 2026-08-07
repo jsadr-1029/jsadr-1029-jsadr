@@ -87,6 +87,8 @@ model Cliente {
   numeroCuentaCliente String?
   // Estado del cliente (activo/inactivo)
   activo          Boolean  @default(true)
+  // v4.12 (QA M09 TC-NOT-015): cliente desuscrito de notificaciones automáticas
+  optOutNotificaciones Boolean @default(false)
   // === Autenticación del portal (PIN de 4 dígitos) ===
   pinHash            String?
   pinCreatedAt       DateTime?
@@ -755,6 +757,10 @@ model NotificacionLog {
   // PENDIENTE | ENVIADO | FALLIDO | PENDIENTE_MANUAL
   error           String?
   linkWaMe        String?  // enlace wa.me para envío manual
+  // v4.12 (QA M09 TC-NOT-003): wamid devuelto por WhatsApp Cloud API de Meta
+  wamid           String?  // WhatsApp Message ID (cuando se envía vía Cloud API)
+  // v4.12 (QA M09 TC-NOT-014): canal usado para el envío
+  canal           String?  // WHATSAPP | EMAIL | WA_ME_LINK
   fechaEnvio      DateTime @default(now())
 }
 

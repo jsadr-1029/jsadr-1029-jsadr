@@ -1,12 +1,16 @@
 // =====================================================
-// Servicio de Notificaciones WhatsApp v2.1
-// Genera enlaces wa.me reales (WhatsApp Web/App)
+// Servicio de Notificaciones WhatsApp v4.12
+// Estrategia: 1) WhatsApp Cloud API (Meta)  2) Fallback wa.me link manual
 // =====================================================
+
+import { enviarWhatsAppCloudAPI, whatsappCloudConfigurado } from './whatsapp-cloud'
 
 interface ResultadoEnvio {
   exito: boolean
   error?: string
   linkWaMe?: string
+  wamid?: string
+  canal?: 'WHATSAPP' | 'WA_ME_LINK'
   respuesta?: any
 }
 
@@ -38,14 +42,16 @@ export function generarLinkWaMe(telefono: string, mensaje: string): string {
 }
 
 /**
- * "Envía" un mensaje de WhatsApp generando un link wa.me
- * El administrador debe hacer clic en el link para abrir WhatsApp y enviar el mensaje.
+ * "Envía" un mensaje de WhatsApp.
  *
- * Esto se hace así porque el SDK de Z.ai NO tiene funcionalidad de WhatsApp.
- * Para envío automático real se requiere integrar con:
- *   - WhatsApp Business API (Meta) — requiere verificación de negocio
- *   - Twilio WhatsApp API — requiere credenciales
- *   - Baileys/whatsapp-web.js — requiere escanear QR desde un teléfono
+ * Estrategia v4.12:
+ *   1. Si WHATSAPP_TOKEN + WHATSAPP_PHONE_NUMBER_ID están configurados, intenta
+ *      WhatsApp Cloud API de Meta (envío automático real, retorna wamid).
+ *   2. Si Cloud API no está configurado o falla, genera un link wa.me para
+ *      envío manual por el administrador.
+ *
+ * @returns ResultadoEnvio con exito=true si Cloud API envió correctamente,
+ *          exito=false + linkWaMe si cae a fallback manual.
  */
 export async function enviarWhatsApp(telefono: string, mensaje: string): Promise<ResultadoEnvio> {
   try {
@@ -54,14 +60,28 @@ export async function enviarWhatsApp(telefono: string, mensaje: string): Promise
       return { exito: false, error: 'Número de teléfono inválido' }
     }
 
-    const linkWaMe = generarLinkWaMe(telefono, mensaje)
+    // 1. Intentar WhatsApp Cloud API si está configurado
+    if (whatsappCloudConfigurado()) {
+      const cloudResult = await enviarWhatsAppCloudAPI(telefono, mensaje)
+      if (cloudResult.exito) {
+        return {
+          exito: true,
+          wamid: cloudResult.wamid,
+          canal: 'WHATSAPP',
+          respuesta: cloudResult.respuesta,
+        }
+      }
+      // Si falla, continuar al fallback wa.me
+      console.warn('[WhatsApp] Cloud API falló, fallback a wa.me:', cloudResult.error)
+    }
 
-    // No hay envío automático real disponible en este entorno.
-    // Devolvemos el link wa.me para que el administrador lo abra manualmente.
+    // 2. Fallback: generar link wa.me para envío manual
+    const linkWaMe = generarLinkWaMe(telefono, mensaje)
     return {
-      exito: false, // false porque NO se envió automáticamente
+      exito: false,
       error: 'PENDIENTE_MANUAL',
       linkWaMe,
+      canal: 'WA_ME_LINK',
       respuesta: {
         modo: 'manual',
         telefono: telefonoLimpio,
@@ -330,6 +350,11 @@ export async function guardarNotificacion(params: {
       estado,
       error: envio.error || null,
       linkWaMe: envio.linkWaMe || null,
+      // v4.12 (QA M09 TC-NOT-003): persistir wamid de WhatsApp Cloud API
+      wamid: envio.wamid || null,
+      // v4.12 (QA M09 TC-NOT-014): registrar canal usado
+      canal: envio.canal || null,
+      fechaEnvio: new Date(),
     },
   })
 }
