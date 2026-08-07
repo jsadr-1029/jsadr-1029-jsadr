@@ -92,6 +92,15 @@ function isCSRFSafe(req: NextRequest): boolean {
   const method = req.method.toUpperCase()
   if (method === 'GET' || method === 'HEAD' || method === 'OPTIONS') return true
 
+  // === Excepción: endpoints de cron (server-to-server, sin Origin/Referer) ===
+  // Vercel Cron llama internamente desde el deployment, no envía Origin.
+  // Estos endpoints se autentican con X-Cron-Secret o X-Vercel-Cron=1 internamente.
+  const pathname = req.nextUrl.pathname
+  if (pathname.startsWith('/api/recordatorios/cron') ||
+      pathname.startsWith('/api/pagos/cron')) {
+    return true
+  }
+
   const origin = req.headers.get('origin')
   const referer = req.headers.get('referer')
 
