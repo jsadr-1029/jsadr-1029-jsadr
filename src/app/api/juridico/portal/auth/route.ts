@@ -248,6 +248,7 @@ export async function GET(req: NextRequest) {
 // =====================================================
 // DELETE — Logout
 // ?token=xxx o body { token }
+// v4.11 (QA M08 TC-JUR-015): registra LOGOUT en AuditLog
 // =====================================================
 export async function DELETE(req: NextRequest) {
   try {
@@ -255,10 +256,36 @@ export async function DELETE(req: NextRequest) {
     const token = searchParams.get('token')
 
     if (token) {
+      // Buscar usuario antes de limpiar para auditoría
+      const usuario = await db.usuario.findFirst({
+        where: { tokenSesion: token },
+        select: { id: true, nombre: true, rol: true, cedula: true },
+      })
+
       await db.usuario.updateMany({
         where: { tokenSesion: token },
         data: { tokenSesion: null, tokenExpira: null },
       })
+
+      // v4.11: registrar LOGOUT en AuditLog
+      if (usuario) {
+        const clientInfo = getClientInfo(req)
+        try {
+          await registrarAuditLog({
+            usuarioId: usuario.id,
+            usuarioNombre: usuario.nombre,
+            accion: 'LOGOUT_PORTAL_JURIDICO',
+            modulo: 'juridico',
+            entidadNombre: usuario.cedula || '',
+            detalles: `Logout del portal jurídico (${usuario.rol})`,
+            ipOrigen: clientInfo.ip,
+            userAgent: clientInfo.userAgent,
+            exito: true,
+          })
+        } catch {
+          // no bloquear
+        }
+      }
     }
 
     return NextResponse.json({

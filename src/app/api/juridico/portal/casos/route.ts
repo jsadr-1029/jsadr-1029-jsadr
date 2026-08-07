@@ -9,6 +9,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { sanitizeError } from '@/lib/error-handler'
 import { verificarTokenPortal } from '../auth/route'
+import { registrarAuditLog, getClientInfo } from '@/lib/security'
 
 export async function GET(req: NextRequest) {
   try {
@@ -114,6 +115,24 @@ export async function GET(req: NextRequest) {
       (sum, c) => sum + (c.valorReclamado || 0),
       0
     )
+
+    // v4.11 (QA M08 TC-JUR-015): registrar consulta en AuditLog
+    const clientInfo = getClientInfo(req)
+    try {
+      await registrarAuditLog({
+        usuarioId: usuario.id,
+        usuarioNombre: usuario.nombre,
+        accion: 'CONSULTA_CASOS_JURIDICOS',
+        modulo: 'juridico',
+        entidadNombre: usuario.cedula || usuario.username,
+        detalles: `Listado de casos jurídicos asignados (${total} casos, rol ${usuario.rol})`,
+        ipOrigen: clientInfo.ip,
+        userAgent: clientInfo.userAgent,
+        exito: true,
+      })
+    } catch {
+      // no bloquear
+    }
 
     return NextResponse.json({
       success: true,
