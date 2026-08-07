@@ -8,27 +8,42 @@ import fs from 'fs';
 import { db as prisma } from '../src/lib/db';
 
 // ─── Cargar .env ────────────────────────────────────────────────────────────
-const envContent = fs.readFileSync('/home/z/my-project/.env', 'utf8');
-for (const line of envContent.split('\n')) {
-  const m = line.match(/^([A-Z_][A-Z0-9_]*)=(.*)$/);
-  if (m) {
-    let v = m[2];
-    if (v.startsWith('"') && v.endsWith('"')) v = v.slice(1, -1);
-    if (!process.env[m[1]]) process.env[m[1]] = v;
-  }
+const envCandidates = [
+  `${process.cwd()}/.env`,
+  `${process.cwd()}/.vercel/.env.production`,
+  '/home/z/my-project/.env',
+];
+for (const envPath of envCandidates) {
+  try {
+    if (!fs.existsSync(envPath)) continue;
+    const envContent = fs.readFileSync(envPath, 'utf8');
+    for (const line of envContent.split('\n')) {
+      const m = line.match(/^([A-Z_][A-Z0-9_]*)=(.*)$/);
+      if (m) {
+        let v = m[2];
+        if (v.startsWith('"') && v.endsWith('"')) v = v.slice(1, -1);
+        if (!process.env[m[1]]) process.env[m[1]] = v;
+      }
+    }
+    break;
+  } catch (e) { /* continuar con el siguiente candidato */ }
+}
+if (!process.env.DATABASE_URL) {
+  console.error('⚠️  DATABASE_URL no definida. En CI: el workflow carga .vercel/.env.production.');
+  process.exit(1);
 }
 
 const TESTS: { tc: string; name: string; fn: () => Promise<any> }[] = [];
 function test(tc: string, name: string, fn: () => Promise<any>) { TESTS.push({ tc, name, fn }); }
 function assert(cond: any, msg: string) { if (!cond) throw new Error('ASSERT FAIL: ' + msg); }
 
-const AUTH_GUARD_SRC = '/home/z/my-project/src/lib/auth-guard.ts';
-const ERROR_HANDLER_SRC = '/home/z/my-project/src/lib/error-handler.ts';
-const TOTP_SRC = '/home/z/my-project/src/lib/totp.ts';
-const PROXY_SRC = '/home/z/my-project/src/proxy.ts';
-const CLIENTES_ROUTE_SRC = '/home/z/my-project/src/app/api/clientes/route.ts';
-const PAGOS_REVERSAR_SRC = '/home/z/my-project/src/app/api/pagos/[id]/reversar/route.ts';
-const CREDENCIALES_ELIMINAR_SRC = '/home/z/my-project/src/app/api/seguridad/credenciales/eliminar/route.ts';
+const AUTH_GUARD_SRC = 'src/lib/auth-guard.ts';
+const ERROR_HANDLER_SRC = 'src/lib/error-handler.ts';
+const TOTP_SRC = 'src/lib/totp.ts';
+const PROXY_SRC = 'src/proxy.ts';
+const CLIENTES_ROUTE_SRC = 'src/app/api/clientes/route.ts';
+const PAGOS_REVERSAR_SRC = 'src/app/api/pagos/[id]/reversar/route.ts';
+const CREDENCIALES_ELIMINAR_SRC = 'src/app/api/seguridad/credenciales/eliminar/route.ts';
 
 // ════════════════════════════════════════════════════════════════════════════
 // TC-SEC-002 — CONSULTOR no puede mutar
@@ -117,7 +132,7 @@ test('TC-SEC-009', 'Errores 500 no exponen stack trace al cliente (sanitizeError
     'Debe tener class AppError para errores de aplicación controlados');
 
   // Verificar que los catch de las API routes usan sanitizeError
-  const pagosRoute = fs.readFileSync('/home/z/my-project/src/app/api/pagos/route.ts', 'utf8');
+  const pagosRoute = fs.readFileSync('src/app/api/pagos/route.ts', 'utf8');
   assert(pagosRoute.includes('sanitizeError'),
     'API /api/pagos debe usar sanitizeError en el catch');
 

@@ -9,14 +9,29 @@ import { db as prisma } from '../src/lib/db';
 import { clienteSchema, validateInput } from '../src/lib/validators';
 
 // ─── Cargar .env ────────────────────────────────────────────────────────────
-const envContent = fs.readFileSync('/home/z/my-project/.env', 'utf8');
-for (const line of envContent.split('\n')) {
-  const m = line.match(/^([A-Z_][A-Z0-9_]*)=(.*)$/);
-  if (m) {
-    let v = m[2];
-    if (v.startsWith('"') && v.endsWith('"')) v = v.slice(1, -1);
-    if (!process.env[m[1]]) process.env[m[1]] = v;
-  }
+const envCandidates = [
+  `${process.cwd()}/.env`,
+  `${process.cwd()}/.vercel/.env.production`,
+  '/home/z/my-project/.env',
+];
+for (const envPath of envCandidates) {
+  try {
+    if (!fs.existsSync(envPath)) continue;
+    const envContent = fs.readFileSync(envPath, 'utf8');
+    for (const line of envContent.split('\n')) {
+      const m = line.match(/^([A-Z_][A-Z0-9_]*)=(.*)$/);
+      if (m) {
+        let v = m[2];
+        if (v.startsWith('"') && v.endsWith('"')) v = v.slice(1, -1);
+        if (!process.env[m[1]]) process.env[m[1]] = v;
+      }
+    }
+    break;
+  } catch (e) { /* continuar con el siguiente candidato */ }
+}
+if (!process.env.DATABASE_URL) {
+  console.error('⚠️  DATABASE_URL no definida. En CI: el workflow carga .vercel/.env.production.');
+  process.exit(1);
 }
 
 const TESTS: { tc: string; name: string; fn: () => Promise<any> }[] = [];
@@ -29,10 +44,10 @@ const UNIQUE_CEDULA_A = '9' + TS.toString().slice(-9);
 const UNIQUE_CEDULA_B = '8' + (TS + 1).toString().slice(-9);
 const UNIQUE_CEDULA_C = '7' + (TS + 2).toString().slice(-9);
 
-const CLIENTES_ROUTE_SRC = '/home/z/my-project/src/app/api/clientes/route.ts';
-const CLIENTES_ID_SRC = '/home/z/my-project/src/app/api/clientes/[id]/route.ts';
-const PORTAL_AUTH_SRC = '/home/z/my-project/src/app/api/portal/auth/route.ts';
-const SCHEMA_PRISMA = '/home/z/my-project/prisma/schema.prisma';
+const CLIENTES_ROUTE_SRC = 'src/app/api/clientes/route.ts';
+const CLIENTES_ID_SRC = 'src/app/api/clientes/[id]/route.ts';
+const PORTAL_AUTH_SRC = 'src/app/api/portal/auth/route.ts';
+const SCHEMA_PRISMA = 'prisma/schema.prisma';
 
 // ════════════════════════════════════════════════════════════════════════════
 // TC-CLI-002 — Crear cliente con cédula duplicada
@@ -641,14 +656,14 @@ test('TC-CLI-015', 'PUT asigna tieneTasaPersonalizada + tasaPersonalizada; simul
     `tasaPersonalizada debe ser 2.5, fue ${actualizado.tasaPersonalizada}`);
 
   // Verificar que el simulador usa tasaPersonalizada
-  const simuladorSrc = fs.readFileSync('/home/z/my-project/src/components/views/SimuladorView.tsx', 'utf8');
+  const simuladorSrc = fs.readFileSync('src/components/views/SimuladorView.tsx', 'utf8');
   assert(simuladorSrc.includes('tieneTasaPersonalizada'),
     'SimuladorView debe leer tieneTasaPersonalizada del cliente');
   assert(simuladorSrc.includes('if (c.tieneTasaPersonalizada && c.tasaPersonalizada != null)'),
     'SimuladorView debe usar tasaPersonalizada cuando tieneTasaPersonalizada=true');
 
   // Verificar que /api/solicitudes-web también la usa
-  const solicitudesSrc = fs.readFileSync('/home/z/my-project/src/app/api/solicitudes-web/route.ts', 'utf8');
+  const solicitudesSrc = fs.readFileSync('src/app/api/solicitudes-web/route.ts', 'utf8');
   assert(solicitudesSrc.includes('cliente.tieneTasaPersonalizada'),
     '/api/solicitudes-web debe leer tieneTasaPersonalizada');
 

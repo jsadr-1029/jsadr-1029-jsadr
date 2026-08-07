@@ -16,7 +16,7 @@
 import * as fs from 'fs'
 import * as path from 'path'
 
-const ROOT = '/home/z/my-project'
+const ROOT = process.cwd()
 let pass = 0
 let fail = 0
 const failures: string[] = []

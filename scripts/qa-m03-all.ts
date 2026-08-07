@@ -23,26 +23,41 @@ import fs from 'fs';
 import { db as prisma } from '../src/lib/db';
 
 // ─── Cargar .env ────────────────────────────────────────────────────────────
-const envContent = fs.readFileSync('/home/z/my-project/.env', 'utf8');
-for (const line of envContent.split('\n')) {
-  const m = line.match(/^([A-Z_][A-Z0-9_]*)=(.*)$/);
-  if (m) {
-    let v = m[2];
-    if (v.startsWith('"') && v.endsWith('"')) v = v.slice(1, -1);
-    if (!process.env[m[1]]) process.env[m[1]] = v;
-  }
+const envCandidates = [
+  `${process.cwd()}/.env`,
+  `${process.cwd()}/.vercel/.env.production`,
+  '/home/z/my-project/.env',
+];
+for (const envPath of envCandidates) {
+  try {
+    if (!fs.existsSync(envPath)) continue;
+    const envContent = fs.readFileSync(envPath, 'utf8');
+    for (const line of envContent.split('\n')) {
+      const m = line.match(/^([A-Z_][A-Z0-9_]*)=(.*)$/);
+      if (m) {
+        let v = m[2];
+        if (v.startsWith('"') && v.endsWith('"')) v = v.slice(1, -1);
+        if (!process.env[m[1]]) process.env[m[1]] = v;
+      }
+    }
+    break;
+  } catch (e) { /* continuar con el siguiente candidato */ }
+}
+if (!process.env.DATABASE_URL) {
+  console.error('⚠️  DATABASE_URL no definida. En CI: el workflow carga .vercel/.env.production.');
+  process.exit(1);
 }
 
 const TESTS: { tc: string; name: string; fn: () => Promise<any> }[] = [];
 function test(tc: string, name: string, fn: () => Promise<any>) { TESTS.push({ tc, name, fn }); }
 function assert(cond: any, msg: string) { if (!cond) throw new Error('ASSERT FAIL: ' + msg); }
 
-const PRESTAMOS_ROUTE_SRC = '/home/z/my-project/src/app/api/prestamos/route.ts';
-const PRESTAMOS_ID_SRC = '/home/z/my-project/src/app/api/prestamos/[id]/route.ts';
-const VALIDAR_OTP_SRC = '/home/z/my-project/src/app/api/portal/validar-otp/route.ts';
-const SOLICITAR_OTP_SRC = '/home/z/my-project/src/app/api/portal/solicitar-otp/route.ts';
-const OTP_LIB_SRC = '/home/z/my-project/src/lib/otp.ts';
-const SCHEMA_PRISMA = '/home/z/my-project/prisma/schema.prisma';
+const PRESTAMOS_ROUTE_SRC = 'src/app/api/prestamos/route.ts';
+const PRESTAMOS_ID_SRC = 'src/app/api/prestamos/[id]/route.ts';
+const VALIDAR_OTP_SRC = 'src/app/api/portal/validar-otp/route.ts';
+const SOLICITAR_OTP_SRC = 'src/app/api/portal/solicitar-otp/route.ts';
+const OTP_LIB_SRC = 'src/lib/otp.ts';
+const SCHEMA_PRISMA = 'prisma/schema.prisma';
 
 // ════════════════════════════════════════════════════════════════════════════
 // TC-PRE-001 — Crear préstamo válido (código autogenerado PR-YYYY-NNNN)
@@ -177,8 +192,8 @@ test('TC-PRE-006', 'Mora compuesta diaria sobre saldo pendiente', async () => {
 test('TC-PRE-007', 'Job cron verifica mora y cambia ACTIVO → EN_MORA', async () => {
   // Verificar que existe job cron de mora
   const cronFiles = [
-    '/home/z/my-project/src/app/api/pagos/cron/route.ts',
-    '/home/z/my-project/src/app/api/recordatorios/cron/route.ts',
+    'src/app/api/pagos/cron/route.ts',
+    'src/app/api/recordatorios/cron/route.ts',
   ];
   let encontrado = false;
   for (const f of cronFiles) {
@@ -209,7 +224,7 @@ test('TC-PRE-008', 'Pago total cambia EN_MORA → PAGADO con fechaCierre', async
   // CANCELADO = préstamo saldado/cerrado.
   assert(/CANCELADO/.test(schema), 'schema debe contemplar estado CANCELADO (= préstamo saldado)');
   // Verificar que existe lógica de cierre en pagos/route.ts (POST que aplica pago)
-  const pagosPostSrc = '/home/z/my-project/src/app/api/pagos/route.ts';
+  const pagosPostSrc = 'src/app/api/pagos/route.ts';
   assert(fs.existsSync(pagosPostSrc), 'debe existir /api/pagos/route.ts');
   const src = fs.readFileSync(pagosPostSrc, 'utf8');
   assert(/saldoTotal\s*<=\s*0|saldoTotal\s*<\s*1/.test(src),
@@ -228,15 +243,15 @@ test('TC-PRE-009', 'Anular préstamo requiere ADMIN y registra en BitacoraPresta
   console.log(`   ℹ️  Lógica de anulación en [id]/route.ts: ${tieneAnular ? 'SÍ' : 'NO (buscar en sub-rutas)'}`);
 
   // Verificar que hay ruta /api/prestamos/[id]/anular o similar
-  const anularPath = '/home/z/my-project/src/app/api/prestamos/[id]/anular';
+  const anularPath = 'src/app/api/prestamos/[id]/anular';
   let anularSrc = '';
   if (fs.existsSync(anularPath + '/route.ts')) {
     anularSrc = fs.readFileSync(anularPath + '/route.ts', 'utf8');
   } else {
     // Buscar en otros lugares
-    const glob = require('child_process').execSync('find /home/z/my-project/src/app/api/prestamos -name "route.ts"', { encoding: 'utf8' });
+    const glob = require('child_process').execSync('find src/app/api/prestamos -name "route.ts"', { encoding: 'utf8' });
     console.log(`   ℹ️  Rutas disponibles en /api/prestamos:`);
-    glob.split('\n').filter(Boolean).forEach(p => console.log(`      ${p.replace('/home/z/my-project/src/app/api/prestamos', '')}`));
+    glob.split('\n').filter(Boolean).forEach(p => console.log(`      ${p.replace('src/app/api/prestamos', '')}`));
   }
 
   // v4.6 (TC-PRE-009): se añadió case 'anular' al PATCH de /api/prestamos/[id]
@@ -311,7 +326,7 @@ test('TC-PRE-014', 'GET /api/prestamos?estado=EN_MORA filtra correctamente', asy
 // TC-PRE-015 — Reversar pago aplicado
 // ════════════════════════════════════════════════════════════════════════════
 test('TC-PRE-015', 'POST /api/pagos/<id>/reversar marca pago como REVERSADO y recalcula saldo', async () => {
-  const reversarSrc = '/home/z/my-project/src/app/api/pagos/[id]/reversar/route.ts';
+  const reversarSrc = 'src/app/api/pagos/[id]/reversar/route.ts';
   assert(fs.existsSync(reversarSrc), 'debe existir /api/pagos/[id]/reversar/route.ts');
 
   const src = fs.readFileSync(reversarSrc, 'utf8');

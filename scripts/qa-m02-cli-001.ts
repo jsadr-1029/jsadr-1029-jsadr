@@ -16,14 +16,29 @@ import { clienteSchema, validateInput } from '../src/lib/validators';
 import { sanitizeError } from '../src/lib/error-handler';
 
 // ─── Cargar .env (para variables adicionales que pueda necesitar el script) ───
-const envContent = fs.readFileSync('/home/z/my-project/.env', 'utf8');
-for (const line of envContent.split('\n')) {
-  const m = line.match(/^([A-Z_][A-Z0-9_]*)=(.*)$/);
-  if (m) {
-    let v = m[2];
-    if (v.startsWith('"') && v.endsWith('"')) v = v.slice(1, -1);
-    if (!process.env[m[1]]) process.env[m[1]] = v;
-  }
+const envCandidates = [
+  `${process.cwd()}/.env`,
+  `${process.cwd()}/.vercel/.env.production`,
+  '/home/z/my-project/.env',
+];
+for (const envPath of envCandidates) {
+  try {
+    if (!fs.existsSync(envPath)) continue;
+    const envContent = fs.readFileSync(envPath, 'utf8');
+    for (const line of envContent.split('\n')) {
+      const m = line.match(/^([A-Z_][A-Z0-9_]*)=(.*)$/);
+      if (m) {
+        let v = m[2];
+        if (v.startsWith('"') && v.endsWith('"')) v = v.slice(1, -1);
+        if (!process.env[m[1]]) process.env[m[1]] = v;
+      }
+    }
+    break;
+  } catch (e) { /* continuar con el siguiente candidato */ }
+}
+if (!process.env.DATABASE_URL) {
+  console.error('⚠️  DATABASE_URL no definida. En CI: el workflow carga .vercel/.env.production.');
+  process.exit(1);
 }
 
 const TESTS: { name: string; fn: () => Promise<any> }[] = [];
@@ -87,20 +102,20 @@ test('TC-CLI-001.5 — clienteSchema valida email con formato correcto', async (
 
 test('TC-CLI-001.6 — POST route valida campos obligatorios (nombre, cédula, teléfono)', async () => {
   // Inspección del código fuente de /api/clientes/route.ts
-  const src = fs.readFileSync('/home/z/my-project/src/app/api/clientes/route.ts', 'utf8');
+  const src = fs.readFileSync('src/app/api/clientes/route.ts', 'utf8');
   assert(src.includes('!nombre || !cedula || !telefono'), 'route debe check nombre/cédula/teléfono obligatorios');
   assert(src.includes('Nombre, cédula y teléfono son obligatorios'), 'route debe tener mensaje de error específico');
 });
 
 test('TC-CLI-001.7 — POST route valida cédula única antes de crear', async () => {
-  const src = fs.readFileSync('/home/z/my-project/src/app/api/clientes/route.ts', 'utf8');
+  const src = fs.readFileSync('src/app/api/clientes/route.ts', 'utf8');
   assert(src.includes('db.cliente.findUnique({ where: { cedula } }'), 'route debe hacer findUnique por cédula');
   assert(src.includes('Ya existe un cliente con esa cédula'), 'route debe tener mensaje de cédula duplicada');
   assert(src.includes('status: 400'), 'route debe retornar 400 en cédula duplicada');
 });
 
 test('TC-CLI-001.8 — POST route devuelve success:true y data con id tras crear', async () => {
-  const src = fs.readFileSync('/home/z/my-project/src/app/api/clientes/route.ts', 'utf8');
+  const src = fs.readFileSync('src/app/api/clientes/route.ts', 'utf8');
   // El route crea el cliente y retorna success:true + data (con id generado por cuid)
   assert(src.includes('db.cliente.create'), 'route debe llamar db.cliente.create');
   assert(src.includes('return NextResponse.json({ success: true, data: cliente })'), 'route debe retornar success:true y data:cliente');
@@ -154,7 +169,7 @@ test('TC-CLI-001.9 — POST route persiste cliente en BD con cédula única', as
 });
 
 test('TC-CLI-001.10 — POST route rechaza cédula duplicada con HTTP 400 (inspección de lógica)', async () => {
-  const src = fs.readFileSync('/home/z/my-project/src/app/api/clientes/route.ts', 'utf8');
+  const src = fs.readFileSync('src/app/api/clientes/route.ts', 'utf8');
   // El route hace findUnique por cédula y, si encuentra un existente, retorna 400
   // con el mensaje "Ya existe un cliente con esa cédula".
   const idxMsg = src.indexOf('Ya existe un cliente con esa cédula');
@@ -165,14 +180,14 @@ test('TC-CLI-001.10 — POST route rechaza cédula duplicada con HTTP 400 (inspe
 });
 
 test('TC-CLI-001.11 — POST route usa validateInput (Zod) antes de procesar', async () => {
-  const src = fs.readFileSync('/home/z/my-project/src/app/api/clientes/route.ts', 'utf8');
+  const src = fs.readFileSync('src/app/api/clientes/route.ts', 'utf8');
   assert(src.includes('import { clienteSchema, validateInput }'), 'route debe importar clienteSchema y validateInput');
   assert(src.includes('validateInput(clienteSchema, body)'), 'route debe llamar validateInput(clienteSchema, body)');
   assert(src.includes('if (!validacion.success)'), 'route debe check validacion.success');
 });
 
 test('TC-CLI-001.12 — POST route usa sanitizeError en catch (no expone internals)', async () => {
-  const src = fs.readFileSync('/home/z/my-project/src/app/api/clientes/route.ts', 'utf8');
+  const src = fs.readFileSync('src/app/api/clientes/route.ts', 'utf8');
   assert(src.includes('import { sanitizeError }'), 'route debe importar sanitizeError');
   assert(src.includes('sanitizeError(error).message'), 'route debe usar sanitizeError en catch');
   assert(src.includes('status: 500'), 'route debe retornar 500 en errores no controlados');
@@ -183,7 +198,7 @@ test('TC-CLI-001.13 — Criterio aceptación: cliente creado aparece en listado 
   // 1. La query GET usa db.cliente.findMany con orderBy createdAt desc
   // 2. Simulamos la query directamente y verificamos que un cliente recién creado aparece
 
-  const src = fs.readFileSync('/home/z/my-project/src/app/api/clientes/route.ts', 'utf8');
+  const src = fs.readFileSync('src/app/api/clientes/route.ts', 'utf8');
   assert(src.includes('db.cliente.findMany'), 'route GET debe usar db.cliente.findMany');
   assert(src.includes("orderBy: { createdAt: 'desc' }"), 'route GET debe ordenar por createdAt desc');
   assert(src.includes('return NextResponse.json({ success: true, data: clientes })'), 'route GET debe retornar success:true + data');
@@ -216,7 +231,7 @@ test('TC-CLI-001.13 — Criterio aceptación: cliente creado aparece en listado 
 });
 
 test('TC-CLI-001.14 — Prisma schema define cédula como @unique (garantía a nivel BD)', async () => {
-  const schema = fs.readFileSync('/home/z/my-project/prisma/schema.prisma', 'utf8');
+  const schema = fs.readFileSync('prisma/schema.prisma', 'utf8');
   // Buscar el bloque model Cliente y verificar cedula @unique
   const bloqueModelo = schema.match(/model\s+Cliente\s*\{[^}]*\}/);
   assert(bloqueModelo !== null, 'debe existir model Cliente en schema.prisma');

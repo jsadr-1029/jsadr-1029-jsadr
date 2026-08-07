@@ -25,26 +25,41 @@ import fs from 'fs';
 import { db as prisma } from '../src/lib/db';
 
 // ─── Cargar .env ────────────────────────────────────────────────────────────
-const envContent = fs.readFileSync('/home/z/my-project/.env', 'utf8');
-for (const line of envContent.split('\n')) {
-  const m = line.match(/^([A-Z_][A-Z0-9_]*)=(.*)$/);
-  if (m) {
-    let v = m[2];
-    if (v.startsWith('"') && v.endsWith('"')) v = v.slice(1, -1);
-    if (!process.env[m[1]]) process.env[m[1]] = v;
-  }
+const envCandidates = [
+  `${process.cwd()}/.env`,
+  `${process.cwd()}/.vercel/.env.production`,
+  '/home/z/my-project/.env',
+];
+for (const envPath of envCandidates) {
+  try {
+    if (!fs.existsSync(envPath)) continue;
+    const envContent = fs.readFileSync(envPath, 'utf8');
+    for (const line of envContent.split('\n')) {
+      const m = line.match(/^([A-Z_][A-Z0-9_]*)=(.*)$/);
+      if (m) {
+        let v = m[2];
+        if (v.startsWith('"') && v.endsWith('"')) v = v.slice(1, -1);
+        if (!process.env[m[1]]) process.env[m[1]] = v;
+      }
+    }
+    break;
+  } catch (e) { /* continuar con el siguiente candidato */ }
+}
+if (!process.env.DATABASE_URL) {
+  console.error('⚠️  DATABASE_URL no definida. En CI: el workflow carga .vercel/.env.production.');
+  process.exit(1);
 }
 
 const TESTS: { tc: string; name: string; fn: () => Promise<any> }[] = [];
 function test(tc: string, name: string, fn: () => Promise<any>) { TESTS.push({ tc, name, fn }); }
 function assert(cond: any, msg: string) { if (!cond) throw new Error('ASSERT FAIL: ' + msg); }
 
-const PAGOS_ROUTE_SRC = '/home/z/my-project/src/app/api/pagos/route.ts';
-const PAGOS_ID_SRC = '/home/z/my-project/src/app/api/pagos/[id]/route.ts';
-const PAGOS_REVERSAR_SRC = '/home/z/my-project/src/app/api/pagos/[id]/reversar/route.ts';
-const PAGOS_CONCILIACION_SRC = '/home/z/my-project/src/app/api/pagos/conciliacion/route.ts';
-const CAJAS_MOV_SRC = '/home/z/my-project/src/app/api/cajas/[id]/movimientos/route.ts';
-const SCHEMA_PRISMA = '/home/z/my-project/prisma/schema.prisma';
+const PAGOS_ROUTE_SRC = 'src/app/api/pagos/route.ts';
+const PAGOS_ID_SRC = 'src/app/api/pagos/[id]/route.ts';
+const PAGOS_REVERSAR_SRC = 'src/app/api/pagos/[id]/reversar/route.ts';
+const PAGOS_CONCILIACION_SRC = 'src/app/api/pagos/conciliacion/route.ts';
+const CAJAS_MOV_SRC = 'src/app/api/cajas/[id]/movimientos/route.ts';
+const SCHEMA_PRISMA = 'prisma/schema.prisma';
 
 // ════════════════════════════════════════════════════════════════════════════
 // TC-PAG-001 — Pago completo de cuota

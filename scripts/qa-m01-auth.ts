@@ -7,15 +7,41 @@ import { PrismaClient } from '@prisma/client';
 import { generateSecret, generateTOTP, verifyTOTP, generateURI } from '../src/lib/totp';
 import { generarCodigoOtp, registrarOtp } from '../src/lib/otp';
 
-// Cargar .env
-const envContent = fs.readFileSync('/home/z/my-project/.env', 'utf8');
-for (const line of envContent.split('\n')) {
-  const m = line.match(/^([A-Z_][A-Z0-9_]*)=(.*)$/);
-  if (m) {
-    let v = m[2];
-    if (v.startsWith('"') && v.endsWith('"')) v = v.slice(1, -1);
-    if (!process.env[m[1]]) process.env[m[1]] = v;
+// Cargar .env (compatible con CI: el archivo .env puede no existir)
+// Orden de prioridad:
+//   1. Variables ya presentes en process.env (CI: cargadas por el workflow desde .vercel/.env.production)
+//   2. Archivo .env local (dev: cargado por dotenv al inicio)
+// En CI solo se requiere que DATABASE_URL esté en el environment del proceso.
+const envCandidates = [
+  '/home/z/my-project/.env',
+  `${process.cwd()}/.env`,
+  `${process.cwd()}/.vercel/.env.production`,
+];
+for (const envPath of envCandidates) {
+  try {
+    if (!fs.existsSync(envPath)) continue;
+    const envContent = fs.readFileSync(envPath, 'utf8');
+    for (const line of envContent.split('\n')) {
+      const m = line.match(/^([A-Z_][A-Z0-9_]*)=(.*)$/);
+      if (m) {
+        let v = m[2];
+        if (v.startsWith('"') && v.endsWith('"')) v = v.slice(1, -1);
+        // No sobrescribir variables ya presentes en el entorno (CI)
+        if (!process.env[m[1]]) process.env[m[1]] = v;
+      }
+    }
+    break; // primer archivo encontrado basta
+  } catch (e) {
+    // Continuar con el siguiente candidato
   }
+}
+
+// Validar que DATABASE_URL esté disponible antes de instanciar Prisma
+if (!process.env.DATABASE_URL) {
+  console.error('⚠️  DATABASE_URL no está definida en el entorno.');
+  console.error('   En CI: el workflow carga .vercel/.env.production antes de ejecutar este script.');
+  console.error('   En dev: asegúrate de tener un archivo .env con DATABASE_URL=postgresql://...');
+  process.exit(1);
 }
 
 const prisma = new PrismaClient({
@@ -96,7 +122,7 @@ test('TC-AUTH-012.8 — generateURI produce otpauth:// válido', async () => {
 
 test('TC-AUTH-012.9 — login route step 1 devuelve requiresMFA cuando mfaEnabled', async () => {
   // Verificar código fuente del login route: la lógica de step 1 está en líneas 181-206
-  const loginRoute = fs.readFileSync('/home/z/my-project/src/app/api/auth/login/route.ts', 'utf8');
+  const loginRoute = fs.readFileSync('src/app/api/auth/login/route.ts', 'utf8');
   assert(loginRoute.includes('requiresMFA: true'), 'login route debe devolver requiresMFA: true');
   assert(loginRoute.includes('tempToken'), 'login route debe devolver tempToken');
   assert(loginRoute.includes("usuario.mfaEnabled && usuario.mfaSecret"), 'login route debe check mfaEnabled && mfaSecret');
@@ -105,7 +131,7 @@ test('TC-AUTH-012.9 — login route step 1 devuelve requiresMFA cuando mfaEnable
 });
 
 test('TC-AUTH-012.10 — login route step 2 devuelve access_token + refresh_token', async () => {
-  const loginRoute = fs.readFileSync('/home/z/my-project/src/app/api/auth/login/route.ts', 'utf8');
+  const loginRoute = fs.readFileSync('src/app/api/auth/login/route.ts', 'utf8');
   assert(loginRoute.includes('access_token'), 'login route step 2 debe devolver access_token');
   assert(loginRoute.includes('refresh_token'), 'login route step 2 debe devolver refresh_token');
   assert(loginRoute.includes('resetFailedAttempts(usuario.id)'), 'login route step 2 debe reset intentos');
@@ -219,7 +245,7 @@ test('TC-AUTH-013.5 — OTP se borra de Configuracion tras uso exitoso', async (
 });
 
 test('TC-AUTH-013.6 — MFA route soporta enviar_otp_whatsapp (5 min expiración)', async () => {
-  const mfaRoute = fs.readFileSync('/home/z/my-project/src/app/api/auth/mfa/route.ts', 'utf8');
+  const mfaRoute = fs.readFileSync('src/app/api/auth/mfa/route.ts', 'utf8');
   assert(mfaRoute.includes("accion === 'enviar_otp_whatsapp'"), 'mfa route debe tener acción enviar_otp_whatsapp');
   assert(mfaRoute.includes('expiracion.setMinutes(expiracion.getMinutes() + 5)'), 'mfa route debe setear expiración +5 min');
   assert(mfaRoute.includes('OTP_WHATSAPP_'), 'mfa route debe usar clave OTP_WHATSAPP_');
@@ -229,7 +255,7 @@ test('TC-AUTH-013.6 — MFA route soporta enviar_otp_whatsapp (5 min expiración
 });
 
 test('TC-AUTH-013.7 — login route step 2 valida OTP WhatsApp como fallback', async () => {
-  const loginRoute = fs.readFileSync('/home/z/my-project/src/app/api/auth/login/route.ts', 'utf8');
+  const loginRoute = fs.readFileSync('src/app/api/auth/login/route.ts', 'utf8');
   assert(loginRoute.includes('OTP_WHATSAPP_'), 'login route debe buscar OTP_WHATSAPP_');
   assert(loginRoute.includes("data.otp === otp"), 'login route debe comparar OTP');
   assert(loginRoute.includes("new Date(data.expiracion) > new Date()"), 'login route debe validar expiración');
