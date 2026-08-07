@@ -30,6 +30,7 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { useToast } from '@/hooks/use-toast'
+import { capturarFoto } from '@/lib/camera'
 import {
   calcularPrestamo,
   calcularPrestamoTasaFijaMensual,
@@ -336,51 +337,19 @@ export function PortalClienteModal({
 
   const tomarFotoSelfie = async () => {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'user', width: { ideal: 1280 }, height: { ideal: 720 } },
+      const dataUrl = await capturarFoto('user', {
+        titulo: 'Tomar selfie con cédula',
+        textoBoton: 'Capturar selfie',
+        espejar: true,
       })
-      const video = document.createElement('video')
-      video.srcObject = stream
-      video.autoplay = true
-      video.playsInline = true
-      const modal = document.createElement('div')
-      modal.style.cssText =
-        'position:fixed;inset:0;background:rgba(0,0,0,0.92);z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:20px;'
-      video.style.cssText = 'max-width:90vw;max-height:70vh;border-radius:16px;'
-      const btnContainer = document.createElement('div')
-      btnContainer.style.cssText = 'margin-top:16px;display:flex;gap:12px;'
-      const btnCapturar = document.createElement('button')
-      btnCapturar.textContent = 'Capturar'
-      btnCapturar.style.cssText =
-        'padding:12px 28px;background:linear-gradient(135deg,#6366f1,#a855f7);color:white;border:none;border-radius:12px;font-size:16px;font-weight:600;cursor:pointer;box-shadow:0 8px 24px -6px rgba(99,102,241,0.5);'
-      const btnCancelar = document.createElement('button')
-      btnCancelar.textContent = 'Cancelar'
-      btnCancelar.style.cssText =
-        'padding:12px 28px;background:rgba(255,255,255,0.1);color:white;border:1px solid rgba(255,255,255,0.2);border-radius:12px;font-size:16px;cursor:pointer;'
-      btnContainer.appendChild(btnCancelar)
-      btnContainer.appendChild(btnCapturar)
-      modal.appendChild(video)
-      modal.appendChild(btnContainer)
-      document.body.appendChild(modal)
-      btnCancelar.onclick = () => {
-        stream.getTracks().forEach((t) => t.stop())
-        document.body.removeChild(modal)
-      }
-      btnCapturar.onclick = () => {
-        const canvas = document.createElement('canvas')
-        canvas.width = video.videoWidth
-        canvas.height = video.videoHeight
-        const ctx = canvas.getContext('2d')!
-        ctx.drawImage(video, 0, 0)
-        const dataUrl = canvas.toDataURL('image/jpeg', 0.85)
+      if (dataUrl) {
         setTycFotoSelfie(dataUrl)
-        stream.getTracks().forEach((t) => t.stop())
-        document.body.removeChild(modal)
+        toast({ title: 'Selfie capturada', description: 'Revisa la imagen antes de continuar.' })
       }
     } catch (e: any) {
       toast({
-        title: 'Cámara no disponible',
-        description: 'Usa la opción de subir archivo.',
+        title: e?.userMessage || 'Cámara no disponible',
+        description: e?.hint || 'Usa la opción de subir archivo.',
         variant: 'destructive',
       })
     }
@@ -411,50 +380,19 @@ export function PortalClienteModal({
   // === Tomar/subir foto de la cédula (paso 3) ===
   const tomarFotoDocumento = async () => {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } },
+      const dataUrl = await capturarFoto('environment', {
+        titulo: 'Tomar foto de la cédula',
+        textoBoton: 'Capturar foto de la cédula',
+        espejar: false,
       })
-      const video = document.createElement('video')
-      video.srcObject = stream
-      video.autoplay = true
-      video.playsInline = true
-      const overlay = document.createElement('div')
-      overlay.style.cssText = `position:fixed;inset:0;background:rgba(0,0,0,0.88);z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:20px;`
-      overlay.appendChild(video)
-      video.style.cssText = `max-width:90vw;max-height:60vh;border-radius:12px;`
-      const captureBtn = document.createElement('button')
-      captureBtn.textContent = 'Capturar foto de la cédula'
-      captureBtn.style.cssText = `padding:12px 28px;background:linear-gradient(135deg,#6366f1,#a855f7);color:white;border:none;border-radius:12px;font-size:14px;font-weight:600;cursor:pointer;box-shadow:0 8px 24px -6px rgba(99,102,241,0.5);`
-      const cancelBtn = document.createElement('button')
-      cancelBtn.textContent = 'Cancelar'
-      cancelBtn.style.cssText = `padding:12px 28px;background:rgba(255,255,255,0.1);color:white;border:1px solid rgba(255,255,255,0.2);border-radius:12px;font-size:14px;cursor:pointer;`
-      const hint = document.createElement('p')
-      hint.textContent = 'Coloca tu cédula en el cuadro y asegúrate de que se vea nítida.'
-      hint.style.cssText = `color:#e5e7eb;font-size:12px;text-align:center;max-width:480px;`
-      overlay.appendChild(hint)
-      overlay.appendChild(captureBtn)
-      overlay.appendChild(cancelBtn)
-      document.body.appendChild(overlay)
-      const cleanup = () => {
-        stream.getTracks().forEach((t) => t.stop())
-        if (overlay.parentNode) overlay.parentNode.removeChild(overlay)
-      }
-      cancelBtn.onclick = () => cleanup()
-      captureBtn.onclick = () => {
-        const canvas = document.createElement('canvas')
-        canvas.width = video.videoWidth
-        canvas.height = video.videoHeight
-        const ctx = canvas.getContext('2d')
-        if (!ctx) return cleanup()
-        ctx.drawImage(video, 0, 0)
-        const dataUrl = canvas.toDataURL('image/jpeg', 0.85)
+      if (dataUrl) {
         setTycFotoDocumento(dataUrl)
-        cleanup()
+        toast({ title: 'Foto capturada', description: 'Revisa la imagen antes de continuar.' })
       }
     } catch (e: any) {
       toast({
-        title: 'Cámara no disponible',
-        description: 'Usa la opción de subir archivo.',
+        title: e?.userMessage || 'Cámara no disponible',
+        description: e?.hint || 'Usa la opción de subir archivo.',
         variant: 'destructive',
       })
     }

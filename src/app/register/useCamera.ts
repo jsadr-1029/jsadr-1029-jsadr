@@ -33,10 +33,31 @@ export function useCamera() {
         setError('Tu navegador no soporta acceso a cámara.')
         return
       }
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'user', width: { ideal: 1280 }, height: { ideal: 720 } },
-        audio: false,
-      })
+      // Verificar contexto seguro (HTTPS o localhost)
+      if (typeof window !== 'undefined' && !window.isSecureContext && window.location.hostname !== 'localhost') {
+        setStatus('error')
+        setError('La cámara solo funciona en conexiones HTTPS seguras.')
+        return
+      }
+      // Intentar con facingMode 'user' (ideal para selfies).
+      // Si falla con OverconstrainedError (algunos desktops), reintentar con video: true.
+      let stream: MediaStream
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: { ideal: 'user' }, width: { ideal: 1280 }, height: { ideal: 720 } },
+          audio: false,
+        })
+      } catch (e1: any) {
+        if (e1?.name === 'OverconstrainedError' || e1?.name === 'ConstraintNotSatisfiedError') {
+          // Reintentar sin facingMode (algunos desktops no soportan 'user' como constraint estricto)
+          stream = await navigator.mediaDevices.getUserMedia({
+            video: { width: { ideal: 1280 }, height: { ideal: 720 } },
+            audio: false,
+          })
+        } else {
+          throw e1
+        }
+      }
       streamRef.current = stream
       if (videoRef.current) {
         videoRef.current.srcObject = stream
@@ -45,12 +66,20 @@ export function useCamera() {
       setStreaming(true)
       setStatus('active')
     } catch (e: any) {
-      setStatus(e?.name === 'NotAllowedError' ? 'denied' : 'error')
-      setError(
-        e?.name === 'NotAllowedError'
-          ? 'Permiso de cámara denegado. Habilítalo en el navegador o sube un archivo.'
-          : 'No se pudo acceder a la cámara: ' + (e?.message || 'desconocido')
-      )
+      const name = e?.name || ''
+      const isDenied = name === 'NotAllowedError' || name === 'PermissionDeniedError'
+      const isInUse = name === 'NotReadableError' || name === 'TrackStartError'
+      const isNotFound = name === 'NotFoundError' || name === 'DevicesNotFoundError'
+      setStatus(isDenied ? 'denied' : 'error')
+      if (isDenied) {
+        setError('Permiso de cámara denegado. Habilítalo en el ícono de candado junto a la URL o sube un archivo.')
+      } else if (isInUse) {
+        setError('La cámara está siendo usada por otra app (Zoom, Teams, Meet). Ciérrala e intenta de nuevo.')
+      } else if (isNotFound) {
+        setError('No se detectó ninguna cámara conectada. Usa la opción de subir archivo.')
+      } else {
+        setError('No se pudo acceder a la cámara: ' + (e?.message || 'desconocido'))
+      }
     }
   }, [])
 

@@ -14,6 +14,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { useToast } from '@/hooks/use-toast'
+import { capturarFoto } from '@/lib/camera'
 import { formatearMoneda, formatearFecha } from '@/lib/finanzas'
 import {
   Upload,
@@ -122,77 +123,23 @@ export default function PaginaFirma({ params }: { params: Promise<{ token: strin
 
   const tomarFoto = async (tipo: 'documento' | 'selfie') => {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: tipo === 'selfie' ? 'user' : 'environment' },
-      })
-      const video = document.createElement('video')
-      video.srcObject = stream
-      video.play()
-      const dialogContent = document.createElement('div')
-      dialogContent.style.position = 'fixed'
-      dialogContent.style.top = '0'
-      dialogContent.style.left = '0'
-      dialogContent.style.width = '100%'
-      dialogContent.style.height = '100%'
-      dialogContent.style.backgroundColor = 'rgba(0,0,0,0.9)'
-      dialogContent.style.zIndex = '9999'
-      dialogContent.style.display = 'flex'
-      dialogContent.style.flexDirection = 'column'
-      dialogContent.style.alignItems = 'center'
-      dialogContent.style.justifyContent = 'center'
-      dialogContent.style.padding = '20px'
-
-      video.style.maxWidth = '100%'
-      video.style.maxHeight = '70vh'
-      video.style.borderRadius = '8px'
-
-      const btnCapturar = document.createElement('button')
-      btnCapturar.textContent = '📸 Capturar'
-      btnCapturar.style.marginTop = '16px'
-      btnCapturar.style.padding = '12px 24px'
-      btnCapturar.style.background = '#1e40af'
-      btnCapturar.style.color = 'white'
-      btnCapturar.style.border = 'none'
-      btnCapturar.style.borderRadius = '8px'
-      btnCapturar.style.cursor = 'pointer'
-      btnCapturar.style.fontSize = '16px'
-
-      const btnCerrar = document.createElement('button')
-      btnCerrar.textContent = '✕ Cerrar'
-      btnCerrar.style.marginTop = '8px'
-      btnCerrar.style.padding = '8px 16px'
-      btnCerrar.style.background = '#ef4444'
-      btnCerrar.style.color = 'white'
-      btnCerrar.style.border = 'none'
-      btnCerrar.style.borderRadius = '8px'
-      btnCerrar.style.cursor = 'pointer'
-
-      dialogContent.appendChild(video)
-      dialogContent.appendChild(btnCapturar)
-      dialogContent.appendChild(btnCerrar)
-      document.body.appendChild(dialogContent)
-
-      btnCapturar.onclick = () => {
-        const canvas = document.createElement('canvas')
-        canvas.width = video.videoWidth
-        canvas.height = video.videoHeight
-        const ctx = canvas.getContext('2d')!
-        ctx.drawImage(video, 0, 0)
-        const dataUrl = canvas.toDataURL('image/jpeg', 0.8)
+      const dataUrl = await capturarFoto(
+        tipo === 'selfie' ? 'user' : 'environment',
+        {
+          titulo: tipo === 'selfie' ? 'Tomar selfie' : 'Tomar foto del documento',
+          textoBoton: tipo === 'selfie' ? 'Capturar selfie' : 'Capturar foto',
+          espejar: tipo === 'selfie',
+        }
+      )
+      if (dataUrl) {
         if (tipo === 'documento') setFotoDocumento(dataUrl)
         else setFotoSelfie(dataUrl)
-        stream.getTracks().forEach((t) => t.stop())
-        document.body.removeChild(dialogContent)
-      }
-
-      btnCerrar.onclick = () => {
-        stream.getTracks().forEach((t) => t.stop())
-        document.body.removeChild(dialogContent)
+        toast({ title: 'Foto capturada', description: 'Revisa la imagen antes de continuar.' })
       }
     } catch (e: any) {
       toast({
-        title: 'Error al acceder a la cámara',
-        description: 'Tu navegador no permite acceder a la cámara. Usa la opción de subir archivo.',
+        title: e?.userMessage || 'Error al acceder a la cámara',
+        description: e?.hint || 'Usa la opción de subir archivo.',
         variant: 'destructive',
       })
     }
