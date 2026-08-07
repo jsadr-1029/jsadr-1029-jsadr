@@ -296,7 +296,12 @@ export async function POST(
     // ============================================================
     // Post-transacción: notificar al cliente por WhatsApp (NO crítico,
     // se hace fuera de la tx para no bloquearla si WhatsApp falla).
+    // La tasa solo se muestra si la modalidad es sistema francés.
     // ============================================================
+    const modalidadNuevo = (nuevoPrestamo.modalidadAmortizacion as string) || 'FRANCES'
+    const mostrarTasaRenovacion = modalidadNuevo === 'FRANCES'
+    const lineaTasaRenovacion = mostrarTasaRenovacion ? `• Tasa anual: ${tasaFinal}%\n` : ''
+
     const mensaje = `🔄 *PRÉSTAMO RENOVADO - PENDIENTE CONFIRMACIÓN*
 
 Hola *${nuevoPrestamo.cliente.nombre}*, tu préstamo ${prestamoOriginal.codigo} fue renovado.
@@ -306,8 +311,7 @@ Hola *${nuevoPrestamo.cliente.nombre}*, tu préstamo ${prestamoOriginal.codigo} 
 • Monto total: $${montoNum.toLocaleString('es-CO')}
 • Cuota fija: $${calculo.montoCuota.toLocaleString('es-CO')}
 • N° cuotas: ${calculo.numeroCuotas} (${nuevaFrecuencia.toLowerCase()}es)
-• Tasa anual: ${tasaFinal}%
-• Fecha primer pago: ${formatearFecha(
+${lineaTasaRenovacion}• Fecha primer pago: ${formatearFecha(
       calculo.tablaAmortizacion[0]?.fechaVencimiento || fechaInicio
     )}
 • Total a pagar: $${calculo.totalPagar.toLocaleString('es-CO')}

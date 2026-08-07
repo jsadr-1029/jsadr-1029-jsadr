@@ -69,6 +69,9 @@ interface Prestamo {
   requiereDocumentos: boolean
   tycAceptado: boolean
   firmaId?: string | null
+  firmaFechaCompleta?: string | null
+  firmaTipo?: string | null
+  firmaRol?: string | null
   tieneCodeudor?: boolean
   codeudorNombre?: string | null
   codeudorCedula?: string | null
@@ -1270,13 +1273,15 @@ ${linkFirmaCodeudor}
                         >
                           <FileText className="w-4 h-4" />
                         </Button>
-                        {/* Reforzado: botón para ver certificado de firma electrónica */}
+                        {/* Reforzado: botón para ver certificado de firma electrónica.
+                            Habilitado para descarga repetida — cuantas veces el gestor lo necesite.
+                            Solo se deshabilita si NO existe ninguna firma completada. */}
                         <Button
                           size="sm"
                           variant="ghost"
                           className={p.firmaId ? "text-blue-600 hover:text-blue-700" : "text-muted-foreground opacity-40"}
                           onClick={() => p.firmaId && window.open(`/api/firma/certificado?firmaId=${p.firmaId}`, '_blank', 'noopener,noreferrer')}
-                          title={p.firmaId ? "Ver Certificado de Firma Electrónica" : "Sin firma electrónica"}
+                          title={p.firmaId ? `Descargar Certificado de Firma Electrónica (descargable las veces que necesite)${p.firmaFechaCompleta ? ` · Firmado: ${new Date(p.firmaFechaCompleta).toLocaleDateString('es-CO')}` : ''}` : "Sin firma electrónica completada"}
                           disabled={!p.firmaId}
                         >
                           <Shield className="w-4 h-4" />

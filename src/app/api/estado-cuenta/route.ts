@@ -40,6 +40,11 @@ export async function GET(req: NextRequest) {
             pagos: {
               orderBy: { numeroCuota: 'asc' },
             },
+            firmas: {  // incluir firmas electrónicas para sección de aceptación
+              where: { estadoFirma: 'COMPLETADA' },
+              orderBy: { fechaFirmaCompleta: 'desc' },
+              take: 3,  // últimas 3 firmas completadas
+            },
           },
           orderBy: { createdAt: 'desc' },
         },
@@ -539,6 +544,58 @@ function generarEstadoCuentaHTML({
           </tr>
         </tbody>
       </table>
+
+      ${p.firmas && p.firmas.length > 0 ? `
+      <div class="firma-aceptacion" style="margin-top: 20px; border: 2px solid #16a34a; border-radius: 10px; padding: 16px 20px; background: linear-gradient(135deg, #f0fdf4 0%, #ecfdf5 100%);">
+        <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 12px; padding-bottom: 10px; border-bottom: 1px dashed #16a34a;">
+          <span style="font-size: 22px;">✍️</span>
+          <h3 style="margin: 0; font-size: 14px; color: #14532d; font-weight: 700; letter-spacing: 0.5px;">ACEPTACIÓN Y FIRMA DEL CLIENTE</h3>
+          <span style="margin-left: auto; background: #16a34a; color: white; padding: 3px 10px; border-radius: 12px; font-size: 10px; font-weight: 700;">✓ FIRMADO</span>
+        </div>
+        ${p.firmas.map((f: any) => `
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px 24px; font-size: 11px; color: #14532d;">
+          <div><strong>📄 Tipo documento:</strong> ${f.tipo === 'TYC' ? 'Términos y Condiciones' : f.tipo === 'PAGARE' ? 'Pagaré' : f.tipo === 'CONTRATO' ? 'Contrato' : f.tipo}</div>
+          <div><strong>👤 Firmante:</strong> ${f.firmanteNombre || p.cliente?.nombre || '—'}${f.firmanteRol ? ` (${f.firmanteRol})` : ''}</div>
+          <div><strong>🆔 Cédula firmante:</strong> ${f.firmanteCedula || '—'}</div>
+          <div><strong>🔐 Canal OTP:</strong> ${f.otpCanal || '—'}</div>
+          <div><strong>📅 Fecha firma:</strong> ${f.fechaFirmaCompleta ? formatearFecha(f.fechaFirmaCompleta) : '—'} ${f.fechaFirmaCompleta ? new Date(f.fechaFirmaCompleta).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' }) : ''}</div>
+          <div><strong>🌍 IP origen:</strong> ${f.ipFirma || '—'}</div>
+          <div><strong>🔑 Estado:</strong> <span style="color: #16a34a; font-weight: 700;">COMPLETADA</span></div>
+          <div><strong>🆔 ID firma:</strong> <span style="font-family: 'Courier New', monospace; font-size: 10px;">${f.id.substring(0, 18)}…</span></div>
+        </div>
+        ${f.imagenFirma ? `
+        <div style="margin-top: 14px; padding-top: 12px; border-top: 1px dashed #16a34a; display: flex; align-items: center; gap: 16px;">
+          <div style="background: white; border: 1px solid #d1d5db; border-radius: 6px; padding: 8px 12px;">
+            <img src="${f.imagenFirma.startsWith('data:') ? f.imagenFirma : `data:image/png;base64,${f.imagenFirma}`}" alt="Firma del cliente" style="height: 60px; width: auto; display: block;" />
+            <div style="text-align: center; font-size: 9px; color: #6b7280; margin-top: 2px;">Firma manuscrita digital</div>
+          </div>
+          <div style="font-size: 10px; color: #14532d; line-height: 1.5;">
+            <div style="font-weight: 700; margin-bottom: 4px;">Declaración de aceptación:</div>
+            El cliente declara haber leído, entendido y aceptado voluntariamente los términos y condiciones del préstamo <strong>${p.codigo}</strong>, así como la obligación de pago según el cronograma arriba detallado. La firma electrónica tiene plena validez legal conforme a la Ley 527 de 1999 y el Decreto 1074 de 2015.
+          </div>
+        </div>
+        ` : `
+        <div style="margin-top: 14px; padding-top: 12px; border-top: 1px dashed #16a34a;">
+          <div style="font-size: 10px; color: #14532d; line-height: 1.5;">
+            <div style="font-weight: 700; margin-bottom: 4px;">Declaración de aceptación:</div>
+            El cliente declara haber leído, entendido y aceptado voluntariamente los términos y condiciones del préstamo <strong>${p.codigo}</strong>, así como la obligación de pago según el cronograma arriba detallado. La firma electrónica tiene plena validez legal conforme a la Ley 527 de 1999 y el Decreto 1074 de 2015.
+          </div>
+        </div>
+        `}
+        `).join('')}
+      </div>
+      ` : `
+      <div class="firma-aceptacion" style="margin-top: 20px; border: 2px dashed #d1d5db; border-radius: 10px; padding: 16px 20px; background: #f9fafb;">
+        <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px;">
+          <span style="font-size: 18px;">⏳</span>
+          <h3 style="margin: 0; font-size: 13px; color: #6b7280; font-weight: 600;">SIN FIRMA ELECTRÓNICA REGISTRADA</h3>
+          <span style="margin-left: auto; background: #f3f4f6; color: #6b7280; padding: 3px 10px; border-radius: 12px; font-size: 10px; font-weight: 600;">PENDIENTE</span>
+        </div>
+        <div style="font-size: 10px; color: #6b7280; line-height: 1.4;">
+          Este préstamo aún no cuenta con firma electrónica registrada. El cliente debe completar el proceso de aceptación y firma para validar el documento.
+        </div>
+      </div>
+      `}
     </div>
     `
   }).join('')}

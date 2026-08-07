@@ -30,12 +30,30 @@ export async function GET(req: NextRequest) {
       include: {
         cliente: true,
         categoria: true,
+        // Incluir la firma COMPLETADA más reciente para habilitar el botón
+        // de descarga del certificado de firma electrónica en cualquier momento.
+        firmas: {
+          where: { estadoFirma: 'COMPLETADA' },
+          orderBy: { fechaFirmaCompleta: 'desc' },
+          take: 1,
+          select: { id: true, fechaFirmaCompleta: true, tipo: true, firmanteRol: true },
+        },
         _count: { select: { pagos: true } },
       },
       orderBy: { createdAt: 'desc' },
     })
 
-    return NextResponse.json({ success: true, data: prestamos })
+    // Aplanar: agregar campo `firmaId` derivado de la firma completada más reciente,
+    // para compatibilidad con el frontend que espera p.firmaId directo.
+    const prestamosConFirmaId = prestamos.map((p: any) => ({
+      ...p,
+      firmaId: p.firmas?.[0]?.id || p.firmaId || null,
+      firmaFechaCompleta: p.firmas?.[0]?.fechaFirmaCompleta || null,
+      firmaTipo: p.firmas?.[0]?.tipo || null,
+      firmaRol: p.firmas?.[0]?.firmanteRol || null,
+    }))
+
+    return NextResponse.json({ success: true, data: prestamosConFirmaId })
   } catch (error: any) {
     return NextResponse.json({ success: false, error: sanitizeError(error).message }, { status: 500 })
   }

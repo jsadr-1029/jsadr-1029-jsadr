@@ -88,6 +88,7 @@ export async function POST(
         tasaAnual: prestamo.tasaInteresAnual,
         totalPagar: calculo.totalPagar,
         linkAceptacion,
+        modalidad: (prestamo.modalidadAmortizacion as string) || 'FRANCES',
       })
 
       const envioWhatsApp = await enviarWhatsApp(prestamo.cliente.telefono, mensaje)
@@ -220,6 +221,7 @@ export async function POST(
         tasaAnual: prestamo.tasaInteresAnual,
         totalPagar: calculo.totalPagar,
         linkAceptacion,
+        modalidad: (prestamo.modalidadAmortizacion as string) || 'FRANCES',
       })
 
       const envioWhatsApp = await enviarWhatsApp(prestamo.cliente.telefono, mensajeFallback)

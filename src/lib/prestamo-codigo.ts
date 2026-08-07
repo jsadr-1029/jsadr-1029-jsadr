@@ -274,6 +274,11 @@ export async function generarYEnviarCodigosConfirmacion(opts: {
   })
 
   // WhatsApp al deudor
+  // La tasa solo se muestra si la modalidad es sistema francés
+  const modalidad = (prestamo.modalidadAmortizacion as string) || 'FRANCES'
+  const mostrarTasa = modalidad === 'FRANCES'
+  const lineaTasa = mostrarTasa ? `• Tasa anual: ${prestamo.tasaInteresAnual}%\n` : ''
+
   const mensajeWhatsApp = requiereCodeudor
     ? `✅ *PRÉSTAMO APROBADO - CÓDIGOS DE CONFIRMACIÓN*
 
@@ -283,8 +288,7 @@ Hola *${prestamo.cliente.nombre}*, tu préstamo ${prestamo.codigo} fue aprobado.
 • Monto: $${prestamo.montoPrincipal.toLocaleString('es-CO')}
 • Cuota fija: $${calculo.montoCuota.toLocaleString('es-CO')}
 • N° cuotas: ${calculo.numeroCuotas}
-• Tasa anual: ${prestamo.tasaInteresAnual}%
-• Total a pagar: $${calculo.totalPagar.toLocaleString('es-CO')}
+${lineaTasa}• Total a pagar: $${calculo.totalPagar.toLocaleString('es-CO')}
 
 🔐 *PRÉSTAMO CON CODEUDOR — Requiere doble confirmación*
 Hemos enviado un código a TU correo (${prestamo.cliente.email}) y OTRO código al correo del codeudor (${prestamo.codeudorEmail}).
@@ -298,8 +302,7 @@ Hola *${prestamo.cliente.nombre}*, tu préstamo ${prestamo.codigo} fue aprobado.
 • Monto: $${prestamo.montoPrincipal.toLocaleString('es-CO')}
 • Cuota fija: $${calculo.montoCuota.toLocaleString('es-CO')}
 • N° cuotas: ${calculo.numeroCuotas}
-• Tasa anual: ${prestamo.tasaInteresAnual}%
-• Total a pagar: $${calculo.totalPagar.toLocaleString('es-CO')}
+${lineaTasa}• Total a pagar: $${calculo.totalPagar.toLocaleString('es-CO')}
 
 🔐 *Hemos enviado un código de confirmación a tu correo electrónico:*
 ${prestamo.cliente.email}

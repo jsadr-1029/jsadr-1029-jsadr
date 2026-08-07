@@ -229,6 +229,11 @@ model Prestamo {
   totalPagar          Float
   tasaAplicada        Float
 
+  // Modalidad de amortización (controla si se muestra la tasa en WhatsApp)
+  // FRANCES = sistema francés (cuota fija con interés sobre capital inicial)
+  // OTRO    = otra modalidad (no se muestra la tasa en plantillas WhatsApp de aprobación)
+  modalidadAmortizacion String @default("FRANCES")
+
   // Mora configurable
   tasaMoraPersonalizada Float?  // si el admin la modifica para este préstamo
   moraCompuestaDiaria Boolean @default(true)  // mora compuesta diaria

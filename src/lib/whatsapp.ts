@@ -133,7 +133,11 @@ export function mensajeAprobacionTyC(d: {
   tasaAnual: number
   totalPagar: number
   linkAceptacion: string
+  modalidad?: string  // 'FRANCES' para mostrar la tasa, cualquier otro valor la oculta
 }): string {
+  // La tasa solo se muestra si la modalidad es sistema francés
+  const mostrarTasa = d.modalidad === 'FRANCES' || d.modalidad === undefined
+  const lineaTasa = mostrarTasa ? `• Tasa anual: ${d.tasaAnual}%\n` : ''
   return `✅ *PRÉSTAMO APROBADO - REQUIERE ACEPTACIÓN*
 
 Hola *${d.nombreCliente}*, tu préstamo ${d.codigoPrestamo} fue aprobado.
@@ -142,8 +146,7 @@ Hola *${d.nombreCliente}*, tu préstamo ${d.codigoPrestamo} fue aprobado.
 • Monto: $${d.monto.toLocaleString('es-CO')}
 • Cuota fija: $${d.cuota.toLocaleString('es-CO')}
 • N° cuotas: ${d.numeroCuotas}
-• Tasa anual: ${d.tasaAnual}%
-• Total a pagar: $${d.totalPagar.toLocaleString('es-CO')}
+${lineaTasa}• Total a pagar: $${d.totalPagar.toLocaleString('es-CO')}
 
 ⚠️ *Para desembolsar el préstamo debes aceptar los Términos y Condiciones.*
 
@@ -240,7 +243,7 @@ Hola *${d.nombreCliente}*, tu préstamo presenta mora.
 • Mora generada: $${d.montoMora.toLocaleString('es-CO')}
 • *Total a pagar: $${d.totalAdeudado.toLocaleString('es-CO')}*
 
-⚠️ *A los 60 días de mora se iniciará cobro jurídico.*
+⚠️ *A los 30 días de mora se iniciará cobro jurídico.*
 
 Contáctanos para regularizar tu pago.`
 }
@@ -256,7 +259,7 @@ export function mensajeAvisoLegal(d: {
 
 Estimado/a *${d.nombreCliente}*:
 
-Su préstamo *${d.codigoPrestamo}* con saldo de *$${d.saldoTotal.toLocaleString('es-CO')}* fue derivado a cobro jurídico por incumplimiento de pago (60+ días de mora).
+Su préstamo *${d.codigoPrestamo}* con saldo de *$${d.saldoTotal.toLocaleString('es-CO')}* fue derivado a cobro jurídico por incumplimiento de pago (30+ días de mora).
 
 👤 *Abogado asignado:* ${d.abogado}
 📞 *Contacto:* ${d.telefonoAbogado}
