@@ -1,0 +1,14 @@
+{
+  "GITHUB": {
+    "estado": "NO_DESCIFRABLE",
+    "tokenLength": 129
+  },
+  "VERCEL": {
+    "estado": "NO_DESCIFRABLE",
+    "tokenLength": 161
+  },
+  "NEON": {
+    "estado": "NO_DESCIFRABLE",
+    "tokenLength": 289
+  }
+}
