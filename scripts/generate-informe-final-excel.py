@@ -52,7 +52,7 @@ USUARIOS_SISTEMA = [
         "username": "Adm-Jsadr",
         "email": "admin@jsadr.co",
         "cedula": "—",
-        "password": "Js121473164*",
+        "password": "Js951029*",
         "portal_principal": "Administrador (/admin o /login)",
         "url": "https://jsadr.com.co/admin",
         "activo": True,
@@ -64,7 +64,7 @@ USUARIOS_SISTEMA = [
         "username": "P_jsadr",
         "email": "portal-admin@jsadr.co",
         "cedula": "—",
-        "password": "Js121473164*",
+        "password": "Js951029*",
         "portal_principal": "Portal Administrativo (/login)",
         "url": "https://jsadr.com.co/login",
         "activo": True,
@@ -76,7 +76,7 @@ USUARIOS_SISTEMA = [
         "username": "gestor-jsadr",
         "email": "gestor@empresa.com",
         "cedula": "—",
-        "password": "Js121473164*",
+        "password": "Js951029*",
         "portal_principal": "Portal Administrativo (/login)",
         "url": "https://jsadr.com.co/login",
         "activo": True,
@@ -88,7 +88,7 @@ USUARIOS_SISTEMA = [
         "username": "consultor-jsadr",
         "email": "consultor@empresa.com",
         "cedula": "—",
-        "password": "Js121473164*",
+        "password": "Js951029*",
         "portal_principal": "Portal Administrativo (/login)",
         "url": "https://jsadr.com.co/login",
         "activo": True,
@@ -100,11 +100,11 @@ USUARIOS_SISTEMA = [
         "username": "JD_jsadr",
         "email": "jd_jsadr@jsadr.co",
         "cedula": "JD_jsadr",
-        "password": "Js121473164*",
+        "password": "Js951029*",
         "portal_principal": "Portal Jurídico (/juridico)",
         "url": "https://jsadr.com.co/juridico",
         "activo": True,
-        "notas": "Abogado principal. Login con cédula=JD_jsadr + clave=Js121473164* en /juridico.",
+        "notas": "Abogado principal. Login con cédula=JD_jsadr + clave=Js951029* en /juridico.",
     },
     {
         "rol": "ABOGADO",
@@ -112,7 +112,7 @@ USUARIOS_SISTEMA = [
         "username": "Jd_jsadr",
         "email": "abogado@jsadr.co",
         "cedula": "—",
-        "password": "Js121473164*",
+        "password": "Js951029*",
         "portal_principal": "Portal Jurídico (/juridico)",
         "url": "https://jsadr.com.co/juridico",
         "activo": True,
@@ -124,7 +124,7 @@ USUARIOS_SISTEMA = [
         "username": "abogado-jsadr",
         "email": "abogado@jsadr.com.co",
         "cedula": "1234567890",
-        "password": "Js121473164*",
+        "password": "Js951029*",
         "portal_principal": "Portal Jurídico (/juridico)",
         "url": "https://jsadr.com.co/juridico",
         "activo": True,
@@ -134,23 +134,23 @@ USUARIOS_SISTEMA = [
 
 # --- 2. Clientes (Portal Cliente) ---
 CLIENTES_PORTAL = [
-    {"nombre": "CAROLINA ALVAREZ",    "cedula": "1214726347", "email": "JSADR23@GMAIL.COM",       "telefono": "3103674546", "clave_portal": "1214726347", "url": "https://jsadr.com.co/login", "notas": "Cliente activo"},
-    {"nombre": "JOHAN ALVAREZ",       "cedula": "1214731649", "email": "—",                       "telefono": "3235949510", "clave_portal": "1214731649", "url": "https://jsadr.com.co/login", "notas": "Cliente activo"},
-    {"nombre": "juaquin",             "cedula": "123456789",  "email": "jhoan-1029@hotmail.com",  "telefono": "3202705313", "clave_portal": "123456789",  "url": "https://jsadr.com.co/login", "notas": "Cliente activo"},
-    {"nombre": "prueba jsadr29",      "cedula": "9000000005", "email": "jsadr29@gmail.com",       "telefono": "3000000005", "clave_portal": "9000000005", "url": "https://jsadr.com.co/login", "notas": "Cliente de prueba"},
-    {"nombre": "prueba johan-1029",   "cedula": "9000000004", "email": "johan-1029@hotmail.com",  "telefono": "3000000004", "clave_portal": "9000000004", "url": "https://jsadr.com.co/login", "notas": "Cliente de prueba"},
-    {"nombre": "prueba jsadr23",      "cedula": "9000000002", "email": "jsadr23@outlook.com",     "telefono": "3000000002", "clave_portal": "9000000002", "url": "https://jsadr.com.co/login", "notas": "Cliente de prueba"},
-    {"nombre": "Test Gestor OK",      "cedula": "8888888888", "email": "test@test.com",           "telefono": "3000000001", "clave_portal": "8888888888", "url": "https://jsadr.com.co/login", "notas": "Cliente de prueba (gestor OK)"},
-    {"nombre": "TEST 2",              "cedula": "888888888",  "email": "—",                       "telefono": "3000000001", "clave_portal": "888888888",  "url": "https://jsadr.com.co/login", "notas": "Cliente de prueba"},
-    {"nombre": "Test",                "cedula": "9125466545", "email": "—",                       "telefono": "3000000001", "clave_portal": "(requiere reset)", "url": "https://jsadr.com.co/login", "notas": "Hash no coincide con cédula. Solicitar reset de clave al admin."},
+    {"nombre": "CAROLINA ALVAREZ",    "cedula": "1214726347", "email": "JSADR23@GMAIL.COM",       "telefono": "3103674546", "clave_portal": "4321", "url": "https://jsadr.com.co/login", "notas": "Cliente activo. Login: cédula + 4321"},
+    {"nombre": "JOHAN ALVAREZ",       "cedula": "1214731649", "email": "—",                       "telefono": "3235949510", "clave_portal": "4321", "url": "https://jsadr.com.co/login", "notas": "Cliente activo. Login: cédula + 4321"},
+    {"nombre": "juaquin",             "cedula": "123456789",  "email": "jhoan-1029@hotmail.com",  "telefono": "3202705313", "clave_portal": "4321", "url": "https://jsadr.com.co/login", "notas": "Cliente activo. Login: cédula + 4321"},
+    {"nombre": "prueba jsadr29",      "cedula": "9000000005", "email": "jsadr29@gmail.com",       "telefono": "3000000005", "clave_portal": "4321", "url": "https://jsadr.com.co/login", "notas": "Cliente de prueba. Login: cédula + 4321"},
+    {"nombre": "prueba johan-1029",   "cedula": "9000000004", "email": "johan-1029@hotmail.com",  "telefono": "3000000004", "clave_portal": "4321", "url": "https://jsadr.com.co/login", "notas": "Cliente de prueba. Login: cédula + 4321"},
+    {"nombre": "prueba jsadr23",      "cedula": "9000000002", "email": "jsadr23@outlook.com",     "telefono": "3000000002", "clave_portal": "4321", "url": "https://jsadr.com.co/login", "notas": "Cliente de prueba. Login: cédula + 4321"},
+    {"nombre": "Test Gestor OK",      "cedula": "8888888888", "email": "test@test.com",           "telefono": "3000000001", "clave_portal": "4321", "url": "https://jsadr.com.co/login", "notas": "Cliente de prueba. Login: cédula + 4321"},
+    {"nombre": "TEST 2",              "cedula": "888888888",  "email": "—",                       "telefono": "3000000001", "clave_portal": "4321", "url": "https://jsadr.com.co/login", "notas": "Cliente de prueba. Login: cédula + 4321"},
+    {"nombre": "Test",                "cedula": "9125466545", "email": "—",                       "telefono": "3000000001", "clave_portal": "4321", "url": "https://jsadr.com.co/login", "notas": "Cliente de prueba. Login: cédula + 4321"},
 ]
 
 # --- 3. URLs de Portales ---
 PORTALES_URLS = [
-    {"portal": "Admin (sistema interno)",    "url": "https://jsadr.com.co/admin",   "usuarios": "Adm-Jsadr (admin@jsadr.co)",                 "credenciales": "usuario + Js121473164*"},
-    {"portal": "Administrativo (gestores)",  "url": "https://jsadr.com.co/login",   "usuarios": "P_jsadr, gestor-jsadr, consultor-jsadr",     "credenciales": "usuario + Js121473164*"},
-    {"portal": "Jurídico (abogados)",        "url": "https://jsadr.com.co/juridico","usuarios": "JD_jsadr, Jd_jsadr, abogado-jsadr",          "credenciales": "cédula/usuario + Js121473164*"},
-    {"portal": "Cliente",                    "url": "https://jsadr.com.co/login",   "usuarios": "9 clientes (login con cédula + clave)",      "credenciales": "cédula + clave (inicial: cédula)"},
+    {"portal": "Admin (sistema interno)",    "url": "https://jsadr.com.co/admin",   "usuarios": "Adm-Jsadr (admin@jsadr.co)",                 "credenciales": "usuario + Js951029*"},
+    {"portal": "Administrativo (gestores)",  "url": "https://jsadr.com.co/login",   "usuarios": "P_jsadr, gestor-jsadr, consultor-jsadr",     "credenciales": "usuario + Js951029*"},
+    {"portal": "Jurídico (abogados)",        "url": "https://jsadr.com.co/juridico","usuarios": "JD_jsadr, Jd_jsadr, abogado-jsadr",          "credenciales": "cédula/usuario + Js951029*"},
+    {"portal": "Cliente",                    "url": "https://jsadr.com.co/login",   "usuarios": "9 clientes (login con cédula + clave)",      "credenciales": "cédula + 4321"},
 ]
 
 # --- 4. Sincronización ---
@@ -158,32 +158,32 @@ SINCRONIZACION = [
     {
         "plataforma": "GitHub",
         "estado": "✅ Sincronizado",
-        "commit_sha": "7c9a9e7",
+        "commit_sha": "78e7f2f",
         "rama": "main",
         "repositorio": "jsadr-1029/jsadr-1029-jsadr",
         "url": "https://github.com/jsadr-1029/jsadr-1029-jsadr",
-        "ultimo_sync": "2026-08-07 21:55 UTC",
-        "detalle": "Commit automático con scripts de verificación. Push a origin/main OK.",
+        "ultimo_sync": "2026-08-07 22:30 UTC",
+        "detalle": "Commit 78e7f2f con reset unificado de claves (sistema=Js951029*, clientes=4321). Push a origin/main OK.",
     },
     {
         "plataforma": "Vercel",
         "estado": "✅ Sincronizado",
-        "commit_sha": "7c9a9e7",
+        "commit_sha": "78e7f2f",
         "rama": "main (production)",
         "repositorio": "Proyecto jsadr-1029-jsadr (prj_JQV6HJQB65nmSEp45Z1FFPmxARtj)",
         "url": "https://jsadr.com.co",
-        "ultimo_sync": "2026-08-07 21:55 UTC",
-        "detalle": "Deploy dpl_92FK READY. Dominio jsadr.com.co + www.jsadr.com.co verificados. 13 env vars en producción.",
+        "ultimo_sync": "2026-08-07 22:30 UTC",
+        "detalle": "Deploy dpl_ApW4 READY (commit 78e7f2f). Dominio jsadr.com.co + www.jsadr.com.co verificados. 13 env vars en producción.",
     },
     {
         "plataforma": "Neon",
         "estado": "✅ Sincronizado",
-        "commit_sha": "schema v4.16",
+        "commit_sha": "schema v4.16 + reset claves",
         "rama": "neondb (main)",
         "repositorio": "ep-small-lab-ax4gzg9p-pooler (us-east-2)",
         "url": "postgresql://neondb_owner@ep-small-lab-ax4gzg9p-pooler.c-4.us-east-2.aws.neon.tech/neondb",
-        "ultimo_sync": "2026-08-07 21:55 UTC",
-        "detalle": "prisma db push OK. 69 tablas, 650+ registros, 7 usuarios, 9 clientes. PlataformaSync.ultimoEstado=OK.",
+        "ultimo_sync": "2026-08-07 22:30 UTC",
+        "detalle": "prisma db push OK + reset de claves unificado. 69 tablas, 650+ registros, 7 usuarios (clave=Js951029*), 9 clientes (clave=4321). PlataformaSync.ultimoEstado=OK.",
     },
 ]
 
@@ -342,9 +342,9 @@ resumen_rows = [
     ["Riesgos Altos reparados",      "11",                                                 "TC-CLI-014, TC-PAG-007, TC-MAIL-003, TC-SEG-004, TC-SEG-009, TC-PCL-014, TC-PJU-006, TC-NOT-004, TC-INT-005, TC-DEV-014, TC-DEV-015"],
     ["Riesgos Medios reparados",     "14",                                                 "Repartidos en M03, M05, M06, M07, M08, M09, M10, M11, M12, M13"],
     ["Riesgos Bajos reparados",      "7",                                                  "TC-MAIL-011, TC-SEG-018, TC-PCL-011, TC-NOT-015, TC-REP-009, TC-INT-014, TC-UI-012, TC-UI-015"],
-    ["GitHub sync",                  "✅ Sincronizado",                                    "Commit 7c9a9e7 en origin/main, 0 archivos pendientes"],
-    ["Vercel sync",                  "✅ Sincronizado",                                    "Deploy READY en jsadr.com.co (commit 7c9a9e7)"],
-    ["Neon sync",                    "✅ Sincronizado",                                    "69 tablas, 650+ registros, PlataformaSync.ultimoEstado=OK"],
+    ["GitHub sync",                  "✅ Sincronizado",                                    "Commit 78e7f2f en origin/main, reset de claves unificado"],
+    ["Vercel sync",                  "✅ Sincronizado",                                    "Deploy READY en jsadr.com.co (commit 78e7f2f)"],
+    ["Neon sync",                    "✅ Sincronizado",                                    "69 tablas, 650+ registros, claves resetadas (sistema=Js951029*, clientes=4321)"],
     ["Stack tecnológico",            "Next.js 15 + Prisma + PostgreSQL (Neon) + Vercel", "TypeScript, Tailwind CSS, shadcn/ui, bcrypt, JWT, Brevo"],
 ]
 write_table(ws, "Métricas Detalladas del Proyecto", resumen_headers, resumen_rows, start_row=13)
@@ -383,7 +383,7 @@ for c in CLIENTES_PORTAL:
         c["nombre"], c["cedula"], c["email"], c["telefono"], c["clave_portal"], c["url"], c["notas"]
     ])
 # Total row
-total_row_c = ["TOTAL", f"{len(CLIENTES_PORTAL)} clientes", "", "", "", "", "8/9 con clave=cédula operativa"]
+total_row_c = ["TOTAL", f"{len(CLIENTES_PORTAL)} clientes", "", "", "4321", "", "Usuario = cédula. Clave unificada = 4321"]
 write_table(ws3, "Clientes — Portal Cliente (login con cédula + clave)", clientes_headers, clientes_rows, total_row=total_row_c)
 widths3 = [25, 18, 30, 16, 22, 35, 50]
 for i, w in enumerate(widths3, start=2):
@@ -477,9 +477,9 @@ setup_sheet(ws, title=None, last_col=None)  # no-op for ws8 here
 setup_sheet(ws8, title="Notas y Próximos Pasos", last_col=4)
 
 notas = [
-    ("Seguridad de credenciales", "Todas las contraseñas están almacenadas como hash bcrypt (rounds=12). La verificación se realizó con bcrypt.compare contra el hash actual en Neon.", "Crítico"),
-    ("Clave única para sistema", "Los 7 usuarios del sistema comparten la clave Js121473164* por petición del cliente. En una siguiente fase puede rotarse a claves individuales.", "Importante"),
-    ("Clientes: clave=cédula", "Los 9 clientes tienen como clave inicial su número de cédula. El cliente 'Test' (cédula 9125466545) tiene un hash no coincidente y requiere reset.", "Importante"),
+    ("Seguridad de credenciales", "Todas las contraseñas están almacenadas como hash bcrypt (rounds=12). La verificación se realizó con bcrypt.compare contra el hash actual en Neon. Reset unificado: sistema=Js951029*, clientes=4321.", "Crítico"),
+    ("Clave única para sistema", "Los 7 usuarios del sistema (Admin/Gestor/Consultor/Abogado) comparten la clave Js951029* por petición del cliente. En una siguiente fase puede rotarse a claves individuales.", "Importante"),
+    ("Clientes: clave unificada 4321", "Los 9 clientes tienen clave=4321 (login con su número de cédula como usuario). Esta es una clave temporal — recomendamos que cada cliente la cambie en su primer acceso al portal.", "Importante"),
     ("MFA no habilitado", "Ningún usuario tiene MFA habilitado (mfaEnabled=false). Para mayor seguridad, recomendamos habilitar TOTP en el portal admin para usuarios ADMIN.", "Recomendado"),
     ("URLs producción", "Producción: https://jsadr.com.co (HTTP 200, dominio verificado). GitHub: https://github.com/jsadr-1029/jsadr-1029-jsadr", "Info"),
     ("Pipeline CI/CD", "Workflow .github/workflows/deploy-vercel.yml con QA gate (continue-on-error=true temporal). Una vez debuggeado en CI, quitar continue-on-error para hacerlo bloqueante.", "Importante"),
