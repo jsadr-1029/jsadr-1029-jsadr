@@ -98,26 +98,69 @@ jobs:
           # Cargar variables de entorno de producción descargadas por `vercel pull`
           if [ -f .vercel/.env.production ]; then
             echo "📋 Cargando variables desde .vercel/.env.production..."
-            # Exportar solo las variables que los scripts QA necesitan (no filtrar para no perder ninguna)
             set -a
             . .vercel/.env.production
             set +a
             echo "✅ Variables cargadas: $(grep -c '=' .vercel/.env.production || echo 0)"
+            echo "   Variables disponibles (nombres solo, sin valores):"
+            # Listar nombres de variables SIN valores para debugging
+            grep -oE '^[A-Z_][A-Z0-9_]*=' .vercel/.env.production | sed 's/=//' | sort | while read -r var; do
+              if [ -n "${!var:-}" ]; then echo "     - $var (✓ cargada)"; else echo "     - $var (✗ vacía)"; fi
+            done
           else
             echo "⚠️  .vercel/.env.production no encontrado — los tests que requieren BD fallarán."
           fi
 
+          # Verificar variables críticas
           echo ""
+          echo "🔑 Variables críticas para QA:"
+          for var in DATABASE_URL BREVO_API_KEY BREVO_SMTP_KEY WHATSAPP_TOKEN WHATSAPP_PHONE_NUMBER_ID API_ENCRYPTION_KEY JWT_SECRET; do
+            if [ -n "${!var:-}" ]; then
+              val="${!var}"
+              if [ ${#val} -gt 20 ]; then
+                echo "   ✅ $var = ${val:0:10}...${val: -4} (len=${#val})"
+              else
+                echo "   ✅ $var = [${#val} chars]"
+              fi
+            else
+              echo "   ❌ $var NO DEFINIDA"
+            fi
+          done
+
+          echo ""
+          echo "📂 Working directory: $(pwd)"
+          echo "📂 Archivos en cwd: $(ls -1 | head -20 | tr '\n' ' ')"
+          echo ""
+
           echo "═══════════════════════════════════════════════════════════"
           echo "  Iniciando QA Regression Gate (pre-deploy gate)"
           echo "═══════════════════════════════════════════════════════════"
           echo ""
 
           # Ejecutar orquestador — exit 0 = todos PASS, exit 1 = algún FAIL
-          node scripts/qa-regression-all.cjs
+          node scripts/qa-regression-all.cjs || GATE_EXIT=$?
+          GATE_EXIT=${GATE_EXIT:-0}
 
+          # Mostrar contenido del JSON de resultados en el log (para debugging sin artifact)
           echo ""
-          echo "✅ QA Regression Gate PASS — procediendo con deploy a producción."
+          echo "═══════════════════════════════════════════════════════════"
+          echo "  Resultados detallados del gate (qa-regresion-results.json):"
+          echo "═══════════════════════════════════════════════════════════"
+          if [ -f download/qa-regresion-results.json ]; then
+            cat download/qa-regresion-results.json
+          else
+            echo "  (no se generó el JSON de resultados)"
+          fi
+          echo ""
+          echo "═══════════════════════════════════════════════════════════"
+
+          if [ "$GATE_EXIT" = "0" ]; then
+            echo "✅ QA Regression Gate PASS — procediendo con deploy a producción."
+          else
+            echo "❌ QA Regression Gate FAIL — deploy bloqueado."
+            echo "   Revisa el JSON arriba para ver qué módulos fallaron."
+          fi
+          exit $GATE_EXIT
         env:
           NODE_ENV: production
 
