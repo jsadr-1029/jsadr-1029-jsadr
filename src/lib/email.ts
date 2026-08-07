@@ -12,6 +12,13 @@ let cachedConfigHash: string = ''
 let cachedBrevoApiKey: string | null = null
 let cachedBrevoApiKeyHash: string = ''
 
+// === Cache de "API key inválida" (evita reintentos inútiles) ===
+// Si Brevo API devuelve 401/403, marcamos la key como inválida por 5 min
+// para no golpear la API en cada envío (el OTP se va por SMTP fallback).
+let brevoApiKeyInvalidUntil: number = 0
+let brevoApiKeyInvalidHash: string = ''
+const BREVO_API_INVALID_TTL_MS = 5 * 60 * 1000 // 5 minutos
+
 interface SmtpConfig {
   host: string
   port: number
@@ -198,6 +205,10 @@ async function obtenerBrevoApiKey(): Promise<string | null> {
       cachedBrevoApiKey = process.env.BREVO_API_KEY
       cachedBrevoApiKeyHash = process.env.BREVO_API_KEY.slice(-6)
     }
+    // Si la key está marcada como inválida, no usarla
+    if (Date.now() < brevoApiKeyInvalidUntil && brevoApiKeyInvalidHash === cachedBrevoApiKeyHash) {
+      return null
+    }
     return cachedBrevoApiKey
   }
 
@@ -233,6 +244,10 @@ async function obtenerBrevoApiKey(): Promise<string | null> {
         return null
       }
       const hash = decrypted.slice(-6)
+      // Si la key está marcada como inválida para este hash, no usarla
+      if (Date.now() < brevoApiKeyInvalidUntil && brevoApiKeyInvalidHash === hash) {
+        return null
+      }
       if (cachedBrevoApiKeyHash !== hash) {
         cachedBrevoApiKey = decrypted
         cachedBrevoApiKeyHash = hash
@@ -267,7 +282,7 @@ async function enviarPorBrevoApi(params: {
   html?: string
   fromName: string
   fromEmail: string
-}): Promise<{ success: boolean; messageId?: string; error?: string }> {
+}): Promise<{ success: boolean; messageId?: string; error?: string; httpStatus?: number }> {
   const { apiKey, to, subject, text, html, fromName, fromEmail } = params
 
   try {
@@ -292,6 +307,10 @@ async function enviarPorBrevoApi(params: {
     if (html) body.htmlContent = html
     if (text) body.textContent = text
 
+    // Timeout de 12s — Vercel serverless tiene 10-60s según plan
+    const controller = new AbortController()
+    const timeout = setTimeout(() => controller.abort(), 12000)
+
     const res = await fetch('https://api.brevo.com/v3/smtp/email', {
       method: 'POST',
       headers: {
@@ -300,12 +319,25 @@ async function enviarPorBrevoApi(params: {
         accept: 'application/json',
       },
       body: JSON.stringify(body),
-    })
+      signal: controller.signal,
+    }).finally(() => clearTimeout(timeout))
 
     if (!res.ok) {
       const errBody = await res.text()
+      // Si la API key es inválida (401/403), marcarla como inválida por 5 min
+      // para evitar reintentos inútiles en cada envío (el OTP se va por SMTP).
+      if (res.status === 401 || res.status === 403) {
+        const keyHash = apiKey.slice(-6)
+        brevoApiKeyInvalidUntil = Date.now() + BREVO_API_INVALID_TTL_MS
+        brevoApiKeyInvalidHash = keyHash
+        console.warn(
+          `[email][BREVO] API key inválida (HTTP ${res.status}). Marcando como inválida por ${BREVO_API_INVALID_TTL_MS / 60000} min. ` +
+            `Usar SMTP fallback. Hash key: ...${keyHash}`
+        )
+      }
       return {
         success: false,
+        httpStatus: res.status,
         error: `Brevo API HTTP ${res.status}: ${errBody.slice(0, 300)}`,
       }
     }
@@ -316,6 +348,9 @@ async function enviarPorBrevoApi(params: {
       messageId: data.messageId,
     }
   } catch (error: any) {
+    if (error.name === 'AbortError') {
+      return { success: false, error: 'Brevo API timeout (12s)' }
+    }
     return { success: false, error: `Brevo API exception: ${error.message}` }
   }
 }
@@ -348,7 +383,15 @@ async function obtenerTransporter(): Promise<{
         user: config.user,
         pass: config.pass,
       },
-    })
+      // Timeouts para evitar que instancias warm de Vercel se queden colgadas
+      connectionTimeout: 10000,  // 10s para conectar
+      greetingTimeout: 10000,    // 10s para recibir greeting del server
+      socketTimeout: 20000,      // 20s para operaciones de socket
+      pool: true,                // connection pooling (reutiliza conexiones)
+      maxConnections: 3,
+      maxMessages: 100,
+      rateLimit: false,
+    } as nodemailer.TransportOptions)
     cachedTransporter = transporter
     cachedConfigHash = hash
     return { transporter, config, isEthereal: false }
@@ -567,6 +610,25 @@ export async function enviarEmail({
     }
   } catch (error: any) {
     console.error('[email] Error enviando email (SMTP fallback también falló):', error)
+    // Si el error es de autenticación SMTP (535, 525, 5.7.1, etc.), resetear el
+    // transporter cacheado para que el próximo envío cree uno nuevo con credenciales frescas.
+    const errMsg = (error.message || '').toLowerCase()
+    if (
+      errMsg.includes('invalid login') ||
+      errMsg.includes('5.7.1') ||
+      errMsg.includes('5.7.8') ||
+      errMsg.includes('unauthorized') ||
+      errMsg.includes('authentication failed') ||
+      errMsg.includes('535') ||
+      errMsg.includes('525')
+    ) {
+      console.warn('[email][SMTP] Error de autenticación detectado. Reseteando transporter cacheado.')
+      if (cachedTransporter) {
+        try { cachedTransporter.close() } catch {}
+      }
+      cachedTransporter = null
+      cachedConfigHash = ''
+    }
     // Registrar fallo en EnvioCorreo también
     try {
       await db.envioCorreo.create({
