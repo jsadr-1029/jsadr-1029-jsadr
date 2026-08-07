@@ -21,6 +21,20 @@ function fileExists(p: string): boolean {
   try { return fs.existsSync(p) } catch { return false }
 }
 
+// CI-safe: si .env no existe (GitHub Actions), sintetizar contenido desde process.env
+// para que los tests "contiene BREVO_API_KEY=" sigan funcionando.
+function envContents(): string {
+  const envPath = path.join(ROOT, '.env')
+  if (fs.existsSync(envPath)) return read(envPath)
+  const lines: string[] = []
+  for (const [k, v] of Object.entries(process.env)) {
+    if (k && k.match(/^[A-Z_][A-Z0-9_]*$/) && v !== undefined) {
+      lines.push(`${k}=${v}`)
+    }
+  }
+  return lines.join('\n')
+}
+
 function check(id: string, label: string, cond: boolean, extra?: string) {
   if (cond) {
     pass++
@@ -152,7 +166,7 @@ function tc_int_007() {
   const emailLib = read(path.join(ROOT, 'src/lib/email.ts'))
   const securityLib = read(path.join(ROOT, 'src/lib/security.ts'))
   const envExample = read(path.join(ROOT, '.env.example'))
-  const env = read(path.join(ROOT, '.env'))
+  const env = envContents()
 
   check('TC-INT-007.1', 'Código referencia BREVO_API_KEY (process.env)', contains(emailLib, 'process.env.BREVO_API_KEY'))
   check('TC-INT-007.2', 'Código referencia BREVO_SMTP_KEY (process.env)', contains(emailLib, 'process.env.BREVO_SMTP_KEY') || contains(emailLib, 'BREVO_SMTP_KEY'))
@@ -186,7 +200,7 @@ function tc_int_009() {
   console.log('\n=== TC-INT-009: Neon — Conexión con SSL ===')
   const schema = read(path.join(ROOT, 'prisma/schema.prisma'))
   const envExample = read(path.join(ROOT, '.env.example'))
-  const env = read(path.join(ROOT, '.env'))
+  const env = envContents()
 
   check('TC-INT-009.1', '.env.example documenta DATABASE_URL con sslmode=require', contains(envExample, 'sslmode=require') || contains(envExample, 'sslmode'))
   check('TC-INT-009.2', '.env local tiene DATABASE_URL con sslmode', contains(env, 'sslmode=require') || contains(env, 'sslmode'))
@@ -214,7 +228,7 @@ function tc_int_011() {
   console.log('\n=== TC-INT-011: GitHub — Secret scanning activo ===')
   // Verificar que los secrets estén en .env (no commited) y .gitignore los excluye
   const gitignore = read(path.join(ROOT, '.gitignore'))
-  const env = read(path.join(ROOT, '.env'))
+  const env = envContents()
 
   check('TC-INT-011.1', '.gitignore existe', gitignore.length > 0)
   check('TC-INT-011.2', '.gitignore excluye .env', contains(gitignore, '.env'))
