@@ -37,6 +37,10 @@ export async function GET(req: NextRequest) {
     const prestamoId = searchParams.get('prestamoId')
     const fecha = searchParams.get('fecha')
     const estado = searchParams.get('estado')
+    // v4.7 (QA M04 TC-PAG-013): flag para incluir pagos ANULADOS en la respuesta.
+    // Por defecto los ANULADOS se ocultan (soft-delete), pero el endpoint
+    // debe poder retornarlos cuando se solicite explícitamente para auditoría.
+    const incluirAnulados = searchParams.get('incluirAnulados') === 'true'
 
     const where: any = {}
     if (prestamoId && prestamoId !== 'all') where.prestamoId = prestamoId
@@ -48,8 +52,8 @@ export async function GET(req: NextRequest) {
       fin.setHours(23, 59, 59, 999)
       where.fechaPago = { gte: inicio, lte: fin }
     }
-    // No mostrar ANULADOS por defecto (soft-delete)
-    if (!estado) {
+    // No mostrar ANULADOS por defecto (soft-delete), salvo que se solicite explícitamente
+    if (!estado && !incluirAnulados) {
       where.estado = { not: 'ANULADO' }
     }
 
@@ -172,10 +176,34 @@ async function generarLinkPago(body: any, user: any) {
 // ACCIÓN: Aplicar pago normal (con transacción)
 // =====================================================
 async function aplicarPago(body: any, user: any) {
-  const { prestamoId, numeroCuota, montoTotal, metodoPago, referencia, cuentaRecaudoId, codigo } = body
+  const { prestamoId, numeroCuota, montoTotal, metodoPago, referencia, cuentaRecaudoId, codigo, fechaPago } = body
 
   if (!prestamoId || !numeroCuota || !montoTotal) {
     return NextResponse.json({ success: false, error: 'Faltan campos obligatorios' }, { status: 400 })
+  }
+
+  // === v4.7 (QA M04 TC-PAG-011/TC-PAG-012): monto debe ser > 0 (no negativo, no cero) ===
+  // Antes: la validación `!montoTotal` (truthy) rechazaba 0 con mensaje confuso.
+  // Ahora: validación numérica explícita, cubre 0 y negativos con codigo MONTO_INVALIDO.
+  const montoTotalNumValidacion = parseFloat(montoTotal)
+  if (isNaN(montoTotalNumValidacion) || montoTotalNumValidacion <= 0) {
+    return NextResponse.json(
+      { success: false, error: `Monto debe ser mayor a 0. Recibido: ${montoTotal}`, codigo: 'MONTO_INVALIDO' },
+      { status: 400 }
+    )
+  }
+
+  // === v4.7 (QA M04 TC-PAG-005): fecha no puede ser futura ===
+  // Si el body trae fechaPago explícita, validar que no sea posterior a hoy.
+  // (Si no viene, se usa new Date() más abajo, que siempre es válida.)
+  if (fechaPago) {
+    const fechaRecibida = new Date(fechaPago)
+    if (!isNaN(fechaRecibida.getTime()) && fechaRecibida > new Date()) {
+      return NextResponse.json(
+        { success: false, error: `Fecha no puede ser futura. Recibido: ${fechaPago}`, codigo: 'FECHA_FUTURA_INVALIDA' },
+        { status: 400 }
+      )
+    }
   }
 
   const prestamo = await db.prestamo.findUnique({
@@ -191,6 +219,22 @@ async function aplicarPago(body: any, user: any) {
     },
   })
   if (!prestamo) return NextResponse.json({ success: false, error: 'Préstamo no encontrado' }, { status: 404 })
+
+  // === v4.7 (QA M04 TC-PAG-004): validar estado del préstamo antes de aplicar pago ===
+  // Estados que NO aceptan pagos: ANULADO, RECHAZADO, CANCELADO.
+  // (CANCELADO = préstamo saldado; ANULADO/RECHAZADO = préstamo cancelado administrativamente)
+  const ESTADOS_NO_ACEPTAN_PAGOS = ['ANULADO', 'RECHAZADO', 'CANCELADO']
+  if (ESTADOS_NO_ACEPTAN_PAGOS.includes(prestamo.estado)) {
+    return NextResponse.json(
+      {
+        success: false,
+        error: `No se pueden registrar pagos a un préstamo en estado ${prestamo.estado}. Solo préstamos ACTIVO/SOLICITUD/EN_MORA/PENDIENTE_ACEPTACION aceptan pagos.`,
+        codigo: 'PRESTAMO_NO_APLICA_PAGOS',
+        estadoPrestamo: prestamo.estado,
+      },
+      { status: 409 }
+    )
+  }
 
   // === VALIDACIÓN DE CUENTA ASIGNADA AL CLIENTE (v3.7 — v4.0.1 fix) ===
   // Prioridad de cuenta asignada:
@@ -361,6 +405,9 @@ async function aplicarPago(body: any, user: any) {
   // === TRANSACCIÓN atómica v4.0 ===
   // Pago create → caja movimiento → recálculo saldos son atómicos.
   // Si algo falla a mitad, todo se revierte y la BD queda consistente.
+  // v4.7 (QA M04 TC-PAG-005): si el body trae fechaPago, se usa esa (ya validada
+  // que no es futura); si no, se usa new Date() (ahora).
+  const fechaPagoFinal = fechaPago ? new Date(fechaPago) : new Date()
   const resultado = await db.$transaction(async (tx) => {
     // 1. Crear o actualizar pago
     const pago = pagoExistente
@@ -371,7 +418,7 @@ async function aplicarPago(body: any, user: any) {
             montoInteres: montoInteresPagado,
             montoMora: montoMoraPagada,
             montoTotal: montoTotalNum,
-            fechaPago: new Date(),
+            fechaPago: fechaPagoFinal,
             metodoPago: metodoPago || 'EFECTIVO',
             referencia: referencia || null,
             cuentaRecaudoId: cuentaFinalPago,
@@ -387,7 +434,7 @@ async function aplicarPago(body: any, user: any) {
             montoInteres: montoInteresPagado,
             montoMora: montoMoraPagada,
             montoTotal: montoTotalNum,
-            fechaPago: new Date(),
+            fechaPago: fechaPagoFinal,
             fechaVencimiento: cuota.fechaVencimiento,
             metodoPago: metodoPago || 'EFECTIVO',
             referencia: referencia || null,

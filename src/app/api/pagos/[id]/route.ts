@@ -42,6 +42,22 @@ export async function DELETE(
       return NextResponse.json({ success: false, error: 'Este pago ya está anulado' }, { status: 400 })
     }
 
+    // === v4.7 (QA M04 TC-PAG-009): no se puede anular un pago REVERSADO ===
+    // Un pago REVERSADO ya fue devuelto al cliente (restitución de saldo).
+    // Anularlo sería inconsistente: el pago ya no está activo.
+    // Si se necesita "re-aplicar" un pago reversado, debe usarse otro flujo.
+    if (pago.estado === 'REVERSADO') {
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'No se puede anular un pago que está REVERSADO. El pago ya fue devuelto al cliente.',
+          codigo: 'PAGO_REVERSADO_NO_ANULABLE',
+          estadoActual: pago.estado,
+        },
+        { status: 409 }
+      )
+    }
+
     const pagoInfo = {
       id: pago.id, codigo: pago.codigo,
       prestamoId: pago.prestamoId, prestamoCodigo: pago.prestamo.codigo,

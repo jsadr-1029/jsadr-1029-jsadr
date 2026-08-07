@@ -34,6 +34,20 @@ export async function POST(
     }
 
     if (pago.estado !== 'APLICADO' && pago.estado !== 'PAGO_PARCIAL') {
+      // === v4.7 (QA M04 TC-PAG-007): mensaje específico para pago ya REVERSADO ===
+      // Si el pago ya está REVERSADO, retornar 409 con codigo PAGO_YA_REVERSADO.
+      // Para otros estados (ANULADO, PENDIENTE, etc.) mantener el 400 original.
+      if (pago.estado === 'REVERSADO') {
+        return NextResponse.json(
+          {
+            success: false,
+            error: 'El pago ya está reversado. No se puede reversar dos veces.',
+            codigo: 'PAGO_YA_REVERSADO',
+            estadoActual: pago.estado,
+          },
+          { status: 409 }
+        )
+      }
       return NextResponse.json(
         { success: false, error: `Solo se pueden reversar pagos APLICADOS o PAGO_PARCIAL. Estado actual: ${pago.estado}` },
         { status: 400 }
