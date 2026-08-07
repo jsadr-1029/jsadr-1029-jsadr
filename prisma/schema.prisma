@@ -68,7 +68,10 @@ model Cliente {
   nombre          String
   cedula          String   @unique
   telefono        String
-  email           String?
+  // v4.5 (QA M02-Clientes TC-CLI-014): email único a nivel BD para prevenir suplantación.
+  // PostgreSQL permite múltiples NULLs en columnas UNIQUE nullable, así que
+  // los clientes sin email no se ven afectados.
+  email           String?  @unique
   // "Cargo" fue reemplazado por "Referido por" (relación a otro Cliente)
   departamento    String?
   municipio       String?

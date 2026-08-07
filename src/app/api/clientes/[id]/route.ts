@@ -135,6 +135,28 @@ export async function PUT(
       }
     }
 
+    // === v4.5 (QA M02-Clientes TC-CLI-014): email único al actualizar ===
+    // Previene que un gestor asigne un email que ya pertenece a otro cliente (riesgo suplantación).
+    if (email !== undefined && email && email.trim() !== '') {
+      const emailExistente = await db.cliente.findFirst({
+        where: {
+          email: { equals: email, mode: 'insensitive' },
+          NOT: { id },
+        },
+        select: { id: true, nombre: true, cedula: true },
+      })
+      if (emailExistente) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: `El correo "${email}" ya está asignado a otro cliente (${emailExistente.nombre}, cédula ${emailExistente.cedula}). No se permiten emails duplicados para prevenir suplantación.`,
+            codigo: 'EMAIL_DUPLICADO',
+          },
+          { status: 409 }
+        )
+      }
+    }
+
     // Validar que no se refiera a sí mismo
     if (referidoPorId && referidoPorId === id) {
       return NextResponse.json(

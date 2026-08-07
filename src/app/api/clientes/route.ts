@@ -116,6 +116,26 @@ export async function POST(req: NextRequest) {
       )
     }
 
+    // === v4.5 (QA M02-Clientes TC-CLI-014): email único para prevenir suplantación ===
+    // El schema.prisma tiene @unique a nivel BD, pero validamos acá antes para
+    // devolver un mensaje claro (409) en vez de un error genérico 500.
+    if (email && email.trim() !== '') {
+      const emailExistente = await db.cliente.findFirst({
+        where: { email: { equals: email, mode: 'insensitive' } },
+        select: { id: true, nombre: true, cedula: true },
+      })
+      if (emailExistente) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: `El correo "${email}" ya está asignado a otro cliente (${emailExistente.nombre}, cédula ${emailExistente.cedula}). No se permiten emails duplicados para prevenir suplantación.`,
+            codigo: 'EMAIL_DUPLICADO',
+          },
+          { status: 409 }
+        )
+      }
+    }
+
     // Validar referidor si viene
     if (referidoPorId) {
       const ref = await db.cliente.findUnique({

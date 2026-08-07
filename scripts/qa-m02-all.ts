@@ -507,37 +507,38 @@ test('TC-CLI-013', 'No se puede eliminar cliente con préstamos (integridad refe
 // TC-CLI-014 — Email duplicado entre clientes
 // ════════════════════════════════════════════════════════════════════════════
 
-test('TC-CLI-014', 'Email NO es @unique en Cliente (permitido duplicar) según schema', async () => {
-  // El Excel pide: "Verificar constraint en schema.prisma"
-  // El caso es deliberadamente ambiguo: HTTP 409 (si email único) o HTTP 201 (si no único)
-  // Lo que importa es verificar qué dice el schema.
+test('TC-CLI-014', 'Email ES @unique en Cliente (previene suplantación) — schema + API + BD', async () => {
+  // v4.5 (2026-08-08): REPARO DE RIESGO DE SUPLANTACIÓN
+  // Hallazgo previo: email era String? sin @unique → 2 clientes podían compartir correo.
+  // Fix aplicado:
+  //   1. schema.prisma → email String? @unique (PostgreSQL permite múltiples NULLs)
+  //   2. POST /api/clientes valida email único → 409 EMAIL_DUPLICADO
+  //   3. PUT  /api/clientes/[id] valida email único → 409 EMAIL_DUPLICADO
+  //   4. BD desempatada (jsadr23@gmail.com → solo Carolina)
 
   const schema = fs.readFileSync(SCHEMA_PRISMA, 'utf8');
   const modeloCliente = schema.match(/model\s+Cliente\s*\{[\s\S]*?\}/);
   assert(modeloCliente !== null, 'debe existir model Cliente en schema.prisma');
 
-  // Verificar que cédula SÍ es @unique pero email NO
-  // Buscar líneas dentro del modelo que contengan "email" y verificar si tienen @unique
   const lineasModelo = modeloCliente![0].split('\n');
   const lineaEmail = lineasModelo.find(l => l.trim().startsWith('email'));
   assert(lineaEmail !== undefined, 'debe existir línea con campo email en modelo Cliente');
+  assert(lineaEmail!.includes('@unique'),
+    'FIX v4.5: email DEBE tener @unique en schema.prisma (previene suplantación)');
 
-  // email NO debe tener @unique (en este modelo)
-  const emailConUnique = lineaEmail!.includes('@unique');
-  // Si NO tiene @unique, el email se puede repetir → HTTP 201 al crear duplicado
-  // Si tiene @unique, el email no se puede repetir → HTTP 409 al crear duplicado
-  // El sistema permite emails duplicados (algunos clientes comparten correo)
+  // Verificar que POST valida email duplicado
+  const srcPost = fs.readFileSync(CLIENTES_ROUTE_SRC, 'utf8');
+  assert(srcPost.includes('EMAIL_DUPLICADO'),
+    'POST /api/clientes debe incluir código EMAIL_DUPLICADO');
+  assert(/findFirst\(\s*\{[\s\S]*?email:[\s\S]*?mode:\s*['"]insensitive['"][\s\S]*?\}\s*\)/.test(srcPost),
+    'POST debe hacer findFirst con mode insensitive sobre email');
 
-  // Reportar el hallazgo
-  console.log(`\n   ℹ️  Schema dice: email ${emailConUnique ? 'ES @unique (HTTP 409 esperado)' : 'NO es @unique (HTTP 201 esperado, emails duplicados permitidos)'}`);
+  // Verificar que PUT también valida email duplicado
+  const srcPut = fs.readFileSync(CLIENTES_ID_SRC, 'utf8');
+  assert(srcPut.includes('EMAIL_DUPLICADO'),
+    'PUT /api/clientes/[id] debe incluir código EMAIL_DUPLICADO');
 
-  // Verificación del comportamiento real del route
-  const src = fs.readFileSync(CLIENTES_ROUTE_SRC, 'utf8');
-  // El route NO debe validar email duplicado (porque el schema no lo exige)
-  assert(!src.includes('Ya existe un cliente con ese email'),
-    'route NO debe tener validación de email duplicado (no hay @unique en schema)');
-
-  // Prueba E2E: crear 2 clientes con el mismo email debe funcionar
+  // E2E: crear cliente A, intentar crear cliente B con mismo email → debe fallar a nivel BD (P2002)
   await prisma.cliente.deleteMany({ where: { cedula: { in: [UNIQUE_CEDULA_A, UNIQUE_CEDULA_B] } } });
 
   const emailCompartido = `compartido-${TS}@test.com`;
@@ -545,21 +546,52 @@ test('TC-CLI-014', 'Email NO es @unique en Cliente (permitido duplicar) según s
   const cli1 = await prisma.cliente.create({
     data: { nombre: 'CLI 1', cedula: UNIQUE_CEDULA_A, telefono: '3000000001', email: emailCompartido },
   });
-  const cli2 = await prisma.cliente.create({
-    data: { nombre: 'CLI 2', cedula: UNIQUE_CEDULA_B, telefono: '3000000002', email: emailCompartido },
-  });
+  assert(cli1.email === emailCompartido, 'primer cliente creado con el email');
 
-  assert(cli1.id !== cli2.id, 'ambos clientes deben tener IDs distintos');
-  assert(cli1.email === cli2.email, 'ambos clientes deben tener el mismo email');
+  let errorP2002: any = null;
+  try {
+    await prisma.cliente.create({
+      data: { nombre: 'CLI 2', cedula: UNIQUE_CEDULA_B, telefono: '3000000002', email: emailCompartido },
+    });
+  } catch (e: any) {
+    errorP2002 = e;
+  }
+  assert(errorP2002 !== null, 'BD debe rechazar el segundo create con email duplicado');
+  assert(errorP2002.code === 'P2002',
+    `Prisma debe retornar código P2002 (unique constraint), recibido: ${errorP2002?.code}`);
+
+  // E2E API: POST /api/clientes con email duplicado debe retornar 409 (no 500)
+  // (Requiere servidor dev corriendo en localhost:3000)
+  const bodyDuplicado = {
+    nombre: 'CLI API DUP',
+    cedula: UNIQUE_CEDULA_B,
+    telefono: '3000000002',
+    email: emailCompartido,
+  };
+  try {
+    const resp = await fetch('http://localhost:3000/api/clientes', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(bodyDuplicado),
+    });
+    assert(resp.status === 409,
+      `API debe retornar 409 para email duplicado, recibido: ${resp.status}`);
+    const data = await resp.json();
+    assert(data.codigo === 'EMAIL_DUPLICADO',
+      `Body debe incluir codigo: EMAIL_DUPLICADO, recibido: ${data.codigo}`);
+  } catch (e: any) {
+    if (e.code === 'ECONNREFUSED') {
+      console.log('   ⚠️  Servidor dev no disponible, se omite prueba E2E API (BD validada OK)');
+    } else {
+      throw e;
+    }
+  }
 
   // Cleanup
-  await prisma.cliente.deleteMany({ where: { id: { in: [cli1.id, cli2.id] } } });
+  await prisma.cliente.deleteMany({ where: { id: { in: [cli1.id] } } });
+  await prisma.cliente.deleteMany({ where: { cedula: { in: [UNIQUE_CEDULA_A, UNIQUE_CEDULA_B] } } });
 
-  // Resultado final: el sistema permite emails duplicados (decisión de diseño validada)
-  if (emailConUnique) {
-    throw new Error('Email está marcado @unique — comportamiento esperado sería HTTP 409');
-  }
-  // Si llegamos aquí, el test pasa: emails duplicados permitidos
+  console.log('   ℹ️  Fix v4.5 verificado: BD (@unique) + API (409 EMAIL_DUPLICADO)');
 });
 
 // ════════════════════════════════════════════════════════════════════════════
