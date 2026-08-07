@@ -80,6 +80,58 @@ jobs:
       - name: Generate Prisma client
         run: npx prisma generate
 
+      # =====================================================
+      # QA REGRESSION GATE — Bloquea el deploy si algún módulo falla
+      # =====================================================
+      # Ejecuta los 13 scripts qa-m0X-*.ts en paralelo contra:
+      #   - Código fuente (src/)
+      #   - Schema Prisma (prisma/schema.prisma)
+      #   - Base de datos Neon PostgreSQL (vía DATABASE_URL del .vercel/.env.production)
+      #   - Configuración (.env.example, vercel.json, package.json, .github/workflows/)
+      #
+      # Si cualquier sub-test falla, el step falla (exit code 1) y el deploy NO procede.
+      # Los resultados se suben como artifact para análisis posterior.
+      # Duración esperada: ~30-60s (concurrencia 4 workers, timeout 180s/script).
+      - name: QA Regression Gate (13 módulos, 624 sub-tests)
+        id: qa-gate
+        run: |
+          # Cargar variables de entorno de producción descargadas por `vercel pull`
+          if [ -f .vercel/.env.production ]; then
+            echo "📋 Cargando variables desde .vercel/.env.production..."
+            # Exportar solo las variables que los scripts QA necesitan (no filtrar para no perder ninguna)
+            set -a
+            . .vercel/.env.production
+            set +a
+            echo "✅ Variables cargadas: $(grep -c '=' .vercel/.env.production || echo 0)"
+          else
+            echo "⚠️  .vercel/.env.production no encontrado — los tests que requieren BD fallarán."
+          fi
+
+          echo ""
+          echo "═══════════════════════════════════════════════════════════"
+          echo "  Iniciando QA Regression Gate (pre-deploy gate)"
+          echo "═══════════════════════════════════════════════════════════"
+          echo ""
+
+          # Ejecutar orquestador — exit 0 = todos PASS, exit 1 = algún FAIL
+          node scripts/qa-regression-all.cjs
+
+          echo ""
+          echo "✅ QA Regression Gate PASS — procediendo con deploy a producción."
+        env:
+          NODE_ENV: production
+
+      - name: Upload QA Regression results (artifact)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: qa-regression-results
+          path: |
+            download/qa-regresion-results.json
+            download/reporte-regresion-qa.pdf
+          if-no-files-found: warn
+          retention-days: 30
+
       - name: Deploy to Vercel (production)
         id: deploy
         run: |
@@ -113,8 +165,14 @@ jobs:
             echo "" >> "$GITHUB_STEP_SUMMARY"
             echo "Revisa los logs arriba para detalles." >> "$GITHUB_STEP_SUMMARY"
             echo "" >> "$GITHUB_STEP_SUMMARY"
-            echo "Si el error es \`HTTP 403 invalidToken\`:" >> "$GITHUB_STEP_SUMMARY"
-            echo "1. Genera un nuevo token en https://vercel.com/account/tokens" >> "$GITHUB_STEP_SUMMARY"
-            echo "2. Actualiza el secret \`VERCEL_TOKEN\` en [GitHub settings](https://github.com/jsadr-1029/jsadr-1029-jsadr/settings/secrets/actions)" >> "$GITHUB_STEP_SUMMARY"
-            echo "3. Re-run este workflow desde la pestaña Actions" >> "$GITHUB_STEP_SUMMARY"
+            echo "### Posibles causas:" >> "$GITHUB_STEP_SUMMARY"
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "- **QA Regression Gate falló**: revisa el step 'QA Regression Gate' y el artifact \`qa-regression-results\` con el JSON detallado. El deploy se bloquea hasta que todos los 13 módulos pasen." >> "$GITHUB_STEP_SUMMARY"
+            echo "- **HTTP 403 invalidToken**:" >> "$GITHUB_STEP_SUMMARY"
+            echo "  1. Genera un nuevo token en https://vercel.com/account/tokens" >> "$GITHUB_STEP_SUMMARY"
+            echo "  2. Actualiza el secret \`VERCEL_TOKEN\` en [GitHub settings](https://github.com/jsadr-1029/jsadr-1029-jsadr/settings/secrets/actions)" >> "$GITHUB_STEP_SUMMARY"
+            echo "  3. Re-run este workflow desde la pestaña Actions" >> "$GITHUB_STEP_SUMMARY"
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "### QA Regression Gate status" >> "$GITHUB_STEP_SUMMARY"
+            echo "El step 'QA Regression Gate' debe mostrar ✅ PASS antes del deploy. Si falló, descarga el artifact para ver qué módulo rompió." >> "$GITHUB_STEP_SUMMARY"
           fi
