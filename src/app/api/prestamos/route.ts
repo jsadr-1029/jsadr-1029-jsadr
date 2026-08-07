@@ -204,6 +204,43 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, error: 'Cliente no encontrado' }, { status: 404 })
     }
 
+    // === v4.6 (QA M03 TC-PRE-003): validacion global de monto minimo ===
+    // Minimo absoluto del sistema: 50,000 COP. Aplica siempre, incluso si el cliente
+    // no tiene categoria asignada. Previere prestamos administrativamente inviables.
+    const MONTO_MINIMO_GLOBAL = 50000
+    const montoNumGlobal = parseFloat(montoPrincipal)
+    if (isNaN(montoNumGlobal) || montoNumGlobal < MONTO_MINIMO_GLOBAL) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: `Monto debe ser >= ${MONTO_MINIMO_GLOBAL.toLocaleString('es-CO')} COP. Monto recibido: ${montoPrincipal}`,
+          codigo: 'MONTO_INFERIOR_MINIMO',
+        },
+        { status: 400 }
+      )
+    }
+
+    // === v4.6 (QA M03 TC-PRE-004): validacion de plazo minimo ===
+    // plazoMeses debe ser entero >= 1. Previene division por cero en calculos
+    // y prestamos sin cuotas programadas.
+    // Aplica cuando el prestamo NO es cuota personalizada ni tasa fija (esas modalidades
+    // validan numeroCuotas directamente).
+    const esCuotaPersonalizada = modalidad === 'CUOTA_PERSONALIZADA'
+    const esTasaFija = modalidad === 'TASA_FIJA_MENSUAL'
+    if (!esCuotaPersonalizada && !esTasaFija && plazoMeses !== undefined) {
+      const plazoNum = parseInt(plazoMeses)
+      if (isNaN(plazoNum) || plazoNum < 1) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: 'Plazo debe ser >= 1 mes.',
+            codigo: 'PLAZO_INVALIDO',
+          },
+          { status: 400 }
+        )
+      }
+    }
+
     // === Validación de monto por categoría ===
     // Resuelve la categoría: la pasada en el body, o la del cliente, o la del préstamo anterior
     let categoriaValidar: Awaited<ReturnType<typeof db.categoriaCliente.findUnique>> = null

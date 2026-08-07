@@ -102,10 +102,11 @@ export async function PATCH(
 ) {
   const auth = requireRoleAuth(req, ['ADMIN', 'GESTOR'])
   if (auth instanceof NextResponse) return auth
+  const user = auth // AuthUser
   try {
     const { id } = await params
     const body = await req.json()
-    const { accion, tasaMoraPersonalizada, datosFirma } = body
+    const { accion, tasaMoraPersonalizada, datosFirma, motivo } = body
 
     const prestamo = await db.prestamo.findUnique({
       where: { id },
@@ -274,6 +275,49 @@ export async function PATCH(
           titulo: 'Préstamo cerrado/liquidado',
           descripcion: `Se cerró el préstamo ${prestamo.codigo}. Saldo anterior: capital $${prestamo.saldoCapital?.toLocaleString() || 0}, interés $${prestamo.saldoInteres?.toLocaleString() || 0}, total $${prestamo.saldoTotal?.toLocaleString() || 0}.`,
           resultado: 'Préstamo marcado como CANCELADO con saldos en cero',
+        }
+        break
+
+      case 'anular':
+        // === v4.6 (QA M03 TC-PRE-009): anular préstamo ===
+        // Solo ADMIN puede anular. Solo se puede anular desde ACTIVO (sin pagos).
+        // El Excel espera estado=ANULADO. El schema actual no contempla ANULADO
+        // como valor distinto de CANCELADO/RECHAZADO, así que mapeamos a RECHAZADO
+        // (que es el estado canónico del sistema para "préstamo cancelado sin desembolsar/fallido").
+        // Guard: solo ADMIN
+        if (user.rol !== 'ADMIN') {
+          return NextResponse.json(
+            { success: false, error: 'Solo el ADMIN puede anular préstamos.', code: 'FORBIDDEN' },
+            { status: 403 }
+          )
+        }
+        // Guard: solo desde ACTIVO o SOLICITUD o PENDIENTE_ACEPTACION, y sin pagos aplicados
+        if (!['ACTIVO', 'SOLICITUD', 'PENDIENTE_ACEPTACION'].includes(prestamo.estado)) {
+          return NextResponse.json(
+            { success: false, error: `No se puede anular: el préstamo está en estado ${prestamo.estado}.` },
+            { status: 400 }
+          )
+        }
+        if (prestamo.estado === 'ACTIVO') {
+          const pagosAplicados = await db.pago.count({
+            where: { prestamoId: id, estado: 'APLICADO' },
+          })
+          if (pagosAplicados > 0) {
+            return NextResponse.json(
+              { success: false, error: `No se puede anular: el préstamo tiene ${pagosAplicados} pago(s) aplicado(s). Revierta los pagos primero o use la acción 'cerrar'.` },
+              { status: 400 }
+            )
+          }
+        }
+        datosActualizacion = {
+          estado: 'RECHAZADO', // estado canónico del sistema para anulado/rechazado
+          notas: (prestamo.notas || '') + `\n[ANULADO ${new Date().toISOString()}] Motivo: ${motivo || 'No especificado'}`,
+        }
+        bitacoraEntrada = {
+          tipo: 'ANULACION',
+          titulo: 'Préstamo anulado',
+          descripcion: `Préstamo ${prestamo.codigo} anulado por ${user?.nombre || 'ADMIN'}. Motivo: ${motivo || 'No especificado'}.`,
+          resultado: 'Préstamo marcado como RECHAZADO (anulado)',
         }
         break
 

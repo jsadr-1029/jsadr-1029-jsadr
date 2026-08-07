@@ -35,6 +35,32 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'No hay OTP pendiente. Solicita uno nuevo.' }, { status: 400 })
     }
 
+    // === v4.6 (QA M03 TC-PRE-011): verificar expiración del OTP ===
+    // El OTP expira a los 5 minutos (definido en solicitar-otp).
+    // Si otpFechaEnvio + 5 min < ahora → rechazar con 400 (no 401, no 500).
+    // Previene que un OTP interceptado se use indefinidamente.
+    const OTP_TTL_MIN = 5
+    if (firma.otpFechaEnvio) {
+      const expiraEn = new Date(firma.otpFechaEnvio.getTime() + OTP_TTL_MIN * 60 * 1000)
+      if (new Date() > expiraEn) {
+        // Marcar la firma como EXPIRADA y limpiar el OTP
+        await db.firmaElectronica.update({
+          where: { id: firmaId },
+          data: {
+            estadoFirma: 'EXPIRADA',
+            otpCodigo: null,
+          },
+        })
+        return NextResponse.json(
+          {
+            error: 'OTP expirado. Solicita un nuevo código para continuar.',
+            codigo: 'OTP_EXPIRADO',
+          },
+          { status: 400 }
+        )
+      }
+    }
+
     const ip = obtenerIp(req)
     const ua = obtenerUserAgent(req)
     const cliente = firma.prestamo?.cliente
@@ -66,6 +92,19 @@ export async function POST(req: NextRequest) {
             detalle: `OTP incorrecto. Intento ${nuevosIntentos}/${firma.maxIntentos}`,
           },
         })
+      }
+
+      // v4.6 (QA M03 TC-PRE-012): si se exceden los intentos, retornar 429 (Too Many Requests)
+      // en lugar de 401, como espera el estándar y el plan de pruebas.
+      if (bloqueado) {
+        return NextResponse.json(
+          {
+            error: 'Máximo de intentos alcanzado. Firma bloqueada por seguridad.',
+            codigo: 'OTP_BLOQUEADO',
+            bloqueado: true,
+          },
+          { status: 429 }
+        )
       }
 
       return NextResponse.json({

@@ -9,7 +9,7 @@ export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-    const auth = requireRole(req, ['ADMIN', 'GESTOR'])
+    const auth = requireRole(req, ['ADMIN']) // v4.6 (QA M03 TC-PRE-015): solo ADMIN puede reversar pagos
     if (auth instanceof NextResponse) return auth
   try {
     const { id } = await params
