@@ -965,3 +965,23 @@ html {
   isolation: isolate;
   contain: layout style paint;
 }
+
+/* =====================================================
+   v4.15 (QA M12 TC-UI-006): .sr-only para accesibilidad
+   -----------------------------------------------------
+   Oculta contenido visualmente pero lo mantiene accesible
+   para screen readers. Compatible con Chrome, Firefox y
+   Safari (NVDA, JAWS, VoiceOver, TalkBack).
+   Usado por DialogClose, AlertCircle labels, etc.
+   ===================================================== */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}

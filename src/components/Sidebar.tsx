@@ -6,6 +6,7 @@ import { cn } from '@/lib/utils'
 import { getUserData } from '@/lib/api-client'
 import { vistasPermitidasUsuario } from '@/lib/permisos'
 import { useAuthReactive } from '@/hooks/use-auth-reactive'
+import { Skeleton } from '@/components/ui/skeleton'
 import {
   FileText,
   DollarSign,
@@ -139,6 +140,13 @@ export function Sidebar({ view, onChange, forceVisible = false, mobileOpen = fal
   // Estado de expansión por grupo
   const [expanded, setExpanded] = useState<Record<string, boolean>>({})
 
+  // v4.15 (QA M12 TC-UI-013): Estado de carga — mostrar Skeleton mientras
+  // se obtiene el rol del usuario (evita flasheo de menú vacío en mobile/desktop).
+  const [loading, setLoading] = useState(!rol)
+  useEffect(() => {
+    if (rol) setLoading(false)
+  }, [rol])
+
   // Auto-expandir el grupo que contiene la vista activa
   useEffect(() => {
     setExpanded((prev) => {
@@ -174,14 +182,34 @@ export function Sidebar({ view, onChange, forceVisible = false, mobileOpen = fal
           forceVisible ? 'flex' : 'hidden lg:flex',
         )}
       >
-        <SidebarContent
-          menuItems={menuItems}
-          view={view}
-          expanded={expanded}
-          toggleGroup={toggleGroup}
-          onChange={onChange}
-          rol={rol}
-        />
+        {loading ? (
+          // v4.15 (QA M12 TC-UI-013): Skeleton loaders mientras se obtiene el rol
+          <div className="flex flex-col gap-3 p-4">
+            <div className="flex items-center gap-3 mb-4">
+              <Skeleton className="w-11 h-11 rounded-xl" />
+              <div className="flex flex-col gap-1.5">
+                <Skeleton className="w-24 h-3" />
+                <Skeleton className="w-16 h-2.5" />
+              </div>
+            </div>
+            <Skeleton className="w-full h-9 rounded-lg" />
+            <Skeleton className="w-full h-9 rounded-lg" />
+            <Skeleton className="w-3/4 h-9 rounded-lg" />
+            <Skeleton className="w-full h-9 rounded-lg" />
+            <Skeleton className="w-2/3 h-9 rounded-lg" />
+            <Skeleton className="w-full h-9 rounded-lg" />
+            <Skeleton className="w-1/2 h-9 rounded-lg" />
+          </div>
+        ) : (
+          <SidebarContent
+            menuItems={menuItems}
+            view={view}
+            expanded={expanded}
+            toggleGroup={toggleGroup}
+            onChange={onChange}
+            rol={rol}
+          />
+        )}
       </aside>
 
       {/* === Mobile Drawer === */}
