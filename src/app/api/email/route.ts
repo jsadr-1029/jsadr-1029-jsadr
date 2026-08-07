@@ -29,16 +29,39 @@ export async function POST(req: NextRequest) {
 
     if (accion === 'probar') {
       const resultado = await probarSmtp()
-      return NextResponse.json({ success: resultado.success, message: resultado.message, config: resultado.config })
+      return NextResponse.json({
+        success: resultado.success,
+        message: resultado.message,
+        codigo: resultado.codigo, // v4.8: codigo sanitizado (SMTP_AUTH_FAILED, SMTP_CONN_ERROR, etc.)
+        config: resultado.config,
+      })
     }
 
     if (accion === 'enviar-prueba') {
       if (!to) {
         return NextResponse.json(
-          { success: false, error: 'Especifica el destinatario en "to"' },
+          { success: false, error: 'Especifica el destinatario en "to"', codigo: 'TO_REQUERIDO' },
           { status: 400 }
         )
       }
+
+      // === v4.8 (QA M05 TC-MAIL-010): validar formato de email del destinatario ===
+      // Antes: solo se validaba `!to` (truthy), permitiendo strings como "no-es-email".
+      // enviarEmail() sí validaba el formato pero retornaba success:false (HTTP 200),
+      // lo cual era confuso para el cliente (parecía exitoso pero no enviaba).
+      // Ahora: validación previa con regex en la API route → HTTP 400 EMAIL_INVALIDO.
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+      if (!emailRegex.test(String(to).trim())) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: `El email del destinatario no tiene un formato válido. Recibido: "${to}"`,
+            codigo: 'EMAIL_INVALIDO',
+          },
+          { status: 400 }
+        )
+      }
+
       const resultado = await enviarEmail({
         to,
         subject: 'Correo de prueba - Sistema de Préstamos',

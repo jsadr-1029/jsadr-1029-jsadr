@@ -676,10 +676,16 @@ export async function haySmtpConfigurado(): Promise<boolean> {
 
 /**
  * Prueba la conexión SMTP.
+ * v4.8 (QA M05 TC-MAIL-015): el error devuelto al cliente está sanitizado.
+ * Antes: `message: \`Error de conexión SMTP: ${error.message}\`` exponía
+ * detalles internos (host, puerto, credenciales parciales) al cliente.
+ * Ahora: clasifica el tipo de error y devuelve un mensaje genérico + codigo.
+ * Los detalles del error quedan solo en logs del server (console.error).
  */
 export async function probarSmtp(): Promise<{
   success: boolean
   message: string
+  codigo?: string
   config?: SmtpConfig
 }> {
   try {
@@ -689,6 +695,7 @@ export async function probarSmtp(): Promise<{
         success: false,
         message:
           'No hay SMTP configurado. Se está usando Ethereal Email (modo de prueba). Configura una conexión EMAIL_SMTP en Conexiones API.',
+        codigo: 'SMTP_NO_CONFIGURADO',
       }
     }
     await transporter.verify()
@@ -701,9 +708,52 @@ export async function probarSmtp(): Promise<{
       },
     }
   } catch (error: any) {
+    // Log completo del error para diagnóstico interno (no se envía al cliente)
+    console.error('[email][probarSmtp] Error completo:', error)
+
+    // === v4.8 (QA M05 TC-MAIL-015): clasificar y sanitizar el error ===
+    const errMsg = (error.message || '').toLowerCase()
+    let codigo = 'SMTP_ERROR'
+    let mensajeSanitizado = 'Error al conectar con el servidor SMTP.'
+
+    // Error de autenticación (535, 525, 5.7.1, 5.7.8, invalid login, unauthorized)
+    if (
+      errMsg.includes('535') ||
+      errMsg.includes('525') ||
+      errMsg.includes('5.7.1') ||
+      errMsg.includes('5.7.8') ||
+      errMsg.includes('invalid login') ||
+      errMsg.includes('unauthorized') ||
+      errMsg.includes('authentication failed')
+    ) {
+      codigo = 'SMTP_AUTH_FAILED'
+      mensajeSanitizado = 'Error de autenticación SMTP. Verifica que las credenciales (user/password o API key) sean correctas y estén activas en el panel de Brevo.'
+    }
+    // Error de conexión (timeout, ECONNREFUSED, ENOTFOUND)
+    else if (
+      errMsg.includes('econnrefused') ||
+      errMsg.includes('enotfound') ||
+      errMsg.includes('timeout') ||
+      errMsg.includes('etimedout')
+    ) {
+      codigo = 'SMTP_CONN_ERROR'
+      mensajeSanitizado = 'No se pudo conectar al servidor SMTP. Verifica host y puerto, y que no haya firewall bloqueando la conexión.'
+    }
+    // Error de SSL/TLS
+    else if (
+      errMsg.includes('ssl') ||
+      errMsg.includes('tls') ||
+      errMsg.includes('certificate') ||
+      errMsg.includes('self-signed')
+    ) {
+      codigo = 'SMTP_TLS_ERROR'
+      mensajeSanitizado = 'Error de SSL/TLS al conectar al servidor SMTP. Verifica el certificado y el puerto (465=SSL, 587=STARTTLS).'
+    }
+
     return {
       success: false,
-      message: `Error de conexión SMTP: ${error.message}`,
+      message: mensajeSanitizado,
+      codigo,
     }
   }
 }

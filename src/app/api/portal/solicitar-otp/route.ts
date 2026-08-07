@@ -42,13 +42,13 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Máximo de intentos alcanzado' }, { status: 429 })
     }
 
-    // Generar OTP nuevo (numérico 6 dígitos)
-    const otp = generarCodigoOtp('numeric', 6)
+    // === v4.8 (QA M05 TC-MAIL-004): validar email ANTES de generar el OTP ===
+    // Antes: el OTP se generaba y luego se validaba el email. Si el cliente no
+    // tenía email, el OTP se había generado en memoria (desperdicio + riesgo de
+    // logs). Ahora: validar email primero, luego generar OTP.
     const cliente = firma.prestamo.cliente
     const telefono = cliente.telefono || ''
     const email = cliente.email || ''
-    const ip = obtenerIp(req)
-    const ua = obtenerUserAgent(req)
 
     // FIXED v5.0: canal siempre EMAIL
     const canalEf: 'EMAIL' = 'EMAIL'
@@ -58,10 +58,16 @@ export async function POST(req: NextRequest) {
         {
           error:
             'Tu cuenta no tiene un correo electrónico registrado. Contacta al administrador para actualizar tu correo antes de continuar.',
+          codigo: 'CLIENTE_SIN_EMAIL',
         },
         { status: 400 }
       )
     }
+
+    // Generar OTP nuevo (numérico 6 dígitos) — solo después de validar email
+    const otp = generarCodigoOtp('numeric', 6)
+    const ip = obtenerIp(req)
+    const ua = obtenerUserAgent(req)
 
     // Registrar en OtpRegistro (trazabilidad centralizada)
     const otpRegistro = await registrarOtp({
