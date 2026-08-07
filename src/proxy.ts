@@ -300,7 +300,7 @@ export async function proxy(req: NextRequest) {
   response.headers.set('X-Permitted-Cross-Domain-Policies', 'none')
   response.headers.set('Cross-Origin-Resource-Policy', 'same-site')
   response.headers.set('Cross-Origin-Opener-Policy', 'same-origin-allow-popups')
-  response.headers.set('Permissions-Policy', 'camera=(), microphone=(), geolocation=(), payment=()')
+  response.headers.set('Permissions-Policy', 'camera=(self), microphone=(), geolocation=(), payment=()')
   response.headers.set('X-XSS-Protection', '1; mode=block')
   response.headers.set('X-RateLimit-Limit', limitConfig ? String(limitConfig.max) : '0')
   // X-Frame-Options y CSP restrictivos solo en producción (en preview z.ai necesita iframe)

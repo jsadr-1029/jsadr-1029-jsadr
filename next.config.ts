@@ -51,7 +51,7 @@ const nextConfig: NextConfig = {
           { key: "X-Permitted-Cross-Domain-Policies", value: "none" },
           { key: "Cross-Origin-Resource-Policy", value: "same-site" },
           { key: "Cross-Origin-Opener-Policy", value: "same-origin-allow-popups" },
-          { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=(), payment=()" },
+          { key: "Permissions-Policy", value: "camera=(self), microphone=(), geolocation=(), payment=()" },
           { key: "X-XSS-Protection", value: "1; mode=block" },
           { key: "Referrer-Policy", value: "no-referrer-when-downgrade" },
         ],
