@@ -111,16 +111,21 @@ export async function POST(req: NextRequest) {
       })
     }
 
+    // === v4.10 (QA M07 TC-PORT-003): bloqueo a los 5 intentos (estándar) ===
+    // Antes era 3; el plan de pruebas exige 5 (coincide con /api/portal/auth).
+    const MAX_INTENTOS_PIN = 5
+    const TIEMPO_BLOQUEO_MIN = 15
+
     // Validar PIN existente
     const pinValido = bcrypt.compareSync(pin, cliente.pinHash)
     if (!pinValido) {
       const nuevosIntentos = cliente.pinIntentos + 1
-      const bloquear = nuevosIntentos >= 3
+      const bloquear = nuevosIntentos >= MAX_INTENTOS_PIN
       await db.cliente.update({
         where: { id: cliente.id },
         data: {
           pinIntentos: nuevosIntentos,
-          pinBloqueadoHasta: bloquear ? new Date(Date.now() + 15 * 60 * 1000) : null,
+          pinBloqueadoHasta: bloquear ? new Date(Date.now() + TIEMPO_BLOQUEO_MIN * 60 * 1000) : null,
         },
       })
 
@@ -133,7 +138,7 @@ export async function POST(req: NextRequest) {
           userAgent: clientInfo.userAgent,
           accion: 'LOGIN_PIN',
           exito: false,
-          detalle: `PIN incorrecto. Intento ${nuevosIntentos}/3`,
+          detalle: `PIN incorrecto. Intento ${nuevosIntentos}/${MAX_INTENTOS_PIN}`,
         },
       })
 
@@ -141,10 +146,11 @@ export async function POST(req: NextRequest) {
         {
           success: false,
           error: bloquear
-            ? 'Demasiados intentos. Cuenta bloqueada por 15 minutos.'
-            : `PIN incorrecto. Intentos restantes: ${3 - nuevosIntentos}`,
+            ? `Demasiados intentos. Cuenta bloqueada por ${TIEMPO_BLOQUEO_MIN} minutos.`
+            : `PIN incorrecto. Intentos restantes: ${MAX_INTENTOS_PIN - nuevosIntentos}`,
+          codigo: bloquear ? 'PIN_BLOQUEADO' : 'PIN_INCORRECTO',
         },
-        { status: 401 }
+        { status: bloquear ? 403 : 401 }
       )
     }
 
@@ -180,6 +186,82 @@ export async function POST(req: NextRequest) {
       clienteId: cliente.id,
       nombre: cliente.nombre,
     })
+  } catch (e) {
+    return NextResponse.json(
+      { success: false, error: (e as Error).message },
+      { status: 500 }
+    )
+  }
+}
+
+// =====================================================
+// DELETE /api/portal/login — Cierre de sesión (logout)
+// v4.10 (QA M07 TC-PORT-014)
+// =====================================================
+// Body: { token: string } | Headers: x-portal-token
+// Acción:
+//   1. Identifica al cliente por tokenSesion.
+//   2. Limpia tokenSesion=null y tokenExpira=null en BD.
+//   3. Registra LOGOUT en AccesoPortal (auditoría).
+//   4. Retorna HTTP 200.
+//
+// Si el token no coincide con ningún cliente, retorna 200 igualmente
+// (idempotente: no revela si la sesión existía).
+// =====================================================
+export async function DELETE(req: NextRequest) {
+  try {
+    // Token desde body o header (preferido)
+    let token: string | undefined
+    try {
+      const body = await req.json()
+      token = body?.token
+    } catch {
+      // body vacío no es error: leemos header
+    }
+    if (!token) {
+      token = req.headers.get('x-portal-token') || undefined
+    }
+
+    const clientInfo = getClientInfo(req)
+
+    if (token) {
+      // Buscar cliente por tokenSesion
+      const cliente = await db.cliente.findFirst({
+        where: { tokenSesion: token },
+        select: { id: true, cedula: true, nombre: true },
+      })
+
+      if (cliente) {
+        // Limpiar token en BD
+        await db.cliente.update({
+          where: { id: cliente.id },
+          data: {
+            tokenSesion: null,
+            tokenExpira: null,
+          },
+        })
+
+        // Auditoría
+        await db.accesoPortal.create({
+          data: {
+            clienteId: cliente.id,
+            clienteCedula: cliente.cedula,
+            clienteNombre: cliente.nombre,
+            ipOrigen: clientInfo.ip,
+            userAgent: clientInfo.userAgent,
+            accion: 'LOGOUT',
+            exito: true,
+            detalle: 'Sesión cerrada por DELETE /api/portal/login',
+          },
+        })
+      }
+    }
+
+    // Respuesta idempotente — siempre 200 (no revela si el token existía)
+    return NextResponse.json(
+      { success: true, message: 'Sesión cerrada' },
+      { status: 200 }
+    )
   } catch (e) {
     return NextResponse.json(
       { success: false, error: (e as Error).message },

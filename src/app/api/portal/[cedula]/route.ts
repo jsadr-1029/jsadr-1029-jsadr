@@ -3,12 +3,75 @@ import { db } from '@/lib/db'
 import { sanitizeError } from '@/lib/error-handler'
 
 // GET - portal de consulta por cédula
+// v4.10 (QA M07 TC-PORT-015): validación token vs cédula
+//   - El cliente debe enviar su token de sesión (header x-portal-token o query ?token=).
+//   - Se busca el cliente por tokenSesion y se verifica que su cédula coincida
+//     con la cédula del URL. Si no coinciden → HTTP 403 (cross-cliente bloqueado).
+//   - También se valida tokenExpira > now.
 export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ cedula: string }> }
 ) {
   try {
     const { cedula } = await params
+
+    // === v4.10: Validar token de sesión del portal ===
+    const token =
+      req.headers.get('x-portal-token') ||
+      new URL(req.url).searchParams.get('token')
+
+    if (!token) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'Token de sesión requerido. Inicie sesión en el portal.',
+          codigo: 'TOKEN_REQUERIDO',
+        },
+        { status: 401 }
+      )
+    }
+
+    // Buscar al cliente autenticado por tokenSesion (no por la cédula del URL)
+    const clienteAutenticado = await db.cliente.findFirst({
+      where: { tokenSesion: token as string },
+      select: { id: true, cedula: true, nombre: true, tokenExpira: true },
+    })
+
+    if (
+      !clienteAutenticado ||
+      !clienteAutenticado.tokenExpira ||
+      new Date(clienteAutenticado.tokenExpira) < new Date()
+    ) {
+      return NextResponse.json(
+        { success: false, error: 'Sesión expirada', codigo: 'SESSION_EXPIRED' },
+        { status: 401 }
+      )
+    }
+
+    // === Validación cross-cliente: el token debe pertenecer a la cédula del URL ===
+    if (clienteAutenticado.cedula !== cedula) {
+      // Auditoría del intento de acceso cross-cliente
+      await db.accesoPortal.create({
+        data: {
+          clienteId: clienteAutenticado.id,
+          clienteCedula: clienteAutenticado.cedula,
+          clienteNombre: clienteAutenticado.nombre,
+          ipOrigen: req.headers.get('x-forwarded-for') || req.headers.get('x-real-ip') || null,
+          userAgent: req.headers.get('user-agent') || null,
+          accion: 'ACCESO_CROSS_CLIENTE_BLOQUEADO',
+          exito: false,
+          detalle: `Cliente ${clienteAutenticado.cedula} intentó consultar datos de cédula ${cedula} (bloqueado).`,
+        },
+      })
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'No autorizado para ver datos de otro cliente.',
+          codigo: 'CROSS_CLIENTE_BLOQUEADO',
+        },
+        { status: 403 }
+      )
+    }
 
     const cliente = await db.cliente.findUnique({
       where: { cedula },

@@ -455,7 +455,7 @@ export async function POST(req: NextRequest) {
         tablaAmortizacionParseada: resultado.tablaAmortizacion,
       },
       message: 'Solicitud creada exitosamente',
-    })
+    }, { status: 201 })
   } catch (error) {
     logError('/api/solicitudes-web POST', error)
     return errorResponse('/api/solicitudes-web POST', error)
