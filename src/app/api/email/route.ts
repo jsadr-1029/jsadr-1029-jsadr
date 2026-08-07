@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { haySmtpConfigurado, probarSmtp, enviarEmail } from '@/lib/email'
+import { haySmtpConfigurado, probarSmtp, enviarEmail, verificarCuentaBrevo } from '@/lib/email'
 import { requireRole } from '@/lib/auth-guard'
 import { sanitizeError } from '@/lib/error-handler'
+import { db } from '@/lib/db'
 
 // GET - saber si hay SMTP configurado
 export async function GET(req: NextRequest) {
@@ -29,11 +30,50 @@ export async function POST(req: NextRequest) {
 
     if (accion === 'probar') {
       const resultado = await probarSmtp()
+      // v4.14 (QA M11 TC-INT-001): además de probar SMTP, verificar HTTPS API de Brevo
+      // (/v3/account) y actualizar ConexionAPI.probada + fechaUltimaPrueba + resultadoUltimaPrueba
+      let brevoAccount: { success?: boolean; message?: string; cuenta?: unknown } | null = null
+      try {
+        brevoAccount = await verificarCuentaBrevo()
+      } catch (e) {
+        // No fallar el test de SMTP si la verificación HTTPS falla — solo reportarlo
+        brevoAccount = { success: false, message: (e as Error).message }
+      }
+
+      // Determinar éxito global: SMTP ok O Brevo HTTPS ok (al menos uno)
+      const okGlobal = resultado.success || !!brevoAccount?.success
+
+      // Actualizar ConexionAPI.EMAIL_SMTP con el resultado de la prueba
+      try {
+        const conexion = await db.conexionAPI.findFirst({
+          where: { tipo: 'EMAIL_SMTP', activa: true },
+          select: { id: true },
+        })
+        if (conexion) {
+          await db.conexionAPI.update({
+            where: { id: conexion.id },
+            data: {
+              probada: okGlobal,
+              fechaUltimaPrueba: new Date(),
+              resultadoUltimaPrueba: okGlobal
+                ? 'OK'
+                : (resultado.codigo || brevoAccount?.message || 'FAIL').slice(0, 200),
+            },
+          })
+        }
+      } catch (e) {
+        // No fallar la respuesta si la BD no está disponible
+        console.error('[email][probar] Error actualizando ConexionAPI:', e)
+      }
+
       return NextResponse.json({
-        success: resultado.success,
-        message: resultado.message,
+        success: okGlobal,
+        message: okGlobal
+          ? resultado.message
+          : `${resultado.message} | Brevo HTTPS: ${brevoAccount?.message || 'N/A'}`,
         codigo: resultado.codigo, // v4.8: codigo sanitizado (SMTP_AUTH_FAILED, SMTP_CONN_ERROR, etc.)
         config: resultado.config,
+        brevoHttps: brevoAccount, // v4.14: resultado de /v3/account
       })
     }
 

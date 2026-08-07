@@ -757,3 +757,81 @@ export async function probarSmtp(): Promise<{
     }
   }
 }
+
+// =====================================================
+// verificarCuentaBrevo — GET https://api.brevo.com/v3/account
+// -----------------------------------------------------
+// Verifica que la BREVO_API_KEY (desencriptada de BD o de env var)
+// sea válida consultando el endpoint /v3/account de Brevo.
+// Devuelve los datos de la cuenta (email, plan, etc.) si la key es válida.
+//
+// Es usado por /api/email {accion: 'probar'} como verificación adicional
+// (además de transporter.verify() que prueba SMTP) y por TC-INT-002.
+// =====================================================
+export async function verificarCuentaBrevo(): Promise<{
+  success: boolean
+  message: string
+  cuenta?: { email?: string; plan?: string; firstName?: string; lastName?: string }
+  raw?: unknown
+}> {
+  try {
+    const apiKey = await obtenerBrevoApiKey()
+    if (!apiKey) {
+      return {
+        success: false,
+        message:
+          'No hay BREVO_API_KEY configurada (ni en env var ni en ConexionAPI). ' +
+          'Configura la clave HTTPS API (xkeysib-...) en .env o en Configuración Global → Conexiones API.',
+      }
+    }
+
+    const res = await fetch('https://api.brevo.com/v3/account', {
+      method: 'GET',
+      headers: {
+        'api-key': apiKey,
+        'accept': 'application/json',
+      },
+      // Timeout 8s para no bloquear la request
+      signal: AbortSignal.timeout(8000),
+    })
+
+    if (res.status === 401 || res.status === 403) {
+      // Marcar la key como inválida por 5 min para evitar reintentos inútiles
+      brevoApiKeyInvalidUntil = Date.now() + BREVO_API_INVALID_TTL_MS
+      brevoApiKeyInvalidHash = apiKey.slice(-6)
+      return {
+        success: false,
+        message:
+          'BREVO_API_KEY rechazada por Brevo (HTTP ' +
+          res.status +
+          '). La clave es inválida o fue revocada. Genérala de nuevo en https://app.brevo.com/settings/keys/api',
+      }
+    }
+
+    if (!res.ok) {
+      return {
+        success: false,
+        message: `Brevo /v3/account devolvió HTTP ${res.status}.`,
+        raw: await res.text().catch(() => null),
+      }
+    }
+
+    const data: any = await res.json().catch(() => ({}))
+    return {
+      success: true,
+      message: 'Cuenta Brevo verificada correctamente vía HTTPS API /v3/account.',
+      cuenta: {
+        email: data.email,
+        plan: data.plan?.type || data.plan,
+        firstName: data.firstName,
+        lastName: data.lastName,
+      },
+      raw: data,
+    }
+  } catch (error: any) {
+    return {
+      success: false,
+      message: `Error al consultar Brevo /v3/account: ${error.message || error}`,
+    }
+  }
+}
