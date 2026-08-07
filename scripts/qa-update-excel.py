@@ -7,9 +7,8 @@ WB_PATH = "/home/z/my-project/upload/plan-pruebas-qa-jsadr.xlsx"
 
 # Mapeo: sheet_name → [(row_num, tc_id), ...]
 updates = {
-    "3. M01-Autenticación": [
-        (16, "TC-AUTH-012"),
-        (17, "TC-AUTH-013"),
+    "4. M02-Clientes": [
+        (5, "TC-CLI-001"),
     ],
 }
 
