@@ -347,11 +347,15 @@ export function PortalClienteModal({
         toast({ title: 'Selfie capturada', description: 'Revisa la imagen antes de continuar.' })
       }
     } catch (e: any) {
+      // Incluir el error técnico (name) en el toast para diagnóstico.
+      // El userMessage es lo amigable para el usuario; el name es para soporte.
+      const tecnico = e?.name ? ` [${e.name}]` : ''
       toast({
-        title: e?.userMessage || 'Cámara no disponible',
+        title: (e?.userMessage || 'Cámara no disponible') + tecnico,
         description: e?.hint || 'Usa la opción de subir archivo.',
         variant: 'destructive',
       })
+      console.error('[PortalClienteModal] Error tomarFotoSelfie:', e)
     }
   }
 
@@ -366,8 +370,8 @@ export function PortalClienteModal({
       toast({ title: 'Formato no permitido', description: 'Usa JPG, PNG o WebP.', variant: 'destructive' })
       return
     }
-    if (file.size > 5 * 1024 * 1024) {
-      toast({ title: 'Archivo muy grande', description: 'Máximo 5MB.', variant: 'destructive' })
+    if (file.size > 10 * 1024 * 1024) {
+      toast({ title: 'Archivo muy grande', description: 'Máximo 10MB.', variant: 'destructive' })
       return
     }
     const reader = new FileReader()
@@ -390,11 +394,13 @@ export function PortalClienteModal({
         toast({ title: 'Foto capturada', description: 'Revisa la imagen antes de continuar.' })
       }
     } catch (e: any) {
+      const tecnico = e?.name ? ` [${e.name}]` : ''
       toast({
-        title: e?.userMessage || 'Cámara no disponible',
+        title: (e?.userMessage || 'Cámara no disponible') + tecnico,
         description: e?.hint || 'Usa la opción de subir archivo.',
         variant: 'destructive',
       })
+      console.error('[PortalClienteModal] Error tomarFotoDocumento:', e)
     }
   }
 
@@ -409,8 +415,8 @@ export function PortalClienteModal({
       toast({ title: 'Formato no permitido', description: 'Usa JPG, PNG o WebP.', variant: 'destructive' })
       return
     }
-    if (file.size > 5 * 1024 * 1024) {
-      toast({ title: 'Archivo muy grande', description: 'Máximo 5MB.', variant: 'destructive' })
+    if (file.size > 10 * 1024 * 1024) {
+      toast({ title: 'Archivo muy grande', description: 'Máximo 10MB.', variant: 'destructive' })
       return
     }
     const reader = new FileReader()
@@ -1059,7 +1065,7 @@ export function PortalClienteModal({
                     <ul className="space-y-0.5 ml-3 list-disc">
                       <li>Cédula completa y legible (frente)</li>
                       <li>Sin reflejos ni sombras</li>
-                      <li>Buena iluminación · Máximo 5MB</li>
+                      <li>Buena iluminación · Máximo 10MB</li>
                     </ul>
                   </div>
 
@@ -1160,7 +1166,7 @@ export function PortalClienteModal({
                     <ul className="space-y-0.5 ml-3 list-disc">
                       <li>Rostro completo sin lentes/gorra</li>
                       <li>Cédula visible junto al rostro</li>
-                      <li>Buena iluminación · Máximo 5MB</li>
+                      <li>Buena iluminación · Máximo 10MB</li>
                     </ul>
                   </div>
 

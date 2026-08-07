@@ -208,11 +208,11 @@ async function confirmarConFoto(prestamoId: string, body: any) {
     )
   }
 
-  // Limitar tamaño: cada foto máximo ~5MB (base64 ~7MB)
-  const MAX_SIZE = 7 * 1024 * 1024
+  // Limitar tamaño: cada foto máximo ~10MB (base64 ~14MB)
+  const MAX_SIZE = 14 * 1024 * 1024
   if (fotoDocumentoBase64.length > MAX_SIZE || fotoSelfieBase64.length > MAX_SIZE) {
     return NextResponse.json(
-      { success: false, error: 'Las fotos exceden el tamaño máximo permitido (5MB cada una).' },
+      { success: false, error: 'Las fotos exceden el tamaño máximo permitido (10MB cada una).' },
       { status: 400 }
     )
   }

@@ -12,7 +12,7 @@ import crypto from 'crypto'
 // POST JSON: { accion: 'validar', observacion? } para validar comprobante existente
 // =====================================================
 
-const MAX_SIZE = 5 * 1024 * 1024 // 5 MB
+const MAX_SIZE = 10 * 1024 * 1024 // 10 MB
 const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf']
 
 export async function POST(
@@ -41,7 +41,7 @@ export async function POST(
         return NextResponse.json({ success: false, error: 'Archivo no proporcionado' }, { status: 400 })
       }
       if (file.size > MAX_SIZE) {
-        return NextResponse.json({ success: false, error: `El archivo excede 5MB (tamaño: ${(file.size / 1024 / 1024).toFixed(2)}MB)` }, { status: 400 })
+        return NextResponse.json({ success: false, error: `El archivo excede 10MB (tamaño: ${(file.size / 1024 / 1024).toFixed(2)}MB)` }, { status: 400 })
       }
       if (!ALLOWED_TYPES.includes(file.type)) {
         return NextResponse.json({ success: false, error: `Tipo de archivo no soportado: ${file.type}. Permitidos: JPG, PNG, WEBP, PDF` }, { status: 400 })

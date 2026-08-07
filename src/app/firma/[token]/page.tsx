@@ -108,8 +108,8 @@ export default function PaginaFirma({ params }: { params: Promise<{ token: strin
       toast({ title: 'Error', description: 'El archivo debe ser una imagen', variant: 'destructive' })
       return
     }
-    if (file.size > 5 * 1024 * 1024) {
-      toast({ title: 'Error', description: 'La imagen no puede superar 5MB', variant: 'destructive' })
+    if (file.size > 10 * 1024 * 1024) {
+      toast({ title: 'Error', description: 'La imagen no puede superar 10MB', variant: 'destructive' })
       return
     }
     const reader = new FileReader()

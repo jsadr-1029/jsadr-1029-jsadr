@@ -441,11 +441,11 @@ async function guardarFotos(body: any, req: NextRequest) {
     return NextResponse.json({ success: false, error: 'fotoSelfie debe ser una imagen en base64 (data:image/...)' }, { status: 400 })
   }
 
-  // Validar tamaño (máx 5MB por foto)
+  // Validar tamaño (máx 10MB por foto, base64 ~14MB)
   const tamanoDoc = Buffer.byteLength(fotoDocumento, 'utf8')
   const tamanoSelfie = Buffer.byteLength(fotoSelfie, 'utf8')
-  if (tamanoDoc > 5 * 1024 * 1024 || tamanoSelfie > 5 * 1024 * 1024) {
-    return NextResponse.json({ success: false, error: 'Las fotos no pueden superar 5MB cada una' }, { status: 400 })
+  if (tamanoDoc > 14 * 1024 * 1024 || tamanoSelfie > 14 * 1024 * 1024) {
+    return NextResponse.json({ success: false, error: 'Las fotos no pueden superar 10MB cada una' }, { status: 400 })
   }
 
   // Calcular hashes SHA-256 (para integridad)

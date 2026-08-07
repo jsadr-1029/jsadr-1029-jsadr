@@ -60,36 +60,64 @@ export async function abrirCamara(
     }
   }
 
-  // 3. Intentar con facingMode preferido
-  const constraintsPreferidas: MediaStreamConstraints = {
-    video: {
-      facingMode: { ideal: preferredFacing },
-      width: { ideal: 1280 },
-      height: { ideal: 720 },
+  // 3. Estrategia de fallback en cascada:
+  //    Intento A: facingMode preferido + dimensiones ideales
+  //    Intento B: solo dimensiones ideales (sin facingMode)
+  //    Intento C: video: true (cualquier cámara, cualquier configuración)
+  //    Esto cubre desktops, laptops, teléfonos, webcams USB, y casos Edge donde
+  //    cualquier constraint específica falla con OverconstrainedError.
+
+  const intentos: Array<{ nombre: string; constraints: MediaStreamConstraints }> = [
+    {
+      nombre: `facingMode=${preferredFacing} + dimensiones`,
+      constraints: {
+        video: {
+          facingMode: { ideal: preferredFacing },
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
+        },
+        audio: false,
+      },
     },
-    audio: false,
+    {
+      nombre: 'solo dimensiones (sin facingMode)',
+      constraints: {
+        video: { width: { ideal: 1280 }, height: { ideal: 720 } },
+        audio: false,
+      },
+    },
+    {
+      nombre: 'video: true (sin restricciones)',
+      constraints: { video: true, audio: false },
+    },
+  ]
+
+  let ultimoError: any = null
+  for (const intento of intentos) {
+    try {
+      console.log(`[camera] intento: ${intento.nombre}`)
+      const stream = await navigator.mediaDevices.getUserMedia(intento.constraints)
+      console.log(`[camera] éxito con: ${intento.nombre}`)
+      return stream
+    } catch (e: any) {
+      console.warn(`[camera] fallo con ${intento.nombre}: ${e?.name} — ${e?.message}`)
+      ultimoError = e
+      // NotAllowedError y SecurityError no valen la pena reintentar — son fallos
+      // de permiso/HTTPS que no se resuelven con otro constraint.
+      if (e?.name === 'NotAllowedError' || e?.name === 'PermissionDeniedError' ||
+          e?.name === 'SecurityError') {
+        break
+      }
+      // Cualquier otro error (OverconstrainedError, NotFoundError, NotReadableError)
+      // → intentar con el siguiente set de constraints más permisivo.
+    }
   }
 
-  try {
-    return await navigator.mediaDevices.getUserMedia(constraintsPreferidas)
-  } catch (e: any) {
-    // Si es OverconstrainedError, el facingMode no está disponible → reintentar sin él
-    if (e?.name === 'OverconstrainedError' || e?.name === 'ConstraintNotSatisfiedError') {
-      console.warn(
-        `[camera] facingMode "${preferredFacing}" no disponible, reintentando con video: true`
-      )
-      try {
-        return await navigator.mediaDevices.getUserMedia({
-          video: { width: { ideal: 1280 }, height: { ideal: 720 } },
-          audio: false,
-        })
-      } catch (e2: any) {
-        throw traducirErrorCamara(e2)
-      }
-    }
-    // Cualquier otro error → traducir
-    throw traducirErrorCamara(e)
-  }
+  // Si llegamos aquí, todos los intentos fallaron. Si el último error fue
+  // NotAllowedError, significa que el usuario SÍ bloqueó el permiso. Si fue
+  // NotFoundError, no hay cámara. Si fue OverconstrainedError, ninguna
+  // configuración funcionó. En todos los casos, traducir y propagar.
+  throw traducirErrorCamara(ultimoError)
 }
 
 /**
