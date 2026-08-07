@@ -38,6 +38,7 @@ import {
 } from '@/components/ui/dialog'
 import { useToast } from '@/hooks/use-toast'
 import { formatearMoneda, formatearFecha } from '@/lib/finanzas'
+import { abrirHtmlImprimible } from '@/lib/auth-docs'
 import {
   DollarSign, Bell, RefreshCw, Undo2, RotateCcw, Trash2, Plus,
   TrendingUp, TrendingDown, Calendar, Users, AlertTriangle, Clock,
@@ -682,7 +683,7 @@ export function PagosView({ onChanged }: { onChanged: () => void }) {
 
   // === DESCARGAR ESTADO DE CUENTA ===
   const descargarEstadoCuenta = (cedula: string, nombre: string) => {
-    window.open(`/api/estado-cuenta?cedula=${encodeURIComponent(cedula)}`, '_blank')
+    abrirHtmlImprimible(`/api/estado-cuenta?cedula=${encodeURIComponent(cedula)}`)
     toast({
       title: 'Estado de cuenta abierto',
       description: `Se abrió el estado de cuenta de ${nombre}. Usa el botón "Imprimir / Guardar PDF" para descargarlo.`,

@@ -710,6 +710,7 @@ export function PortalClienteModal({
               hubItems={hubItems}
               onSelect={(id) => setVista(id)}
               cuentaRecaudoPrincipal={data.cuentaRecaudoPrincipal}
+              onEstadoCuenta={descargarEstadoCuenta}
             />
           )}
 
@@ -1306,6 +1307,7 @@ function HubView({
   hubItems,
   onSelect,
   cuentaRecaudoPrincipal,
+  onEstadoCuenta,
 }: {
   cliente: PortalClienteInfo
   kpis: PortalKPIS
@@ -1313,6 +1315,7 @@ function HubView({
   hubItems: HubItemConfig[]
   onSelect: (id: HubItemId) => void
   cuentaRecaudoPrincipal?: CuentaRecaudoInfo | null
+  onEstadoCuenta?: (prestamoId?: string) => void
 }) {
   return (
     <div className="space-y-5 fade-scale">
@@ -1515,11 +1518,7 @@ function HubView({
             <Button
               size="sm"
               className="gradient-premium gradient-premium-hover btn-press h-8 text-[11px]"
-              onClick={() => {
-                const tokenParam = typeof window !== 'undefined' ? '' : ''
-                const url = `/api/estado-cuenta?cedula=${encodeURIComponent(cliente.cedula)}${tokenParam}`
-                window.open(url, '_blank')
-              }}
+              onClick={() => onEstadoCuenta?.()}
             >
               <Printer className="w-3 h-3 mr-1" />
               Ver

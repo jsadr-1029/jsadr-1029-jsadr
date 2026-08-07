@@ -34,6 +34,7 @@ import {
 import { useToast } from '@/hooks/use-toast'
 import { formatearMoneda, formatearFecha, calcularPrestamo, calcularPrestamoTasaFijaMensual, Frecuencia } from '@/lib/finanzas'
 import { calcularBloqueCorte, calcularFechaPrimerCorte, calcularDiasCausadosAntes, calcularValorDiasCausados, PeriodoCorte } from '@/lib/corte-fechas'
+import { abrirHtmlImprimible } from '@/lib/auth-docs'
 import { FileText, Plus, Search, Eye, Check, X, ArrowRight, RefreshCw, PenTool, Shield, Trash2, Calendar, Scissors, Sparkles } from 'lucide-react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { ClientesView } from '@/components/views/ClientesView'
@@ -1264,7 +1265,7 @@ ${linkFirmaCodeudor}
                           size="sm"
                           variant="ghost"
                           className="text-purple-600 hover:text-purple-700"
-                          onClick={() => window.open(`/api/estado-cuenta?cedula=${encodeURIComponent(p.cliente.cedula)}&prestamoId=${p.id}`, '_blank', 'noopener,noreferrer')}
+                          onClick={() => abrirHtmlImprimible(`/api/estado-cuenta?cedula=${encodeURIComponent(p.cliente.cedula)}&prestamoId=${p.id}`)}
                           title="Estado de cuenta"
                         >
                           <FileText className="w-4 h-4" />

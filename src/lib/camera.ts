@@ -183,9 +183,141 @@ function traducirErrorCamara(e: any): CameraError {
 }
 
 /**
+ * ====================================================================
+ * DETECCIÓN DE NITIDEZ (Sharpness Detection)
+ * ====================================================================
+ *
+ * Usa la técnica estándar de visión por computadora: varianza del filtro
+ * Laplaciano. El Laplaciano resalta los bordes (cambios bruscos de
+ * intensidad); una imagen nítida tiene bordes fuertes → varianza alta;
+ * una imagen borrosa tiene bordes suaves → varianza baja.
+ *
+ * Implementación optimizada para tiempo real:
+ *  1. Muestrear el video a un canvas pequeño (128x96) — rápido.
+ *  2. Obtener los pixels en escala de grises.
+ *  3. Aplicar convolución Laplaciana 3x3 ([0,1,0; 1,-4,1; 0,1,0]).
+ *  4. Calcular la varianza de los valores resultantes.
+ *
+ * Umbrales calibrados empíricamente para fotos de documentos y selfies
+ * tomadas con webcam (640x480 a 1280x720):
+ *  - varianza >= 120  → NÍTIDA  (verde)
+ *  - varianza 50-119  → ACEPTABLE (amarillo)
+ *  - varianza < 50    → BORROSA  (rojo)
+ */
+
+interface MedicionNitidez {
+  /** Varianza del Laplaciano (mayor = más nítida). */
+  varianza: number
+  /** Clasificación legible. */
+  nivel: 'NITIDA' | 'ACEPTABLE' | 'BORROSA' | 'SIN_SENAL'
+  /** Mensaje de recomendación para el usuario. */
+  mensaje: string
+  /** Recomendación accionable (corta). */
+  recomendacion: string
+}
+
+/**
+ * Mide la nitidez de un frame de video.
+ * @returns MedicionNitidez con la varianza y clasificación.
+ */
+function medirNitidez(video: HTMLVideoElement): MedicionNitidez {
+  // Si el video no tiene dimensiones aún, retornar SIN_SENAL
+  if (!video.videoWidth || !video.videoHeight) {
+    return {
+      varianza: 0,
+      nivel: 'SIN_SENAL',
+      mensaje: 'Esperando señal de cámara...',
+      recomendacion: '',
+    }
+  }
+
+  // Canvas pequeño para análisis rápido (downscale no afecta la detección
+  // de borrosidad significativamente y reduce el cómputo ~50x).
+  const W = 128
+  const H = 96
+  const canvas = document.createElement('canvas')
+  canvas.width = W
+  canvas.height = H
+  const ctx = canvas.getContext('2d', { willReadFrequently: true })
+  if (!ctx) {
+    return {
+      varianza: 0,
+      nivel: 'SIN_SENAL',
+      mensaje: 'No se pudo analizar la imagen.',
+      recomendacion: '',
+    }
+  }
+  ctx.drawImage(video, 0, 0, W, H)
+  const imageData = ctx.getImageData(0, 0, W, H)
+  const pixels = imageData.data
+
+  // Convertir a escala de grises (luminancia perceptual)
+  const gray = new Float32Array(W * H)
+  for (let i = 0, j = 0; i < pixels.length; i += 4, j++) {
+    gray[j] = 0.299 * pixels[i] + 0.587 * pixels[i + 1] + 0.114 * pixels[i + 2]
+  }
+
+  // Aplicar Laplaciano 3x3: [0,1,0; 1,-4,1; 0,1,0]
+  // y acumular suma y suma de cuadrados para varianza.
+  const laplacian = new Float32Array(W * H)
+  for (let y = 1; y < H - 1; y++) {
+    for (let x = 1; x < W - 1; x++) {
+      const idx = y * W + x
+      const val = gray[idx - W] + gray[idx + W] + gray[idx - 1] + gray[idx + 1] - 4 * gray[idx]
+      laplacian[idx] = val
+    }
+  }
+
+  // Varianza = E[X²] - (E[X])²
+  let sum = 0
+  let sumSq = 0
+  let count = 0
+  for (let y = 1; y < H - 1; y++) {
+    for (let x = 1; x < W - 1; x++) {
+      const idx = y * W + x
+      const v = laplacian[idx]
+      sum += v
+      sumSq += v * v
+      count++
+    }
+  }
+  const mean = sum / count
+  const variance = sumSq / count - mean * mean
+
+  // Clasificar según umbrales calibrados
+  if (variance >= 120) {
+    return {
+      varianza: variance,
+      nivel: 'NITIDA',
+      mensaje: '✅ Imagen nítida — lista para capturar.',
+      recomendacion: '',
+    }
+  } else if (variance >= 50) {
+    return {
+      varianza: variance,
+      nivel: 'ACEPTABLE',
+      mensaje: '⚠️ Imagen aceptable — podría ser más nítida.',
+      recomendacion: 'Acércate un poco más o mejora la iluminación.',
+    }
+  } else {
+    return {
+      varianza: variance,
+      nivel: 'BORROSA',
+      mensaje: '❌ Imagen borrosa — no se puede capturar.',
+      recomendacion: 'Acércate al documento, mejora la luz, sujeta firme la cámara, o limpia el lente.',
+    }
+  }
+}
+
+/**
  * Muestra un modal overlay con el stream de la cámara y botones para capturar
  * o cancelar. Retorna un dataUrl JPEG de la foto capturada, o null si el
  * usuario cancela.
+ *
+ * Incluye detección de nitidez en tiempo real: mide cada 500ms y muestra un
+ * indicador visual (verde/amarillo/rojo) con recomendaciones. Si la imagen
+ * está borrosa, el botón "Capturar" se deshabilita y aparece un botón
+ * "Capturar de todas formas" que permite forzar la captura.
  *
  * @param stream MediaStream ya abierto (de abrirCamara()).
  * @param opts Opciones: título, espejar (para selfie), texto del botón.
@@ -230,15 +362,98 @@ export function mostrarModalCamara(
     videoContainer.appendChild(video)
     overlay.appendChild(videoContainer)
 
+    // === Indicador de nitidez ===
+    // Badge superior izquierdo del video con el nivel actual.
+    const nitidezBadge = document.createElement('div')
+    nitidezBadge.style.cssText =
+      'position:absolute;top:10px;left:10px;padding:6px 12px;border-radius:20px;font-size:11px;font-weight:600;color:white;backdrop-filter:blur(6px);background:rgba(0,0,0,0.55);transition:background 0.3s;display:flex;align-items:center;gap:6px;'
+    nitidezBadge.textContent = '⚪ Analizando...'
+    videoContainer.appendChild(nitidezBadge)
+
+    // Banner inferior con mensaje de recomendación (visible solo si hay aviso).
+    const recomendacionBanner = document.createElement('div')
+    recomendacionBanner.style.cssText =
+      'position:absolute;bottom:0;left:0;right:0;padding:10px 14px;background:linear-gradient(0deg, rgba(0,0,0,0.85), rgba(0,0,0,0));color:white;font-size:12px;line-height:1.4;display:none;'
+    videoContainer.appendChild(recomendacionBanner)
+
+    // Estado actual de nitidez (compartido entre el loop de medición y el botón capturar)
+    let nivelActual: MedicionNitidez['nivel'] = 'SIN_SENAL'
+    let recomendacionActual = ''
+
+    const actualizarIndicador = (m: MedicionNitidez) => {
+      nivelActual = m.nivel
+      recomendacionActual = m.recomendacion
+
+      // Badge de nivel
+      const colores: Record<MedicionNitidez['nivel'], string> = {
+        NITIDA: '#10b981',
+        ACEPTABLE: '#f59e0b',
+        BORROSA: '#ef4444',
+        SIN_SENAL: '#6b7280',
+      }
+      const iconos: Record<MedicionNitidez['nivel'], string> = {
+        NITIDA: '✅',
+        ACEPTABLE: '⚠️',
+        BORROSA: '❌',
+        SIN_SENAL: '⚪',
+      }
+      nitidezBadge.textContent = `${iconos[m.nivel]} ${m.nivel === 'SIN_SENAL' ? 'Esperando...' : m.nivel.replace('_', ' ')}`
+      nitidezBadge.style.background = `rgba(0,0,0,0.65)`
+      nitidezBadge.style.borderLeft = `4px solid ${colores[m.nivel]}`
+
+      // Banner de recomendación (solo si no es NÍTIDA y hay mensaje)
+      if (m.nivel === 'NITIDA' || m.nivel === 'SIN_SENAL' || !m.recomendacion) {
+        recomendacionBanner.style.display = 'none'
+      } else {
+        recomendacionBanner.style.display = 'block'
+        recomendacionBanner.innerHTML =
+          `<div style="font-weight:600;margin-bottom:2px;">${m.mensaje}</div>` +
+          `<div style="opacity:0.9;font-size:11px;">💡 ${m.recomendacion}</div>`
+      }
+
+      // Habilitar/deshabilitar botón capturar
+      if (m.nivel === 'BORROSA') {
+        btnCapturar.disabled = true
+        btnCapturar.style.opacity = '0.45'
+        btnCapturar.style.cursor = 'not-allowed'
+        btnCapturar.textContent = '📸 Imagen borrosa'
+        // Mostrar botón "forzar captura"
+        btnForzar.style.display = 'inline-block'
+      } else if (m.nivel === 'SIN_SENAL') {
+        btnCapturar.disabled = true
+        btnCapturar.style.opacity = '0.45'
+        btnCapturar.style.cursor = 'not-allowed'
+        btnCapturar.textContent = '📸 Esperando cámara...'
+        btnForzar.style.display = 'none'
+      } else {
+        btnCapturar.disabled = false
+        btnCapturar.style.opacity = '1'
+        btnCapturar.style.cursor = 'pointer'
+        btnCapturar.textContent = '📸 ' + textoBoton
+        btnForzar.style.display = 'none'
+      }
+    }
+
     const btnContainer = document.createElement('div')
-    btnContainer.style.cssText = 'margin-top:12px;display:flex;gap:12px;'
+    btnContainer.style.cssText = 'margin-top:12px;display:flex;gap:12px;flex-wrap:wrap;justify-content:center;'
 
     const btnCapturar = document.createElement('button')
     btnCapturar.textContent = '📸 ' + textoBoton
     btnCapturar.style.cssText =
-      'padding:12px 28px;background:linear-gradient(135deg,#6366f1,#a855f7);color:white;border:none;border-radius:12px;font-size:15px;font-weight:600;cursor:pointer;box-shadow:0 8px 24px -6px rgba(99,102,241,0.5);transition:transform 0.15s;'
-    btnCapturar.onmouseover = () => (btnCapturar.style.transform = 'scale(1.05)')
+      'padding:12px 28px;background:linear-gradient(135deg,#6366f1,#a855f7);color:white;border:none;border-radius:12px;font-size:15px;font-weight:600;cursor:pointer;box-shadow:0 8px 24px -6px rgba(99,102,241,0.5);transition:transform 0.15s,opacity 0.2s;'
+    btnCapturar.onmouseover = () => {
+      if (!btnCapturar.disabled) btnCapturar.style.transform = 'scale(1.05)'
+    }
     btnCapturar.onmouseout = () => (btnCapturar.style.transform = 'scale(1)')
+
+    // Botón secundario "Forzar captura" (visible solo cuando la imagen está borrosa).
+    // Permite al usuario saltarse la advertencia si sabe que la imagen sí sirve.
+    const btnForzar = document.createElement('button')
+    btnForzar.textContent = '🔓 Capturar de todas formas'
+    btnForzar.style.cssText =
+      'padding:10px 18px;background:transparent;color:#fbbf24;border:1px solid #fbbf24;border-radius:12px;font-size:12px;font-weight:500;cursor:pointer;display:none;'
+    btnForzar.onmouseover = () => (btnForzar.style.background = 'rgba(251,191,36,0.12)')
+    btnForzar.onmouseout = () => (btnForzar.style.background = 'transparent')
 
     const btnCancelar = document.createElement('button')
     btnCancelar.textContent = '✕ Cancelar'
@@ -247,6 +462,7 @@ export function mostrarModalCamara(
 
     btnContainer.appendChild(btnCancelar)
     btnContainer.appendChild(btnCapturar)
+    btnContainer.appendChild(btnForzar)
     overlay.appendChild(btnContainer)
 
     document.body.appendChild(overlay)
@@ -254,7 +470,25 @@ export function mostrarModalCamara(
     // Reproducir video (algunos navegadores requieren play() explícito)
     video.play().catch(() => {})
 
+    // === Loop de medición de nitidez en tiempo real ===
+    let medicionInterval: ReturnType<typeof setInterval> | null = null
+    let medicionTimeout: ReturnType<typeof setTimeout> | null = null
+    const iniciarMedicionLoop = () => {
+      // Pequeño delay inicial para que el video se estabilice
+      medicionTimeout = setTimeout(() => {
+        // Medición inmediata
+        actualizarIndicador(medirNitidez(video))
+        // Y luego cada 500ms
+        medicionInterval = setInterval(() => {
+          actualizarIndicador(medirNitidez(video))
+        }, 500)
+      }, 400)
+    }
+    iniciarMedicionLoop()
+
     const cleanup = () => {
+      if (medicionInterval) clearInterval(medicionInterval)
+      if (medicionTimeout) clearTimeout(medicionTimeout)
       stream.getTracks().forEach((t) => t.stop())
       if (overlay.parentNode) overlay.parentNode.removeChild(overlay)
     }
@@ -264,11 +498,12 @@ export function mostrarModalCamara(
       resolve(null)
     }
 
-    btnCapturar.onclick = () => {
+    // Función común para capturar la foto (usada por btnCapturar y btnForzar)
+    const capturar = () => {
       // Esperar a que el video tenga dimensiones válidas
       if (!video.videoWidth || !video.videoHeight) {
         // Reintentar en 200ms si el video aún no está listo
-        setTimeout(() => btnCapturar.click(), 200)
+        setTimeout(() => capturar(), 200)
         return
       }
       const canvas = document.createElement('canvas')
@@ -289,6 +524,18 @@ export function mostrarModalCamara(
       const dataUrl = canvas.toDataURL('image/jpeg', 0.85)
       cleanup()
       resolve(dataUrl)
+    }
+
+    btnCapturar.onclick = () => {
+      if (btnCapturar.disabled) return
+      capturar()
+    }
+
+    btnForzar.onclick = () => {
+      // Confirmar antes de forzar
+      if (confirm('La imagen está borrosa. ¿Capturar de todas formas?\n\nUna foto borrosa puede hacer que el documento sea ilegible y retrasar tu trámite.')) {
+        capturar()
+      }
     }
 
     // ESC para cancelar

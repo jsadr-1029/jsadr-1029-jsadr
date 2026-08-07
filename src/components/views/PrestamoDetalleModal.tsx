@@ -32,6 +32,7 @@ import { EstadoBadge } from '@/components/ui-basics'
 import { BitacoraPanel } from '@/components/views/BitacoraPanel'
 import { useToast } from '@/hooks/use-toast'
 import { formatearMoneda, formatearFecha, formatearFechaHora } from '@/lib/finanzas'
+import { abrirHtmlImprimible } from '@/lib/auth-docs'
 import {
   X,
   Printer,
@@ -624,7 +625,7 @@ export function PrestamoDetalleModal({
               <Button
                 size="sm"
                 variant="outline"
-                onClick={() => window.open(`/api/estado-cuenta?cedula=${encodeURIComponent(data.cliente.cedula)}&prestamoId=${data.id}`, '_blank', 'noopener,noreferrer')}
+                onClick={() => abrirHtmlImprimible(`/api/estado-cuenta?cedula=${encodeURIComponent(data.cliente.cedula)}&prestamoId=${data.id}`)}
                 title="Ver estado de cuenta"
               >
                 <FileText className="w-4 h-4 mr-1" />
@@ -885,7 +886,7 @@ export function PrestamoDetalleModal({
                   variant="outline"
                   size="sm"
                   onClick={() =>
-                    window.open(`/api/documentos?prestamoId=${data.id}&tipo=pagare`, '_blank', 'noopener,noreferrer')
+                    abrirHtmlImprimible(`/api/documentos?prestamoId=${data.id}&tipo=pagare`)
                   }
                 >
                   <Printer className="w-4 h-4 mr-2" />
@@ -897,7 +898,7 @@ export function PrestamoDetalleModal({
                   variant="outline"
                   size="sm"
                   onClick={() =>
-                    window.open(`/api/documentos?prestamoId=${data.id}&tipo=carta`, '_blank', 'noopener,noreferrer')
+                    abrirHtmlImprimible(`/api/documentos?prestamoId=${data.id}&tipo=carta`)
                   }
                 >
                   <Printer className="w-4 h-4 mr-2" />
@@ -909,7 +910,7 @@ export function PrestamoDetalleModal({
                   variant="default"
                   size="sm"
                   onClick={() =>
-                    window.open(`/api/documentos?prestamoId=${data.id}&tipo=combinado`, '_blank', 'noopener,noreferrer')
+                    abrirHtmlImprimible(`/api/documentos?prestamoId=${data.id}&tipo=combinado`)
                   }
                   title="Genera un único PDF con el Pagaré y la Carta de Instrucciones, cada uno con su propia sección de firma electrónica, fotos y OTP"
                 >
