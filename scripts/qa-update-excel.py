@@ -6,9 +6,21 @@ from openpyxl.styles import PatternFill, Font, Alignment
 WB_PATH = "/home/z/my-project/upload/plan-pruebas-qa-jsadr.xlsx"
 
 # Mapeo: sheet_name → [(row_num, tc_id), ...]
+# M02-Clientes: TC-CLI-002 a TC-CLI-015 (excepto 007 y 009 ya aprobados)
 updates = {
     "4. M02-Clientes": [
-        (5, "TC-CLI-001"),
+        (6, "TC-CLI-002"),
+        (7, "TC-CLI-003"),
+        (8, "TC-CLI-004"),
+        (9, "TC-CLI-005"),
+        (10, "TC-CLI-006"),
+        (12, "TC-CLI-008"),
+        (14, "TC-CLI-010"),
+        (15, "TC-CLI-011"),
+        (16, "TC-CLI-012"),
+        (17, "TC-CLI-013"),
+        (18, "TC-CLI-014"),
+        (19, "TC-CLI-015"),
     ],
 }
 
