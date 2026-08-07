@@ -127,6 +127,13 @@ model Cliente {
   instruccionCuentaId   String?  // ID de cuenta temporal sobreescrita por el gestor
   instruccionCuentaNota String?  // explicación del cambio (ej: "Pago puntual a CTA-3 por cierre mes")
   instruccionCuentaExpira DateTime?
+  // === Preferencia de notificación de pagos ===
+  // Define cómo el cliente desea recibir recordatorios automáticos de cuotas próximas a vencer.
+  // - WHATSAPP: solo WhatsApp al teléfono registrado
+  // - EMAIL:    solo correo electrónico
+  // - AMBOS:    WhatsApp + correo electrónico
+  // - NINGUNO:  el cliente optó por no recibir recordatorios
+  preferenciaNotificacion String? @default("WHATSAPP")
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
@@ -432,11 +439,20 @@ model Pago {
   reciboHash      String?  // SHA-256 del contenido del recibo (verificación pública)
   reciboFechaEmision DateTime?
 
+  // === Recordatorio automático de pago (v4.4) ===
+  // Fecha del último recordatorio automático enviado al cliente por el cron diario.
+  // Se marca para evitar enviar múltiples recordatorios por la misma cuota.
+  // El cron consulta los Pago con fechaVencimiento entre hoy y mañana, y envía
+  // el recordatorio solo si recordatorioEnviadoEn es null o es de un día anterior.
+  recordatorioEnviadoEn DateTime?
+  recordatorioMedios    String?  // "WHATSAPP", "EMAIL", "AMBOS" — qué medios se usaron
+
   createdAt       DateTime @default(now())
 
   @@index([estado, fechaPago])
   @@index([prestamoId, numeroCuota])
   @@index([esSoloIntereses])
+  @@index([fechaVencimiento, estado])
 }
 
 // -----------------------------------------------------

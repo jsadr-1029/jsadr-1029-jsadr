@@ -79,7 +79,10 @@ function isPublicEndpoint(pathname: string): boolean {
     pathname.startsWith('/api/chat/iniciar') || // inicio de chat con cédula+teléfono (sin token previo)
     pathname.startsWith('/api/chat/otp') || // solicitud/verificación OTP del chat
     pathname === '/api/simulador' || // simulador público
-    pathname === '/api/solicitudes-nuevos-clientes' // POST público: registro de nuevos clientes desde /register
+    pathname === '/api/solicitudes-nuevos-clientes' || // POST público: registro de nuevos clientes desde /register
+    // === Cron endpoints (v4.4) — autenticados por X-Cron-Secret ===
+    pathname.startsWith('/api/recordatorios/cron') ||
+    pathname.startsWith('/api/pagos/cron')
   )
 }
 

@@ -51,5 +51,10 @@
       "maxDuration": 60
     }
   },
-  "crons": []
+  "crons": [
+    {
+      "path": "/api/recordatorios/cron",
+      "schedule": "0 13 * * *"
+    }
+  ]
 }

@@ -104,6 +104,8 @@ interface Cliente {
   instruccionCuentaId: string | null
   instruccionCuentaNota: string | null
   instruccionCuentaExpira: string | null
+  // === Preferencia de notificación (v4.4) ===
+  preferenciaNotificacion?: 'WHATSAPP' | 'EMAIL' | 'AMBOS' | 'NINGUNO' | null
   createdAt: string
   _count?: { prestamos: number; referidos: number }
 }
@@ -133,6 +135,8 @@ interface FormData {
   instruccionCuentaId: string
   instruccionCuentaNota: string
   instruccionCuentaExpira: string
+  // === Preferencia de notificación (v4.4) ===
+  preferenciaNotificacion: 'WHATSAPP' | 'EMAIL' | 'AMBOS' | 'NINGUNO'
 }
 
 const VACIO: FormData = {
@@ -160,6 +164,8 @@ const VACIO: FormData = {
   instruccionCuentaId: '',
   instruccionCuentaNota: '',
   instruccionCuentaExpira: '',
+  // === Preferencia de notificación (v4.4) ===
+  preferenciaNotificacion: 'WHATSAPP',
 }
 
 export function ClientesView({ onChanged }: { onChanged: () => void }) {
@@ -283,6 +289,8 @@ export function ClientesView({ onChanged }: { onChanged: () => void }) {
       instruccionCuentaExpira: cliente.instruccionCuentaExpira
         ? new Date(cliente.instruccionCuentaExpira).toISOString().slice(0, 10)
         : '',
+      // === Preferencia de notificación (v4.4) ===
+      preferenciaNotificacion: cliente.preferenciaNotificacion || 'WHATSAPP',
     })
     setEditandoId(cliente.id)
     setModalAbierto(true)
@@ -673,6 +681,53 @@ export function ClientesView({ onChanged }: { onChanged: () => void }) {
                   onChange={(e) => setForm({ ...form, email: e.target.value })}
                 />
               </div>
+            </div>
+
+            {/* Preferencia de notificación de pagos (v4.4) */}
+            <div className="space-y-3 pt-2 border-t">
+              <div>
+                <h4 className="text-sm font-semibold">Recordatorios de pago</h4>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  ¿Cómo deseas que el sistema le recuerde al cliente las cuotas próximas a vencer?
+                  Se enviará automáticamente un recordatorio el día anterior al vencimiento.
+                </p>
+              </div>
+              <RadioGroup
+                value={form.preferenciaNotificacion}
+                onValueChange={(val: 'WHATSAPP' | 'EMAIL' | 'AMBOS' | 'NINGUNO') =>
+                  setForm({ ...form, preferenciaNotificacion: val })
+                }
+                className="grid grid-cols-2 sm:grid-cols-4 gap-2"
+              >
+                {[
+                  { value: 'WHATSAPP', label: 'WhatsApp', icon: '💬', desc: 'Solo al teléfono' },
+                  { value: 'EMAIL', label: 'Correo', icon: '📧', desc: 'Solo al email' },
+                  { value: 'AMBOS', label: 'Ambos', icon: '📱', desc: 'WhatsApp + correo', recommended: true },
+                  { value: 'NINGUNO', label: 'Ninguno', icon: '🔕', desc: 'Sin recordatorios' },
+                ].map((opt) => (
+                  <label
+                    key={opt.value}
+                    htmlFor={`pref-${opt.value}`}
+                    className={`flex flex-col gap-1 p-3 rounded-lg border-2 cursor-pointer transition-all hover:bg-accent/40 ${
+                      form.preferenciaNotificacion === opt.value
+                        ? 'border-blue-500 bg-blue-50/40'
+                        : 'border-muted opacity-90'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2">
+                      <RadioGroupItem id={`pref-${opt.value}`} value={opt.value} />
+                      <span className="text-base">{opt.icon}</span>
+                      <span className="text-sm font-semibold">{opt.label}</span>
+                    </div>
+                    <span className="text-[10px] text-muted-foreground pl-6">{opt.desc}</span>
+                  </label>
+                ))}
+              </RadioGroup>
+              {(form.preferenciaNotificacion === 'EMAIL' || form.preferenciaNotificacion === 'AMBOS') && !form.email && (
+                <p className="text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded p-2">
+                  ⚠️ Seleccionaste correo, pero falta el email. Ingrésalo arriba para que el recordatorio llegue.
+                </p>
+              )}
             </div>
 
             {/* Ubicación */}

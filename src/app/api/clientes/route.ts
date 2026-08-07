@@ -82,11 +82,27 @@ export async function POST(req: NextRequest) {
       instruccionCuentaId,
       instruccionCuentaNota,
       instruccionCuentaExpira,
+      // === Preferencia de notificación (v4.4) ===
+      preferenciaNotificacion,
     } = body
 
     if (!nombre || !cedula || !telefono) {
       return NextResponse.json(
         { success: false, error: 'Nombre, cédula y teléfono son obligatorios' },
+        { status: 400 }
+      )
+    }
+
+    // Validar preferenciaNotificacion (si viene)
+    const PREF_VALIDAS = ['WHATSAPP', 'EMAIL', 'AMBOS', 'NINGUNO']
+    const prefFinal = preferenciaNotificacion && PREF_VALIDAS.includes(preferenciaNotificacion)
+      ? preferenciaNotificacion
+      : 'WHATSAPP' // default seguro
+
+    // Validar que si la preferencia incluye EMAIL, el cliente tenga email
+    if ((prefFinal === 'EMAIL' || prefFinal === 'AMBOS') && !email) {
+      return NextResponse.json(
+        { success: false, error: 'Si la preferencia de notificación es EMAIL o AMBOS, el correo electrónico es obligatorio.' },
         { status: 400 }
       )
     }
@@ -171,6 +187,8 @@ export async function POST(req: NextRequest) {
         instruccionCuentaId: instruccionCuentaId || null,
         instruccionCuentaNota: instruccionCuentaNota || null,
         instruccionCuentaExpira: instruccionCuentaExpira ? new Date(instruccionCuentaExpira) : null,
+        // === Preferencia de notificación (v4.4) ===
+        preferenciaNotificacion: prefFinal,
       },
       include: {
         referidoPor: {

@@ -84,6 +84,7 @@ import {
   MessagesSquare,
   Clock3,
   Lock,
+  BellRing,
 } from 'lucide-react'
 import { CentroComunicacionesPortal } from '@/components/views/CentroComunicacionesPortal'
 
@@ -1758,18 +1759,54 @@ function ProximosPagosView({
     )
   }
 
+  // === Identificar el próximo pago más urgente (vence hoy o mañana) ===
+  const hoy = new Date()
+  hoy.setHours(0, 0, 0, 0)
+  const proximoUrgente = proximos.find((pg) => {
+    const venc = new Date(pg.fechaVencimiento)
+    venc.setHours(0, 0, 0, 0)
+    const diff = Math.round((venc.getTime() - hoy.getTime()) / (1000 * 60 * 60 * 24))
+    return diff >= 0 && diff <= 1
+  })
+
   return (
     <div className="space-y-3 fade-scale">
+      {/* Banner de recordatorio destacado (solo si hay cuota que vence hoy o mañana) */}
+      {proximoUrgente && (
+        <div className="rounded-xl p-3 bg-gradient-to-r from-amber-500/20 to-orange-500/20 border-2 border-amber-400/60">
+          <div className="flex items-start gap-2">
+            <BellRing className="w-4 h-4 text-amber-400 mt-0.5 shrink-0" />
+            <div className="flex-1 min-w-0">
+              <p className="text-xs font-bold text-amber-200">
+                ⏰ Recordatorio: cuota vence {new Date(proximoUrgente.fechaVencimiento).toDateString() === hoy.toDateString() ? 'hoy' : 'mañana'}
+              </p>
+              <p className="text-[10px] text-amber-100/80 mt-0.5">
+                Préstamo <span className="font-mono font-bold">{proximoUrgente.prestamo.codigo}</span> · Cuota {proximoUrgente.numeroCuota} · <span className="font-bold">{formatearMoneda(proximoUrgente.montoTotal)}</span>
+              </p>
+              <p className="text-[10px] text-amber-100/70 mt-1">
+                Recuerda que enviamos un recordatorio automático el día anterior al vencimiento a tu correo y WhatsApp según tus preferencias.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {proximos.map((pg: any) => {
         const venc = new Date(pg.fechaVencimiento)
-        const hoy = new Date()
-        const dias = Math.ceil((venc.getTime() - hoy.getTime()) / (1000 * 60 * 60 * 24))
+        venc.setHours(0, 0, 0, 0)
+        const hoyMid = new Date()
+        hoyMid.setHours(0, 0, 0, 0)
+        const dias = Math.round((venc.getTime() - hoyMid.getTime()) / (1000 * 60 * 60 * 24))
         const vencido = dias < 0
+        const esHoy = dias === 0
+        const esManana = dias === 1
+        const recordatorioEnviado = !!pg.recordatorioEnviadoEn
+
         return (
           <Card
             key={pg.id}
             className={`premium-card premium-card-hover rounded-2xl ${
-              vencido ? 'border-red-400/40' : ''
+              vencido ? 'border-red-400/40' : (esHoy || esManana) ? 'border-amber-400/50' : ''
             }`}
           >
             <CardContent className="p-3.5">
@@ -1781,10 +1818,22 @@ function ProximosPagosView({
                     {vencido && (
                       <Badge variant="destructive" className="text-[10px] h-5">Vencido</Badge>
                     )}
+                    {esHoy && (
+                      <Badge className="text-[10px] h-5 bg-orange-500/30 text-orange-200 border-orange-400/50">Vence hoy</Badge>
+                    )}
+                    {esManana && (
+                      <Badge className="text-[10px] h-5 bg-amber-500/30 text-amber-200 border-amber-400/50">Vence mañana</Badge>
+                    )}
+                    {recordatorioEnviado && !vencido && (
+                      <Badge variant="outline" className="text-[10px] h-5 border-blue-400/40 text-blue-300">
+                        <BellRing className="w-2.5 h-2.5 mr-1" />
+                        Recordatorio enviado
+                      </Badge>
+                    )}
                   </div>
                   <p className="text-[10px] text-muted-foreground mt-1">
                     Vence: <strong>{formatearFecha(pg.fechaVencimiento)}</strong>
-                    {vencido ? ` · ${Math.abs(dias)}d atrás` : ` · en ${dias}d`}
+                    {vencido ? ` · ${Math.abs(dias)}d atrás` : dias === 0 ? ' · hoy' : ` · en ${dias}d`}
                   </p>
                 </div>
                 <DiasRestantesBadge dias={dias} />
@@ -1793,6 +1842,12 @@ function ProximosPagosView({
               <p className="text-xl font-black text-amber-300 mb-2.5">
                 {formatearMoneda(pg.montoTotal)}
               </p>
+
+              {(esHoy || esManana) && (
+                <p className="text-[10px] text-amber-200/80 mb-2 italic">
+                  💡 Paga a tiempo para evitar intereses moratorios.
+                </p>
+              )}
 
               <Button
                 size="sm"

@@ -92,7 +92,32 @@ export async function PUT(
       instruccionCuentaId,
       instruccionCuentaNota,
       instruccionCuentaExpira,
+      // === Preferencia de notificación (v4.4) ===
+      preferenciaNotificacion,
     } = body
+
+    // Validar preferenciaNotificacion (si viene)
+    const PREF_VALIDAS = ['WHATSAPP', 'EMAIL', 'AMBOS', 'NINGUNO']
+    let prefFinal: string | undefined = undefined
+    if (preferenciaNotificacion !== undefined) {
+      if (!PREF_VALIDAS.includes(preferenciaNotificacion)) {
+        return NextResponse.json(
+          { success: false, error: `Preferencia de notificación inválida. Valores válidos: ${PREF_VALIDAS.join(', ')}` },
+          { status: 400 }
+        )
+      }
+      // Si el cliente elige EMAIL o AMBOS, debe tener email
+      if ((preferenciaNotificacion === 'EMAIL' || preferenciaNotificacion === 'AMBOS')) {
+        const emailFinal = email !== undefined ? email : (await db.cliente.findUnique({ where: { id }, select: { email: true } }))?.email
+        if (!emailFinal) {
+          return NextResponse.json(
+            { success: false, error: 'Si la preferencia de notificación es EMAIL o AMBOS, el correo electrónico es obligatorio.' },
+            { status: 400 }
+          )
+        }
+      }
+      prefFinal = preferenciaNotificacion
+    }
 
     // Validar cédula única si se cambia
     if (cedula) {
@@ -174,6 +199,8 @@ export async function PUT(
         ...(instruccionCuentaExpira !== undefined && {
           instruccionCuentaExpira: instruccionCuentaExpira ? new Date(instruccionCuentaExpira) : null,
         }),
+        // === Preferencia de notificación (v4.4) ===
+        ...(prefFinal !== undefined && { preferenciaNotificacion: prefFinal }),
       },
       include: {
         referidoPor: {
