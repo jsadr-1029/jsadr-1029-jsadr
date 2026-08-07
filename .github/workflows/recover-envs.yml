@@ -31,10 +31,16 @@ jobs:
           VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
           VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
 
+      - name: Rename to non-hidden
+        run: |
+          cp .env.production env-production.txt
+          ls -la env-production.txt
+          wc -l env-production.txt
+
       - name: Upload env artifacts
         uses: actions/upload-artifact@v4
         with:
           name: vercel-envs
-          path: .env.production
+          path: env-production.txt
           retention-days: 1
           if-no-files-found: error
