@@ -1,13 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { sanitizeError } from '@/lib/error-handler'
+import { requireRole } from '@/lib/auth-guard'
 
 // GET - obtener un cliente por id (incluye referidor y referidos)
+// v4.9 (QA M06 TC-SEC-002): cualquier rol autenticado puede consultar
 export async function GET(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const authResult = requireRole(req, ['ADMIN', 'GESTOR', 'CONSULTOR'])
+    if (authResult instanceof NextResponse) return authResult
     const { id } = await params
     const cliente = await db.cliente.findUnique({
       where: { id },
@@ -60,11 +64,16 @@ export async function GET(
 }
 
 // PUT - actualizar un cliente
+// v4.9 (QA M06 TC-SEC-002): RBAC — solo ADMIN/GESTOR pueden actualizar clientes.
 export async function PUT(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const authResult = requireRole(req, ['ADMIN', 'GESTOR'])
+    if (authResult instanceof NextResponse) return authResult
+    const user = authResult as any
+
     const { id } = await params
     const body = await req.json()
     const {
@@ -254,11 +263,16 @@ export async function PUT(
 }
 
 // PATCH - cambiar estado (activo/inactivo)
+// v4.9 (QA M06 TC-SEC-002): RBAC — solo ADMIN puede activar/desactivar clientes.
 export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const authResult = requireRole(req, ['ADMIN'])
+    if (authResult instanceof NextResponse) return authResult
+    const user = authResult as any
+
     const { id } = await params
     const body = await req.json()
     const { activo } = body

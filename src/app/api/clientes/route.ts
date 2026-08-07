@@ -2,10 +2,15 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { clienteSchema, validateInput } from '@/lib/validators'
 import { sanitizeError } from '@/lib/error-handler'
+import { requireRole } from '@/lib/auth-guard'
 
 // GET - listar todos los clientes (con referidor incluido)
 export async function GET(req: NextRequest) {
   try {
+    // v4.9 (QA M06 TC-SEC-002): cualquier rol autenticado puede consultar
+    const authResult = requireRole(req, ['ADMIN', 'GESTOR', 'CONSULTOR'])
+    if (authResult instanceof NextResponse) return authResult
+
     const { searchParams } = new URL(req.url)
     const soloActivos = searchParams.get('activos') === '1'
 
@@ -44,8 +49,16 @@ export async function GET(req: NextRequest) {
 }
 
 // POST - crear nuevo cliente
+// v4.9 (QA M06 TC-SEC-002): RBAC — solo ADMIN/GESTOR pueden crear clientes.
+// ANTES: el POST no tenía requireRole, permitiendo que CONSULTOR (o cualquier
+// usuario autenticado) creara clientes. Ahora: requireRole(['ADMIN','GESTOR'])
+// rechaza CONSULTOR con HTTP 403 FORBIDDEN.
 export async function POST(req: NextRequest) {
   try {
+    const authResult = requireRole(req, ['ADMIN', 'GESTOR'])
+    if (authResult instanceof NextResponse) return authResult
+    const user = authResult as any
+
     const body = await req.json()
 
     // Reforzado: validar con Zod antes de procesar

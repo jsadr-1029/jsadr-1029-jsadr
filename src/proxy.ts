@@ -204,22 +204,40 @@ function getRateLimitForPath(pathname: string): { max: number; key: string } | n
 export async function proxy(req: NextRequest) {
   // === 1. CORS preflight ===
   if (req.method === 'OPTIONS') {
-    const response = new NextResponse(null, { status: 204 })
     const origin = req.headers.get('origin')
-    if (origin && ALLOWED_ORIGINS.some(allowed => {
+    const isOriginAllowed = origin && ALLOWED_ORIGINS.some(allowed => {
       if (allowed.includes('*')) {
         const regex = new RegExp('^' + allowed.replace(/\./g, '\\.').replace(/\*/g, '.*') + '$')
         return regex.test(origin)
       }
       return origin === allowed
-    })) {
+    })
+
+    if (isOriginAllowed) {
+      // Origen permitido: retornar 204 con headers CORS completos
+      const response = new NextResponse(null, { status: 204 })
       response.headers.set('Access-Control-Allow-Origin', origin)
       response.headers.set('Access-Control-Allow-Methods', 'GET, POST, PATCH, PUT, DELETE, OPTIONS')
       response.headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization, x-portal-token')
       response.headers.set('Access-Control-Allow-Credentials', 'true')
       response.headers.set('Access-Control-Max-Age', '86400')
+      return response
     }
-    return response
+
+    // v4.9 (QA M06 TC-SEC-015): CORS preflight rechazado debe retornar 403 explícito.
+    // Antes: si el origen no estaba en la whitelist, el proxy retornaba 204 (éxito)
+    // sin headers CORS, lo cual era confuso (el navegador lo interpretaba como
+    // éxito pero bloqueaba la petición real). Ahora: retorna 403 Forbidden explícito
+    // con codigo CORS_ORIGEN_NO_PERMITIDO y mensaje claro.
+    return NextResponse.json(
+      {
+        success: false,
+        error: `Origin '${origin || '(missing)'}' no permitido por política CORS.`,
+        code: 'CORS_ORIGEN_NO_PERMITIDO',
+        allowedOrigins: ALLOWED_ORIGINS,
+      },
+      { status: 403 }
+    )
   }
 
   const pathname = req.nextUrl.pathname
