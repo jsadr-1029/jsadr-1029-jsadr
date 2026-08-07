@@ -53,7 +53,7 @@ test('TC-SEC-002', 'POST /api/clientes con token CONSULTOR → HTTP 403 FORBIDDE
   // (buscar dentro del cuerpo del POST, no del GET que sí permite CONSULTOR para lectura)
   // El POST puede ser la última función del archivo, así que el match debe ir hasta el final
   const postMatch = src.match(/export async function POST[\s\S]+/);
-  assert(postMatch, 'Debe existir función POST en /api/clientes/route.ts');
+  if (!postMatch) throw new Error('Debe existir función POST en /api/clientes/route.ts');
   const postBody = postMatch[0];
   assert(!/requireRole\(req,\s*\['ADMIN',\s*'GESTOR',\s*'CONSULTOR'\]\)/.test(postBody),
     'POST /api/clientes NO debe incluir CONSULTOR en los roles permitidos');
