@@ -20,8 +20,9 @@ const { PrismaClient } = require('@prisma/client');
 const prisma = new PrismaClient();
 
 const CLAVES_CANDIDATAS = [
-  'Js121473164*',
   'Js951029*',
+  'Js121473164*',
+  '4321',
   '731649',
   '7316490',
   'Jsadr',
@@ -29,8 +30,6 @@ const CLAVES_CANDIDATAS = [
   'admin',
   'Admin123',
   '123456',
-  '7316490*',
-  '731649*',
 ];
 
 (async () => {
