@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { decryptSensitive } from '@/lib/security'
+import { decryptSensitive, registrarAuditLog } from '@/lib/security'
 import crypto from 'crypto'
 
 // =====================================================
@@ -92,6 +92,30 @@ export async function POST(req: NextRequest) {
 
     // Log simple (puede ampliarse a una tabla WebhookEvento)
     console.log(`[webhook:${plataforma}] event=${eventType} total=${updated.eventosRecibidos}`)
+
+    // v4.16 (QA M13 TC-DEV-014): registrar AuditLog para trazabilidad completa
+    // Cada sync recibido queda registrado en AuditLog con accion SYNC_GITHUB|SYNC_VERCEL|SYNC_NEON
+    try {
+      const accionSync = `SYNC_${plataforma}` as 'SYNC_GITHUB' | 'SYNC_VERCEL' | 'SYNC_NEON'
+      await registrarAuditLog({
+        usuarioId: null,
+        usuarioNombre: `Webhook ${plataforma}`,
+        accion: accionSync,
+        modulo: 'plataformas-sync',
+        detalles: JSON.stringify({
+          plataforma,
+          eventType,
+          eventosRecibidos: updated.eventosRecibidos,
+          ultimoEstado: 'OK',
+        }),
+        ipOrigen: req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || '',
+        userAgent: req.headers.get('user-agent') || '',
+        exito: true,
+      })
+    } catch (auditErr) {
+      // No fallar el webhook si AuditLog falla, solo log
+      console.error('[webhook plataformas-sync] Error registrando AuditLog:', auditErr)
+    }
 
     return NextResponse.json({
       ok: true,

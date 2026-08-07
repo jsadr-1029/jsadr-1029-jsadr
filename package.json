@@ -13,7 +13,10 @@
     "db:push": "prisma db push --accept-data-loss",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
-    "db:reset": "prisma migrate reset"
+    "db:reset": "prisma migrate reset",
+    "vercel:rollback": "node scripts/vercel-rollback.cjs",
+    "vercel:deploy": "vercel deploy --prod --yes",
+    "vercel:envs": "node scripts/_check-vercel-envs.cjs"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

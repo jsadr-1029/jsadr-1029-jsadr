@@ -525,6 +525,61 @@ async function main() {
   }
   console.log('\n═══════════════════════════════════════════════════════\n');
 
+  // ─── v4.16 (QA M13 TC-DEV-011 / TC-DEV-014): ───
+  // Actualizar PlataformaSync en BD con ultimoEstado + sincronizado
+  // y registrar AuditLog con acciones SYNC_GITHUB/SYNC_VERCEL/SYNC_NEON
+  try {
+    const platformStatuses = [
+      { plataforma: 'GITHUB', ok: report.github.ok, accion: 'SYNC_GITHUB', detalles: report.github.details || {} },
+      { plataforma: 'VERCEL', ok: report.vercel.ok, accion: 'SYNC_VERCEL', detalles: report.vercel.details || {} },
+      { plataforma: 'NEON', ok: report.neon.ok, accion: 'SYNC_NEON', detalles: report.neon.details || {} },
+    ];
+
+    for (const ps of platformStatuses) {
+      const existing = await prisma.plataformaSync.findUnique({ where: { plataforma: ps.plataforma } });
+      if (existing) {
+        await prisma.plataformaSync.update({
+          where: { plataforma: ps.plataforma },
+          data: {
+            sincronizado: ps.ok,
+            ultimoEstado: ps.ok ? 'OK' : 'ERROR',
+            ultimoSync: new Date(),
+            ultimoError: ps.ok ? null : `Sync falló — ver sync-report.json`,
+          },
+        });
+        console.log(`  ✅ PlataformaSync.${ps.plataforma}: ultimoEstado=${ps.ok ? 'OK' : 'ERROR'}, sincronizado=${ps.ok}`);
+      }
+    }
+
+    // Registrar AuditLog para cada plataforma
+    for (const ps of platformStatuses) {
+      try {
+        await prisma.auditLog.create({
+          data: {
+            usuarioId: null,
+            usuarioNombre: 'sync-full-platforms.cjs',
+            accion: ps.accion,
+            modulo: 'plataformas-sync',
+            detalles: JSON.stringify({
+              plataforma: ps.plataforma,
+              success: ps.ok,
+              detalles: ps.detalles,
+              timestamp: new Date().toISOString(),
+            }).slice(0, 2000),
+            ipOrigen: 'localhost',
+            userAgent: 'sync-script',
+            exito: ps.ok,
+          },
+        });
+        console.log(`  ✅ AuditLog: ${ps.accion} registrado (${ps.ok ? 'OK' : 'ERROR'})`);
+      } catch (auditErr) {
+        console.warn(`  ⚠ No se pudo registrar AuditLog para ${ps.plataforma}:`, auditErr.message);
+      }
+    }
+  } catch (e) {
+    console.warn('  ⚠ Error actualizando PlataformaSync/AuditLog:', e.message);
+  }
+
   // Guardar reporte en disco
   fs.writeFileSync('/home/z/my-project/tool-results/sync-report.json', JSON.stringify(report, null, 2));
   console.log('  Reporte JSON guardado en /home/z/my-project/tool-results/sync-report.json');
