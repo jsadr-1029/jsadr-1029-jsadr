@@ -1,12 +1,12 @@
 // =====================================================
-// /api/reportes — Dashboard unificado + Proyecciones v3.0
+// /api/reportes — Dashboard unificado + Proyecciones v4.13
 // Combina KPIs operacionales, financieros, proyecciones y reportes
-// Requiere autenticación (cualquier rol)
+// RBAC: ADMIN, CONSULTOR (lectura), GESTOR (lectura)
 // =====================================================
 
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { requireAuth } from '@/lib/auth-guard'
+import { requireRole } from '@/lib/auth-guard'
 import { errorResponse, logError } from '@/lib/error-handler'
 import {
   calcularPrestamo,
@@ -18,7 +18,8 @@ import {
 
 export async function GET(req: NextRequest) {
   try {
-    const authResult = requireAuth(req)
+    // v4.13 (TC-REP-011): CONSULTOR tiene acceso de lectura a reportes
+    const authResult = requireRole(req, ['ADMIN', 'CONSULTOR', 'GESTOR'])
     if (authResult instanceof NextResponse) return authResult
 
     const { searchParams } = new URL(req.url)
