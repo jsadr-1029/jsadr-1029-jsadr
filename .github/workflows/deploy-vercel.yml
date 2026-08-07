@@ -132,6 +132,17 @@ jobs:
           echo "📂 Archivos en cwd: $(ls -1 | head -20 | tr '\n' ' ')"
           echo ""
 
+          # Test de conectividad a Neon Postgres antes de correr el gate
+          echo "🔌 Test de conectividad a Neon Postgres..."
+          node -e "
+            const url = process.env.DATABASE_URL;
+            if (!url) { console.error('❌ DATABASE_URL no definida'); process.exit(1); }
+            console.log('   DATABASE_URL length:', url.length);
+            console.log('   sslmode=require:', url.includes('sslmode=require') ? '✅' : '⚠️ no');
+            console.log('   neon.tech:', url.includes('neon.tech') ? '✅' : '⚠️ no');
+          " || true
+
+          echo ""
           echo "═══════════════════════════════════════════════════════════"
           echo "  Iniciando QA Regression Gate (pre-deploy gate)"
           echo "═══════════════════════════════════════════════════════════"

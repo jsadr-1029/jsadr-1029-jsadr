@@ -214,19 +214,44 @@ async function main() {
   }
   console.log('');
 
-  // Detalle de fallos
+  // Detalle de fallos — MUY verbose para debugging en CI
   const failed = results.filter((r) => !r.ok);
   if (failed.length > 0) {
     console.log('\n═══ DETALLE DE MÓDULOS CON FALLOS ═══');
     for (const r of failed) {
-      console.log(`\n❌ ${r.id} ${r.name} (exit code: ${r.code ?? 'n/a'}${r.timeout ? ', TIMEOUT' : ''}${r.error ? `, ERROR: ${r.error}` : ''})`);
-      // Imprimir las líneas que empiezan con ❌ del stdout
-      const lines = (r.stdout || '').split('\n').filter((l) => l.includes('❌') || l.includes('FAIL'));
-      if (lines.length === 0) {
-        console.log('  (no se detectaron líneas FAIL en stdout)');
-        if (r.stderr) console.log('  stderr (últimas 500 chars):', r.stderr.slice(-500));
-      } else {
-        for (const l of lines.slice(0, 30)) console.log('  ' + l);
+      console.log(`\n❌ ${r.id} ${r.name}`);
+      console.log(`   Exit code: ${r.code ?? 'n/a'}${r.timeout ? ' | TIMEOUT' : ''}${r.error ? ' | ERROR: ' + r.error : ''}`);
+      console.log(`   Duración: ${fmtMs(r.durationMs)}`);
+      console.log(`   Pass/Fail: ${r.pass}/${r.fail}`);
+
+      // Mostrar líneas con ❌ o FAIL del stdout
+      const lines = (r.stdout || '').split('\n').filter((l) =>
+        l.includes('❌') || l.includes('FAIL') || l.includes('Error') || l.includes('error')
+      );
+      if (lines.length > 0) {
+        console.log('   --- Líneas de error en stdout ---');
+        for (const l of lines.slice(0, 20)) console.log(`   | ${l.trim()}`);
+      }
+
+      // Mostrar últimas 30 líneas de stdout (para contexto)
+      const stdoutLines = (r.stdout || '').split('\n').filter(Boolean);
+      if (stdoutLines.length > 0) {
+        console.log('   --- Últimas 30 líneas de stdout ---');
+        for (const l of stdoutLines.slice(-30)) console.log(`   | ${l}`);
+      }
+
+      // Mostrar stderr completo si existe
+      if (r.stderr && r.stderr.trim()) {
+        console.log('   --- stderr (completo, hasta 2000 chars) ---');
+        const stderrTrimmed = r.stderr.slice(-2000);
+        for (const l of stderrTrimmed.split('\n').slice(-30)) {
+          if (l.trim()) console.log(`   ! ${l}`);
+        }
+      }
+
+      // Si el script crasheó sin output, mostrar el comando
+      if (!r.stdout && !r.stderr) {
+        console.log('   (sin output — el script probablemente crasheó antes de producir salida)');
       }
     }
   } else {
