@@ -61,8 +61,23 @@ function parseResults(stdout) {
 function runOne(mod) {
   return new Promise((resolve) => {
     const start = Date.now();
-    const args = ['tsx', mod.script];
-    const child = spawn('npx', args, {
+
+    // Estrategia para encontrar tsx:
+    //   1. node_modules/.bin/tsx (local, después de npm install)
+    //   2. npx tsx (fallback, descarga on-demand)
+    const fs = require('node:fs');
+    const path = require('node:path');
+    const localTsx = path.join(process.cwd(), 'node_modules', '.bin', 'tsx');
+    let cmd, args;
+    if (fs.existsSync(localTsx)) {
+      cmd = process.execPath;  // node binary
+      args = [localTsx, mod.script];
+    } else {
+      cmd = 'npx';
+      args = ['tsx', mod.script];
+    }
+
+    const child = spawn(cmd, args, {
       cwd: process.cwd(),
       env: process.env,
       stdio: ['ignore', 'pipe', 'pipe'],
