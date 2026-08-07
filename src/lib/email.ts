@@ -201,6 +201,15 @@ function esCifradoAES(s: string | null | undefined): boolean {
 async function obtenerBrevoApiKey(): Promise<string | null> {
   // 1. Intentar desde env var (más rápido, evita query a BD)
   if (process.env.BREVO_API_KEY) {
+    // Saltar inmediatamente si no tiene prefijo xkeysib- (SMTP key mal puesta en env)
+    if (!process.env.BREVO_API_KEY.startsWith('xkeysib-')) {
+      console.warn(
+        '[email][BREVO] BREVO_API_KEY de .env no empieza con "xkeysib-" ' +
+          '(primeros 10 chars: "' + process.env.BREVO_API_KEY.slice(0, 10) + '"). ' +
+          'Saltando HTTPS API — usando SMTP fallback.'
+      )
+      return null
+    }
     if (cachedBrevoApiKey !== process.env.BREVO_API_KEY) {
       cachedBrevoApiKey = process.env.BREVO_API_KEY
       cachedBrevoApiKeyHash = process.env.BREVO_API_KEY.slice(-6)
@@ -233,13 +242,14 @@ async function obtenerBrevoApiKey(): Promise<string | null> {
         )
         return null
       }
-      // Validar que tenga el prefijo correcto de Brevo
+      // Validar que tenga el prefijo correcto de Brevo HTTPS API (xkeysib-).
+      // Si tiene prefijo xsmtpsib- es una SMTP key mal colocada en el campo apiKey
+      // → saltar HTTPS API y usar SMTP fallback directamente (evita 12s de timeout).
       if (!decrypted.startsWith('xkeysib-')) {
-        console.error(
-          '[email][BREVO] apiKey desencriptada no empieza con "xkeysib-". ' +
-            'Valor recibido (primeros 12 chars): "' +
-            decrypted.slice(0, 12) +
-            '". Revisa las credenciales en panel Brevo.'
+        console.warn(
+          '[email][BREVO] apiKey desencriptada no empieza con "xkeysib-" ' +
+            '(primeros 12 chars: "' + decrypted.slice(0, 12) + '"). ' +
+            'Asumimos es una SMTP key mal puesta — saltando HTTPS API, usando SMTP fallback.'
         )
         return null
       }
@@ -256,10 +266,10 @@ async function obtenerBrevoApiKey(): Promise<string | null> {
     }
     // Texto plano — validar prefijo
     if (!conexion.apiKey.startsWith('xkeysib-')) {
-      console.error(
-        '[email][BREVO] apiKey en texto plano no empieza con "xkeysib-". Valor actual (primeros 12 chars): "' +
-          conexion.apiKey.slice(0, 12) +
-          '"'
+      console.warn(
+        '[email][BREVO] apiKey en texto plano no empieza con "xkeysib-" ' +
+          '(primeros 12 chars: "' + conexion.apiKey.slice(0, 12) + '"). ' +
+          'Saltando HTTPS API, usando SMTP fallback.'
       )
       return null
     }
