@@ -225,9 +225,11 @@ export async function POST(req: NextRequest) {
     // y prestamos sin cuotas programadas.
     // Aplica cuando el prestamo NO es cuota personalizada ni tasa fija (esas modalidades
     // validan numeroCuotas directamente).
-    const esCuotaPersonalizada = modalidad === 'CUOTA_PERSONALIZADA'
-    const esTasaFija = modalidad === 'TASA_FIJA_MENSUAL'
-    if (!esCuotaPersonalizada && !esTasaFija && plazoMeses !== undefined) {
+    // Nota: las constantes esCuotaPersonalizada y esTasaFija se declaran más abajo,
+    // aquí usamos nombres locales para evitar redeclaración.
+    const _esCuotaPersonalizadaPreCheck = modalidad === 'CUOTA_PERSONALIZADA'
+    const _esTasaFijaPreCheck = modalidad === 'TASA_FIJA_MENSUAL'
+    if (!_esCuotaPersonalizadaPreCheck && !_esTasaFijaPreCheck && plazoMeses !== undefined) {
       const plazoNum = parseInt(plazoMeses)
       if (isNaN(plazoNum) || plazoNum < 1) {
         return NextResponse.json(

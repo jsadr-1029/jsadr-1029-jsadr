@@ -110,6 +110,7 @@ test('TC-PRE-003', 'Monto 10,000 debe rechazarse con HTTP 400 "Monto debe ser �
 test('TC-PRE-004', 'Plazo 0 meses debe rechazarse con HTTP 400 "Plazo debe ser ≥ 1"', async () => {
   const src = fs.readFileSync(PRESTAMOS_ROUTE_SRC, 'utf8');
   // v4.6 (TC-PRE-004): se añadió validación plazoNum < 1
+  // (nombres locales _esCuotaPersonalizadaPreCheck para evitar redeclaración)
   assert(/parseInt\(plazoMeses\)/.test(src), 'POST debe parsear plazoMeses con parseInt');
   assert(/plazoNum\s*<\s*1/.test(src), 'POST debe validar plazoNum < 1');
   assert(src.includes('PLAZO_INVALIDO'),
