@@ -580,7 +580,14 @@ test('TC-CLI-014', 'Email ES @unique en Cliente (previene suplantación) — sch
     assert(data.codigo === 'EMAIL_DUPLICADO',
       `Body debe incluir codigo: EMAIL_DUPLICADO, recibido: ${data.codigo}`);
   } catch (e: any) {
-    if (e.code === 'ECONNREFUSED') {
+    // Node fetch nativo (undici) envuelve ECONNREFUSED en TypeError("fetch failed")
+    // con e.cause.code === 'ECONNREFUSED'. Cubrir ambos caminos.
+    const isConnRefused =
+      e?.code === 'ECONNREFUSED' ||
+      e?.cause?.code === 'ECONNREFUSED' ||
+      (typeof e?.message === 'string' && e.message.includes('fetch failed')) ||
+      (typeof e?.message === 'string' && e.message.includes('ECONNREFUSED'));
+    if (isConnRefused) {
       console.log('   ⚠️  Servidor dev no disponible, se omite prueba E2E API (BD validada OK)');
     } else {
       throw e;
