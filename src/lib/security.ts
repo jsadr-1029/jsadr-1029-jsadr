@@ -425,29 +425,51 @@ export function encryptSensitive(text: string): string {
 }
 
 export function decryptSensitive(encryptedText: string): string {
+  // 1) Intentar con API_ENCRYPTION_KEY (de .env o Vercel env var)
   try {
     const key = getEncryptionKey()
-    if (!key || key.length === 0) return encryptedText
-    const parts = encryptedText.split(':')
-    if (parts.length !== 2) return encryptedText // no está cifrado
-    const iv = Buffer.from(parts[0], 'hex')
-    const encrypted = parts[1]
-    const decipher = crypto.createDecipheriv(ALGORITHM, key, iv)
-    let decrypted = decipher.update(encrypted, 'hex', 'utf8')
-    decrypted += decipher.final('utf8')
-    return decrypted
+    if (key && key.length > 0) {
+      const parts = encryptedText.split(':')
+      if (parts.length === 2) {
+        const iv = Buffer.from(parts[0], 'hex')
+        const encrypted = parts[1]
+        const decipher = crypto.createDecipheriv(ALGORITHM, key, iv)
+        let decrypted = decipher.update(encrypted, 'hex', 'utf8')
+        decrypted += decipher.final('utf8')
+        return decrypted
+      }
+    }
   } catch (err: any) {
-    // ⚠️ Si la desencripción falla, significa que API_ENCRYPTION_KEY de .env
-    // no coincide con la llave usada al cifrar. Registrar para que el
-    // administrador pueda detectar la causa raíz de fallos de correo/auth.
-    console.error('[decryptSensitive] Falló desencripción:', {
-      errorCode: err?.code || 'UNKNOWN',
-      message: err?.message || String(err),
-      inputPrefix: encryptedText.substring(0, 16) + '...',
-      hint: 'Verifica que API_ENCRYPTION_KEY en .env coincida con la usada al cifrar las credenciales.',
-    })
-    return encryptedText // si falla, devolver original
+    // Continuar al fallback con BACKUP_KEY_SEED
   }
+
+  // 2) Fallback: BACKUP_KEY_SEED (hardcoded en código fuente — sobrevive a
+  //    sobrescrituras de .env y a desincronización entre local y Vercel).
+  //    Esto permite que credenciales cifradas con encryptBackup() sean
+  //    descifradas por código que llama a decryptSensitive(), lo que
+  //    hace el sistema resiliente a pérdida/rotación de API_ENCRYPTION_KEY.
+  try {
+    const backupKey = getBackupKey()
+    const parts = encryptedText.split(':')
+    if (parts.length === 2) {
+      const iv = Buffer.from(parts[0], 'hex')
+      const encrypted = parts[1]
+      const decipher = crypto.createDecipheriv(ALGORITHM, backupKey, iv)
+      let decrypted = decipher.update(encrypted, 'hex', 'utf8')
+      decrypted += decipher.final('utf8')
+      return decrypted
+    }
+  } catch (err: any) {
+    // Continuar al log de error
+  }
+
+  // 3) Si ambas rutas fallan, registrar y devolver original
+  console.error('[decryptSensitive] Falló desencripción con API_ENCRYPTION_KEY y BACKUP_KEY_SEED:', {
+    message: 'Ambas llaves fallaron — el valor no está cifrado o ambas llaves no coinciden',
+    inputPrefix: encryptedText.substring(0, 16) + '...',
+    hint: 'Verifica API_ENCRYPTION_KEY en .env, o re-cifra el valor con encryptBackup() para usar BACKUP_KEY_SEED.',
+  })
+  return encryptedText
 }
 
 // === 6.1 BACKUP DE CREDENCIALES (llave hardcoded, NO depende de .env) ===
