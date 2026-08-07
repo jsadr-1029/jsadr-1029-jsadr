@@ -428,6 +428,25 @@ export function UserMenu({ currentView, onNavigate }: UserMenuProps) {
 
   if (!mounted) return null
 
+  // FIX (2026-08-07): Si no hay usuario autenticado (no hay user_data en
+  // localStorage ni token en cookies/localStorage), NO renderizar el menú.
+  // Antes, este menú aparecía en /login y /register mostrando "Usuario"
+  // en la esquina superior derecha aunque el visitante no hubiera iniciado
+  // sesión, lo que confundía al usuario y exponía la existencia del menú
+  // interno a visitantes no autenticados.
+  if (!user && !reactiveUser) return null
+
+  // FIX (2026-08-07): Si estamos en una ruta pública (/login o /register),
+  // no mostrar el menú aunque haya datos residuales en localStorage. Esto
+  // evita que un usuario que navegó a /login vea el menú de su sesión
+  // anterior antes de que el redirect del useEffect lo lleve al dashboard.
+  if (typeof window !== 'undefined') {
+    const path = window.location.pathname
+    if (path === '/login' || path === '/register' || path === '/juridico') {
+      return null
+    }
+  }
+
   // Para cliente del portal, no mostrar el menú completo
   // Usamos reactiveRol que también intenta decodificar el JWT si
   // user_data está incompleto, evitando el bug de mostrar "Usuario".
