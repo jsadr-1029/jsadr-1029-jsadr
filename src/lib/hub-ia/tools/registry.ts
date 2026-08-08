@@ -447,6 +447,478 @@ const actualizar_parametro: ToolDef = {
 }
 
 // =====================================================
+// HERRAMIENTAS DE ANÁLISIS (read-only, devuelven conclusiones)
+// =====================================================
+
+const analizar_modulo: ToolDef = {
+  name: 'analizar_modulo',
+  description: 'Analiza un módulo específico de la plataforma (clientes, prestamos, pagos, juridico, configuracion) y devuelve métricas clave, estado de salud y posibles problemas detectados.',
+  parameters: {
+    type: 'object',
+    properties: {
+      modulo: { type: 'string', enum: ['clientes', 'prestamos', 'pagos', 'juridico', 'configuracion', 'seguridad'], description: 'Módulo a analizar' },
+    },
+    required: ['modulo'],
+  },
+  riesgo: 'bajo',
+  async execute(args) {
+    const modulo = String(args.modulo)
+    const out: Record<string, unknown> = { modulo }
+    if (modulo === 'prestamos') {
+      const [total, activos, mora, juridico] = await Promise.all([
+        db.prestamo.count(),
+        db.prestamo.count({ where: { estado: 'ACTIVO' } }),
+        db.prestamo.count({ where: { estado: 'EN_MORA' } }),
+        db.prestamo.count({ where: { estado: 'JURIDICO' } }),
+      ])
+      out.totalPrestamos = total
+      out.activos = activos
+      out.enMora = mora
+      out.juridico = juridico
+      out.tasaMora = total ? ((mora / total) * 100).toFixed(2) + '%' : '0%'
+      out.observaciones = mora > 0 ? `Hay ${mora} préstamos en mora (${((mora / total) * 100).toFixed(2)}% del total).` : 'No hay préstamos en mora.'
+    } else if (modulo === 'clientes') {
+      const [total, activos] = await Promise.all([
+        db.cliente.count(),
+        db.cliente.count({ where: { activo: true } }),
+      ])
+      out.totalClientes = total
+      out.activos = activos
+      out.observaciones = activos < total * 0.7 ? 'Más del 30% de los clientes están inactivos.' : 'Salud del módulo de clientes: OK.'
+    } else if (modulo === 'pagos') {
+      const [pendientes, vencidos, aplicadosHoy] = await Promise.all([
+        db.pago.count({ where: { estado: 'PENDIENTE' } }),
+        db.pago.count({ where: { estado: 'VENCIDO' } }),
+        db.pago.count({ where: { estado: 'APLICADO', fechaPago: { gte: new Date(Date.now() - 86400000) } } }),
+      ])
+      out.pagosPendientes = pendientes
+      out.pagosVencidos = vencidos
+      out.pagosAplicadosHoy = aplicadosHoy
+      out.observaciones = vencidos > 0 ? `Hay ${vencidos} pagos vencidos que requieren acción inmediata.` : 'No hay pagos vencidos.'
+    } else if (modulo === 'juridico') {
+      const [casosAbiertos] = await Promise.all([
+        db.casoJuridico.count({ where: { estado: { not: 'CERRADO' } } }),
+      ])
+      out.casosAbiertos = casosAbiertos
+      out.observaciones = casosAbiertos > 0 ? `Hay ${casosAbiertos} casos jurídicos en proceso.` : 'No hay casos jurídicos abiertos.'
+    } else if (modulo === 'configuracion') {
+      const total = await db.variableGlobal.count()
+      out.totalVariables = total
+      out.observaciones = `Hay ${total} variables globales configuradas.`
+    } else if (modulo === 'seguridad') {
+      const [usuarios, audit24h, promptInjectionBlocked] = await Promise.all([
+        db.usuario.count({ where: { activo: true } }),
+        db.auditLog.count({ where: { fecha: { gte: new Date(Date.now() - 86400000) } } }),
+        db.hubIAAccion.count({ where: { toolName: 'prompt_injection_blocked', createdAt: { gte: new Date(Date.now() - 86400000) } } }),
+      ])
+      out.usuariosActivos = usuarios
+      out.eventosAuditoria24h = audit24h
+      out.intentosPromptInjectionBloqueados = promptInjectionBlocked
+      out.observaciones = promptInjectionBlocked > 0 ? `⚠️ Se bloquearon ${promptInjectionBlocked} intentos de prompt injection en 24h.` : 'Sin actividad maliciosa detectada.'
+    } else {
+      return { ok: false, error: `Módulo '${modulo}' no soportado para análisis.` }
+    }
+    return { ok: true, data: out }
+  },
+}
+
+const detectar_errores: ToolDef = {
+  name: 'detectar_errores',
+  description: 'Busca errores recientes en los logs de auditoría del sistema. Devuelve los eventos fallidos de las últimas 24-72 horas.',
+  parameters: {
+    type: 'object',
+    properties: {
+      horas: { type: 'number', description: 'Cantidad de horas hacia atrás (default 24, max 168)' },
+      limite: { type: 'number', description: 'Máximo de resultados (default 20, max 50)' },
+    },
+  },
+  riesgo: 'bajo',
+  async execute(args) {
+    const horas = Math.min(Number(args.horas) || 24, 168)
+    const limite = Math.min(Number(args.limite) || 20, 50)
+    const desde = new Date(Date.now() - horas * 3600000)
+    const errores = await db.auditLog.findMany({
+      where: { exito: false, fecha: { gte: desde } },
+      orderBy: { fecha: 'desc' },
+      take: limite,
+      select: {
+        accion: true, modulo: true, errorMessage: true, fecha: true,
+        usuarioNombre: true, entidadNombre: true,
+      },
+    })
+    // Agrupar por tipo de error
+    const porTipo: Record<string, number> = {}
+    for (const e of errores) {
+      const tipo = e.accion
+      porTipo[tipo] = (porTipo[tipo] || 0) + 1
+    }
+    return {
+      ok: true,
+      data: {
+        totalErrores: errores.length,
+        horas,
+        porTipo,
+        errores: errores.map((e) => ({
+          accion: e.accion,
+          modulo: e.modulo,
+          usuario: e.usuarioNombre,
+          entidad: e.entidadNombre,
+          error: e.errorMessage,
+          fecha: e.fecha.toISOString(),
+        })),
+      },
+    }
+  },
+}
+
+const generar_reporte: ToolDef = {
+  name: 'generar_reporte',
+  description: 'Genera un reporte de cartera o mora con estadísticas agregadas. Devuelve datos estructurados para análisis.',
+  parameters: {
+    type: 'object',
+    properties: {
+      tipo: { type: 'string', enum: ['cartera', 'mora', 'pagos', 'clientes'], description: 'Tipo de reporte' },
+      desde: { type: 'string', description: 'Fecha desde (YYYY-MM-DD, opcional)' },
+      hasta: { type: 'string', description: 'Fecha hasta (YYYY-MM-DD, opcional)' },
+    },
+    required: ['tipo'],
+  },
+  riesgo: 'bajo',
+  async execute(args) {
+    const tipo = String(args.tipo)
+    if (tipo === 'cartera') {
+      const prestamos = await db.prestamo.findMany({
+        where: { estado: { in: ['ACTIVO', 'EN_MORA', 'JURIDICO'] } },
+        select: { estado: true, montoPrincipal: true, saldoTotal: true, montoMora: true },
+      })
+      const totalCartera = prestamos.reduce((s, p) => s + p.saldoTotal, 0)
+      const totalMora = prestamos.reduce((s, p) => s + p.montoMora, 0)
+      const porEstado = prestamos.reduce((acc, p) => {
+        acc[p.estado] = (acc[p.estado] || 0) + 1
+        return acc
+      }, {} as Record<string, number>)
+      return {
+        ok: true,
+        data: {
+          tipo: 'cartera',
+          totalPrestamos: prestamos.length,
+          totalCartera,
+          totalMora,
+          porEstado,
+          generadoEn: new Date().toISOString(),
+        },
+      }
+    }
+    if (tipo === 'mora') {
+      const enMora = await db.prestamo.findMany({
+        where: { estado: 'EN_MORA' },
+        select: { diasMora: true, montoMora: true, saldoTotal: true },
+      })
+      const buckets = { '1-30': 0, '31-60': 0, '61-90': 0, '+90': 0 }
+      for (const p of enMora) {
+        if (p.diasMora <= 30) buckets['1-30']++
+        else if (p.diasMora <= 60) buckets['31-60']++
+        else if (p.diasMora <= 90) buckets['61-90']++
+        else buckets['+90']++
+      }
+      return {
+        ok: true,
+        data: {
+          tipo: 'mora',
+          totalEnMora: enMora.length,
+          totalMoraAcumulada: enMora.reduce((s, p) => s + p.montoMora, 0),
+          bucketsAntiguedad: buckets,
+          promedioDiasMora: enMora.length ? Math.round(enMora.reduce((s, p) => s + p.diasMora, 0) / enMora.length) : 0,
+          generadoEn: new Date().toISOString(),
+        },
+      }
+    }
+    if (tipo === 'pagos') {
+      const desde = args.desde ? new Date(String(args.desde)) : new Date(Date.now() - 30 * 86400000)
+      const hasta = args.hasta ? new Date(String(args.hasta)) : new Date()
+      const pagos = await db.pago.findMany({
+        where: { fechaPago: { gte: desde, lte: hasta } },
+        select: { estado: true, montoTotal: true, metodoPago: true },
+      })
+      const porEstado = pagos.reduce((acc, p) => {
+        acc[p.estado] = (acc[p.estado] || 0) + 1
+        return acc
+      }, {} as Record<string, number>)
+      const porMetodo = pagos.reduce((acc, p) => {
+        acc[p.metodoPago] = (acc[p.metodoPago] || 0) + 1
+        return acc
+      }, {} as Record<string, number>)
+      return {
+        ok: true,
+        data: {
+          tipo: 'pagos',
+          desde: desde.toISOString(),
+          hasta: hasta.toISOString(),
+          totalPagos: pagos.length,
+          totalMonto: pagos.reduce((s, p) => s + p.montoTotal, 0),
+          porEstado,
+          porMetodo,
+          generadoEn: new Date().toISOString(),
+        },
+      }
+    }
+    if (tipo === 'clientes') {
+      const [total, activos, optOut] = await Promise.all([
+        db.cliente.count(),
+        db.cliente.count({ where: { activo: true } }),
+        db.cliente.count({ where: { optOutNotificaciones: true } }),
+      ])
+      return {
+        ok: true,
+        data: {
+          tipo: 'clientes',
+          total,
+          activos,
+          inactivos: total - activos,
+          optOutNotificaciones: optOut,
+          generadoEn: new Date().toISOString(),
+        },
+      }
+    }
+    return { ok: false, error: `Tipo de reporte '${tipo}' no soportado.` }
+  },
+}
+
+const verificar_servicios: ToolDef = {
+  name: 'verificar_servicios',
+  description: 'Verifica el estado de los servicios internos del sistema (base de datos, conexión a IA, auditoría, etc.).',
+  parameters: { type: 'object', properties: {} },
+  riesgo: 'bajo',
+  async execute() {
+    const servicios: Array<{ nombre: string; estado: string; latenciaMs?: number; detalle?: string }> = []
+    // DB
+    const inicioDb = Date.now()
+    try {
+      await db.$queryRaw`SELECT 1`
+      servicios.push({ nombre: 'PostgreSQL (Neon)', estado: 'operativo', latenciaMs: Date.now() - inicioDb })
+    } catch (e: any) {
+      servicios.push({ nombre: 'PostgreSQL (Neon)', estado: 'error', detalle: e.message })
+    }
+    // Auditoría
+    try {
+      const count = await db.auditLog.count({ where: { fecha: { gte: new Date(Date.now() - 86400000) } } })
+      servicios.push({ nombre: 'Auditoría (AuditLog)', estado: 'operativo', detalle: `${count} eventos en 24h` })
+    } catch (e: any) {
+      servicios.push({ nombre: 'Auditoría (AuditLog)', estado: 'error', detalle: e.message })
+    }
+    // Hub IA
+    try {
+      const conversaciones = await db.hubIAConversation.count()
+      servicios.push({ nombre: 'Hub IA', estado: 'operativo', detalle: `${conversaciones} conversaciones registradas` })
+    } catch (e: any) {
+      servicios.push({ nombre: 'Hub IA', estado: 'error', detalle: e.message })
+    }
+    return {
+      ok: true,
+      data: {
+        timestamp: new Date().toISOString(),
+        totalServicios: servicios.length,
+        operativos: servicios.filter((s) => s.estado === 'operativo').length,
+        conError: servicios.filter((s) => s.estado === 'error').length,
+        servicios,
+      },
+    }
+  },
+}
+
+const consultar_modulos: ToolDef = {
+  name: 'consultar_modulos',
+  description: 'Lista los módulos disponibles en la plataforma que el agente IA puede analizar o sobre los que puede ejecutar acciones.',
+  parameters: { type: 'object', properties: {} },
+  riesgo: 'bajo',
+  async execute() {
+    return {
+      ok: true,
+      data: {
+        modulos: [
+          { nombre: 'clientes', descripcion: 'Gestión de clientes' },
+          { nombre: 'prestamos', descripcion: 'Gestión de préstamos' },
+          { nombre: 'pagos', descripcion: 'Registro y conciliación de pagos' },
+          { nombre: 'juridico', descripcion: 'Casos jurídicos y cobranza' },
+          { nombre: 'configuracion', descripcion: 'Configuración global de la plataforma' },
+          { nombre: 'seguridad', descripcion: 'Auditoría, usuarios, permisos' },
+        ],
+      },
+    }
+  },
+}
+
+const consultar_permisos: ToolDef = {
+  name: 'consultar_permisos',
+  description: 'Consulta los permisos del usuario actual (rol, qué vistas puede ver, qué herramientas puede ejecutar).',
+  parameters: { type: 'object', properties: {} },
+  riesgo: 'bajo',
+  async execute(args, ctx) {
+    const rol = ctx.user.rol
+    const puedeConsultar = true
+    const puedeModificar = rol === 'ADMIN'
+    const puedeEliminar = false // siempre requiere confirmación adicional
+    return {
+      ok: true,
+      data: {
+        usuario: ctx.user.nombre,
+        rol,
+        permisos: {
+          consultar: puedeConsultar,
+          modificar: puedeModificar,
+          eliminar: puedeEliminar,
+          ejecutar_herramientas_riesgo_bajo: true,
+          ejecutar_herramientas_riesgo_medio: puedeModificar,
+          ejecutar_herramientas_riesgo_alto: puedeModificar,
+          ejecutar_herramientas_riesgo_critico: false, // siempre bloqueado
+        },
+      },
+    }
+  },
+}
+
+const consultar_reportes: ToolDef = {
+  name: 'consultar_reportes',
+  description: 'Lista los reportes disponibles que pueden generarse mediante la herramienta generar_reporte.',
+  parameters: { type: 'object', properties: {} },
+  riesgo: 'bajo',
+  async execute() {
+    return {
+      ok: true,
+      data: {
+        reportes: [
+          { tipo: 'cartera', descripcion: 'Reporte de cartera activa (préstamos ACTIVO/EN_MORA/JURIDICO)' },
+          { tipo: 'mora', descripcion: 'Reporte de mora con buckets de antigüedad (1-30, 31-60, 61-90, +90 días)' },
+          { tipo: 'pagos', descripcion: 'Reporte de pagos en rango de fechas (default: últimos 30 días)' },
+          { tipo: 'clientes', descripcion: 'Reporte de clientes (totales, activos, opt-out)' },
+        ],
+      },
+    }
+  },
+}
+
+// =====================================================
+// HERRAMIENTAS DE MODIFICACIÓN — bitácora (riesgo medio)
+// =====================================================
+
+const crear_registro: ToolDef = {
+  name: 'crear_registro',
+  description: 'Crea una nota en la bitácora de un préstamo. Útil para registrar observaciones, llamadas, visitas o seguimientos.',
+  parameters: {
+    type: 'object',
+    properties: {
+      prestamoId: { type: 'string', description: 'ID del préstamo' },
+      tipo: { type: 'string', enum: ['NOTA', 'LLAMADA', 'VISITA', 'EMAIL', 'WHATSAPP', 'REUNION', 'OTRO'], description: 'Tipo de evento' },
+      titulo: { type: 'string', description: 'Título breve' },
+      descripcion: { type: 'string', description: 'Descripción del evento' },
+      resultado: { type: 'string', description: 'Resultado (opcional)' },
+    },
+    required: ['prestamoId', 'tipo', 'titulo', 'descripcion'],
+  },
+  riesgo: 'medio',
+  async execute(args, ctx) {
+    const prestamo = await db.prestamo.findUnique({ where: { id: String(args.prestamoId) } })
+    if (!prestamo) return { ok: false, error: 'Préstamo no encontrado' }
+    const nota = await db.bitacoraPrestamo.create({
+      data: {
+        prestamoId: prestamo.id,
+        prestamoCodigo: prestamo.codigo,
+        usuarioId: ctx.user.id,
+        usuarioNombre: ctx.user.nombre,
+        tipo: String(args.tipo),
+        titulo: String(args.titulo),
+        descripcion: String(args.descripcion),
+        resultado: args.resultado ? String(args.resultado) : null,
+        fechaEvento: new Date(),
+      },
+    })
+    return { ok: true, data: { id: nota.id, creado: true } }
+  },
+}
+
+const actualizar_registro: ToolDef = {
+  name: 'actualizar_registro',
+  description: 'Actualiza una nota existente en la bitácora de un préstamo. Solo el autor o un ADMIN pueden modificarla.',
+  parameters: {
+    type: 'object',
+    properties: {
+      notaId: { type: 'string', description: 'ID de la nota a actualizar' },
+      titulo: { type: 'string', description: 'Nuevo título (opcional)' },
+      descripcion: { type: 'string', description: 'Nueva descripción (opcional)' },
+      resultado: { type: 'string', description: 'Nuevo resultado (opcional)' },
+    },
+    required: ['notaId'],
+  },
+  riesgo: 'alto',
+  async execute(args, ctx) {
+    const nota = await db.bitacoraPrestamo.findUnique({ where: { id: String(args.notaId) } })
+    if (!nota) return { ok: false, error: 'Nota no encontrada' }
+    // Solo el autor o ADMIN
+    if (nota.usuarioId !== ctx.user.id && ctx.user.rol !== 'ADMIN') {
+      return { ok: false, error: 'Solo el autor o un administrador pueden modificar esta nota.' }
+    }
+    const data: any = {}
+    if (args.titulo) data.titulo = String(args.titulo)
+    if (args.descripcion) data.descripcion = String(args.descripcion)
+    if (args.resultado) data.resultado = String(args.resultado)
+    const updated = await db.bitacoraPrestamo.update({ where: { id: nota.id }, data })
+    return { ok: true, data: { id: updated.id, actualizado: true } }
+  },
+}
+
+const modificar_configuracion: ToolDef = {
+  name: 'modificar_configuracion',
+  description: 'Modifica una variable global de configuración de la plataforma. Solo se permiten variables marcadas como editables. NO se permiten variables sensibles (API keys, secrets, passwords).',
+  parameters: {
+    type: 'object',
+    properties: {
+      clave: { type: 'string', description: 'Clave de la variable a modificar' },
+      valor: { type: 'string', description: 'Nuevo valor' },
+      motivo: { type: 'string', description: 'Motivo del cambio (auditable)' },
+    },
+    required: ['clave', 'valor'],
+  },
+  riesgo: 'alto',
+  async execute(args, ctx) {
+    const clave = String(args.clave)
+    const valor = String(args.valor)
+    const SENSIBLE = /key|secret|pass|token|pwd/i
+    if (SENSIBLE.test(clave)) {
+      return { ok: false, error: 'No se permite modificar variables sensibles vía IA.' }
+    }
+    const existing = await db.variableGlobal.findUnique({ where: { clave } })
+    if (!existing) return { ok: false, error: `Variable '${clave}' no existe.` }
+    if (!existing.editable) return { ok: false, error: `Variable '${clave}' no es editable.` }
+    const valorAnterior = existing.valor
+    const updated = await db.variableGlobal.update({
+      where: { clave },
+      data: { valor, updatedBy: `hub-ia:${ctx.user.nombre}` },
+    })
+    // Registrar en AuditoriaConfiguracion (tabla separada para cambios de configuración)
+    await db.auditoriaConfiguracion.create({
+      data: {
+        seccion: 'variables_globales',
+        campo: clave,
+        valorAnterior,
+        valorNuevo: valor,
+        usuarioId: ctx.user.id,
+        usuarioNombre: ctx.user.nombre,
+        motivo: args.motivo ? String(args.motivo) : 'Modificación vía Hub IA',
+      },
+    })
+    return {
+      ok: true,
+      data: {
+        clave: updated.clave,
+        valorAnterior,
+        valorNuevo: updated.valor,
+        actualizado: true,
+      },
+    }
+  },
+}
+
+// =====================================================
 // REGISTRO FINAL
 // =====================================================
 
@@ -458,11 +930,22 @@ export const TOOLS: ToolDef[] = [
   consultar_mora,
   consultar_configuracion,
   consultar_usuarios,
+  consultar_modulos,
+  consultar_permisos,
+  consultar_reportes,
   consultar_estado_sistema,
   consultar_logs,
+  // Análisis
+  analizar_modulo,
+  detectar_errores,
+  generar_reporte,
+  verificar_servicios,
   // Modificación
   crear_alerta,
+  crear_registro,
+  actualizar_registro,
   actualizar_parametro,
+  modificar_configuracion,
 ]
 
 export function getToolByName(name: string): ToolDef | undefined {

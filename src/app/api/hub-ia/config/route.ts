@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireRole } from '@/lib/auth-guard'
 import { db } from '@/lib/db'
-import { encryptSensitive, decryptSensitive } from '@/lib/security'
+import { encryptSensitive } from '@/lib/security'
 import { sanitizeError } from '@/lib/error-handler'
 import { verificarZAI } from '@/lib/hub-ia/providers/zai'
 import { verificarOpenAI, estaOpenAIConfigurado, getModelo as getOpenaiModelo } from '@/lib/hub-ia/providers/openai'
-import { estaAgentePausado } from '@/lib/hub-ia/security-gateway'
+import { obtenerEstadoAgente, verificarLimiteMensual } from '@/lib/hub-ia/security-gateway'
 
 export const runtime = 'nodejs'
 
@@ -23,7 +23,8 @@ export async function GET(req: NextRequest) {
     const openaiKeySet = !!configMap['openai_api_key'] || !!process.env.OPENAI_API_KEY
     const zaiOk = await verificarZAI()
     const openaiOk = openaiKeySet ? await verificarOpenAI() : { ok: false, error: 'No configurado' }
-    const pausado = await estaAgentePausado()
+    const estadoAgente = await obtenerEstadoAgente()
+    const limiteMensual = await verificarLimiteMensual()
     const openaiModelo = openaiKeySet ? await getOpenaiModelo() : 'gpt-4o-mini'
 
     return NextResponse.json({
@@ -44,10 +45,12 @@ export async function GET(req: NextRequest) {
             apiKeySet: openaiKeySet,
           },
         },
-        agentePausado: pausado,
+        estadoAgente, // 'operativo' | 'solo_consulta' | 'bloqueado'
+        agentePausado: estadoAgente !== 'operativo', // backward compat
         providerDefault: configMap['provider_default'] || 'auto',
         modoDefault: configMap['modo_default'] || 'supervisado',
         limiteMensualUsd: parseFloat(configMap['limite_mensual_usd'] || '50'),
+        usoMensual: limiteMensual,
       },
     })
   } catch (error: any) {
@@ -81,6 +84,14 @@ export async function PATCH(req: NextRequest) {
     // Si es API key, cifrar antes de guardar
     if (clave === 'openai_api_key' && valor) {
       valorFinal = encryptSensitive(String(valor))
+    }
+    // Validar limite_mensual_usd sea numérico y positivo
+    if (clave === 'limite_mensual_usd') {
+      const n = parseFloat(String(valor))
+      if (isNaN(n) || n < 0) {
+        return NextResponse.json({ success: false, error: 'limite_mensual_usd debe ser un número positivo' }, { status: 400 })
+      }
+      valorFinal = String(n)
     }
 
     await db.hubIAConfig.upsert({

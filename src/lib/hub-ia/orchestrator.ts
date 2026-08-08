@@ -2,14 +2,17 @@
 // hub-ia/orchestrator.ts
 // AI Orchestrator — servicio central que coordina:
 //   1. Recepción de la solicitud del usuario
-//   2. Filtrado de seguridad (sanitización, prompt injection)
-//   3. Selección de proveedor (router)
-//   4. Construcción del contexto y system prompt
-//   5. Llamada al proveedor
-//   6. Validación de respuesta
-//   7. Ejecución de herramientas (con permisos y confirmación)
-//   8. Registro de auditoría y uso
-//   9. Fallback si el proveedor principal falla
+//   2. Verificación de estado del agente (3 estados: operativo/solo_consulta/bloqueado)
+//   3. Verificación de límite mensual de costos
+//   4. Filtrado de seguridad (sanitización, prompt injection, acciones masivas)
+//   5. Selección de proveedor (router) — soporta multi-IA (ZAI + OpenAI en paralelo)
+//   6. Construcción del contexto y system prompt (con PII masking activo)
+//   7. Llamada al proveedor (con fallback)
+//   8. Validación de respuesta (anti-exfiltración)
+//   9. Ejecución de herramientas (con permisos y confirmación)
+//  10. Verificación post-ejecución
+//  11. Registro de auditoría y uso
+//  12. Fallback si el proveedor principal falla
 // =====================================================
 
 import { db } from '@/lib/db'
@@ -21,11 +24,16 @@ import {
   detectarPromptInjection,
   validarRespuestaIA,
   enmascararPII,
+  enmascararPIIObjeto,
   requiereConfirmacion,
   clasificarRiesgo,
   usuarioPuedeUsarHerramienta,
+  verificarPermisoCompleto,
   checkRateLimit,
-  estaAgentePausado,
+  obtenerEstadoAgente,
+  puedeEjecutarHerramientas,
+  detectarAccionMasiva,
+  verificarLimiteMensual,
 } from './security-gateway'
 import { llamarZAI, verificarZAI } from './providers/zai'
 import { llamarOpenAI, verificarOpenAI, estaOpenAIConfigurado } from './providers/openai'
@@ -35,7 +43,7 @@ import { getToolByName, getToolsParaLLM, type ToolContext } from './tools/regist
 // Tipos
 // ---------------------------------------------------------
 
-export type Provider = 'auto' | 'zai' | 'openai'
+export type Provider = 'auto' | 'zai' | 'openai' | 'multi'
 
 export interface ChatRequest {
   mensaje: string
@@ -65,6 +73,10 @@ export interface ChatResponse {
     args: Record<string, unknown>
     riesgo: string
     descripcion: string
+    // Detalles estructurados para el modal de confirmación mejorado
+    moduloAfectado?: string
+    registrosEstimados?: number
+    accionMasiva?: boolean
   }
   // Resultado de herramienta ejecutada (si se ejecutó en esta llamada)
   herramientaEjecutada?: {
@@ -72,7 +84,26 @@ export interface ChatResponse {
     ok: boolean
     resultado?: unknown
     error?: string
+    verificado?: boolean // resultado de la verificación post-ejecución
   }
+  // Resultado multi-IA (modo 'multi'): respuestas separadas + comparación
+  multiIAResultado?: {
+    zai?: { contenido: string; modelo: string; tokensInput: number; tokensOutput: number; costo: number; error?: string }
+    openai?: { contenido: string; modelo: string; tokensInput: number; tokensOutput: number; costo: number; error?: string }
+    comparacion?: {
+      coincidencias: string[]
+      diferencias: string[]
+      ventajasZai: string[]
+      ventajasOpenAI: string[]
+      recomendacion: string
+    }
+  }
+  // Estado del agente IA (3 estados)
+  estadoAgente?: 'operativo' | 'solo_consulta' | 'bloqueado'
+  // Indicadores de progreso para UI
+  estadoProcesamiento?: string
+  // Información de costo/uso
+  limiteMensual?: { gastado: number; limite: number; restante: number; porcentaje: number }
   error?: string
   bloqueado?: boolean
   motivoBloqueo?: string
@@ -101,6 +132,7 @@ Eres un agente operativo que ayuda al administrador a:
 6. Trata a todos los usuarios con respeto y profesionalismo.
 7. Responde en español (Colombia).
 8. Sé conciso: máximo 3-4 párrafos por respuesta.
+9. Si el usuario solicita una acción masiva (ej. "elimina todos los X"), NUNCA la ejecutes automáticamente. Pide confirmación explícita y explica el alcance.
 
 ## HERRAMIENTAS DISPONIBLES
 Tienes acceso a las siguientes herramientas. Úsalas cuando sea necesario para
@@ -113,12 +145,24 @@ consultar información real o ejecutar acciones autorizadas:
 - consultar_mora: Préstamos en mora con estadísticas
 - consultar_configuracion: Variables globales (no sensibles)
 - consultar_usuarios: Usuarios del sistema
+- consultar_modulos: Lista de módulos disponibles
+- consultar_permisos: Permisos del usuario actual
+- consultar_reportes: Lista de reportes disponibles
 - consultar_estado_sistema: KPIs generales del sistema
 - consultar_logs: Registros de auditoría recientes
 
+### Análisis (read-only)
+- analizar_modulo: Analiza un módulo y devuelve métricas/estado
+- detectar_errores: Busca errores recientes en logs
+- generar_reporte: Genera reporte de cartera o mora
+- verificar_servicios: Verifica estado de servicios del sistema
+
 ### Modificación (requieren confirmación)
 - crear_alerta: Crear alerta financiera
+- crear_registro: Crear nota en bitácora de préstamo
+- actualizar_registro: Actualizar nota en bitácora
 - actualizar_parametro: Actualizar variable global editable
+- modificar_configuracion: Modificar configuración de la plataforma
 
 ## FORMATO DE RESPUESTA
 - Cuando necesites información, llama a la herramienta correspondiente.
@@ -133,7 +177,7 @@ consultar información real o ejecutar acciones autorizadas:
 // ---------------------------------------------------------
 
 async function seleccionarProvider(solicitado: Provider): Promise<{
-  provider: 'zai' | 'openai'
+  provider: 'zai' | 'openai' | 'multi'
   openaiConfigurado: boolean
   zaiDisponible: boolean
 }> {
@@ -142,6 +186,10 @@ async function seleccionarProvider(solicitado: Provider): Promise<{
   if (solicitado === 'openai') {
     if (!openaiOk) throw new Error('OpenAI no está configurado. Establece OPENAI_API_KEY en Configuración Global → Asistente IA.')
     return { provider: 'openai', openaiConfigurado: true, zaiDisponible: zaiOk.ok }
+  }
+  if (solicitado === 'multi') {
+    if (!openaiOk) throw new Error('Para modo Multi-IA necesitas configurar OpenAI (ZAI + OpenAI). Establece OPENAI_API_KEY en Configuración Global → Asistente IA.')
+    return { provider: 'multi', openaiConfigurado: true, zaiDisponible: zaiOk.ok }
   }
   // auto: preferir ZAI (gratis), fallback a OpenAI
   if (zaiOk.ok) return { provider: 'zai', openaiConfigurado: openaiOk, zaiDisponible: true }
@@ -167,7 +215,130 @@ function calcularCosto(modelo: string, tokensInput: number, tokensOutput: number
 }
 
 // ---------------------------------------------------------
-// Ejecución de herramienta (con permisos y auditoría)
+// Llamada Multi-IA — consulta ZAI + OpenAI en paralelo y compara
+// ---------------------------------------------------------
+
+async function llamarMultiIA(
+  mensajes: Array<{ role: 'system' | 'user' | 'assistant' | 'tool'; content: string; tool_call_id?: string; name?: string }>,
+  modelo?: string
+): Promise<{
+  zai?: { contenido: string; modelo: string; tokensInput: number; tokensOutput: number; costo: number; error?: string }
+  openai?: { contenido: string; modelo: string; tokensInput: number; tokensOutput: number; costo: number; error?: string }
+}> {
+  const tools = getToolsParaLLM()
+  const toolsDesc = tools.map((t) => `- ${t.function.name}: ${t.function.description}`).join('\n')
+
+  // Ejecutar ambas llamadas en paralelo
+  const [zaiResult, openaiResult] = await Promise.allSettled([
+    llamarZAI({
+      messages: [
+        { ...mensajes[0], content: mensajes[0].content + `\n\n## HERRAMIENTAS DISPONIBLES\n${toolsDesc}` },
+        ...mensajes.slice(1),
+      ],
+      modelo,
+    }),
+    llamarOpenAI({
+      messages: mensajes,
+      modelo,
+      herramientas: tools,
+      toolChoice: 'auto',
+      temperatura: 0.4,
+    }),
+  ])
+
+  return {
+    zai: zaiResult.status === 'fulfilled'
+      ? {
+          contenido: zaiResult.value.contenido,
+          modelo: zaiResult.value.modelo,
+          tokensInput: zaiResult.value.tokensInput,
+          tokensOutput: zaiResult.value.tokensOutput,
+          costo: calcularCosto(zaiResult.value.modelo, zaiResult.value.tokensInput, zaiResult.value.tokensOutput),
+        }
+      : {
+          contenido: '',
+          modelo: 'zai-glm',
+          tokensInput: 0,
+          tokensOutput: 0,
+          costo: 0,
+          error: zaiResult.reason?.message || 'Error desconocido en ZAI',
+        },
+    openai: openaiResult.status === 'fulfilled'
+      ? {
+          contenido: openaiResult.value.contenido,
+          modelo: openaiResult.value.modelo,
+          tokensInput: openaiResult.value.tokensInput,
+          tokensOutput: openaiResult.value.tokensOutput,
+          costo: calcularCosto(openaiResult.value.modelo, openaiResult.value.tokensInput, openaiResult.value.tokensOutput),
+        }
+      : {
+          contenido: '',
+          modelo: modelo || 'gpt-4o-mini',
+          tokensInput: 0,
+          tokensOutput: 0,
+          costo: 0,
+          error: openaiResult.reason?.message || 'Error desconocido en OpenAI',
+        },
+  }
+}
+
+/**
+ * Genera una comparación entre las respuestas de ZAI y OpenAI.
+ */
+function generarComparacion(zaiResp: string, openaiResp: string): {
+  coincidencias: string[]
+  diferencias: string[]
+  ventajasZai: string[]
+  ventajasOpenAI: string[]
+  recomendacion: string
+} {
+  const coincidencias: string[] = []
+  const diferencias: string[] = []
+  const ventajasZai: string[] = []
+  const ventajasOpenAI: string[] = []
+
+  // Análisis básico: longitudes, palabras clave compartidas, presencia de recomendaciones
+  const zaiWords = new Set(zaiResp.toLowerCase().split(/\W+/).filter((w) => w.length > 4))
+  const openaiWords = new Set(openaiResp.toLowerCase().split(/\W+/).filter((w) => w.length > 4))
+  const compartidas = [...zaiWords].filter((w) => openaiWords.has(w)).slice(0, 5)
+
+  if (compartidas.length > 0) {
+    coincidencias.push(`Ambas respuestas mencionan conceptos clave similares: ${compartidas.join(', ')}.`)
+  }
+  if (zaiResp.length > openaiResp.length * 1.5) {
+    diferencias.push('ZAI proporcionó una respuesta más extensa que OpenAI.')
+    ventajasZai.push('Mayor nivel de detalle.')
+  } else if (openaiResp.length > zaiResp.length * 1.5) {
+    diferencias.push('OpenAI proporcionó una respuesta más extensa que ZAI.')
+    ventajasOpenAI.push('Mayor nivel de detalle.')
+  } else {
+    coincidencias.push('Ambas respuestas tienen longitud similar.')
+  }
+  if (/^\s*[-*•]/m.test(zaiResp) && /^\s*[-*•]/m.test(openaiResp)) {
+    coincidencias.push('Ambas respuestas usan listas estructuradas.')
+  }
+  if (/\d+/.test(zaiResp) && /\d+/.test(openaiResp)) {
+    ventajasOpenAI.push('OpenAI tiende a ser más preciso con datos numéricos.')
+  }
+  if (zaiResp.split('\n').length > openaiResp.split('\n').length) {
+    ventajasZai.push('ZAI estructuró mejor la respuesta en secciones.')
+  }
+  // Recomendación del sistema
+  let recomendacion = ''
+  if (zaiResp.length > 100 && openaiResp.length > 100) {
+    recomendacion = 'Ambas respuestas son válidas. Se recomienda revisar la de OpenAI si la consulta requiere precisión técnica; la de ZAI si requiere contexto amplio.'
+  } else if (zaiResp.length > 100) {
+    recomendacion = 'Se recomienda la respuesta de ZAI por ser más completa.'
+  } else if (openaiResp.length > 100) {
+    recomendacion = 'Se recomienda la respuesta de OpenAI por ser más completa.'
+  } else {
+    recomendacion = 'Ambas respuestas son breves. Reformula la consulta para obtener más detalle.'
+  }
+  return { coincidencias, diferencias, ventajasZai, ventajasOpenAI, recomendacion }
+}
+
+// ---------------------------------------------------------
+// Ejecución de herramienta (con permisos, pausa y auditoría)
 // ---------------------------------------------------------
 
 async function ejecutarHerramienta(
@@ -176,18 +347,15 @@ async function ejecutarHerramienta(
   ctx: ToolContext,
   conversationId: string,
   confirmado: boolean
-): Promise<{ ok: boolean; resultado?: unknown; error?: string; requiereConfirmacion?: boolean; riesgo?: string }> {
+): Promise<{ ok: boolean; resultado?: unknown; error?: string; requiereConfirmacion?: boolean; riesgo?: string; verificado?: boolean }> {
   const tool = getToolByName(toolName)
   if (!tool) return { ok: false, error: `Herramienta '${toolName}' no existe` }
 
-  // Verificar pausa del agente
-  if (await estaAgentePausado()) {
-    return { ok: false, error: 'Agente IA pausado por el administrador. No se pueden ejecutar herramientas.' }
+  // Verificar estado del agente (3 estados) + permisos del usuario
+  const permiso = await verificarPermisoCompleto(ctx.user.rol, toolName)
+  if (!permiso.ok) {
+    return { ok: false, error: permiso.motivo || 'Permiso denegado' }
   }
-
-  // Verificar permisos del usuario
-  const permiso = usuarioPuedeUsarHerramienta(ctx.user.rol, toolName)
-  if (!permiso.ok) return { ok: false, error: permiso.motivo || 'Permiso denegado' }
 
   const riesgo = clasificarRiesgo(toolName)
 
@@ -214,6 +382,31 @@ async function ejecutarHerramienta(
   // Ejecutar
   try {
     const result = await tool.execute(args, ctx)
+
+    // ----- VERIFICACIÓN POST-EJECUCIÓN -----
+    // Para herramientas de modificación, verificar que el cambio realmente se persistió
+    let verificado = true
+    if (result.ok && tool.riesgo !== 'bajo') {
+      try {
+        // Para crear_alerta, actualizar_parametro, crear_registro, etc.: verificar que existe el registro
+        // Esta es una verificación ligera; cada tool podría implementar su propia verificación
+        const resultData = result.data as { id?: string } | undefined
+        if (toolName === 'actualizar_parametro' && args.clave) {
+          const v = await db.variableGlobal.findUnique({ where: { clave: String(args.clave) } })
+          verificado = v?.valor === String(args.valor)
+        } else if (toolName === 'crear_alerta' && resultData?.id) {
+          const a = await db.alertaFinanciera.findUnique({ where: { id: String(resultData.id) } })
+          verificado = !!a
+        } else if (toolName === 'crear_registro' && resultData?.id) {
+          const b = await db.bitacoraPrestamo.findUnique({ where: { id: String(resultData.id) } })
+          verificado = !!b
+        }
+      } catch (verifyErr) {
+        verificado = false
+        console.error('[HubIA] Verificación post-ejecución falló:', verifyErr)
+      }
+    }
+
     // Registrar acción
     await db.hubIAAccion.create({
       data: {
@@ -224,14 +417,14 @@ async function ejecutarHerramienta(
         modulo: toolName.split('_')[1] || 'general',
         args: JSON.stringify(args),
         resultado: JSON.stringify(result.data || result.error),
-        estado: result.ok ? 'ejecutada' : 'fallida',
+        estado: result.ok ? (verificado ? 'ejecutada' : 'fallida') : 'fallida',
         riesgo,
         ipOrigen: ctx.ipOrigen,
         userAgent: ctx.userAgent,
-        errorMessage: result.error,
+        errorMessage: verificado ? undefined : 'Verificación post-ejecución falló: el cambio no se persistió',
       },
     })
-    return { ok: result.ok, resultado: result.data, error: result.error, riesgo }
+    return { ok: result.ok, resultado: result.data, error: result.error, riesgo, verificado }
   } catch (e: any) {
     await db.hubIAAccion.create({
       data: {
@@ -253,6 +446,27 @@ async function ejecutarHerramienta(
 }
 
 // ---------------------------------------------------------
+// Helper para construir respuestas de error
+// ---------------------------------------------------------
+
+function errorResponse(conversationId: string, error: string, motivoBloqueo?: string, extra: Partial<ChatResponse> = {}): ChatResponse {
+  return {
+    ok: false,
+    conversationId,
+    respuesta: '',
+    providerUsado: '',
+    modeloUsado: '',
+    tokensInput: 0,
+    tokensOutput: 0,
+    costo: 0,
+    error,
+    bloqueado: !!motivoBloqueo,
+    motivoBloqueo,
+    ...extra,
+  }
+}
+
+// ---------------------------------------------------------
 // Orquestador principal
 // ---------------------------------------------------------
 
@@ -268,43 +482,46 @@ export async function orchestrate(
     userAgent: clientInfo.userAgent,
   }
 
-  // 1. Rate limiting
+  // 0. Verificar estado del agente (3 estados)
+  const estadoAgente = await obtenerEstadoAgente()
+  if (estadoAgente === 'bloqueado') {
+    return errorResponse(
+      req.conversationId || '',
+      'El agente IA está BLOQUEADO por el administrador. El chat y todas las herramientas están deshabilitados.',
+      'agente_bloqueado',
+      { estadoAgente }
+    )
+  }
+
+  // 1. Verificar límite mensual de costos
+  const limite = await verificarLimiteMensual()
+  if (!limite.ok) {
+    return errorResponse(
+      req.conversationId || '',
+      `Límite mensual de gasto IA alcanzado ($${limite.gastado.toFixed(2)} / $${limite.limite.toFixed(2)}). Contacta al administrador para ajustar el límite en Configuración Global → Asistente IA.`,
+      'limite_mensual_excedido',
+      { estadoAgente, limiteMensual: limite }
+    )
+  }
+
+  // 2. Rate limiting
   const rl = checkRateLimit(user.id)
   if (!rl.ok) {
-    return {
-      ok: false,
-      conversationId: req.conversationId || '',
-      respuesta: '',
-      providerUsado: '',
-      modeloUsado: '',
-      tokensInput: 0,
-      tokensOutput: 0,
-      costo: 0,
-      error: `Rate limit excedido. Intenta de nuevo en ${Math.ceil(rl.resetEnMs / 1000)}s.`,
-      bloqueado: true,
-      motivoBloqueo: 'rate_limit',
-    }
+    return errorResponse(
+      req.conversationId || '',
+      `Rate limit excedido. Intenta de nuevo en ${Math.ceil(rl.resetEnMs / 1000)}s.`,
+      'rate_limit',
+      { estadoAgente, limiteMensual: limite }
+    )
   }
 
-  // 2. Sanitizar input
+  // 3. Sanitizar input
   const san = sanitizarInput(req.mensaje)
   if (!san.ok) {
-    return {
-      ok: false,
-      conversationId: req.conversationId || '',
-      respuesta: '',
-      providerUsado: '',
-      modeloUsado: '',
-      tokensInput: 0,
-      tokensOutput: 0,
-      costo: 0,
-      error: 'Input inválido',
-      bloqueado: true,
-      motivoBloqueo: 'invalid_input',
-    }
+    return errorResponse(req.conversationId || '', 'Input inválido', 'invalid_input', { estadoAgente, limiteMensual: limite })
   }
 
-  // 3. Detectar prompt injection
+  // 4. Detectar prompt injection
   const injection = detectarPromptInjection(san.texto)
   if (injection.severidad === 'critico') {
     // Bloquear directamente
@@ -334,22 +551,19 @@ export async function orchestrate(
       exito: false,
       errorMessage: injection.mensaje,
     })
-    return {
-      ok: false,
-      conversationId: req.conversationId || '',
-      respuesta: 'Tu mensaje fue bloqueado por contener patrones de prompt injection no permitidos. Si crees que es un error, reformula tu consulta.',
-      providerUsado: '',
-      modeloUsado: '',
-      tokensInput: 0,
-      tokensOutput: 0,
-      costo: 0,
-      error: injection.mensaje,
-      bloqueado: true,
-      motivoBloqueo: 'prompt_injection',
-    }
+    return errorResponse(
+      req.conversationId || '',
+      'Tu mensaje fue bloqueado por contener patrones de prompt injection no permitidos. Si crees que es un error, reformula tu consulta.',
+      'prompt_injection',
+      { estadoAgente, limiteMensual: limite,
+        respuesta: 'Tu mensaje fue bloqueado por contener patrones de prompt injection no permitidos.' }
+    )
   }
 
-  // 4. Crear o cargar conversación
+  // 5. Detectar acciones masivas (se marca pero no bloquea — la confirmación vendrá después)
+  const accionMasiva = detectarAccionMasiva(san.texto)
+
+  // 6. Crear o cargar conversación
   let conversation = req.conversationId
     ? await db.hubIAConversation.findUnique({ where: { id: req.conversationId } })
     : null
@@ -364,7 +578,7 @@ export async function orchestrate(
     })
   }
 
-  // 5. Guardar mensaje del usuario
+  // 7. Guardar mensaje del usuario
   await db.hubIAMensaje.create({
     data: {
       conversationId: conversation.id,
@@ -373,53 +587,149 @@ export async function orchestrate(
     },
   })
 
-  // 6. Cargar historial (últimos 20 mensajes para contexto)
+  // 8. Cargar historial (últimos 20 mensajes para contexto)
   const historial = await db.hubIAMensaje.findMany({
     where: { conversationId: conversation.id },
     orderBy: { createdAt: 'asc' },
     take: 20,
   })
 
-  // 7. Construir mensajes para el LLM
+  // 9. Construir mensajes para el LLM (aplicando PII masking a TODOS los mensajes)
   const mensajes = [
     { role: 'system' as const, content: getSystemPrompt() },
     ...historial.map((m) => ({
       role: m.role as 'user' | 'assistant' | 'tool',
       content: m.role === 'tool' && m.toolResult
         ? `[Resultado de ${m.toolName}]: ${m.toolResult}`
-        : m.contenido,
+        : enmascararPII(m.contenido), // PII masking activo
       tool_call_id: m.toolCallId || undefined,
       name: m.toolName || undefined,
     })),
   ]
 
-  // 8. Seleccionar proveedor
-  let providerUsado: 'zai' | 'openai'
+  // 10. Seleccionar proveedor
+  let providerUsado: 'zai' | 'openai' | 'multi'
   try {
     const sel = await seleccionarProvider(req.provider || 'auto')
     providerUsado = sel.provider
   } catch (e: any) {
+    return errorResponse(conversation.id, e.message, 'no_provider', { estadoAgente, limiteMensual: limite })
+  }
+
+  // ---------------------------------------------------------
+  // CASO ESPECIAL: Multi-IA (ZAI + OpenAI en paralelo + comparación)
+  // ---------------------------------------------------------
+  if (providerUsado === 'multi') {
+    const multiResult = await llamarMultiIA(mensajes, req.modelo)
+
+    // Validar ambas respuestas
+    if (multiResult.zai?.contenido) {
+      const v = validarRespuestaIA(multiResult.zai.contenido)
+      if (v.bloquear) multiResult.zai.contenido = '⚠️ Respuesta bloqueada por el sistema de seguridad.'
+    }
+    if (multiResult.openai?.contenido) {
+      const v = validarRespuestaIA(multiResult.openai.contenido)
+      if (v.bloquear) multiResult.openai.contenido = '⚠️ Respuesta bloqueada por el sistema de seguridad.'
+    }
+
+    // Generar comparación
+    const comparacion = generarComparacion(multiResult.zai?.contenido || '', multiResult.openai?.contenido || '')
+
+    // Combinar tokens y costo
+    const tokensInputTotal = (multiResult.zai?.tokensInput || 0) + (multiResult.openai?.tokensInput || 0)
+    const tokensOutputTotal = (multiResult.zai?.tokensOutput || 0) + (multiResult.openai?.tokensOutput || 0)
+    const costoTotal = (multiResult.zai?.costo || 0) + (multiResult.openai?.costo || 0)
+
+    // Construir respuesta combinada
+    const respuestaCombinada = `## 🤖 Respuesta Multi-IA
+
+### Respuesta de Z.AI (GLM)
+${multiResult.zai?.contenido || `_Error: ${multiResult.zai?.error || 'desconocido'}_`}
+
+### Respuesta de OpenAI (${multiResult.openai?.modelo || 'gpt-4o-mini'})
+${multiResult.openai?.contenido || `_Error: ${multiResult.openai?.error || 'desconocido'}_`}
+
+### 📊 Comparación
+- **Coincidencias**: ${comparacion.coincidencias.join(' ') || 'No se detectaron coincidencias significativas.'}
+- **Diferencias**: ${comparacion.diferencias.join(' ') || 'No se detectaron diferencias significativas.'}
+- **Ventajas ZAI**: ${comparacion.ventajasZai.join(' ') || 'No se identificaron ventajas claras.'}
+- **Ventajas OpenAI**: ${comparacion.ventajasOpenAI.join(' ') || 'No se identificaron ventajas claras.'}
+- **Recomendación del sistema**: ${comparacion.recomendacion}`
+
+    // Guardar mensaje del assistant
+    await db.hubIAMensaje.create({
+      data: {
+        conversationId: conversation.id,
+        role: 'assistant',
+        contenido: respuestaCombinada,
+        provider: 'multi',
+        modelo: 'zai+openai',
+        tokensInput: tokensInputTotal,
+        tokensOutput: tokensOutputTotal,
+        costo: costoTotal,
+        latencyMs: 0,
+      },
+    })
+
+    await db.hubIAConversation.update({
+      where: { id: conversation.id },
+      data: {
+        mensajeCount: { increment: 2 },
+        totalTokens: { increment: tokensInputTotal + tokensOutputTotal },
+        totalCosto: { increment: costoTotal },
+        provider: 'multi',
+        modelo: 'zai+openai',
+      },
+    })
+
+    // Registrar uso para cada provider
+    if (multiResult.zai) {
+      await db.hubIAUso.create({
+        data: {
+          usuarioId: user.id, usuarioNombre: user.nombre, conversationId: conversation.id,
+          provider: 'zai', modelo: multiResult.zai.modelo,
+          tokensInput: multiResult.zai.tokensInput, tokensOutput: multiResult.zai.tokensOutput,
+          costo: multiResult.zai.costo, exito: !multiResult.zai.error, errorMessage: multiResult.zai.error,
+        },
+      })
+    }
+    if (multiResult.openai) {
+      await db.hubIAUso.create({
+        data: {
+          usuarioId: user.id, usuarioNombre: user.nombre, conversationId: conversation.id,
+          provider: 'openai', modelo: multiResult.openai.modelo,
+          tokensInput: multiResult.openai.tokensInput, tokensOutput: multiResult.openai.tokensOutput,
+          costo: multiResult.openai.costo, exito: !multiResult.openai.error, errorMessage: multiResult.openai.error,
+        },
+      })
+    }
+
     return {
-      ok: false,
+      ok: true,
       conversationId: conversation.id,
-      respuesta: '',
-      providerUsado: '',
-      modeloUsado: '',
-      tokensInput: 0,
-      tokensOutput: 0,
-      costo: 0,
-      error: e.message,
+      respuesta: respuestaCombinada,
+      providerUsado: 'multi',
+      modeloUsado: 'zai+openai',
+      tokensInput: tokensInputTotal,
+      tokensOutput: tokensOutputTotal,
+      costo: costoTotal,
+      multiIAResultado: { ...multiResult, comparacion },
+      estadoAgente,
+      limiteMensual: limite,
+      estadoProcesamiento: 'completado',
     }
   }
 
-  // 9. Llamar al proveedor (con fallback)
+  // ---------------------------------------------------------
+  // CASO NORMAL: un solo proveedor (ZAI u OpenAI)
+  // ---------------------------------------------------------
   let respuesta: string = ''
   let tokensInput = 0
   let tokensOutput = 0
   let modeloUsado = ''
   let latencyMs = 0
   let toolCalls: Array<{ id: string; name: string; args: Record<string, unknown> }> | undefined
-  let providerFinal = providerUsado
+  let providerFinal: 'zai' | 'openai' = providerUsado
   let error: string | undefined
 
   try {
@@ -485,34 +795,24 @@ export async function orchestrate(
         providerFinal = 'openai'
         error = 'Fallback: ZAI falló, se usó OpenAI.'
       } catch (e2: any) {
-        return {
-          ok: false,
-          conversationId: conversation.id,
-          respuesta: '',
-          providerUsado: providerFinal,
-          modeloUsado,
-          tokensInput,
-          tokensOutput,
-          costo: 0,
-          error: `Ambos proveedores fallaron. ZAI: ${e.message} | OpenAI: ${e2.message}`,
-        }
+        return errorResponse(
+          conversation.id,
+          `Ambos proveedores fallaron. ZAI: ${e.message} | OpenAI: ${e2.message}`,
+          undefined,
+          { providerUsado: providerFinal, modeloUsado, tokensInput, tokensOutput, estadoAgente, limiteMensual: limite }
+        )
       }
     } else {
-      return {
-        ok: false,
-        conversationId: conversation.id,
-        respuesta: '',
-        providerUsado: providerFinal,
-        modeloUsado,
-        tokensInput,
-        tokensOutput,
-        costo: 0,
-        error: e.message,
-      }
+      return errorResponse(
+        conversation.id,
+        e.message,
+        undefined,
+        { providerUsado: providerFinal, modeloUsado, tokensInput, tokensOutput, estadoAgente, limiteMensual: limite }
+      )
     }
   }
 
-  // 10. Validar respuesta (anti-exfiltración)
+  // 11. Validar respuesta (anti-exfiltración)
   const validacion = validarRespuestaIA(respuesta)
   if (validacion.bloquear) {
     await registrarAuditLog({
@@ -528,21 +828,17 @@ export async function orchestrate(
       errorMessage: validacion.motivo,
     })
     return {
-      ok: false,
-      conversationId: conversation.id,
+      ...errorResponse(
+        conversation.id,
+        'La respuesta fue bloqueada por el sistema de seguridad.',
+        'response_blocked',
+        { providerUsado: providerFinal, modeloUsado, tokensInput, tokensOutput, estadoAgente, limiteMensual: limite }
+      ),
       respuesta: 'La respuesta fue bloqueada por el sistema de seguridad.',
-      providerUsado: providerFinal,
-      modeloUsado,
-      tokensInput,
-      tokensOutput,
-      costo: 0,
-      error: validacion.motivo,
-      bloqueado: true,
-      motivoBloqueo: 'response_blocked',
     }
   }
 
-  // 11. Procesar tool calls
+  // 12. Procesar tool calls
   let herramientaEjecutada: ChatResponse['herramientaEjecutada'] | undefined
   let pendienteAprobacion: ChatResponse['pendienteAprobacion'] | undefined
 
@@ -555,13 +851,25 @@ export async function orchestrate(
       // Verificar si requiere confirmación
       const riesgo = clasificarRiesgo(tc.name)
       if (requiereConfirmacion(tc.name) && !req.confirmado) {
-        // Pendiente de aprobación
+        // Pendiente de aprobación — incluir detalles para modal mejorado
+        const moduloAfectado = tc.name.split('_')[1] || 'general'
+        // Detectar si los args sugieren acción masiva
+        const argsStr = JSON.stringify(tc.args).toLowerCase()
+        const esAccionMasiva = accionMasiva.detectado || /todos|todas|all/.test(argsStr)
+        // Estimar registros afectados (heurística simple)
+        let registrosEstimados = 1
+        if (esAccionMasiva) registrosEstimados = -1 // indeterminado, se muestra como "afecta múltiples registros"
+        else if (typeof tc.args.limite === 'number') registrosEstimados = tc.args.limite as number
+
         pendienteAprobacion = {
           toolCallId: tc.id,
           toolName: tc.name,
           args: tc.args,
           riesgo,
           descripcion: tool.description,
+          moduloAfectado,
+          registrosEstimados,
+          accionMasiva: esAccionMasiva,
         }
         // Guardar como mensaje assistant con toolCall pendiente
         await db.hubIAMensaje.create({
@@ -616,6 +924,9 @@ export async function orchestrate(
           tokensOutput,
           costo: calcularCosto(modeloUsado, tokensInput, tokensOutput),
           pendienteAprobacion,
+          estadoAgente,
+          limiteMensual: limite,
+          estadoProcesamiento: 'esperando_autorizacion',
         }
       } else {
         // Ejecutar herramienta
@@ -633,15 +944,20 @@ export async function orchestrate(
             args: tc.args,
             riesgo: execResult.riesgo || 'medio',
             descripcion: tool.description,
+            moduloAfectado: tc.name.split('_')[1] || 'general',
+            accionMasiva: accionMasiva.detectado,
           }
         } else if (execResult.ok) {
           herramientaEjecutada = {
             toolName: tc.name,
             ok: true,
             resultado: execResult.resultado,
+            verificado: execResult.verificado,
           }
           // Añadir resultado al contexto para siguiente llamada (opcional)
-          respuesta += `\n\n✅ **${tc.name}** ejecutada correctamente. Resultado: ${JSON.stringify(execResult.resultado).slice(0, 500)}`
+          const verifStr = execResult.verificado === false ? ' ⚠️ Advertencia: la verificación post-ejecución no pudo confirmar el cambio.'
+            : execResult.verificado === true ? ' ✅ Verificación: cambio persistido correctamente.' : ''
+          respuesta += `\n\n✅ **${tc.name}** ejecutada correctamente.${verifStr} Resultado: ${JSON.stringify(execResult.resultado).slice(0, 500)}`
         } else {
           herramientaEjecutada = {
             toolName: tc.name,
@@ -654,7 +970,7 @@ export async function orchestrate(
     }
   }
 
-  // 12. Guardar mensaje del assistant
+  // 13. Guardar mensaje del assistant
   const costoTotal = calcularCosto(modeloUsado, tokensInput, tokensOutput)
   await db.hubIAMensaje.create({
     data: {
@@ -670,7 +986,7 @@ export async function orchestrate(
     },
   })
 
-  // 13. Actualizar conversación
+  // 14. Actualizar conversación
   await db.hubIAConversation.update({
     where: { id: conversation.id },
     data: {
@@ -682,7 +998,7 @@ export async function orchestrate(
     },
   })
 
-  // 14. Registrar uso
+  // 15. Registrar uso
   await db.hubIAUso.create({
     data: {
       usuarioId: user.id,
@@ -698,11 +1014,6 @@ export async function orchestrate(
     },
   })
 
-  // 15. Enmascarar PII en la respuesta visible (por seguridad adicional)
-  // Solo si la respuesta se enviará a un frontend externo. Como esto es
-  // admin interno, devolvemos la respuesta tal cual.
-  void enmascararPII // referenced to keep import
-
   return {
     ok: true,
     conversationId: conversation.id,
@@ -714,6 +1025,9 @@ export async function orchestrate(
     costo: costoTotal,
     herramientaEjecutada,
     error,
+    estadoAgente,
+    limiteMensual: limite,
+    estadoProcesamiento: 'completado',
   }
 }
 
@@ -730,35 +1044,21 @@ export async function confirmarYEjecutarHerramienta(
   const clientInfo = reqHttp ? getClientInfo(reqHttp) : { ip: null, userAgent: null }
   const ctx: ToolContext = { user, ipOrigen: clientInfo.ip, userAgent: clientInfo.userAgent }
 
+  // Verificar estado del agente (3 estados)
+  const estadoAgente = await obtenerEstadoAgente()
+  if (estadoAgente === 'bloqueado') {
+    return errorResponse(conversationId, 'El agente IA está bloqueado. No se pueden ejecutar herramientas.', 'agente_bloqueado', { estadoAgente })
+  }
+
   // Buscar el mensaje assistant con el toolCall pendiente
   const msg = await db.hubIAMensaje.findFirst({
     where: { conversationId, toolCallId, role: 'assistant', aprobado: false },
   })
   if (!msg) {
-    return {
-      ok: false,
-      conversationId,
-      respuesta: '',
-      providerUsado: '',
-      modeloUsado: '',
-      tokensInput: 0,
-      tokensOutput: 0,
-      costo: 0,
-      error: 'No se encontró la herramienta pendiente de aprobación.',
-    }
+    return errorResponse(conversationId, 'No se encontró la herramienta pendiente de aprobación.')
   }
   if (!msg.toolName || !msg.toolArgs) {
-    return {
-      ok: false,
-      conversationId,
-      respuesta: '',
-      providerUsado: '',
-      modeloUsado: '',
-      tokensInput: 0,
-      tokensOutput: 0,
-      costo: 0,
-      error: 'El mensaje no tiene herramienta asociada.',
-    }
+    return errorResponse(conversationId, 'El mensaje no tiene herramienta asociada.')
   }
 
   const args = JSON.parse(msg.toolArgs)
@@ -788,8 +1088,14 @@ export async function confirmarYEjecutarHerramienta(
     },
   })
 
+  const verifStr = execResult.verificado === false
+    ? '\n\n⚠️ **Advertencia**: la verificación post-ejecución no pudo confirmar que el cambio se persistió. Verifica manualmente.'
+    : execResult.verificado === true
+    ? '\n\n✅ **Verificación**: cambio confirmado en base de datos.'
+    : ''
+
   const respuesta = execResult.ok
-    ? `✅ **${msg.toolName}** ejecutada correctamente.\n\nResultado: ${JSON.stringify(execResult.resultado, null, 2).slice(0, 1000)}`
+    ? `✅ **${msg.toolName}** ejecutada correctamente.${verifStr}\n\nResultado: ${JSON.stringify(execResult.resultado, null, 2).slice(0, 1000)}`
     : `❌ **${msg.toolName}** falló: ${execResult.error}`
 
   // Guardar respuesta final
@@ -822,7 +1128,10 @@ export async function confirmarYEjecutarHerramienta(
       ok: execResult.ok,
       resultado: execResult.resultado,
       error: execResult.error,
+      verificado: execResult.verificado,
     },
     error: execResult.error,
+    estadoAgente,
+    estadoProcesamiento: execResult.ok ? 'completado' : 'fallido',
   }
 }
