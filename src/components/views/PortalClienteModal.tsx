@@ -189,6 +189,106 @@ export function PortalClienteModal({
   // === Vista activa del portal: 'hub' ( pantalla principal) o un HubItemId / secciones inferiores
   const [vista, setVista] = useState<'hub' | HubItemId | 'avisos' | 'campanas'>('hub')
 
+  // === Pila de navegación para botón "Atrás" real ===
+  // Cada vez que el cliente entra a una sección (simulador, préstamos, etc.)
+  // empujamos un estado al historial del navegador. Cuando el cliente presiona
+  // "Atrás" en el navegador/celular, interceptamos popstate y volvemos a la
+  // vista anterior del portal en lugar de cerrar la sesión.
+  const vistaHistoryRef = useRef<Array<'hub' | HubItemId | 'avisos' | 'campanas'>>(['hub'])
+  const isInternalNavigationRef = useRef(false)
+  // Ref para distinguir cierre explícito (botón "Cerrar sesión") de cierre
+  // accidental (Escape, clic fuera del modal). Solo el botón explícito debe
+  // activar el logout.
+  const confirmLogoutRef = useRef(false)
+
+  // Navega a una nueva vista, empujando estado al historial del navegador
+  const navegarA = (nuevaVista: 'hub' | HubItemId | 'avisos' | 'campanas') => {
+    if (nuevaVista === vista) return
+    // Empujar la vista anterior a la pila interna
+    vistaHistoryRef.current.push(vista)
+    // Empujar estado al historial del navegador para interceptar "Atrás"
+    if (typeof window !== 'undefined' && !isInternalNavigationRef.current) {
+      isInternalNavigationRef.current = true
+      window.history.pushState({ portalVista: nuevaVista, ts: Date.now() }, '')
+      isInternalNavigationRef.current = false
+    }
+    setVista(nuevaVista)
+    // Scroll al inicio de la nueva vista
+    if (typeof document !== 'undefined') {
+      const scrollable = document.querySelector('.flex-1.overflow-y-auto')
+      if (scrollable) scrollable.scrollTop = 0
+    }
+  }
+
+  // Vuelve a la vista anterior (si existe), sino vuelve al hub.
+  // No cierra la sesión ni el modal.
+  const volverAtras = () => {
+    const anterior = vistaHistoryRef.current.pop()
+    const destino = anterior || 'hub'
+    // Si la pila quedó vacía, asegurar que tenga al menos 'hub'
+    if (vistaHistoryRef.current.length === 0) {
+      vistaHistoryRef.current.push('hub')
+    }
+    isInternalNavigationRef.current = true
+    if (typeof window !== 'undefined') {
+      // Reemplazar el estado actual en lugar de push para no inflar el historial
+      window.history.replaceState({ portalVista: destino, ts: Date.now() }, '')
+    }
+    setVista(destino)
+    isInternalNavigationRef.current = false
+    // Scroll al inicio
+    if (typeof document !== 'undefined') {
+      const scrollable = document.querySelector('.flex-1.overflow-y-auto')
+      if (scrollable) scrollable.scrollTop = 0
+    }
+  }
+
+  // === Intercepta el botón "Atrás" del navegador/celular ===
+  // Cuando el usuario presiona "Atrás", el navegador dispara popstate.
+  // Si estamos en una vista != 'hub', volvemos a la vista anterior del portal.
+  // Si estamos en 'hub', dejamos que el navegador haga su comportamiento normal
+  // (pero NO cerramos la sesión — eso solo pasa con el botón explícito de logout).
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const handler = (_e: PopStateEvent) => {
+      if (isInternalNavigationRef.current) return
+      const actual = vistaHistoryRef.current[vistaHistoryRef.current.length - 1] || 'hub'
+      if (actual !== 'hub' || vistaHistoryRef.current.length > 1) {
+        // Volver a la vista anterior del portal, no cerrar sesión
+        const anterior = vistaHistoryRef.current.pop() || 'hub'
+        const destino = vistaHistoryRef.current[vistaHistoryRef.current.length - 1] || 'hub'
+        if (vistaHistoryRef.current.length === 0) {
+          vistaHistoryRef.current.push('hub')
+        }
+        setVista(destino)
+        // Volver a empujar el estado para mantener el comportamiento en futuros "Atrás"
+        isInternalNavigationRef.current = true
+        window.history.pushState({ portalVista: destino, ts: Date.now() }, '')
+        isInternalNavigationRef.current = false
+        // Scroll
+        const scrollable = document.querySelector('.flex-1.overflow-y-auto')
+        if (scrollable) scrollable.scrollTop = 0
+        // Toast informativo (sutil)
+        toast({
+          title: 'Volviste',
+          description: 'Estás en: ' + (destino === 'hub' ? 'Hub' : destino.charAt(0).toUpperCase() + destino.slice(1)),
+        })
+      }
+      // Si está en hub y no hay historial, no hacer nada — el navegador decide
+    }
+    window.addEventListener('popstate', handler)
+    // Inicializar historial con un estado para poder interceptar el primer "Atrás"
+    if (vistaHistoryRef.current.length === 1 && vistaHistoryRef.current[0] === 'hub') {
+      isInternalNavigationRef.current = true
+      window.history.replaceState({ portalVista: 'hub', ts: Date.now() }, '')
+      isInternalNavigationRef.current = false
+    }
+    return () => {
+      window.removeEventListener('popstate', handler)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   // === Flujo de aceptación TyC con OTP + Selfie (PRESERVADO) ===
   const [tycPrestamoId, setTycPrestamoId] = useState<string | null>(null)
   const [tycPrestamoCodigo, setTycPrestamoCodigo] = useState<string>('')
@@ -627,10 +727,19 @@ export function PortalClienteModal({
   }
 
   return (
-    <Dialog open={true} onOpenChange={onClose}>
+    <Dialog open={true} onOpenChange={(open) => { /* Solo cerrar vía botón explícito */ if (open === false && confirmLogoutRef.current) { onClose() } }}>
       <DialogContent
         className="max-w-md w-full h-[100vh] sm:h-[95vh] sm:max-h-[860px] flex flex-col p-0 gap-0 overflow-hidden portal-bg border-0 sm:rounded-3xl"
         showCloseButton={false}
+        // === Bloquear cierre accidental del modal ===
+        // Antes: si el cliente presionaba Escape o hacía clic fuera del modal,
+        // se disparaba onClose() → se borraban los tokens de localStorage →
+        // el cliente perdía la sesión sin querer. Ahora SOLO el botón
+        // explícito "Cerrar sesión" (que pone confirmLogoutRef=true antes de
+        // llamar a onClose) puede cerrar el modal.
+        onEscapeKeyDown={(e) => e.preventDefault()}
+        onPointerDownOutside={(e) => e.preventDefault()}
+        onInteractOutside={(e) => e.preventDefault()}
       >
         <VisuallyHidden>
           <DialogTitle>Portal del Cliente — {cliente.nombre}</DialogTitle>
@@ -640,11 +749,12 @@ export function PortalClienteModal({
           <div className="flex items-center justify-between gap-3">
             {vista !== 'hub' ? (
               <button
-                onClick={() => setVista('hub')}
+                onClick={volverAtras}
                 className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors btn-press"
+                title="Volver a la sección anterior"
               >
                 <ArrowLeft className="w-4 h-4" />
-                <span>Hub</span>
+                <span>Atrás</span>
               </button>
             ) : (
               <div className="flex items-center gap-2.5 min-w-0">
@@ -671,7 +781,21 @@ export function PortalClienteModal({
                 </span>
               )}
               <button
-                onClick={onClose}
+                onClick={() => {
+                  // Confirmación explícita de cierre de sesión.
+                  // Esto distingue un logout intencional de un cierre accidental
+                  // (Escape, clic fuera) que NO debe cerrar la sesión.
+                  if (confirm('¿Seguro que deseas cerrar la sesión?')) {
+                    confirmLogoutRef.current = true
+                    // Limpiar la pila de historial que creamos para la navegación
+                    // interna del portal, para no afectar el historial del navegador
+                    // después del logout.
+                    if (typeof window !== 'undefined' && vistaHistoryRef.current.length > 1) {
+                      window.history.go(-(vistaHistoryRef.current.length - 1))
+                    }
+                    onClose()
+                  }
+                }}
                 className="w-9 h-9 rounded-full flex items-center justify-center bg-red-500/10 hover:bg-red-500/20 text-red-300 border border-red-500/20 btn-press transition-colors"
                 title="Cerrar sesión"
               >
@@ -709,7 +833,7 @@ export function PortalClienteModal({
               kpis={kpis}
               resumen={resumen}
               hubItems={hubItems}
-              onSelect={(id) => setVista(id)}
+              onSelect={(id) => navegarA(id)}
               cuentaRecaudoPrincipal={data.cuentaRecaudoPrincipal}
               onEstadoCuenta={descargarEstadoCuenta}
             />
@@ -775,7 +899,7 @@ export function PortalClienteModal({
         <div className="bottom-nav shrink-0 px-2 pt-1.5 pb-2 safe-bottom">
           <div className="grid grid-cols-4 gap-1">
             <button
-              onClick={() => setVista('hub')}
+              onClick={() => navegarA('hub')}
               className={`bottom-nav-item ${vista === 'hub' ? 'active' : ''}`}
             >
               <Home className="w-5 h-5" />
@@ -783,7 +907,7 @@ export function PortalClienteModal({
             </button>
 
             <button
-              onClick={() => setVista('avisos')}
+              onClick={() => navegarA('avisos')}
               className={`bottom-nav-item ${vista === 'avisos' ? 'active' : ''}`}
             >
               <div className="relative">
@@ -798,7 +922,7 @@ export function PortalClienteModal({
             </button>
 
             <button
-              onClick={() => setVista('campanas')}
+              onClick={() => navegarA('campanas')}
               className={`bottom-nav-item ${vista === 'campanas' ? 'active' : ''}`}
             >
               <Megaphone className="w-5 h-5" />
@@ -2219,6 +2343,13 @@ function SimuladorCredito({
   const [enviando, setEnviando] = useState(false)
   const [resultado, setResultado] = useState<ResultadoCalculo | null>(null)
 
+  // === Flexibilidad Financiera (beneficio visible para TODOS los clientes) ===
+  // Regla de negocio: la opción DEBE aparecer en todas las simulaciones del
+  // portal del cliente. Solo se puede ACTIVAR si la simulación tiene 4 o más
+  // cuotas; con menos cuotas se muestra inhabilitada con explicación.
+  const [flexibilidadFinanciera, setFlexibilidadFinanciera] = useState(false)
+  const FLEXIBILIDAD_COSTO = 10000
+
   // === Flujo de Clave Dinámica (confirmación para enviar solicitud) ===
   const [claveDinamicaSolicitada, setClaveDinamicaSolicitada] = useState(false)
   const [claveDinamicaEnviando, setClaveDinamicaEnviando] = useState(false)
@@ -2398,9 +2529,15 @@ function SimuladorCredito({
     }
     try {
       setEnviando(true)
+      // FIX: incluir x-portal-token en headers además del token en el body.
+      // El proxy de seguridad acepta x-portal-token como credencial válida
+      // para endpoints públicos (lista isPublicEndpoint), y el handler valida
+      // el token del body contra cliente.tokenSesion con safeCompare.
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+      if (token) headers['x-portal-token'] = token
       const res = await fetch('/api/solicitudes-web', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify({
           clienteId,
           token,
@@ -2605,6 +2742,93 @@ function SimuladorCredito({
             </p>
           </div>
 
+          {/* === Flexibilidad Financiera (visible para TODOS los clientes) === */}
+          {/* Regla: la opción siempre se muestra. Si la simulación tiene < 4 cuotas, */}
+          {/* se muestra inhabilitada con explicación. Si tiene ≥ 4, se puede activar. */}
+          {(() => {
+            const cuotas = parseInt(numeroCuotas, 10) || 0
+            const elegible = cuotas >= 4
+            return (
+              <Card className={`premium-card rounded-2xl border-2 transition-colors ${
+                flexibilidadFinanciera && elegible
+                  ? 'border-emerald-500/60'
+                  : elegible
+                    ? 'border-emerald-500/20'
+                    : 'border-muted-foreground/20'
+              }`}>
+                <CardContent className="p-3 space-y-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${
+                        flexibilidadFinanciera && elegible
+                          ? 'bg-gradient-to-br from-emerald-500 to-teal-600'
+                          : 'bg-muted/40'
+                      }`}>
+                        <Sparkles className={`w-3.5 h-3.5 ${
+                          flexibilidadFinanciera && elegible ? 'text-white' : 'text-muted-foreground'
+                        }`} />
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-xs font-bold flex items-center gap-1.5">
+                          Flexibilidad Financiera
+                          <Badge
+                            variant="outline"
+                            className={`text-[9px] px-1.5 py-0 ${
+                              flexibilidadFinanciera && elegible
+                                ? 'text-emerald-300 border-emerald-500/40 bg-emerald-500/10'
+                                : 'text-muted-foreground'
+                            }`}
+                          >
+                            {flexibilidadFinanciera && elegible
+                              ? `✨ +${formatearMoneda(FLEXIBILIDAD_COSTO)}`
+                              : `Opcional · ${formatearMoneda(FLEXIBILIDAD_COSTO)}`}
+                          </Badge>
+                        </p>
+                        <p className="text-[10px] text-muted-foreground truncate">
+                          {elegible
+                            ? flexibilidadFinanciera
+                              ? 'Activa en esta solicitud'
+                              : 'Beneficio opcional disponible'
+                            : `Requiere 4+ cuotas · Actual: ${cuotas}`}
+                        </p>
+                      </div>
+                    </div>
+                    <input
+                      type="checkbox"
+                      id="flexFlexPortalModal"
+                      checked={flexibilidadFinanciera && elegible}
+                      disabled={!elegible}
+                      onChange={(e) => setFlexibilidadFinanciera(e.target.checked)}
+                      className="w-4 h-4 accent-emerald-500 shrink-0 cursor-pointer disabled:cursor-not-allowed"
+                      aria-label="Activar Flexibilidad Financiera"
+                    />
+                  </div>
+                  <div className="text-[10px] text-muted-foreground/90 leading-relaxed">
+                    {elegible ? (
+                      <ul className="list-disc list-inside space-y-0.5 ml-1">
+                        <li>Trasladar UNA cuota al final del crédito</li>
+                        <li>Solicitar cambio de fecha de pago (genera "Otro Sí" firmado con OTP)</li>
+                      </ul>
+                    ) : (
+                      <p>
+                        ℹ️ Esta simulación tiene <strong>{cuotas}</strong> cuota(s).
+                        Flexibilidad Financiera está disponible a partir de <strong>4 cuotas</strong>.
+                        Aumenta el plazo o reduce el monto para acceder al beneficio.
+                      </p>
+                    )}
+                  </div>
+                  {flexibilidadFinanciera && elegible && (
+                    <div className="pt-1.5 mt-1 border-t border-emerald-500/20 text-[10px] text-emerald-200/80">
+                      💡 Al aprobarse tu préstamo, podrás activar el beneficio pagando{' '}
+                      <strong>{formatearMoneda(FLEXIBILIDAD_COSTO)}</strong> adicionales.
+                      Los Otros Síes NO modifican el pagaré ni la carta originales.
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            )
+          })()}
+
           {/* === PASO 1: Solicitar Clave Dinámica === */}
           {!claveDinamicaSolicitada && !claveDinamicaVerificada && (
             <Card className="premium-card rounded-2xl border-violet-500/30">
@@ -2780,8 +3004,12 @@ function MisSolicitudesPanel({ cedula, token }: { cedula: string; token?: string
     }
     try {
       setLoading(true)
+      // FIX: incluir x-portal-token header además del token en query string.
+      const headers: Record<string, string> = {}
+      if (token) headers['x-portal-token'] = token
       const res = await fetch(
-        `/api/solicitudes-web/cliente/${cedula}?token=${encodeURIComponent(token)}`
+        `/api/solicitudes-web/cliente/${cedula}?token=${encodeURIComponent(token)}`,
+        { headers }
       )
       const json = await res.json()
       if (json.success) {

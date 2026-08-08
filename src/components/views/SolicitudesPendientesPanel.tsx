@@ -567,7 +567,7 @@ export function SolicitudesPendientesPanel({
                 <Alert className="bg-amber-500/10 border-amber-500/30">
                   <AlertCircle className="h-4 w-4 text-amber-400" />
                   <AlertDescription className="text-xs">
-                    El PIN debe ser cambiado por el cliente en su primer ingreso al portal. Recuérdale que su sesión expira en 2 horas.
+                    El PIN debe ser cambiado por el cliente en su primer ingreso al portal. Recuérdale que su sesión expira en 8 horas.
                   </AlertDescription>
                 </Alert>
               </div>

@@ -78,7 +78,10 @@ export async function POST(req: NextRequest) {
       })
       // Login exitoso
       const token = generateToken(32)
-      const tokenExpira = new Date(Date.now() + 2 * 60 * 60 * 1000) // 2h
+      // Sesión extendida a 8 horas (antes 2h) — evita cierre de sesión inesperado
+      // durante simulación/firma. Solo se cierra por logout explícito o inactividad
+      // prolongada. Ver también /api/portal/auth (SESSION_EXPIRY_HOURS).
+      const tokenExpira = new Date(Date.now() + 8 * 60 * 60 * 1000) // 8h
       await db.cliente.update({
         where: { id: cliente.id },
         data: {
@@ -156,7 +159,8 @@ export async function POST(req: NextRequest) {
 
     // PIN correcto - generar sesión
     const token = generateToken(32)
-    const tokenExpira = new Date(Date.now() + 2 * 60 * 60 * 1000)
+    // Sesión extendida a 8 horas (antes 2h) — ver comentario arriba.
+    const tokenExpira = new Date(Date.now() + 8 * 60 * 60 * 1000)
     await db.cliente.update({
       where: { id: cliente.id },
       data: {

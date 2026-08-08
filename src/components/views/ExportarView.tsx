@@ -115,10 +115,10 @@ export function ExportarView() {
     {
       titulo: 'Tokens de Sesión',
       descripcion:
-        'Tokens de sesión del portal (2h de expiración) y tokens públicos de firma (acceso sin login desde enlace seguro). Permite trazabilidad de acciones realizadas.',
+        'Tokens de sesión del portal (8h de expiración) y tokens públicos de firma (acceso sin login desde enlace seguro). Permite trazabilidad de acciones realizadas.',
       icon: Fingerprint,
       color: 'bg-violet-500/15 text-violet-300 border-violet-400/30',
-      detalle: 'Session 2h · Token firma 7d',
+      detalle: 'Session 8h · Token firma 7d',
     },
   ]
 

@@ -558,7 +558,7 @@ export function PortalView({ onAbrirPortal }: { onAbrirPortal: (cedula: string, 
                 <p className="text-muted-foreground leading-relaxed">
                   Tu acceso está protegido por un PIN de 4 a 6 dígitos, cifrado con bcrypt.
                   Tras 5 intentos fallidos la cuenta se bloquea por 15 minutos. La sesión
-                  expira a las 2 horas de inactividad.
+                  expira a las 8 horas de inactividad.
                 </p>
               </div>
             </div>

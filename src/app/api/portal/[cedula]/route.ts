@@ -131,12 +131,29 @@ export async function GET(
     // Cuenta de recaudo principal (la de la categoría del cliente)
     const cuentaPrincipal = cliente.categoria?.cuentaRecaudo || null
 
-    // Campañas activas
+    // === Campañas activas ===
     const campanas = await db.campaña.findMany({
       where: { activa: true },
       orderBy: { createdAt: 'desc' },
       take: 5,
     })
+
+    // === KEEP-ALIVE: extender la sesión 8h desde ahora ===
+    // Cada vez que el cliente abre/refresca su portal, renovamos tokenExpira
+    // para evitar que la sesión se cierre mientras la usa activamente.
+    // Solo se cierra si el cliente pasa 8h SIN hacer ninguna llamada al API.
+    try {
+      await db.cliente.update({
+        where: { id: clienteAutenticado.id },
+        data: {
+          tokenExpira: new Date(Date.now() + 8 * 60 * 60 * 1000), // +8h
+          ultimoAccesoPortal: new Date(),
+        },
+      })
+    } catch (e) {
+      // No fallar la respuesta si no se puede extender la sesión
+      console.error('[portal/[cedula]] keep-alive error:', e)
+    }
 
     return NextResponse.json({
       success: true,

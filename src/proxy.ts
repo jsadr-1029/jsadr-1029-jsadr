@@ -80,6 +80,15 @@ function isPublicEndpoint(pathname: string): boolean {
     pathname.startsWith('/api/chat/otp') || // solicitud/verificación OTP del chat
     pathname === '/api/simulador' || // simulador público
     pathname === '/api/solicitudes-nuevos-clientes' || // POST público: registro de nuevos clientes desde /register
+    // === Buzón de solicitudes web desde el portal del cliente ===
+    // El cliente envía su token de sesión en el body; el handler valida
+    // internamente contra cliente.tokenSesion con safeCompare.
+    // FIX: antes estas rutas NO estaban en la lista pública, así que el proxy
+    // bloqueaba el POST /api/solicitudes-web con 401 "No autorizado. Token
+    // requerido." justo después de que el cliente validara su Clave Dinámica
+    // OTP — el cliente veía "Token requerido" y no podía enviar la solicitud.
+    pathname === '/api/solicitudes-web' ||
+    pathname.startsWith('/api/solicitudes-web/') ||
     // === Verificación pública de documentos (QR escaneable) ===
     // Cualquier persona (juez, notario, tercero) debe poder escanear el QR
     // de un pagaré/carta/certificado de firma y verificar su autenticidad

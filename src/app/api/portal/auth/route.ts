@@ -42,7 +42,11 @@ const loginPortalSchema = z.object({
 // === CONFIGURACIÓN ===
 const MAX_INTENTOS_PIN = 5
 const TIEMPO_BLOQUEO_MIN = 15
-const SESSION_EXPIRY_HOURS = 2
+// Sesión del portal extendida a 8 horas. Antes era 2h, lo que causaba que el
+// cliente perdiera la sesión a mitad de una simulación o firma. Con 8h, la
+// sesión dura una jornada laboral completa y solo se cierra por logout
+// explícito o inactividad real prolongada.
+const SESSION_EXPIRY_HOURS = 8
 const BCRYPT_ROUNDS = 12 // Reforzado: igual que admin (security.ts)
 const PIN_EXPIRY_DAYS = 90 // Reforzado: PIN expira a los 90 días
 
