@@ -1939,3 +1939,114 @@ model AlertaFinanciera {
   @@index([ambito, atendida])
   @@index([createdAt])
 }
+
+// =====================================================
+// HUB IA — Asistente IA Operativo (v1.0)
+// Modelos para el Hub de Inteligencia Artificial:
+//   - HubIAConfig: configuración de proveedores (API keys cifradas)
+//   - HubIAConversation: sesiones de chat del admin
+//   - HubIAMensaje: mensajes (user/assistant/tool) con tokens y costo
+//   - HubIAAccion: acciones ejecutadas por la IA (auditoría detallada)
+//   - HubIAUso: tracking de consumo por proveedor/modelo/usuario
+// =====================================================
+
+model HubIAConfig {
+  id              String   @id @default(cuid())
+  clave           String   @unique
+  valor           String   // API keys se almacenan cifradas con encryptSensitive()
+  descripcion     String?
+  updatedAt       DateTime @updatedAt
+  updatedBy       String?
+}
+
+model HubIAConversation {
+  id              String   @id @default(cuid())
+  usuarioId       String?
+  usuarioNombre   String
+  titulo          String   @default("Nueva conversación")
+  provider        String?  // zai | openai | auto
+  modelo          String?
+  modo            String   @default("consultivo") // consulta | planificacion | supervisado | ejecucion | automatico
+  pausada         Boolean  @default(false)
+  contexto        String?  // JSON con estado/resumen
+  mensajeCount    Int      @default(0)
+  totalTokens     Int      @default(0)
+  totalCosto      Float    @default(0)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  mensajes        HubIAMensaje[]
+
+  @@index([usuarioId])
+  @@index([createdAt])
+}
+
+model HubIAMensaje {
+  id              String   @id @default(cuid())
+  conversationId  String
+  role            String   // user | assistant | tool | system
+  contenido       String
+  provider        String?  // zai | openai | fallback
+  modelo          String?
+  toolName        String?  // si role=tool, nombre de la herramienta
+  toolCallId      String?
+  toolArgs        String?  // JSON de args
+  toolResult      String?  // JSON de resultado
+  tokensInput     Int      @default(0)
+  tokensOutput    Int      @default(0)
+  costo           Float    @default(0)
+  latencyMs       Int      @default(0)
+  aprobado        Boolean? // null si no requiere aprobación, true/false si sí
+  aprobadoPor     String?
+  aprobadoAt      DateTime?
+  createdAt       DateTime @default(now())
+  conversation    HubIAConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId])
+  @@index([createdAt])
+}
+
+model HubIAAccion {
+  id              String   @id @default(cuid())
+  conversationId  String?
+  usuarioId       String?
+  usuarioNombre   String
+  provider        String?
+  modelo          String?
+  toolName        String
+  modulo          String   // clientes | prestamos | pagos | configuracion | sistema
+  entidadId       String?
+  entidadNombre   String?
+  args            String?  // JSON
+  resultado       String?  // JSON
+  estado          String   // propuesta | aprobada | ejecutada | fallida | bloqueada
+  riesgo          String   @default("bajo") // bajo | medio | alto | critico
+  ipOrigen        String?
+  userAgent       String?
+  errorMessage    String?
+  createdAt       DateTime @default(now())
+
+  @@index([conversationId])
+  @@index([usuarioId])
+  @@index([toolName])
+  @@index([estado])
+  @@index([createdAt])
+}
+
+model HubIAUso {
+  id              String   @id @default(cuid())
+  usuarioId       String?
+  usuarioNombre   String
+  conversationId  String?
+  provider        String   // zai | openai
+  modelo          String
+  tokensInput     Int
+  tokensOutput    Int
+  costo           Float
+  exito           Boolean  @default(true)
+  errorMessage    String?
+  createdAt       DateTime @default(now())
+
+  @@index([usuarioId])
+  @@index([provider, createdAt])
+  @@index([createdAt])
+}

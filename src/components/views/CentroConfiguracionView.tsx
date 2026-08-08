@@ -79,9 +79,11 @@ import {
   AlertCircle,
   Send,
   ShieldCheck,
+  Bot,
 } from 'lucide-react'
 import { SnapshotsProyectoView } from '@/components/views/SnapshotsProyectoView'
 import { BotIcons } from '@/components/views/BotIcons'
+import { HubIAPanel } from '@/components/views/hub-ia/HubIAPanel'
 import { EliminarConfirmacionDialog } from '@/components/views/EliminarConfirmacionDialog'
 
 const API = '/api/configuracion-global'
@@ -271,6 +273,7 @@ export function CentroConfiguracionView() {
     { value: 'versiones', label: 'Versiones', icon: GitBranch },
     { value: 'snapshots', label: 'Snapshots', icon: GitBranch },
     { value: 'codigo-fuente', label: 'Código Fuente', icon: Package },
+    { value: 'asistente-ia', label: 'Asistente IA', icon: Bot },
   ]
 
   return (
@@ -284,7 +287,7 @@ export function CentroConfiguracionView() {
       <BotIcons modulo="configuracion" />
 
       <Tabs value={tab} onValueChange={setTab}>
-        <TabsList className="grid grid-cols-2 md:grid-cols-8 lg:grid-cols-16 w-full h-auto">
+        <TabsList className="grid grid-cols-2 md:grid-cols-8 lg:grid-cols-17 w-full h-auto">
           {TABS.map((t) => (
             <TabsTrigger key={t.value} value={t.value} className="flex flex-col items-center gap-1 py-2 text-xs">
               <t.icon className="w-4 h-4" />
@@ -310,6 +313,7 @@ export function CentroConfiguracionView() {
         <TabsContent value="versiones"><VersionesPanel /></TabsContent>
         <TabsContent value="snapshots"><SnapshotsProyectoView /></TabsContent>
         <TabsContent value="codigo-fuente"><CodigoFuentePanel /></TabsContent>
+        <TabsContent value="asistente-ia"><HubIAPanel /></TabsContent>
       </Tabs>
     </div>
   )
