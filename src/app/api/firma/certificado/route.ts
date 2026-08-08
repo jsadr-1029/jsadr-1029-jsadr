@@ -62,7 +62,7 @@ export async function GET(req: NextRequest) {
       )
     }
 
-    const html = await generarCertificadoHTML(firma, cliente, firma.prestamo)
+    const html = await generarCertificadoHTML(firma, cliente, firma.prestamo, req)
 
     return new NextResponse(html, {
       headers: {
@@ -78,7 +78,7 @@ export async function GET(req: NextRequest) {
   }
 }
 
-async function generarCertificadoHTML(firma: any, cliente: any, prestamo: any): Promise<string> {
+async function generarCertificadoHTML(firma: any, cliente: any, prestamo: any, req?: NextRequest): Promise<string> {
   const fechaFirma = firma.fechaFirmaCompleta || firma.createdAt
   const fechaFormateada = formatearFechaHora(fechaFirma)
   const fechaSolo = formatearFecha(fechaFirma)
@@ -455,7 +455,19 @@ ${await (async () => {
     crypto.createHash('sha256').update(firma.id + '|' + firma.createdAt.toISOString() + '|certificado').digest('hex').substring(8, 12) + '-' +
     crypto.createHash('sha256').update(firma.id + '|' + firma.createdAt.toISOString() + '|certificado').digest('hex').substring(12, 16)
   const selloDig = crypto.createHash('sha256').update(JSON.stringify({ firmaId: firma.id, cliente: cliente.cedula, codigo: codigoVer, timestamp: new Date().toISOString() })).digest('hex')
-  const urlVerif = (process.env.NEXT_PUBLIC_BASE_URL || 'https://preview-chat-c04df402-049e-4406-b5d2-c8e07f801c50.space-z.ai') + '/api/verificar?codigo=' + codigoVer
+  // Construir URL de verificación usando el origen de la petición actual (más confiable que
+  // NEXT_PUBLIC_BASE_URL que puede no estar configurado en producción).
+  let urlBase = process.env.NEXT_PUBLIC_BASE_URL || ''
+  if (req) {
+    try {
+      const u = new URL(req.url)
+      urlBase = `${u.protocol}//${u.host}`
+    } catch {}
+  }
+  if (!urlBase) {
+    urlBase = 'https://preview-chat-c04df402-049e-4406-b5d2-c8e07f801c50.space-z.ai'
+  }
+  const urlVerif = urlBase + '/api/verificar?codigo=' + codigoVer
   let qrB64 = ''
   try { qrB64 = await QRCode.toDataURL(urlVerif, { width: 130, margin: 1, color: { dark: '#1e3a5f', light: '#ffffff' } }) } catch {}
   return `

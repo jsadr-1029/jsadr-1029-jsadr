@@ -126,13 +126,13 @@ export async function GET(req: NextRequest) {
     // tipo=carta genera la carta de instrucciones
     // tipo=combinado genera un único PDF con pagaré + carta (cada uno con su propia sección de firma)
     if (tipo === 'pagare-blanco') {
-      html = await generarPagareBlancoHTML(prestamo, firmaElectronica, firmaCodeudor)
+      html = await generarPagareBlancoHTML(prestamo, firmaElectronica, firmaCodeudor, req)
     } else if (tipo === 'pagare-diligenciado' || tipo === 'pagare') {
-      html = await generarPagareDiligenciadoHTML(prestamo, calculo, firmaElectronica, firmaCodeudor)
+      html = await generarPagareDiligenciadoHTML(prestamo, calculo, firmaElectronica, firmaCodeudor, req)
     } else if (tipo === 'combinado') {
-      html = await generarDocumentoCombinadoHTML(prestamo, calculo, firmaElectronica, firmaCodeudor)
+      html = await generarDocumentoCombinadoHTML(prestamo, calculo, firmaElectronica, firmaCodeudor, req)
     } else {
-      html = await generarCartaInstruccionesHTML(prestamo, firmaElectronica, firmaCodeudor)
+      html = await generarCartaInstruccionesHTML(prestamo, firmaElectronica, firmaCodeudor, req)
     }
 
     // === Registrar en Bitácora del Préstamo ===
@@ -383,8 +383,21 @@ function generarSelloDigital(prestamo: any, tipoDoc: string, codigoVerificacion:
 }
 
 // Generar QR code como base64
-async function generarQRCode(codigoVerificacion: string): Promise<string> {
-  const urlVerificacion = `${process.env.NEXT_PUBLIC_BASE_URL || 'https://preview-chat-c04df402-049e-4406-b5d2-c8e07f801c50.space-z.ai'}/api/documentos/verificar?codigo=${codigoVerificacion}`
+async function generarQRCode(codigoVerificacion: string, req?: NextRequest): Promise<string> {
+  // Construir URL de verificación usando el origen de la petición actual
+  // (más confiable que NEXT_PUBLIC_BASE_URL que puede no estar configurado en producción).
+  // Si por alguna razón no hay req, caemos a NEXT_PUBLIC_BASE_URL o al host por defecto.
+  let baseUrl = process.env.NEXT_PUBLIC_BASE_URL || ''
+  if (req) {
+    try {
+      const u = new URL(req.url)
+      baseUrl = `${u.protocol}//${u.host}`
+    } catch {}
+  }
+  if (!baseUrl) {
+    baseUrl = 'https://preview-chat-c04df402-049e-4406-b5d2-c8e07f801c50.space-z.ai'
+  }
+  const urlVerificacion = `${baseUrl}/api/documentos/verificar?codigo=${codigoVerificacion}`
   try {
     const qrDataUrl = await QRCode.toDataURL(urlVerificacion, {
       width: 150,
@@ -580,12 +593,12 @@ function generarBloqueDatosFirma(rol: 'deudor' | 'codeudor', datos: { nombre: st
 // El pagaré en blanco deja los campos vacíos para diligenciamiento manual posterior.
 // El texto legal ES EXACTAMENTE el del documento de referencia (PAGARÉ 2026.docx).
 // =====================================================
-async function generarPagareBlancoHTML(prestamo: any, firmaElectronica?: any, firmaCodeudor?: any): Promise<string> {
+async function generarPagareBlancoHTML(prestamo: any, firmaElectronica?: any, firmaCodeudor?: any, req?: NextRequest): Promise<string> {
   const seccionFirma = generarSeccionFirmaElectronica(firmaElectronica, prestamo)
   const seccionFirmaCodeudor = generarSeccionFirmaElectronica(firmaCodeudor, prestamo, true)
   const codigoVerificacion = generarCodigoVerificacion(prestamo, 'pagare-blanco')
   const selloDigital = generarSelloDigital(prestamo, 'pagare-blanco', codigoVerificacion)
-  const qrCode = await generarQRCode(codigoVerificacion)
+  const qrCode = await generarQRCode(codigoVerificacion, req)
   const seccionVerificacion = generarSeccionVerificacion(codigoVerificacion, selloDigital, qrCode, 'pagare-blanco')
   const fecha = new Date()
   const dia = fecha.getDate()
@@ -676,12 +689,12 @@ ${seccionVerificacion}
 // Los datos que SÍ se auto-llenan son: nombres, cédulas, dirección, teléfono y correo
 // del deudor y del codeudor (si aplica), tomados de los registros del sistema.
 // =====================================================
-async function generarPagareDiligenciadoHTML(prestamo: any, calculo: any, firmaElectronica?: any, firmaCodeudor?: any): Promise<string> {
+async function generarPagareDiligenciadoHTML(prestamo: any, calculo: any, firmaElectronica?: any, firmaCodeudor?: any, req?: NextRequest): Promise<string> {
   const seccionFirma = generarSeccionFirmaElectronica(firmaElectronica, prestamo)
   const seccionFirmaCodeudor = generarSeccionFirmaElectronica(firmaCodeudor, prestamo, true)
   const codigoVerificacion = generarCodigoVerificacion(prestamo, 'pagare-diligenciado')
   const selloDigital = generarSelloDigital(prestamo, 'pagare-diligenciado', codigoVerificacion)
-  const qrCode = await generarQRCode(codigoVerificacion)
+  const qrCode = await generarQRCode(codigoVerificacion, req)
   const seccionVerificacion = generarSeccionVerificacion(codigoVerificacion, selloDigital, qrCode, 'pagare-diligenciado')
   const fecha = new Date(prestamo.fechaDesembolso || prestamo.fechaSolicitud)
   const dia = fecha.getDate()
@@ -784,12 +797,12 @@ ${contenido}
 // Texto legal idéntico al documento de referencia. Datos del deudor y codeudor
 // (nombre, cédula, dirección, teléfono, correo) auto-llenados del sistema.
 // =====================================================
-async function generarCartaInstruccionesHTML(prestamo: any, firmaElectronica?: any, firmaCodeudor?: any): Promise<string> {
+async function generarCartaInstruccionesHTML(prestamo: any, firmaElectronica?: any, firmaCodeudor?: any, req?: NextRequest): Promise<string> {
   const seccionFirma = generarSeccionFirmaElectronica(firmaElectronica, prestamo)
   const seccionFirmaCodeudor = generarSeccionFirmaElectronica(firmaCodeudor, prestamo, true)
   const codigoVerificacion = generarCodigoVerificacion(prestamo, 'carta')
   const selloDigital = generarSelloDigital(prestamo, 'carta', codigoVerificacion)
-  const qrCode = await generarQRCode(codigoVerificacion)
+  const qrCode = await generarQRCode(codigoVerificacion, req)
   const seccionVerificacion = generarSeccionVerificacion(codigoVerificacion, selloDigital, qrCode, 'carta')
   const cliente = prestamo.cliente
   const fecha = new Date()
@@ -905,15 +918,15 @@ ${contenido}
 // "las firmas, fotos, códigos otp deben aparecer en ambas secciones para garantizar
 // que se cumplió con la entrega de los dos documentos pero estarían en uno solo".
 // =====================================================
-async function generarDocumentoCombinadoHTML(prestamo: any, calculo: any, firmaElectronica?: any, firmaCodeudor?: any): Promise<string> {
+async function generarDocumentoCombinadoHTML(prestamo: any, calculo: any, firmaElectronica?: any, firmaCodeudor?: any, req?: NextRequest): Promise<string> {
   const codigoPagare = generarCodigoVerificacion(prestamo, 'pagare-diligenciado')
   const selloPagare = generarSelloDigital(prestamo, 'pagare-diligenciado', codigoPagare)
-  const qrPagare = await generarQRCode(codigoPagare)
+  const qrPagare = await generarQRCode(codigoPagare, req)
   const verifPagare = generarSeccionVerificacion(codigoPagare, selloPagare, qrPagare, 'pagare-diligenciado')
 
   const codigoCarta = generarCodigoVerificacion(prestamo, 'carta')
   const selloCarta = generarSelloDigital(prestamo, 'carta', codigoCarta)
-  const qrCarta = await generarQRCode(codigoCarta)
+  const qrCarta = await generarQRCode(codigoCarta, req)
   const verifCarta = generarSeccionVerificacion(codigoCarta, selloCarta, qrCarta, 'carta')
 
   // Cada documento tiene su propia sección de firma (independiente, aunque sean los mismos datos)

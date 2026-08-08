@@ -20,8 +20,19 @@ import { NextRequest, NextResponse } from 'next/server'
 
 export const dynamic = 'force-dynamic'
 
-async function verificarCodigo(codigo: string) {
-  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'
+async function verificarCodigo(codigo: string, req?: NextRequest) {
+  // Construir URL base desde el origen de la petición actual — más confiable que
+  // NEXT_PUBLIC_BASE_URL (que puede no estar configurado en producción/Vercel).
+  let baseUrl = process.env.NEXT_PUBLIC_BASE_URL || ''
+  if (req) {
+    try {
+      const u = new URL(req.url)
+      baseUrl = `${u.protocol}//${u.host}`
+    } catch {}
+  }
+  if (!baseUrl) {
+    baseUrl = 'http://localhost:3000'
+  }
   try {
     const res = await fetch(`${baseUrl}/api/documentos/verificar?codigo=${encodeURIComponent(codigo)}`, {
       cache: 'no-store',
@@ -267,7 +278,7 @@ export async function GET(req: NextRequest) {
     })
   }
 
-  const data = await verificarCodigo(codigo)
+  const data = await verificarCodigo(codigo, req)
   const html = renderHTML(codigo, data)
   return new NextResponse(html, {
     headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' },

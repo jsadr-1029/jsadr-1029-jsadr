@@ -23,6 +23,15 @@ import {
   X,
   Mail,
   UserPlus,
+  ScanLine,
+  BadgeCheck,
+  FileSearch,
+  Upload,
+  Calendar,
+  CreditCard,
+  DollarSign,
+  Clock,
+  Hash,
 } from 'lucide-react'
 import { login, isAuthenticated, setTokens, setUserData, getUserData } from '@/lib/api-client'
 import Link from 'next/link'
@@ -67,6 +76,21 @@ export default function LoginPage() {
   const [recuperarMensaje, setRecuperarMensaje] = useState<
     { tipo: 'exito' | 'error' | 'info'; texto: string } | null
   >(null)
+
+  // === ESTADO PARA VALIDACIÓN DE QR / DOCUMENTO ===
+  // Modal público que permite a cualquier persona (juez, notario, tercero) verificar
+  // la autenticidad de un documento Jsadr (pagaré, carta de instrucciones, certificado
+  // de firma electrónica) sin necesidad de iniciar sesión.
+  const [showValidarQR, setShowValidarQR] = useState(false)
+  const [codigoVerificar, setCodigoVerificar] = useState('')
+  const [validarLoading, setValidarLoading] = useState(false)
+  const [validarResultado, setValidarResultado] = useState<
+    | { tipo: 'exito' | 'error'; data?: any; mensaje?: string; codigo?: string }
+    | null
+  >(null)
+  const [imagenQRPreview, setImagenQRPreview] = useState<string | null>(null)
+  const [imagenQRError, setImagenQRError] = useState<string | null>(null)
+  const fileInputRef = useRef<HTMLInputElement | null>(null)
 
   useEffect(() => {
     setTimeout(() => inputRef.current?.focus(), 200)
@@ -289,6 +313,161 @@ export default function LoginPage() {
     } finally {
       setRecuperarLoading(false)
     }
+  }
+
+  // =====================================================
+  // VALIDACIÓN DE QR / DOCUMENTO — Público, sin login
+  // -----------------------------------------------------
+  // Permite a cualquier persona verificar la autenticidad de un
+  // documento Jsadr (pagaré, carta, certificado de firma) usando:
+  //   1. El código de verificación impreso junto al QR (XXXX-XXXX-XXXX-XXXX)
+  //   2. Una foto/imagen del QR — se decodifica client-side con jsQR
+  //      y se extrae automáticamente el código.
+  // Luego llama a /api/documentos/verificar y muestra el resultado.
+  // =====================================================
+  const extraerCodigoDeUrl = (url: string): string | null => {
+    // Acepta tanto ?codigo= como &codigo=, y también URLs completas
+    try {
+      const u = new URL(url)
+      const c = u.searchParams.get('codigo')
+      if (c) return c.trim().toLowerCase()
+    } catch {
+      // No era URL — quizás es el código directo
+      const match = url.match(/([0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4})/i)
+      if (match) return match[1].trim().toLowerCase()
+    }
+    return null
+  }
+
+  const validarDocumento = async (codigo: string) => {
+    const codLimpio = codigo.trim().toLowerCase()
+    if (!codLimpio) {
+      setValidarResultado({
+        tipo: 'error',
+        mensaje: 'Ingresa un código de verificación válido (formato: XXXX-XXXX-XXXX-XXXX).',
+      })
+      return
+    }
+    setValidarLoading(true)
+    setValidarResultado(null)
+    try {
+      const r = await fetch(`/api/documentos/verificar?codigo=${encodeURIComponent(codLimpio)}`, {
+        cache: 'no-store',
+      })
+      const json = await r.json()
+      if (json.success && json.autentico) {
+        setValidarResultado({
+          tipo: 'exito',
+          data: json.data,
+          mensaje: json.mensaje,
+          codigo: codLimpio,
+        })
+      } else {
+        setValidarResultado({
+          tipo: 'error',
+          mensaje:
+            json.error ||
+            'El código no coincide con ningún documento registrado en el sistema Jsadr.',
+          codigo: codLimpio,
+        })
+      }
+    } catch (err: any) {
+      setValidarResultado({
+        tipo: 'error',
+        mensaje: 'No se pudo conectar con el servidor de verificación. Intenta nuevamente.',
+        codigo: codLimpio,
+      })
+    } finally {
+      setValidarLoading(false)
+    }
+  }
+
+  const manejarImagenQR = async (file: File) => {
+    setImagenQRError(null)
+    setImagenQRPreview(null)
+    setValidarResultado(null)
+    if (!file.type.startsWith('image/')) {
+      setImagenQRError('El archivo debe ser una imagen (PNG, JPG, etc.).')
+      return
+    }
+    if (file.size > 8 * 1024 * 1024) {
+      setImagenQRError('La imagen es demasiado grande (máximo 8 MB).')
+      return
+    }
+    try {
+      // Leer la imagen como data URL para previsualizar
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader()
+        reader.onload = () => resolve(reader.result as string)
+        reader.onerror = () => reject(new Error('No se pudo leer el archivo.'))
+        reader.readAsDataURL(file)
+      })
+      setImagenQRPreview(dataUrl)
+
+      // Cargar la imagen en un HTMLImageElement
+      const img = new window.Image()
+      img.src = dataUrl
+      await new Promise<void>((resolve, reject) => {
+        img.onload = () => resolve()
+        img.onerror = () => reject(new Error('No se pudo cargar la imagen.'))
+      })
+
+      // Dibujar en canvas y obtener imageData
+      const canvas = document.createElement('canvas')
+      const maxDim = 1200 // limitar tamaño para no saturar memoria
+      let w = img.width
+      let h = img.height
+      if (w > maxDim || h > maxDim) {
+        const scale = maxDim / Math.max(w, h)
+        w = Math.floor(w * scale)
+        h = Math.floor(h * scale)
+      }
+      canvas.width = w
+      canvas.height = h
+      const ctx = canvas.getContext('2d', { willReadFrequently: true })
+      if (!ctx) {
+        setImagenQRError('No se pudo procesar la imagen (canvas no disponible).')
+        return
+      }
+      ctx.drawImage(img, 0, 0, w, h)
+      const imageData = ctx.getImageData(0, 0, w, h)
+
+      // Decodificar QR con jsQR (importado dinámicamente para evitar SSR issues)
+      const jsQR = (await import('jsqr')).default
+      const decoded = jsQR(imageData.data, imageData.width, imageData.height, {
+        inversionAttempts: 'attemptBoth',
+      })
+      if (!decoded) {
+        setImagenQRError(
+          'No se detectó ningún código QR en la imagen. Verifica que la foto sea nítida y el QR esté completo.'
+        )
+        return
+      }
+      const codigo = extraerCodigoDeUrl(decoded.data)
+      if (!codigo) {
+        setImagenQRError(
+          `El QR decodificado no contiene un código de verificación Jsadr válido. Contenido: "${decoded.data.substring(0, 80)}${decoded.data.length > 80 ? '...' : ''}"`
+        )
+        return
+      }
+      setCodigoVerificar(codigo)
+      // Auto-verificar
+      await validarDocumento(codigo)
+    } catch (err: any) {
+      setImagenQRError(err.message || 'Error al procesar la imagen.')
+    }
+  }
+
+  const abrirValidarQR = () => {
+    setShowValidarQR(true)
+    setCodigoVerificar('')
+    setValidarResultado(null)
+    setImagenQRPreview(null)
+    setImagenQRError(null)
+  }
+
+  const cerrarValidarQR = () => {
+    setShowValidarQR(false)
   }
 
   // =====================================================
@@ -562,6 +741,22 @@ export default function LoginPage() {
                 Solicita tu crédito en 5 minutos · Validación de identidad con cédula y selfie
               </p>
 
+              {/* === VALIDACIÓN PÚBLICA DE QR / DOCUMENTO === */}
+              {/* Acceso sin login para que cualquier tercero (juez, notario, etc.)
+                  pueda verificar la autenticidad de un pagaré/carta/certificado. */}
+              <button
+                type="button"
+                onClick={abrirValidarQR}
+                className="group flex items-center justify-center gap-2 w-full h-11 rounded-xl border border-amber-500/40 bg-amber-500/10 hover:bg-amber-500/20 hover:border-amber-500/60 text-amber-200 text-sm font-medium transition-all mt-3"
+              >
+                <ScanLine className="w-4 h-4" />
+                Validar autenticidad de un documento
+                <ArrowRight className="w-3.5 h-3.5 opacity-60 group-hover:translate-x-0.5 transition-transform" />
+              </button>
+              <p className="text-center text-[10px] text-slate-500 mt-2">
+                Verifica un pagaré, carta de instrucciones o certificado de firma electrónica mediante su código QR
+              </p>
+
             </div>
           </div>
 
@@ -701,6 +896,320 @@ export default function LoginPage() {
                   </Button>
                 </div>
               </form>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* === MODAL DE VALIDACIÓN DE QR / DOCUMENTO === */}
+      {showValidarQR && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm overflow-y-auto">
+          <div className="bg-slate-900 border border-amber-500/30 rounded-2xl shadow-2xl max-w-2xl w-full overflow-hidden my-8">
+            {/* Header */}
+            <div className="bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600 p-5 text-white">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center backdrop-blur-sm">
+                    <ScanLine className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-bold">Verificación de autenticidad</h3>
+                    <p className="text-xs opacity-90">Público · Sin inicio de sesión</p>
+                  </div>
+                </div>
+                <button
+                  onClick={cerrarValidarQR}
+                  className="p-1.5 rounded-lg hover:bg-white/20 transition-colors"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+
+            {/* Cuerpo */}
+            <div className="p-5 space-y-4">
+              {/* Explicación */}
+              <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg p-3 text-xs text-amber-200">
+                <p className="font-semibold mb-1 flex items-center gap-1.5">
+                  <FileSearch className="w-3.5 h-3.5" /> ¿Cómo funciona?
+                </p>
+                <ol className="list-decimal list-inside space-y-0.5 text-amber-300/90">
+                  <li>Ingresa el <strong>código de verificación</strong> impreso junto al QR (formato XXXX-XXXX-XXXX-XXXX), o</li>
+                  <li>Sube una <strong>foto del QR</strong> y se detectará automáticamente el código.</li>
+                  <li>El sistema verifica contra los registros de Jsadr y muestra el resultado.</li>
+                </ol>
+                <p className="mt-2 text-amber-300/80">
+                  Este proceso es <strong>público</strong>: cualquier persona (juez, notario, tercero) puede verificar
+                  la autenticidad de un documento sin necesidad de tener cuenta en el sistema.
+                </p>
+              </div>
+
+              {/* Entrada manual del código */}
+              <div className="space-y-2">
+                <Label htmlFor="codigo-verificar" className="text-slate-200 text-sm font-medium flex items-center gap-1.5">
+                  <Hash className="w-3.5 h-3.5" /> Código de verificación
+                </Label>
+                <div className="relative">
+                  <Input
+                    id="codigo-verificar"
+                    type="text"
+                    value={codigoVerificar}
+                    onChange={(e) => setCodigoVerificar(e.target.value)}
+                    placeholder="abcd-1234-ef56-7890"
+                    className="pl-3 pr-4 h-11 bg-slate-800/50 border-slate-700 text-white placeholder:text-slate-500 focus:border-amber-500 font-mono text-center tracking-widest"
+                    disabled={validarLoading}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && !validarLoading && codigoVerificar.trim()) {
+                        e.preventDefault()
+                        validarDocumento(codigoVerificar)
+                      }
+                    }}
+                  />
+                </div>
+                <Button
+                  type="button"
+                  onClick={() => validarDocumento(codigoVerificar)}
+                  disabled={validarLoading || !codigoVerificar.trim()}
+                  className="w-full h-11 bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700 text-white font-semibold"
+                >
+                  {validarLoading ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Verificando...
+                    </>
+                  ) : (
+                    <>
+                      <BadgeCheck className="w-4 h-4 mr-2" />
+                      Verificar documento
+                    </>
+                  )}
+                </Button>
+              </div>
+
+              {/* Divisor "O" */}
+              <div className="flex items-center gap-3">
+                <span className="h-px flex-1 bg-slate-700/60" />
+                <span className="text-[10px] uppercase tracking-wider text-slate-500">O sube una foto del QR</span>
+                <span className="h-px flex-1 bg-slate-700/60" />
+              </div>
+
+              {/* Upload de imagen */}
+              <div className="space-y-2">
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={(e) => {
+                    const f = e.target.files?.[0]
+                    if (f) manejarImagenQR(f)
+                    // Limpiar para permitir re-subir la misma imagen
+                    e.target.value = ''
+                  }}
+                />
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={validarLoading}
+                  className="w-full h-24 rounded-xl border-2 border-dashed border-slate-600 hover:border-amber-500/60 hover:bg-amber-500/5 transition-all flex flex-col items-center justify-center gap-2 text-slate-400 hover:text-amber-300 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {imagenQRPreview ? (
+                    <>
+                      <img
+                        src={imagenQRPreview}
+                        alt="Preview QR"
+                        className="max-h-16 max-w-full object-contain rounded"
+                      />
+                      <span className="text-[10px]">Click para cambiar imagen</span>
+                    </>
+                  ) : (
+                    <>
+                      <Upload className="w-6 h-6" />
+                      <span className="text-xs font-medium">Subir imagen del QR</span>
+                      <span className="text-[10px] text-slate-500">PNG, JPG · máx 8MB</span>
+                    </>
+                  )}
+                </button>
+                {imagenQRError && (
+                  <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-2 text-xs text-red-200 flex items-start gap-2">
+                    <AlertCircle className="w-3.5 h-3.5 mt-0.5 shrink-0" />
+                    <span>{imagenQRError}</span>
+                  </div>
+                )}
+              </div>
+
+              {/* === RESULTADO === */}
+              {validarResultado && (
+                <div
+                  className={`rounded-xl border p-4 ${
+                    validarResultado.tipo === 'exito'
+                      ? 'bg-emerald-500/10 border-emerald-500/40'
+                      : 'bg-red-500/10 border-red-500/40'
+                  }`}
+                >
+                  {validarResultado.tipo === 'exito' && validarResultado.data ? (
+                    <div className="space-y-3">
+                      {/* Sello grande AUTÉNTICO */}
+                      <div className="flex items-center gap-3">
+                        <div className="w-12 h-12 rounded-full bg-emerald-500/20 border-2 border-emerald-500 flex items-center justify-center flex-shrink-0">
+                          <CheckCircle2 className="w-6 h-6 text-emerald-400" />
+                        </div>
+                        <div>
+                          <h4 className="text-base font-bold text-emerald-300">Documento Auténtico</h4>
+                          <p className="text-xs text-emerald-200/80">{validarResultado.mensaje}</p>
+                        </div>
+                      </div>
+
+                      {/* Detalles del documento */}
+                      <div className="bg-slate-900/50 rounded-lg p-3 space-y-2">
+                        {validarResultado.data.tipoDocumento && (
+                          <div className="flex items-center gap-2 text-xs">
+                            <FileSearch className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
+                            <span className="text-slate-400">Tipo:</span>
+                            <span className="text-white font-semibold">{validarResultado.data.tipoDocumento}</span>
+                          </div>
+                        )}
+                        {validarResultado.data.deudor && (
+                          <div className="flex items-center gap-2 text-xs">
+                            <User className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
+                            <span className="text-slate-400">Deudor:</span>
+                            <span className="text-white font-semibold">{validarResultado.data.deudor}</span>
+                          </div>
+                        )}
+                        {validarResultado.data.cedula && (
+                          <div className="flex items-center gap-2 text-xs">
+                            <CreditCard className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
+                            <span className="text-slate-400">Cédula:</span>
+                            <span className="text-white font-mono">{validarResultado.data.cedula}</span>
+                          </div>
+                        )}
+                        {validarResultado.data.codigoPrestamo && (
+                          <div className="flex items-center gap-2 text-xs">
+                            <Hash className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
+                            <span className="text-slate-400">Préstamo:</span>
+                            <span className="text-white font-mono">{validarResultado.data.codigoPrestamo}</span>
+                          </div>
+                        )}
+                        {validarResultado.data.monto != null && (
+                          <div className="flex items-center gap-2 text-xs">
+                            <DollarSign className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
+                            <span className="text-slate-400">Monto:</span>
+                            <span className="text-white font-semibold">
+                              ${Number(validarResultado.data.monto).toLocaleString('es-CO')}
+                            </span>
+                          </div>
+                        )}
+                        {validarResultado.data.estado && (
+                          <div className="flex items-center gap-2 text-xs">
+                            <BadgeCheck className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
+                            <span className="text-slate-400">Estado:</span>
+                            <span className="text-white font-semibold">{validarResultado.data.estado}</span>
+                          </div>
+                        )}
+                        {validarResultado.data.tieneFirmaElectronica !== undefined && (
+                          <div className="flex items-center gap-2 text-xs">
+                            <ShieldCheck className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
+                            <span className="text-slate-400">Firma electrónica:</span>
+                            <span className={`font-semibold ${validarResultado.data.tieneFirmaElectronica ? 'text-emerald-300' : 'text-red-300'}`}>
+                              {validarResultado.data.tieneFirmaElectronica ? '✓ Sí, firmado electrónicamente' : '✗ No'}
+                            </span>
+                          </div>
+                        )}
+                        {validarResultado.data.fechaFirma && (
+                          <div className="flex items-center gap-2 text-xs">
+                            <Calendar className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
+                            <span className="text-slate-400">Fecha firma:</span>
+                            <span className="text-white">
+                              {new Date(validarResultado.data.fechaFirma).toLocaleString('es-CO', { timeZone: 'America/Bogota' })}
+                            </span>
+                          </div>
+                        )}
+                        {validarResultado.data.canalOTP && (
+                          <div className="flex items-center gap-2 text-xs">
+                            <Mail className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
+                            <span className="text-slate-400">Canal OTP:</span>
+                            <span className="text-white">{validarResultado.data.canalOTP}</span>
+                          </div>
+                        )}
+                        {validarResultado.data.ipFirma && (
+                          <div className="flex items-center gap-2 text-xs">
+                            <Clock className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
+                            <span className="text-slate-400">IP de firma:</span>
+                            <span className="text-white font-mono">{validarResultado.data.ipFirma}</span>
+                          </div>
+                        )}
+                        <div className="flex items-center gap-2 text-xs">
+                          <Clock className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
+                          <span className="text-slate-400">Verificado:</span>
+                          <span className="text-white">
+                            {new Date(validarResultado.data.verificadoEn).toLocaleString('es-CO', { timeZone: 'America/Bogota' })}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Sello legal */}
+                      <div className="bg-slate-800/50 border-l-4 border-emerald-500 rounded p-2 text-[10px] text-slate-300 leading-relaxed">
+                        <strong className="text-emerald-300">Validez legal:</strong> Documento amparado por la Ley 527
+                        de 1999 (Colombia) sobre mensajes de datos y firmas electrónicas, y el Decreto 1074 de 2015.
+                        Constituye prueba documental admisible en proceso ejecutivo (art. 419 CGP).
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      <div className="flex items-center gap-3">
+                        <div className="w-12 h-12 rounded-full bg-red-500/20 border-2 border-red-500 flex items-center justify-center flex-shrink-0">
+                          <AlertCircle className="w-6 h-6 text-red-400" />
+                        </div>
+                        <div>
+                          <h4 className="text-base font-bold text-red-300">Documento No Válido</h4>
+                          <p className="text-xs text-red-200/80">{validarResultado.mensaje}</p>
+                        </div>
+                      </div>
+                      {validarResultado.codigo && (
+                        <div className="bg-slate-900/50 rounded-lg p-2 text-xs">
+                          <span className="text-slate-400">Código recibido: </span>
+                          <span className="text-white font-mono">{validarResultado.codigo}</span>
+                        </div>
+                      )}
+                      <div className="bg-red-500/5 border-l-4 border-red-500 rounded p-2 text-[10px] text-red-200/80 leading-relaxed">
+                        <strong>¿Qué hacer?</strong> Verifica que el código sea exactamente el impreso en el documento.
+                        Si sospechas falsificación, solicita una copia nueva al acreedor o denuncia ante la Fiscalía.
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Footer info */}
+              <div className="text-center text-[10px] text-slate-500 pt-2 border-t border-slate-700/40">
+                Sistema Jsadr · Ley 527 de 1999 · Decreto 1074 de 2015 · Hora oficial America/Bogota (UTC-5)
+              </div>
+
+              {/* Botones */}
+              <div className="flex gap-2 pt-1">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={cerrarValidarQR}
+                  disabled={validarLoading}
+                  className="flex-1 border-slate-700 text-slate-300 hover:bg-slate-800"
+                >
+                  Cerrar
+                </Button>
+                <Button
+                  type="button"
+                  onClick={() => {
+                    setCodigoVerificar('')
+                    setValidarResultado(null)
+                    setImagenQRPreview(null)
+                    setImagenQRError(null)
+                  }}
+                  disabled={validarLoading}
+                  className="flex-1 bg-slate-700 hover:bg-slate-600 text-white"
+                >
+                  Limpiar y validar otro
+                </Button>
+              </div>
             </div>
           </div>
         </div>
