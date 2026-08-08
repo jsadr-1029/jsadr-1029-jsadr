@@ -106,17 +106,22 @@ async function buscarPrestamos(body: { codigo?: string; cedula?: string }) {
     where.cliente = { cedula: { equals: cedula, mode: 'insensitive' } }
   }
 
+  // Pagos "pendientes de conciliar" = PENDIENTE + VENCIDO.
+  // VENCIDO incluye las cuotas de préstamos EN_MORA (siguen siendo cobrables).
+  const ESTADOS_CONCILIABLES = ['PENDIENTE', 'VENCIDO']
+
   const prestamos = await db.prestamo.findMany({
     where,
     include: {
       cliente: true,
       pagos: {
-        where: { estado: 'PENDIENTE' },
+        where: { estado: { in: ESTADOS_CONCILIABLES } },
         orderBy: { numeroCuota: 'asc' },
         select: {
           numeroCuota: true,
           montoTotal: true,
           fechaVencimiento: true,
+          estado: true,
         },
       },
     },
@@ -158,6 +163,7 @@ async function buscarPrestamos(body: { codigo?: string; cedula?: string }) {
         numeroCuota: cuota.numeroCuota,
         montoTotal: cuota.montoTotal,
         fechaVencimiento: cuota.fechaVencimiento.toISOString(),
+        estado: cuota.estado,
       })),
     }
   })
@@ -193,7 +199,7 @@ async function previsualizar(body: { prestamoId?: string; movimientos?: Movimien
     include: {
       cliente: true,
       pagos: {
-        where: { estado: 'PENDIENTE' },
+        where: { estado: { in: ['PENDIENTE', 'VENCIDO'] } },
         orderBy: { numeroCuota: 'asc' },
       },
     },
@@ -203,7 +209,7 @@ async function previsualizar(body: { prestamoId?: string; movimientos?: Movimien
     return NextResponse.json({ success: false, error: 'Préstamo no encontrado' }, { status: 404 })
   }
 
-  // Pool mutable de pagos PENDIENTE disponibles para matchear
+  // Pool mutable de pagos conciliables (PENDIENTE + VENCIDO) disponibles para matchear
   const pool = prestamo.pagos.map((p) => ({
     id: p.id,
     codigo: p.codigo,
@@ -326,7 +332,7 @@ async function aplicar(
     where: { id: prestamoId },
     include: {
       cliente: true,
-      pagos: { where: { estado: 'PENDIENTE' }, orderBy: { numeroCuota: 'asc' } },
+      pagos: { where: { estado: { in: ['PENDIENTE', 'VENCIDO'] } }, orderBy: { numeroCuota: 'asc' } },
     },
   })
 
