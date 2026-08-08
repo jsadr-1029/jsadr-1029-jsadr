@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import crypto from 'crypto'
 import { db } from '@/lib/db'
 import bcrypt from 'bcryptjs'
 import { generateToken } from '@/lib/format'
@@ -7,30 +8,45 @@ import { getClientInfo } from '@/lib/security'
 // =====================================================
 // POST /api/portal/login
 // Body:
-//   { cedula: string, pin: string }    — login por cédula (preferido)
-//   { clienteId: string, pin: string } — login por clienteId (legacy)
+//   { cedula: string, pin: string }     — login por cédula + PIN (legacy)
+//   { cedula: string, clave: string }   — login por cédula + clave (v4.13)
+//   { clienteId: string, pin: string }  — login por clienteId (legacy)
 //
 // Flujo:
 //   1. Buscar cliente por cédula (o clienteId si se proporciona).
-//   2. Si no tiene PIN, crearlo (primer acceso).
-//   3. Validar PIN (bcrypt compare).
-//   4. Generar token de sesión (2h) y persistir en cliente.tokenSesion.
-//   5. Registrar en AccesoPortal.
+//   2a. Si se envió `clave` (v4.13):
+//       - Validar contra claveHash (bcrypt).
+//       - Si `debeCambiarClave=true`: devolver código CAMBIO_CLAVE_OBLIGATORIO
+//         con un token temporal (claveTempToken) que solo autoriza el cambio
+//         de clave. NO se entrega token de sesión completa.
+//       - Si `debeCambiarClave=false`: generar sesión normal.
+//   2b. Si se envió `pin` (legacy):
+//       - Si no tiene PIN, crearlo (primer acceso).
+//       - Validar PIN (bcrypt compare).
+//   3. Generar token de sesión (8h) y persistir en cliente.tokenSesion.
+//   4. Registrar en AccesoPortal.
 //
 // Respuesta:
 //   { success: true, token, clienteId, nombre, nuevoPin?: true }
 //   { success: false, error } (401/403/404 según caso)
+//   { success: false, codigo: 'CAMBIO_CLAVE_OBLIGATORIO', claveTempToken, clienteId, nombre }
+//     — cuando la clave es válida pero debe cambiarse. El frontend debe
+//       mostrar el formulario de cambio de clave y llamar a
+//       /api/portal/cambiar-clave-primer-login con el claveTempToken.
 // =====================================================
 
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
-    const { cedula, clienteId, pin } = body
+    const { cedula, clienteId, pin, clave } = body
 
-    // Aceptar tanto cédula como clienteId (legacy)
-    if (!pin) {
+    // === v4.13: soporte para login con clave (no solo PIN) ===
+    const usaClave = typeof clave === 'string' && clave.length > 0
+    const usaPin = typeof pin === 'string' && pin.length > 0
+
+    if (!usaClave && !usaPin) {
       return NextResponse.json(
-        { success: false, error: 'PIN es requerido' },
+        { success: false, error: 'PIN o clave es requerido' },
         { status: 400 }
       )
     }
@@ -59,8 +75,9 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    // Verificar bloqueo
-    if (cliente.pinBloqueadoHasta && new Date(cliente.pinBloqueadoHasta) > new Date()) {
+    // Verificar bloqueo (PIN o clave, según corresponda)
+    const bloqueadoHasta = usaClave ? cliente.claveBloqueadoHasta : cliente.pinBloqueadoHasta
+    if (bloqueadoHasta && new Date(bloqueadoHasta) > new Date()) {
       return NextResponse.json(
         { success: false, error: 'Cuenta bloqueada temporalmente' },
         { status: 403 }
@@ -68,6 +85,148 @@ export async function POST(req: NextRequest) {
     }
 
     const clientInfo = getClientInfo(req)
+
+    // =====================================================
+    // === v4.13 — Login con CLAVE (alfanumérica) ===
+    // =====================================================
+    if (usaClave) {
+      // Si no tiene claveHash, no se puede loguear con clave
+      if (!cliente.claveHash) {
+        await db.accesoPortal.create({
+          data: {
+            clienteId: cliente.id,
+            clienteCedula: cliente.cedula,
+            clienteNombre: cliente.nombre,
+            ipOrigen: clientInfo.ip,
+            userAgent: clientInfo.userAgent,
+            accion: 'LOGIN_CLAVE',
+            exito: false,
+            detalle: 'Cliente sin clave configurada',
+          },
+        })
+        return NextResponse.json(
+          { success: false, error: 'Cédula o clave incorrecta', codigo: 'CLAVE_INVALIDA' },
+          { status: 401 }
+        )
+      }
+
+      // Validar clave contra el hash bcrypt
+      const claveValida = bcrypt.compareSync(clave, cliente.claveHash)
+      if (!claveValida) {
+        const nuevosIntentos = (cliente.claveIntentos || 0) + 1
+        const MAX_INTENTOS_CLAVE = 5
+        const TIEMPO_BLOQUEO_MIN = 15
+        const bloquear = nuevosIntentos >= MAX_INTENTOS_CLAVE
+        await db.cliente.update({
+          where: { id: cliente.id },
+          data: {
+            claveIntentos: nuevosIntentos,
+            claveBloqueadoHasta: bloquear
+              ? new Date(Date.now() + TIEMPO_BLOQUEO_MIN * 60 * 1000)
+              : null,
+          },
+        })
+
+        await db.accesoPortal.create({
+          data: {
+            clienteId: cliente.id,
+            clienteCedula: cliente.cedula,
+            clienteNombre: cliente.nombre,
+            ipOrigen: clientInfo.ip,
+            userAgent: clientInfo.userAgent,
+            accion: 'LOGIN_CLAVE',
+            exito: false,
+            detalle: `Clave incorrecta. Intento ${nuevosIntentos}/${MAX_INTENTOS_CLAVE}`,
+          },
+        })
+
+        return NextResponse.json(
+          {
+            success: false,
+            error: bloquear
+              ? `Demasiados intentos. Cuenta bloqueada por ${TIEMPO_BLOQUEO_MIN} minutos.`
+              : `Clave incorrecta. Intentos restantes: ${MAX_INTENTOS_CLAVE - nuevosIntentos}`,
+            codigo: bloquear ? 'CLAVE_BLOQUEADA' : 'CLAVE_INVALIDA',
+          },
+          { status: bloquear ? 403 : 401 }
+        )
+      }
+
+      // === Clave válida — resetear intentos ===
+      await db.cliente.update({
+        where: { id: cliente.id },
+        data: { claveIntentos: 0, claveBloqueadoHasta: null },
+      })
+
+      // === v4.13: ¿Debe cambiar la clave? ===
+      if (cliente.debeCambiarClave) {
+        // Generar token temporal SOLO para cambio de clave (24h)
+        const claveTempToken = crypto.randomBytes(32).toString('hex')
+        const claveTempExpira = new Date(Date.now() + 24 * 60 * 60 * 1000) // 24h
+        await db.cliente.update({
+          where: { id: cliente.id },
+          data: { claveTempToken, claveTempExpira },
+        })
+
+        await db.accesoPortal.create({
+          data: {
+            clienteId: cliente.id,
+            clienteCedula: cliente.cedula,
+            clienteNombre: cliente.nombre,
+            ipOrigen: clientInfo.ip,
+            userAgent: clientInfo.userAgent,
+            accion: 'LOGIN_CLAVE',
+            exito: true,
+            detalle: 'Clave válida — debe cambiar (primer ingreso)',
+          },
+        })
+
+        return NextResponse.json({
+          success: false,
+          codigo: 'CAMBIO_CLAVE_OBLIGATORIO',
+          claveTempToken,
+          clienteId: cliente.id,
+          nombre: cliente.nombre,
+          mensaje: 'Por seguridad, debes cambiar tu clave antes de continuar.',
+        })
+      }
+
+      // Login con clave exitoso — generar sesión
+      const token = generateToken(32)
+      const tokenExpira = new Date(Date.now() + 8 * 60 * 60 * 1000) // 8h
+      await db.cliente.update({
+        where: { id: cliente.id },
+        data: {
+          tokenSesion: token,
+          tokenExpira,
+          ultimoAccesoPortal: new Date(),
+        },
+      })
+
+      await db.accesoPortal.create({
+        data: {
+          clienteId: cliente.id,
+          clienteCedula: cliente.cedula,
+          clienteNombre: cliente.nombre,
+          ipOrigen: clientInfo.ip,
+          userAgent: clientInfo.userAgent,
+          accion: 'LOGIN_CLAVE',
+          exito: true,
+          detalle: 'Sesión iniciada con clave',
+        },
+      })
+
+      return NextResponse.json({
+        success: true,
+        token,
+        clienteId: cliente.id,
+        nombre: cliente.nombre,
+      })
+    }
+
+    // =====================================================
+    // === Legacy: Login con PIN ===
+    // =====================================================
 
     // Si no tiene PIN, crearlo (primer acceso)
     if (!cliente.pinHash) {

@@ -33,13 +33,20 @@ import { SolicitudNuevoClienteView } from '@/components/views/SolicitudNuevoClie
 // WhatsApp de soporte de Jsadr
 const WHATSAPP_SOPORTE = 'https://wa.me/573103674546'
 
-type FasePortal = 'cedula' | 'crear_pin' | 'login' | 'cargando'
+type FasePortal = 'cedula' | 'crear_pin' | 'login' | 'cambiar_clave' | 'cargando'
 
 interface InfoCliente {
   clienteId: string
   nombre: string
   tienePin: boolean
   requierePin: boolean
+}
+
+// v4.13 — Estado del cambio de clave obligatorio (primer ingreso)
+interface CambioClaveState {
+  claveTempToken: string
+  clienteId: string
+  nombre: string
 }
 
 export function PortalView({ onAbrirPortal }: { onAbrirPortal: (cedula: string, token?: string) => void }) {
@@ -56,6 +63,12 @@ export function PortalView({ onAbrirPortal }: { onAbrirPortal: (cedula: string, 
   const [loading, setLoading] = useState(false)
   const [intentosRestantes, setIntentosRestantes] = useState<number | null>(null)
   const [bloqueadoHastaMs, setBloqueadoHastaMs] = useState<number | null>(null)
+  // v4.13 — Cambio de clave en primer ingreso
+  const [cambioClave, setCambioClave] = useState<CambioClaveState | null>(null)
+  const [nuevaClave, setNuevaClave] = useState('')
+  const [confirmarNuevaClave, setConfirmarNuevaClave] = useState('')
+  const [mostrarNuevaClave, setMostrarNuevaClave] = useState(false)
+  const [mostrarConfirmarNuevaClave, setMostrarConfirmarNuevaClave] = useState(false)
   const { toast } = useToast()
 
   // Cuenta regresiva si está bloqueado
@@ -73,6 +86,11 @@ export function PortalView({ onAbrirPortal }: { onAbrirPortal: (cedula: string, 
     setMostrarConfirmarPin(false)
     setIntentosRestantes(null)
     setBloqueadoHastaMs(null)
+    setNuevaClave('')
+    setConfirmarNuevaClave('')
+    setMostrarNuevaClave(false)
+    setMostrarConfirmarNuevaClave(false)
+    setCambioClave(null)
   }
 
   // === Paso 1: Verificar cédula ===
@@ -163,50 +181,178 @@ export function PortalView({ onAbrirPortal }: { onAbrirPortal: (cedula: string, 
   }
 
   // === Paso 2b: Login con PIN ===
+  // v4.13: ahora intentamos primero con /api/portal/login enviando `clave`
+  // (la nueva modalidad alfanumérica). Si el cliente tiene claveHash, se valida
+  // contra ella y se respeta el flag `debeCambiarClave`. Si el cliente solo
+  // tiene PIN (legacy), el backend ignora `clave` y usa `pin`.
   const loginConPin = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!pin) {
-      toast({ title: 'Ingresa tu PIN', variant: 'destructive' })
+      toast({ title: 'Ingresa tu PIN o clave', variant: 'destructive' })
       return
     }
     setLoading(true)
     try {
-      const res = await fetch('/api/portal/auth', {
+      // v4.13: usamos /api/portal/login con `clave` (alfanumérica). El backend
+      // valida contra claveHash y, si debeCambiarClave=true, devuelve
+      // codigo='CAMBIO_CLAVE_OBLIGATORIO'. Para clientes legacy sin claveHash,
+      // el frontend hará fallback al endpoint /api/portal/auth con `pin`.
+      const res = await fetch('/api/portal/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          accion: 'login',
           cedula: cedula.trim(),
-          pin,
+          clave: pin, // el mismo campo input, enviado como clave alfanumérica
+        }),
+      })
+      const json = await res.json()
+
+      // === v4.13: ¿Debe cambiar la clave? ===
+      if (!json.success && json.codigo === 'CAMBIO_CLAVE_OBLIGATORIO') {
+        setCambioClave({
+          claveTempToken: json.claveTempToken,
+          clienteId: json.clienteId,
+          nombre: json.nombre,
+        })
+        setFase('cambiar_clave')
+        toast({
+          title: 'Cambio de clave obligatorio',
+          description: json.mensaje || 'Por seguridad, debes cambiar tu clave antes de continuar.',
+        })
+        return
+      }
+
+      // === Login exitoso con clave ===
+      if (json.success) {
+        toast({
+          title: `¡Bienvenido, ${json.nombre}!`,
+          description: 'Sesión iniciada correctamente.',
+        })
+        onAbrirPortal(cedula.trim(), json.token)
+        return
+      }
+
+      // === Fallback a PIN legacy ===
+      // Si el cliente no tiene claveHash, el backend devuelve 'CLAVE_INVALIDA'
+      // con el mensaje 'Cédula o clave incorrecta'. En ese caso, intentamos
+      // con el endpoint legacy /api/portal/auth (PIN).
+      if (json.codigo === 'CLAVE_INVALIDA') {
+        const resLegacy = await fetch('/api/portal/auth', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            accion: 'login',
+            cedula: cedula.trim(),
+            pin,
+          }),
+        })
+        const jsonLegacy = await resLegacy.json()
+        if (jsonLegacy.success) {
+          toast({
+            title: `¡Bienvenido, ${jsonLegacy.data.cliente.nombre}!`,
+            description: 'Sesión iniciada correctamente.',
+          })
+          onAbrirPortal(cedula.trim(), jsonLegacy.data.token)
+          return
+        }
+        // Manejo de errores del legacy
+        if (jsonLegacy.code === 'LOCKED') {
+          setBloqueadoHastaMs(Date.now() + 15 * 60 * 1000)
+          toast({
+            title: 'Cuenta bloqueada',
+            description: jsonLegacy.error,
+            variant: 'destructive',
+          })
+        } else if (jsonLegacy.code === 'INVALID_PIN') {
+          const match = jsonLegacy.error?.match(/(\d+)/)
+          if (match) setIntentosRestantes(parseInt(match[1]))
+          toast({
+            title: 'PIN o clave incorrecto',
+            description: jsonLegacy.error,
+            variant: 'destructive',
+          })
+        } else {
+          toast({ title: 'Error', description: jsonLegacy.error, variant: 'destructive' })
+        }
+        return
+      }
+
+      // === Manejo de errores de /api/portal/login ===
+      if (json.codigo === 'CLAVE_BLOQUEADA') {
+        setBloqueadoHastaMs(Date.now() + 15 * 60 * 1000)
+        toast({
+          title: 'Cuenta bloqueada',
+          description: json.error,
+          variant: 'destructive',
+        })
+      } else if (json.codigo === 'CLAVE_INVALIDA') {
+        toast({
+          title: 'Clave incorrecta',
+          description: json.error,
+          variant: 'destructive',
+        })
+      } else {
+        toast({ title: 'Error', description: json.error, variant: 'destructive' })
+      }
+    } catch (e: any) {
+      toast({ title: 'Error', description: e.message, variant: 'destructive' })
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // === v4.13: Paso 3 — Cambio de clave obligatorio ===
+  const cambiarClavePrimerLogin = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!cambioClave) return
+    if (!nuevaClave || !confirmarNuevaClave) {
+      toast({ title: 'Completa todos los campos', variant: 'destructive' })
+      return
+    }
+    if (nuevaClave.length < 6) {
+      toast({
+        title: 'Clave muy corta',
+        description: 'Mínimo 6 caracteres',
+        variant: 'destructive',
+      })
+      return
+    }
+    if (nuevaClave !== confirmarNuevaClave) {
+      toast({
+        title: 'Las claves no coinciden',
+        variant: 'destructive',
+      })
+      return
+    }
+    setLoading(true)
+    try {
+      const res = await fetch('/api/portal/cambiar-clave-primer-login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          claveTempToken: cambioClave.claveTempToken,
+          nuevaClave,
+          confirmarClave: confirmarNuevaClave,
         }),
       })
       const json = await res.json()
       if (json.success) {
         toast({
-          title: `¡Bienvenido, ${json.data.cliente.nombre}!`,
-          description: 'Sesión iniciada correctamente.',
+          title: '¡Clave actualizada!',
+          description: 'Tu nueva clave quedó registrada. Accediendo al portal...',
         })
-        onAbrirPortal(cedula.trim(), json.data.token)
+        // Limpiar el PIN/clave del input para que no quede en memoria
+        setPin('')
+        setNuevaClave('')
+        setConfirmarNuevaClave('')
+        // El backend ya generó la sesión completa → abrir portal directamente
+        onAbrirPortal(cedula.trim(), json.token)
       } else {
-        if (json.code === 'LOCKED') {
-          setBloqueadoHastaMs(Date.now() + 15 * 60 * 1000)
-          setFase('login')
-          toast({
-            title: 'Cuenta bloqueada',
-            description: json.error,
-            variant: 'destructive',
-          })
-        } else if (json.code === 'INVALID_PIN') {
-          const match = json.error?.match(/(\d+)/)
-          if (match) setIntentosRestantes(parseInt(match[1]))
-          toast({
-            title: 'PIN incorrecto',
-            description: json.error,
-            variant: 'destructive',
-          })
-        } else {
-          toast({ title: 'Error', description: json.error, variant: 'destructive' })
-        }
+        toast({
+          title: 'No se pudo cambiar la clave',
+          description: json.error,
+          variant: 'destructive',
+        })
       }
     } catch (e: any) {
       toast({ title: 'Error', description: e.message, variant: 'destructive' })
@@ -258,11 +404,13 @@ export function PortalView({ onAbrirPortal }: { onAbrirPortal: (cedula: string, 
                 fase === 'cedula' ? 'gradient-premium shadow-md' :
                 fase === 'crear_pin' ? 'bg-amber-500/20 text-amber-300' :
                 fase === 'login' ? 'bg-emerald-500/20 text-emerald-300' :
+                fase === 'cambiar_clave' ? 'bg-amber-500/20 text-amber-300' :
                 'bg-white/5 text-muted-foreground'
               }`}>
                 {fase === 'cedula' && <Search className="w-4 h-4 text-white" />}
                 {fase === 'crear_pin' && <KeyRound className="w-4 h-4" />}
                 {fase === 'login' && <Lock className="w-4 h-4" />}
+                {fase === 'cambiar_clave' && <ShieldCheck className="w-4 h-4" />}
                 {fase === 'cargando' && <Loader2 className="w-4 h-4 animate-spin" />}
               </div>
               <div>
@@ -270,12 +418,14 @@ export function PortalView({ onAbrirPortal }: { onAbrirPortal: (cedula: string, 
                   {fase === 'cedula' && 'Identificación'}
                   {fase === 'crear_pin' && 'Crear PIN de acceso'}
                   {fase === 'login' && 'Iniciar sesión'}
+                  {fase === 'cambiar_clave' && 'Cambiar clave'}
                   {fase === 'cargando' && 'Procesando…'}
                 </p>
                 <p className="text-[10px] text-muted-foreground">
                   {fase === 'cedula' && 'Ingresa tu número de cédula'}
                   {fase === 'crear_pin' && 'Configura tu PIN personal'}
-                  {fase === 'login' && 'Ingresa tu PIN para continuar'}
+                  {fase === 'login' && 'Ingresa tu PIN o clave para continuar'}
+                  {fase === 'cambiar_clave' && 'Define tu nueva clave de acceso'}
                 </p>
               </div>
             </div>
@@ -428,7 +578,109 @@ export function PortalView({ onAbrirPortal }: { onAbrirPortal: (cedula: string, 
             )}
 
             {/* ============ FASE 3: LOGIN CON PIN ============ */}
-            {fase === 'login' && infoCliente && (
+            {fase === 'cambiar_clave' && cambioClave && (
+            <form onSubmit={cambiarClavePrimerLogin} className="space-y-4 fade-scale">
+              <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-400/20">
+                <p className="text-xs font-semibold text-amber-200 mb-1 flex items-center gap-1.5">
+                  <KeyRound className="w-3.5 h-3.5" />
+                  Cambio de clave obligatorio
+                </p>
+                <p className="text-[11px] text-amber-100/80">
+                  Hola <strong>{cambioClave.nombre}</strong>, por seguridad debes definir
+                  una nueva clave antes de continuar. Esta acción se realiza una sola vez.
+                </p>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="nuevaClave" className="text-xs">Nueva clave (mín. 6 caracteres)</Label>
+                <div className="relative">
+                  <Input
+                    id="nuevaClave"
+                    type={mostrarNuevaClave ? 'text' : 'password'}
+                    value={nuevaClave}
+                    onChange={(e) => setNuevaClave(e.target.value)}
+                    placeholder="••••••••"
+                    className="text-lg input-premium h-12 pr-10"
+                    autoFocus
+                    autoComplete="new-password"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setMostrarNuevaClave(!mostrarNuevaClave)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                    tabIndex={-1}
+                  >
+                    {mostrarNuevaClave ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="confirmarNuevaClave" className="text-xs">Confirmar nueva clave</Label>
+                <div className="relative">
+                  <Input
+                    id="confirmarNuevaClave"
+                    type={mostrarConfirmarNuevaClave ? 'text' : 'password'}
+                    value={confirmarNuevaClave}
+                    onChange={(e) => setConfirmarNuevaClave(e.target.value)}
+                    placeholder="••••••••"
+                    className="text-lg input-premium h-12 pr-10"
+                    autoComplete="new-password"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setMostrarConfirmarNuevaClave(!mostrarConfirmarNuevaClave)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                    tabIndex={-1}
+                  >
+                    {mostrarConfirmarNuevaClave ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+                {nuevaClave && confirmarNuevaClave && nuevaClave === confirmarNuevaClave && (
+                  <p className="text-[10px] text-emerald-400 flex items-center gap-1">
+                    <CheckCircle className="w-3 h-3" />
+                    Las claves coinciden
+                  </p>
+                )}
+                {nuevaClave && confirmarNuevaClave && nuevaClave !== confirmarNuevaClave && (
+                  <p className="text-[10px] text-red-400 flex items-center gap-1">
+                    <AlertCircle className="w-3 h-3" />
+                    Las claves no coinciden
+                  </p>
+                )}
+              </div>
+
+              <div className="p-2.5 rounded-lg bg-white/5 text-[10px] text-muted-foreground">
+                <p className="font-semibold mb-1 text-foreground/80">Requisitos de la nueva clave:</p>
+                <ul className="space-y-0.5 ml-3 list-disc">
+                  <li>Mínimo 6 caracteres (recomendado: 8+)</li>
+                  <li>No uses la clave temporal que te enviaron</li>
+                  <li>Combina letras, números y símbolos para mayor seguridad</li>
+                  <li>La clave se almacena cifrada con bcrypt — nadie puede verla</li>
+                </ul>
+              </div>
+
+              <Button
+                type="submit"
+                className="w-full gradient-premium gradient-premium-hover btn-press h-11"
+                disabled={loading || !nuevaClave || !confirmarNuevaClave || nuevaClave !== confirmarNuevaClave || nuevaClave.length < 6}
+              >
+                {loading ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Guardando...
+                  </>
+                ) : (
+                  <>
+                    <ShieldCheck className="w-4 h-4 mr-2" />
+                    Guardar nueva clave y continuar
+                  </>
+                )}
+              </Button>
+            </form>
+          )}
+
+          {fase === 'login' && infoCliente && (
               <form onSubmit={loginConPin} className="space-y-4 fade-scale">
                 {bloqueadoHastaMs && tiempoBloqueoRestante > 0 ? (
                   <div className="p-3 rounded-xl bg-red-500/10 border border-red-400/20 space-y-2">
@@ -448,7 +700,7 @@ export function PortalView({ onAbrirPortal }: { onAbrirPortal: (cedula: string, 
                   <>
                     <div className="p-3 rounded-xl bg-blue-500/10 border border-blue-400/20">
                       <p className="text-xs text-blue-200">
-                        Hola <strong>{infoCliente.nombre}</strong>, ingresa tu PIN para acceder.
+                        Hola <strong>{infoCliente.nombre}</strong>, ingresa tu PIN o clave para acceder.
                       </p>
                     </div>
 
@@ -460,20 +712,22 @@ export function PortalView({ onAbrirPortal }: { onAbrirPortal: (cedula: string, 
                     )}
 
                     <div className="space-y-1.5">
-                      <Label htmlFor="pinLogin" className="text-xs">PIN de acceso</Label>
+                      <Label htmlFor="pinLogin" className="text-xs">PIN o clave de acceso</Label>
                       <div className="relative">
                         <Input
                           id="pinLogin"
                           type={mostrarPin ? 'text' : 'password'}
                           value={pin}
                           onChange={(e) => {
-                            setPin(e.target.value.replace(/\D/g, ''))
+                            // v4.13: permitir caracteres alfanuméricos y símbolos para la nueva
+                            // modalidad de clave. Si el cliente solo tiene PIN (legacy), los
+                            // caracteres no numéricos simplemente no coincidirán.
+                            setPin(e.target.value)
                             setIntentosRestantes(null)
                           }}
-                          placeholder="••••"
-                          className="text-2xl tracking-[0.5em] text-center pr-10 input-premium h-12"
-                          inputMode="numeric"
-                          maxLength={6}
+                          placeholder="••••••••"
+                          className="text-lg tracking-normal text-center pr-10 input-premium h-12"
+                          maxLength={64}
                           autoFocus
                         />
                         <button

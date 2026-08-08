@@ -362,12 +362,46 @@ export function ClientesView({ onChanged }: { onChanged: () => void }) {
       })
       const json = await res.json()
       if (json.success) {
-        toast({
-          title: editandoId ? 'Cliente actualizado' : 'Cliente creado',
-          description: `${form.nombre} ${
-            editandoId ? 'actualizado' : 'registrado'
-          } correctamente`,
-        })
+        // === v4.13 — Mostrar información de la clave temporal generada ===
+        // Si el backend envió la clave temporal en la respuesta (porque el cliente
+        // no tiene email o el envío falló), se la mostramos al gestor para que
+        // la comunique por otro canal. Si el email se envió correctamente, sólo
+        // mostramos el mensaje de éxito.
+        if (!editandoId) {
+          if (json.claveTemporal) {
+            // Mostrar la clave temporal en un toast de larga duración
+            toast({
+              title: '🔐 Cliente creado — Clave temporal',
+              description: `${json.mensaje || 'Comunica esta clave al cliente:'} — CLAVE: ${json.claveTemporal}`,
+              duration: 12000,
+            })
+            // También intentar copiar al portapapeles para facilitar la comunicación
+            try {
+              navigator.clipboard?.writeText(json.claveTemporal)
+              toast({
+                title: 'Clave copiada',
+                description: 'La clave temporal se copió al portapapeles.',
+                duration: 4000,
+              })
+            } catch {}
+          } else if (json.emailEnviado) {
+            toast({
+              title: 'Cliente creado',
+              description: json.mensaje || `Se envió la clave temporal al correo del cliente.`,
+              duration: 6000,
+            })
+          } else {
+            toast({
+              title: 'Cliente creado',
+              description: `${form.nombre} registrado correctamente.`,
+            })
+          }
+        } else {
+          toast({
+            title: 'Cliente actualizado',
+            description: `${form.nombre} actualizado correctamente`,
+          })
+        }
         setModalAbierto(false)
         setForm(VACIO)
         setEditandoId(null)

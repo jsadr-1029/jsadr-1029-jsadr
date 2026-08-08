@@ -104,6 +104,14 @@ model Cliente {
   claveBloqueadoHasta   DateTime?
   claveResetToken       String?  // token temporal para resetear desde un enlace
   claveResetExpira      DateTime?
+  // === v4.13 — Cambio de clave obligatorio en el primer ingreso ===
+  // Cuando el gestor crea el cliente, el sistema auto-genera una clave temporal,
+  // la envía al correo del cliente y marca `debeCambiarClave=true`.
+  // En el primer login exitoso, el portal debe forzar el cambio de clave antes
+  // de permitir el acceso al panel. Tras el cambio, el flag se apaga.
+  debeCambiarClave      Boolean  @default(false)
+  claveTempToken        String?  // token de sesión temporal que autoriza únicamente el cambio de clave (no navegación)
+  claveTempExpira       DateTime?
   // Tasa personalizada (si el cliente tiene una tasa especial acordada)
   tieneTasaPersonalizada Boolean @default(false)
   tasaPersonalizada      Float?  // % mensual fija aplicada sobre capital inicial

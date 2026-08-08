@@ -109,7 +109,7 @@ export function SolicitudesPendientesPanel({
   const [cuentaSel, setCuentaSel] = useState<string>('')
   const [observaciones, setObservaciones] = useState('')
   const [procesando, setProcesando] = useState(false)
-  const [resultadoConversion, setResultadoConversion] = useState<{ clienteCreadoId: string; cedula: string; pin: string } | null>(null)
+  const [resultadoConversion, setResultadoConversion] = useState<{ clienteCreadoId: string; cedula: string; pin?: string; claveTemporal?: string; emailEnviado?: boolean } | null>(null)
 
   const cargar = useCallback(async () => {
     setLoading(true)
@@ -557,17 +557,26 @@ export function SolicitudesPendientesPanel({
                     <CheckCircle2 className="h-9 w-9 text-emerald-400" />
                   </div>
                   <h3 className="text-lg font-bold mb-1">¡Cliente creado!</h3>
-                  <p className="text-sm text-muted-foreground">Entrega estas credenciales al cliente por WhatsApp o llamada:</p>
+                  <p className="text-sm text-muted-foreground">
+                    {resultadoConversion.emailEnviado
+                      ? 'Se envió la clave temporal al correo del cliente. El cliente debe cambiarla en su primer ingreso.'
+                      : 'Entrega estas credenciales al cliente por WhatsApp o llamada:'}
+                  </p>
                 </div>
                 <div className="bg-slate-950/60 border border-slate-700 rounded-xl p-4 space-y-3">
                   <CredRow label="Usuario (cédula)" value={resultadoConversion.cedula} />
-                  <CredRow label="PIN inicial" value={resultadoConversion.pin} highlight />
+                  {resultadoConversion.claveTemporal && (
+                    <CredRow label="Clave temporal" value={resultadoConversion.claveTemporal} highlight />
+                  )}
+                  {resultadoConversion.pin && (
+                    <CredRow label="PIN inicial" value={resultadoConversion.pin} highlight />
+                  )}
                   <CredRow label="ID interno" value={resultadoConversion.clienteCreadoId} />
                 </div>
                 <Alert className="bg-amber-500/10 border-amber-500/30">
                   <AlertCircle className="h-4 w-4 text-amber-400" />
                   <AlertDescription className="text-xs">
-                    El PIN debe ser cambiado por el cliente en su primer ingreso al portal. Recuérdale que su sesión expira en 8 horas.
+                    La clave debe ser cambiada por el cliente en su primer ingreso al portal. La clave temporal expira en 24 horas. Recuérdale que su sesión expira en 8 horas.
                   </AlertDescription>
                 </Alert>
               </div>
