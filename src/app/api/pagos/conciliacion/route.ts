@@ -51,6 +51,13 @@ interface PrestamoResumen {
     montoTotal: number
     fechaVencimiento: string
   } | null
+  // Lista completa de cuotas PENDIENTE — se usa para auto-generar
+  // el contenido del CSV de movimientos del banco en el modal.
+  pagosPendientes: Array<{
+    numeroCuota: number
+    montoTotal: number
+    fechaVencimiento: string
+  }>
 }
 
 export async function POST(req: NextRequest) {
@@ -147,6 +154,11 @@ async function buscarPrestamos(body: { codigo?: string; cedula?: string }) {
             fechaVencimiento: proxima.fechaVencimiento.toISOString(),
           }
         : null,
+      pagosPendientes: p.pagos.map((cuota) => ({
+        numeroCuota: cuota.numeroCuota,
+        montoTotal: cuota.montoTotal,
+        fechaVencimiento: cuota.fechaVencimiento.toISOString(),
+      })),
     }
   })
 

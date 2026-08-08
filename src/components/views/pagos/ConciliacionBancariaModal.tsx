@@ -49,6 +49,11 @@ interface PrestamoResumen {
     montoTotal: number
     fechaVencimiento: string
   } | null
+  pagosPendientes: Array<{
+    numeroCuota: number
+    montoTotal: number
+    fechaVencimiento: string
+  }>
 }
 
 type Paso = 'buscar' | 'seleccionar' | 'csv' | 'preview' | 'resultado'
@@ -73,6 +78,80 @@ export function ConciliacionBancariaModal({ abierto, onCerrar, onAplicado }: Pro
   const [seleccionados, setSeleccionados] = useState<Set<string>>(new Set())
   const [resultado, setResultado] = useState<any>(null)
   const { toast } = useToast()
+
+  // ---------- Helper: generar CSV desde cuotas pendientes ----------
+  // Convierte la lista de pagos PENDIENTE de un préstamo en el contenido
+  // CSV que el modal espera (fecha, monto, descripcion). Esto permite
+  // que al seleccionar un préstamo, el sistema auto-complete el CSV
+  // sin que el usuario tenga que pegar nada manualmente.
+  const generarCsvDesdePendientes = (p: PrestamoResumen): string => {
+    if (!p.pagosPendientes || p.pagosPendientes.length === 0) {
+      return ''
+    }
+    const filas = ['fecha,monto,descripcion']
+    for (const cuota of p.pagosPendientes) {
+      const fecha = cuota.fechaVencimiento.slice(0, 10) // YYYY-MM-DD
+      const monto = cuota.montoTotal.toFixed(2)
+      const desc = `Cuota ${cuota.numeroCuota} - ${p.codigo}`
+      filas.push(`${fecha},${monto},${desc}`)
+    }
+    return filas.join('\n')
+  }
+
+  // ---------- Helper: seleccionar préstamo y auto-previsualizar ----------
+  // Centraliza la lógica de "seleccionar un préstamo": setea el préstamo,
+  // genera el CSV desde sus cuotas pendientes, y dispara la previsualización
+  // automáticamente (sin que el usuario tenga que pegar ni clickear nada).
+  const seleccionarYPrevisualizar = async (p: PrestamoResumen) => {
+    setError('')
+    setPrestamoSel(p)
+    const csv = generarCsvDesdePendientes(p)
+    setCsvText(csv)
+
+    if (!csv) {
+      // Sin cuotas pendientes — no hay nada que conciliar
+      setPaso('csv')
+      setError('Este préstamo no tiene cuotas PENDIENTE para conciliar.')
+      return
+    }
+
+    // Disparar previsualización automáticamente
+    setLoading(true)
+    try {
+      const movs = parseCSV(csv)
+      const r = await fetch('/api/pagos/conciliacion', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          accion: 'previsualizar',
+          prestamoId: p.id,
+          movimientos: movs,
+        }),
+      })
+      const data = await r.json()
+      if (!r.ok || !data.success) {
+        setError(data.error || 'Error al previsualizar')
+        setPaso('csv')
+        return
+      }
+      const movsResult: Movimiento[] = data.data.movimientos.map((m: Movimiento) => ({
+        ...m,
+        referencia: m.referencia || `${m.fecha}|${m.monto}|${m.descripcion || ''}`,
+      }))
+      setMovimientos(movsResult)
+      const preSel = new Set<string>()
+      movsResult.forEach((m) => {
+        if (m.matched && m.montoMatch) preSel.add(m.referencia!)
+      })
+      setSeleccionados(preSel)
+      setPaso('preview')
+    } catch (e: any) {
+      setError(e.message || 'Error al previsualizar')
+      setPaso('csv')
+    } finally {
+      setLoading(false)
+    }
+  }
 
   // ---------- Acción: buscar préstamos ----------
   const buscarPrestamos = async () => {
@@ -101,10 +180,9 @@ export function ConciliacionBancariaModal({ abierto, onCerrar, onAplicado }: Pro
         return
       }
       setPrestamos(lista)
-      // Si solo hay uno, lo seleccionamos automáticamente
+      // Si solo hay uno, lo seleccionamos y auto-previsualizamos
       if (lista.length === 1) {
-        setPrestamoSel(lista[0])
-        setPaso('csv')
+        await seleccionarYPrevisualizar(lista[0])
       } else {
         setPaso('seleccionar')
       }
@@ -359,11 +437,7 @@ export function ConciliacionBancariaModal({ abierto, onCerrar, onAplicado }: Pro
                 <button
                   key={p.id}
                   type="button"
-                  onClick={() => {
-                    setPrestamoSel(p)
-                    setError('')
-                    setPaso('csv')
-                  }}
+                  onClick={() => seleccionarYPrevisualizar(p)}
                   className="w-full text-left p-3 rounded-lg border border-slate-200 bg-white hover:border-sky-400 hover:bg-sky-50/40 transition"
                 >
                   <div className="flex items-start justify-between gap-3">
@@ -428,10 +502,11 @@ export function ConciliacionBancariaModal({ abierto, onCerrar, onAplicado }: Pro
 
             <Alert className="bg-sky-50 border-sky-200">
               <AlertDescription className="text-sky-800 text-xs">
-                Pega aquí el CSV exportado por tu banco. Formato esperado:
-                <strong> fecha, monto, descripcion</strong> (separador <code>,</code> o <code>;</code>,
-                primera fila = encabezados). El sistema buscará cuotas <strong>PENDIENTE</strong> de este
-                préstamo cuyo monto coincida con cada movimiento del banco y las aplicará automáticamente.
+                El sistema <strong>auto-completó</strong> el CSV con las cuotas
+                <strong> PENDIENTE</strong> de este préstamo (fecha de vencimiento + monto + descripción).
+                Si tienes un CSV real del banco, puedes reemplazarlo y hacer clic en
+                <strong> Previsualizar</strong>. El sistema buscará cuotas PENDIENTE cuyo monto coincida
+                con cada movimiento del banco y las aplicará automáticamente.
               </AlertDescription>
             </Alert>
 
