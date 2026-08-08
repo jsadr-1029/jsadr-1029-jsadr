@@ -1,8 +1,11 @@
 'use client'
 
+import { useState } from 'react'
 import { PageHeader } from '@/components/ui-basics'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
+import { useToast } from '@/hooks/use-toast'
+import { descargarArchivo } from '@/lib/auth-docs'
 import {
   Database,
   FileJson,
@@ -17,8 +20,24 @@ import {
 } from 'lucide-react'
 
 export function ExportarView() {
-  const descargar = (formato: 'json' | 'csv') => {
-    window.open(`/api/export?formato=${formato}`, '_blank')
+  const [exportando, setExportando] = useState(false)
+  const { toast } = useToast()
+
+  const descargar = async (formato: 'json' | 'csv') => {
+    // IMPORTANTE: usar descargarArchivo (fetch + Blob) en lugar de
+    // window.open, porque window.open NO puede añadir el header
+    // Authorization: Bearer y en producción el endpoint devuelve
+    // 401 "No autorizado. Token requerido."
+    setExportando(true)
+    const ok = await descargarArchivo(`/api/export?formato=${formato}`)
+    setExportando(false)
+    if (!ok) {
+      toast({
+        title: 'No se pudo exportar',
+        description: 'Verifica tu sesión e intenta nuevamente.',
+        variant: 'destructive',
+      })
+    }
   }
 
   const tarjetas = [
@@ -206,9 +225,9 @@ export function ExportarView() {
                     ))}
                   </ul>
                 </div>
-                <Button onClick={t.accion} className="w-full">
+                <Button onClick={t.accion} disabled={exportando} className="w-full">
                   <Download className="w-4 h-4 mr-2" />
-                  {t.boton}
+                  {exportando ? 'Exportando…' : t.boton}
                 </Button>
               </CardContent>
             </Card>

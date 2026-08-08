@@ -32,7 +32,7 @@ import { EstadoBadge } from '@/components/ui-basics'
 import { BitacoraPanel } from '@/components/views/BitacoraPanel'
 import { useToast } from '@/hooks/use-toast'
 import { formatearMoneda, formatearFecha, formatearFechaHora } from '@/lib/finanzas'
-import { abrirHtmlImprimible } from '@/lib/auth-docs'
+import { abrirHtmlImprimible, descargarArchivo } from '@/lib/auth-docs'
 import {
   X,
   Printer,
@@ -526,9 +526,19 @@ export function PrestamoDetalleModal({
     }
   }
 
-  const descargarPagos = (formato: 'csv' | 'json', cuota?: string) => {
+  const descargarPagos = async (formato: 'csv' | 'json', cuota?: string) => {
     const url = `/api/prestamos/${prestamoId}/pagos-export?formato=${formato}${cuota ? `&cuota=${cuota}` : ''}`
-    window.open(url, '_blank', 'noopener,noreferrer')
+    // IMPORTANTE: usar descargarArchivo (fetch + Blob) en lugar de window.open,
+    // porque window.open NO puede añadir el header Authorization: Bearer y en
+    // producción el endpoint devuelve 401 "No autorizado. Token requerido."
+    const ok = await descargarArchivo(url)
+    if (!ok) {
+      toast({
+        title: 'No se pudo descargar',
+        description: 'Verifica tu sesión e intenta nuevamente.',
+        variant: 'destructive',
+      })
+    }
   }
 
   // Marcar notificación como ENVIADA después de abrir WhatsApp manualmente

@@ -38,7 +38,7 @@ import {
 } from '@/components/ui/dialog'
 import { useToast } from '@/hooks/use-toast'
 import { formatearMoneda, formatearFecha } from '@/lib/finanzas'
-import { abrirHtmlImprimible } from '@/lib/auth-docs'
+import { abrirHtmlImprimible, descargarArchivo } from '@/lib/auth-docs'
 import {
   DollarSign, Bell, RefreshCw, Undo2, RotateCcw, Trash2, Plus,
   TrendingUp, TrendingDown, Calendar, Users, AlertTriangle, Clock,
@@ -236,7 +236,8 @@ export function PagosView({ onChanged }: { onChanged: () => void }) {
   const [proximos, setProximos] = useState<ProximoPago[]>([])
   const [loadingProximos, setLoadingProximos] = useState(false)
   const [resumenProximos, setResumenProximos] = useState<any>(null)
-  
+  const [exportando, setExportando] = useState(false)
+
   // Informe
   const [informe, setInforme] = useState<InformeData | null>(null)
   const [loadingInforme, setLoadingInforme] = useState(false)
@@ -777,7 +778,8 @@ export function PagosView({ onChanged }: { onChanged: () => void }) {
           <Button
             variant="outline"
             size="sm"
-            onClick={() => {
+            disabled={exportando}
+            onClick={async () => {
               const params = new URLSearchParams()
               if (tab === 'pagos-dia') {
                 params.set('tipo', 'hoy')
@@ -794,11 +796,24 @@ export function PagosView({ onChanged }: { onChanged: () => void }) {
               } else {
                 params.set('tipo', 'hoy')
               }
-              window.open(`/api/pagos/export?${params.toString()}`, '_blank')
+              // IMPORTANTE: usar descargarArchivo (fetch + Blob) en lugar de
+              // window.open, porque window.open NO puede añadir el header
+              // Authorization: Bearer y en producción el endpoint devuelve
+              // 401 "No autorizado. Token requerido."
+              setExportando(true)
+              const ok = await descargarArchivo(`/api/pagos/export?${params.toString()}`)
+              setExportando(false)
+              if (!ok) {
+                toast({
+                  title: 'No se pudo exportar',
+                  description: 'Verifica tu sesión e intenta nuevamente.',
+                  variant: 'destructive',
+                })
+              }
             }}
           >
             <Download className="w-3.5 h-3.5 mr-1.5" />
-            Exportar CSV
+            {exportando ? 'Exportando…' : 'Exportar CSV'}
           </Button>
         </div>
 
