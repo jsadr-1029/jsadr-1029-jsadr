@@ -1,0 +1,69 @@
+=== BROWSER ===
+← → 🔄 🔒 business.facebook.com/latest/whatsapp_manager/message_templates?business_id=137042968786351&tab=message-templates&... 🔍 ⭐ 📥 👤 Reinicia para actualizar ···
+Isadr - Io*** Se*** Al... ✉️ Gmail ▶ YouTube 🗺️ Maps 🌐 Traducir 📁 música 💬 ChatGPT 💬 Ingles conversación... 💳 Portal de pagos 💳 pagos colponsenses >> 📁 Todos los marcadores
+
+=== TOP NAV ===
+∞ Meta
+Administrador de WhatsApp > Crear plantilla
+
+=== LEFT SIDEBAR ===
+J
+≡
+🔄 Información general
+💬 Plantillas de mensajes
+    Administrar plantillas
+    Bibliotecas de plantillas
+⚙️ Herramientas de la cuenta
+    Insights
+    Límites de mensajes
+    Procesos
+    Números de teléfono
+    Catálogo
+    Registro de actividad
+💳 Configuraciones de pagos
+    India
+📢 Clic a WhatsApp
+    Crear anuncios ↗
+    Recursos ↗
+🔍
+⚙️
+?
+
+=== BREADCRUMB / TITLE ===
+✏️ your_template_name · Spanish (COL)
+Autenticación · Código de acceso único
+
+=== MAIN CONTENT (every section, every field, every option) ===
+Nombre e idioma de la plantilla
+Asigna un nombre a la plantilla
+[ codigo_otp ] 10/512 Selecciona el idioma [ Spanish (COL) v ]
+
+Configuración de entrega de código
+Elige cómo envían los clientes el código de WhatsApp a tu aplicación. Las ediciones de esta sección no requerirán revisión ni contarán para los límites de edición. Aprende a enviar plantillas de mensajes de autenticación.
+
+(●) Relleno automático sin pulsación ⓘ
+Este relleno automático con acción más sencilla para tus clientes. El modo sin pulsación enviará un código automáticamente en que el cliente tenga que tocar un botón. Si no es posible el modo sin pulsación en el relleno automático, se enviará un mensaje de autocompletar y de copiar códigos.
+
+[ ] Al seleccionar el modo sin pulsación, entiende que el uso de la autenticación sin pulsación por parte de Test WhatsApp Business Account está sujeto a las Condiciones del servicio de WhatsApp Business. Es responsabilidad de Test WhatsApp Business Account asegurarse de que los clientes prevean que el código se rellenará automáticamente y eligen recibir el código sin pulsación a través de WhatsApp.
+Obtén más información sobre las prácticas recomendadas y consultables.
+
+( ) Es necesario marcar la casilla para enviar la plantilla.
+
+( ) Relleno automático con una sola pulsación ⓘ
+Este código dirige a tu aplicación cuando los clientes tocan el botón. Cuando no sea posible usar el relleno automático, se enviará un mensaje de copiar código.
+
+( ) Copiar código ⓘ
+Autenticación básica con configuración rápida. Tus clientes copian y pegan el código en tu aplicación.
+
+Configuración de la [...]
+
+=== PREVIEW PANE ===
+Vista previa de la plantilla ▶
+Tu código de verificación es (###). Por tu seguridad, no lo compartas.
+2:4
+
+=== ACTION BUTTONS ===
+Anterior Enviar [Disabled]
+
+=== OTHER / FOOTER ===
+ESP LAA 9:45 p.m. 7/08/2026
