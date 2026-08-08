@@ -455,18 +455,14 @@ ${await (async () => {
     crypto.createHash('sha256').update(firma.id + '|' + firma.createdAt.toISOString() + '|certificado').digest('hex').substring(8, 12) + '-' +
     crypto.createHash('sha256').update(firma.id + '|' + firma.createdAt.toISOString() + '|certificado').digest('hex').substring(12, 16)
   const selloDig = crypto.createHash('sha256').update(JSON.stringify({ firmaId: firma.id, cliente: cliente.cedula, codigo: codigoVer, timestamp: new Date().toISOString() })).digest('hex')
-  // Construir URL de verificación usando el origen de la petición actual (más confiable que
-  // NEXT_PUBLIC_BASE_URL que puede no estar configurado en producción).
-  let urlBase = process.env.NEXT_PUBLIC_BASE_URL || ''
-  if (req) {
-    try {
-      const u = new URL(req.url)
-      urlBase = `${u.protocol}//${u.host}`
-    } catch {}
-  }
-  if (!urlBase) {
-    urlBase = 'https://preview-chat-c04df402-049e-4406-b5d2-c8e07f801c50.space-z.ai'
-  }
+  // Construir URL de verificación usando el dominio canónico de producción
+  // (NEXT_PUBLIC_APP_URL = https://jsadr.com.co). NO usamos req.url porque en
+  // entornos sandbox/preview genera URLs temporales que luego se desactivan
+  // y rompen el QR al escanearlo (error: "sandbox is inactive").
+  const urlBase =
+    process.env.NEXT_PUBLIC_APP_URL ||
+    process.env.NEXT_PUBLIC_BASE_URL ||
+    'https://jsadr.com.co'
   const urlVerif = urlBase + '/api/verificar?codigo=' + codigoVer
   let qrB64 = ''
   try { qrB64 = await QRCode.toDataURL(urlVerif, { width: 130, margin: 1, color: { dark: '#1e3a5f', light: '#ffffff' } }) } catch {}

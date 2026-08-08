@@ -32,6 +32,13 @@ import {
   DollarSign,
   Clock,
   Hash,
+  Landmark,
+  Phone,
+  MapPin,
+  Wallet,
+  TrendingUp,
+  Percent,
+  FileText,
 } from 'lucide-react'
 import { login, isAuthenticated, setTokens, setUserData, getUserData } from '@/lib/api-client'
 import Link from 'next/link'
@@ -1060,7 +1067,7 @@ export default function LoginPage() {
                         </div>
                       </div>
 
-                      {/* Detalles del documento */}
+                      {/* Detalles del documento (resumen) */}
                       <div className="bg-slate-900/50 rounded-lg p-3 space-y-2">
                         {validarResultado.data.tipoDocumento && (
                           <div className="flex items-center gap-2 text-xs">
@@ -1093,7 +1100,7 @@ export default function LoginPage() {
                         {validarResultado.data.monto != null && (
                           <div className="flex items-center gap-2 text-xs">
                             <DollarSign className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
-                            <span className="text-slate-400">Monto:</span>
+                            <span className="text-slate-400">Monto principal:</span>
                             <span className="text-white font-semibold">
                               ${Number(validarResultado.data.monto).toLocaleString('es-CO')}
                             </span>
@@ -1106,12 +1113,219 @@ export default function LoginPage() {
                             <span className="text-white font-semibold">{validarResultado.data.estado}</span>
                           </div>
                         )}
+                        <div className="flex items-center gap-2 text-xs">
+                          <Clock className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
+                          <span className="text-slate-400">Verificado:</span>
+                          <span className="text-white">
+                            {new Date(validarResultado.data.verificadoEn).toLocaleString('es-CO', { timeZone: 'America/Bogota' })}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* === NUEVO: Datos del Cliente === */}
+                      {validarResultado.data.cliente && (
+                        <div className="bg-blue-500/5 border border-blue-500/20 rounded-lg p-3 space-y-2">
+                          <div className="flex items-center gap-2 text-xs font-bold text-blue-300 border-b border-blue-500/20 pb-1 mb-1">
+                            <User className="w-3.5 h-3.5" />
+                            DATOS DEL CLIENTE
+                          </div>
+                          {validarResultado.data.cliente.telefono && (
+                            <div className="flex items-center gap-2 text-xs">
+                              <Phone className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
+                              <span className="text-slate-400">Teléfono:</span>
+                              <span className="text-white font-mono">{validarResultado.data.cliente.telefono}</span>
+                            </div>
+                          )}
+                          {validarResultado.data.cliente.email && (
+                            <div className="flex items-center gap-2 text-xs">
+                              <Mail className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
+                              <span className="text-slate-400">Correo:</span>
+                              <span className="text-white font-mono">{validarResultado.data.cliente.email}</span>
+                            </div>
+                          )}
+                          {validarResultado.data.cliente.direccion && (
+                            <div className="flex items-center gap-2 text-xs">
+                              <MapPin className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
+                              <span className="text-slate-400">Dirección:</span>
+                              <span className="text-white">{validarResultado.data.cliente.direccion}</span>
+                            </div>
+                          )}
+                          {(validarResultado.data.cliente.ciudad || validarResultado.data.cliente.departamento) && (
+                            <div className="flex items-center gap-2 text-xs">
+                              <MapPin className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
+                              <span className="text-slate-400">Ciudad/Depto:</span>
+                              <span className="text-white">
+                                {[validarResultado.data.cliente.ciudad || validarResultado.data.cliente.municipio, validarResultado.data.cliente.departamento].filter(Boolean).join(', ')}
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {/* === NUEVO: Cuenta de Origen (Desembolso) — DESTACADO === */}
+                      {validarResultado.data.cliente?.cuentaOrigen &&
+                        (validarResultado.data.cliente.cuentaOrigen.banco ||
+                          validarResultado.data.cliente.cuentaOrigen.numeroCuenta) && (
+                        <div className="bg-amber-500/10 border-2 border-amber-500/40 rounded-lg p-3 space-y-2">
+                          <div className="flex items-center gap-2 text-xs font-bold text-amber-300 border-b border-amber-500/30 pb-1 mb-1">
+                            <Landmark className="w-3.5 h-3.5" />
+                            CUENTA DE ORIGEN (DESEMBOLSO)
+                          </div>
+                          <p className="text-[10px] text-amber-200/70 italic">
+                            Cuenta bancaria propia del cliente donde se envió el dinero del desembolso.
+                          </p>
+                          {validarResultado.data.cliente.cuentaOrigen.banco && (
+                            <div className="flex items-center gap-2 text-xs">
+                              <Landmark className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
+                              <span className="text-slate-400">Banco:</span>
+                              <span className="text-white font-semibold">{validarResultado.data.cliente.cuentaOrigen.banco}</span>
+                            </div>
+                          )}
+                          {validarResultado.data.cliente.cuentaOrigen.tipoCuenta && (
+                            <div className="flex items-center gap-2 text-xs">
+                              <Wallet className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
+                              <span className="text-slate-400">Tipo de cuenta:</span>
+                              <span className="text-white font-semibold">{validarResultado.data.cliente.cuentaOrigen.tipoCuenta}</span>
+                            </div>
+                          )}
+                          {validarResultado.data.cliente.cuentaOrigen.numeroCuenta && (
+                            <div className="flex items-center gap-2 text-xs">
+                              <Hash className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
+                              <span className="text-slate-400">Número de cuenta:</span>
+                              <span className="text-white font-mono text-sm font-bold tracking-wider">
+                                {validarResultado.data.cliente.cuentaOrigen.numeroCuenta}
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {/* === NUEVO: Datos del Crédito === */}
+                      {validarResultado.data.credito && (
+                        <div className="bg-emerald-500/5 border border-emerald-500/20 rounded-lg p-3 space-y-2">
+                          <div className="flex items-center gap-2 text-xs font-bold text-emerald-300 border-b border-emerald-500/20 pb-1 mb-1">
+                            <TrendingUp className="w-3.5 h-3.5" />
+                            DATOS DEL CRÉDITO
+                          </div>
+                          {validarResultado.data.credito.modalidad && (
+                            <div className="flex items-center gap-2 text-xs">
+                              <FileText className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
+                              <span className="text-slate-400">Modalidad:</span>
+                              <span className="text-white font-semibold">{validarResultado.data.credito.modalidad}</span>
+                            </div>
+                          )}
+                          {validarResultado.data.credito.tasaInteresAnual != null && (
+                            <div className="flex items-center gap-2 text-xs">
+                              <Percent className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
+                              <span className="text-slate-400">Tasa anual:</span>
+                              <span className="text-white font-semibold">{validarResultado.data.credito.tasaInteresAnual}%</span>
+                            </div>
+                          )}
+                          {validarResultado.data.credito.plazoMeses != null && (
+                            <div className="flex items-center gap-2 text-xs">
+                              <Calendar className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
+                              <span className="text-slate-400">Plazo:</span>
+                              <span className="text-white font-semibold">{validarResultado.data.credito.plazoMeses} meses</span>
+                            </div>
+                          )}
+                          {validarResultado.data.credito.numeroCuotas != null && (
+                            <div className="flex items-center gap-2 text-xs">
+                              <Hash className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
+                              <span className="text-slate-400">Cuotas:</span>
+                              <span className="text-white font-semibold">{validarResultado.data.credito.numeroCuotas}</span>
+                            </div>
+                          )}
+                          {validarResultado.data.credito.frecuencia && (
+                            <div className="flex items-center gap-2 text-xs">
+                              <Clock className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
+                              <span className="text-slate-400">Frecuencia:</span>
+                              <span className="text-white font-semibold">{validarResultado.data.credito.frecuencia}</span>
+                            </div>
+                          )}
+                          {validarResultado.data.credito.montoCuota != null && (
+                            <div className="flex items-center gap-2 text-xs">
+                              <DollarSign className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
+                              <span className="text-slate-400">Cuota fija:</span>
+                              <span className="text-white font-semibold">
+                                ${Number(validarResultado.data.credito.montoCuota).toLocaleString('es-CO')}
+                              </span>
+                            </div>
+                          )}
+                          {validarResultado.data.credito.totalPagar != null && (
+                            <div className="flex items-center gap-2 text-xs">
+                              <DollarSign className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
+                              <span className="text-slate-400">Total a pagar:</span>
+                              <span className="text-white font-semibold">
+                                ${Number(validarResultado.data.credito.totalPagar).toLocaleString('es-CO')}
+                              </span>
+                            </div>
+                          )}
+                          {validarResultado.data.credito.fechaDesembolso && (
+                            <div className="flex items-center gap-2 text-xs">
+                              <Calendar className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
+                              <span className="text-slate-400">Desembolso:</span>
+                              <span className="text-white">
+                                {new Date(validarResultado.data.credito.fechaDesembolso).toLocaleDateString('es-CO', { timeZone: 'America/Bogota' })}
+                              </span>
+                            </div>
+                          )}
+                          {validarResultado.data.credito.fechaVencimiento && (
+                            <div className="flex items-center gap-2 text-xs">
+                              <Calendar className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
+                              <span className="text-slate-400">Vencimiento:</span>
+                              <span className="text-white">
+                                {new Date(validarResultado.data.credito.fechaVencimiento).toLocaleDateString('es-CO', { timeZone: 'America/Bogota' })}
+                              </span>
+                            </div>
+                          )}
+                          {/* Estado de pago actual */}
+                          {validarResultado.data.credito.cuotasPagadas != null && (
+                            <div className="bg-slate-900/40 rounded p-2 mt-2 space-y-1 border border-slate-700/50">
+                              <div className="text-[10px] font-bold text-slate-300 uppercase">Estado de Pago</div>
+                              <div className="flex items-center gap-2 text-xs">
+                                <BadgeCheck className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
+                                <span className="text-slate-400">Cuotas pagadas:</span>
+                                <span className="text-white font-semibold">
+                                  {validarResultado.data.credito.cuotasPagadas} / {validarResultado.data.credito.numeroCuotas ?? '—'}
+                                </span>
+                              </div>
+                              {validarResultado.data.credito.saldoTotal != null && (
+                                <div className="flex items-center gap-2 text-xs">
+                                  <DollarSign className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
+                                  <span className="text-slate-400">Saldo total:</span>
+                                  <span className="text-amber-300 font-bold">
+                                    ${Number(validarResultado.data.credito.saldoTotal).toLocaleString('es-CO')}
+                                  </span>
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {/* === Firma Electrónica (detallada) === */}
+                      <div className="bg-slate-900/50 rounded-lg p-3 space-y-2">
+                        <div className="flex items-center gap-2 text-xs font-bold text-violet-300 border-b border-violet-500/20 pb-1 mb-1">
+                          <ShieldCheck className="w-3.5 h-3.5" />
+                          FIRMA ELECTRÓNICA
+                        </div>
                         {validarResultado.data.tieneFirmaElectronica !== undefined && (
                           <div className="flex items-center gap-2 text-xs">
                             <ShieldCheck className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
-                            <span className="text-slate-400">Firma electrónica:</span>
+                            <span className="text-slate-400">Estado:</span>
                             <span className={`font-semibold ${validarResultado.data.tieneFirmaElectronica ? 'text-emerald-300' : 'text-red-300'}`}>
-                              {validarResultado.data.tieneFirmaElectronica ? '✓ Sí, firmado electrónicamente' : '✗ No'}
+                              {validarResultado.data.tieneFirmaElectronica ? '✓ Firmado electrónicamente' : '✗ No'}
+                            </span>
+                          </div>
+                        )}
+                        {validarResultado.data.firma?.tipo && (
+                          <div className="flex items-center gap-2 text-xs">
+                            <FileText className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
+                            <span className="text-slate-400">Tipo doc. firmado:</span>
+                            <span className="text-white font-semibold">
+                              {validarResultado.data.firma.tipo === 'TYC' ? 'Términos y Condiciones' :
+                                validarResultado.data.firma.tipo === 'PAGARE' ? 'Pagaré' :
+                                validarResultado.data.firma.tipo}
                             </span>
                           </div>
                         )}
@@ -1138,13 +1352,22 @@ export default function LoginPage() {
                             <span className="text-white font-mono">{validarResultado.data.ipFirma}</span>
                           </div>
                         )}
-                        <div className="flex items-center gap-2 text-xs">
-                          <Clock className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
-                          <span className="text-slate-400">Verificado:</span>
-                          <span className="text-white">
-                            {new Date(validarResultado.data.verificadoEn).toLocaleString('es-CO', { timeZone: 'America/Bogota' })}
-                          </span>
-                        </div>
+                        {validarResultado.data.firma?.firmanteRol && (
+                          <div className="flex items-center gap-2 text-xs">
+                            <User className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
+                            <span className="text-slate-400">Rol del firmante:</span>
+                            <span className="text-white">{validarResultado.data.firma.firmanteRol}</span>
+                          </div>
+                        )}
+                        {(validarResultado.data.firma?.id || validarResultado.data.firmaId) && (
+                          <div className="flex items-center gap-2 text-xs">
+                            <Hash className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
+                            <span className="text-slate-400">ID firma:</span>
+                            <span className="text-white font-mono text-[10px]">
+                              {validarResultado.data.firma?.id || validarResultado.data.firmaId}
+                            </span>
+                          </div>
+                        )}
                       </div>
 
                       {/* Sello legal */}

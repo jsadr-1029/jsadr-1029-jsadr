@@ -383,20 +383,22 @@ function generarSelloDigital(prestamo: any, tipoDoc: string, codigoVerificacion:
 }
 
 // Generar QR code como base64
-async function generarQRCode(codigoVerificacion: string, req?: NextRequest): Promise<string> {
-  // Construir URL de verificación usando el origen de la petición actual
-  // (más confiable que NEXT_PUBLIC_BASE_URL que puede no estar configurado en producción).
-  // Si por alguna razón no hay req, caemos a NEXT_PUBLIC_BASE_URL o al host por defecto.
-  let baseUrl = process.env.NEXT_PUBLIC_BASE_URL || ''
-  if (req) {
-    try {
-      const u = new URL(req.url)
-      baseUrl = `${u.protocol}//${u.host}`
-    } catch {}
-  }
-  if (!baseUrl) {
-    baseUrl = 'https://preview-chat-c04df402-049e-4406-b5d2-c8e07f801c50.space-z.ai'
-  }
+async function generarQRCode(codigoVerificacion: string, _req?: NextRequest): Promise<string> {
+  // ============================================================
+  // URL CANÓNICA de verificación — SIEMPRE usa el dominio de producción
+  // configurado en NEXT_PUBLIC_APP_URL (https://jsadr.com.co).
+  // ------------------------------------------------------------
+  // ANTES se usaba `req.url` para inferir el host, pero cuando el sistema
+  // se ejecuta dentro de un sandbox/preview (ej. preview-chat-*.space-z.ai),
+  // el QR quedaba apuntando a ese host temporal que luego se desactiva,
+  // produciendo al escanear el error:
+  //   {"error":"sandbox is inactive"}
+  // Por eso ahora SIEMPRE se usa NEXT_PUBLIC_APP_URL, con fallbacks robustos.
+  // ============================================================
+  const baseUrl =
+    process.env.NEXT_PUBLIC_APP_URL ||
+    process.env.NEXT_PUBLIC_BASE_URL ||
+    'https://jsadr.com.co'
   const urlVerificacion = `${baseUrl}/api/documentos/verificar?codigo=${codigoVerificacion}`
   try {
     const qrDataUrl = await QRCode.toDataURL(urlVerificacion, {
