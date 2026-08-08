@@ -80,6 +80,13 @@ function isPublicEndpoint(pathname: string): boolean {
     pathname.startsWith('/api/chat/otp') || // solicitud/verificación OTP del chat
     pathname === '/api/simulador' || // simulador público
     pathname === '/api/solicitudes-nuevos-clientes' || // POST público: registro de nuevos clientes desde /register
+    // === Verificación pública de documentos (QR escaneable) ===
+    // Cualquier persona (juez, notario, tercero) debe poder escanear el QR
+    // de un pagaré/carta/certificado de firma y verificar su autenticidad
+    // SIN tener cuenta en el sistema. El código de verificación actúa como
+    // token único e intransferible (hash SHA-256 del documento).
+    pathname === '/api/verificar' ||
+    pathname === '/api/documentos/verificar' ||
     // === Cron endpoints (v4.4) — autenticados por X-Cron-Secret ===
     pathname.startsWith('/api/recordatorios/cron') ||
     pathname.startsWith('/api/pagos/cron')
