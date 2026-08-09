@@ -470,7 +470,7 @@ function FirmarModal({ prestamo, token, onClose, navigate }: any) {
             </div>
             <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 mb-4">
               <p className="text-xs text-amber-800">
-                Al firmar, aceptas los términos y condiciones del préstamo. La firma se realizará mediante OTP por WhatsApp.
+                Al firmar, aceptas los términos y condiciones del préstamo. La firma se realizará mediante OTP enviado a tu correo electrónico.
               </p>
             </div>
             <div className="flex gap-2">
@@ -487,7 +487,7 @@ function FirmarModal({ prestamo, token, onClose, navigate }: any) {
             </div>
             <h3 className="font-bold text-slate-900 mb-2">Enviar código OTP</h3>
             <p className="text-sm text-slate-500 mb-4">
-              Te enviaremos un código de verificación por WhatsApp al número registrado.
+              Te enviaremos un código de verificación a tu correo electrónico registrado.
             </p>
             <div className="flex gap-2">
               <Button variant="outline" className="flex-1" onClick={() => setStep('resumen')}>Volver</Button>

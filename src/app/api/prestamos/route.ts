@@ -600,12 +600,24 @@ export async function POST(req: NextRequest) {
           valorPagareCarta: cobroPagareCarta
             ? (Number(valorPagareCarta) > 0 ? Number(valorPagareCarta) : 19900)
             : 0,
+          // === RENOVACIÓN DIFERIDA (Tarea T) ===
+          // Si es renovación, marcamos el nuevo préstamo como pendiente de T&C y
+          // guardamos la referencia al crédito anterior. El crédito anterior NO se
+          // cancela aquí — se cancela cuando el cliente acepta los T&C del nuevo
+          // (ver /api/prestamos/[id]/aceptar-tyc-otp -> confirmarConFoto y
+          //  confirmarActivacion).
+          renovacionPendienteTyc: !!(esRenovacion && prestamoARenovarId),
+          renovacionPrestamoAnteriorId: (esRenovacion && prestamoARenovarId) ? prestamoARenovarId : null,
           notas: notas || null,
         },
         include: { cliente: true },
       })
 
-      // === Si es renovación, finalizar el préstamo anterior y registrar en bitácora ===
+      // === Si es renovación, registrar trazabilidad SIN cancelar el anterior ===
+      // (Tarea T) El crédito anterior se mantiene ACTIVO hasta que el cliente acepte
+      // los T&C del nuevo préstamo. Solo se registran bitácoras y el RenovacionPrestamo.
+      // La cancelación real ocurre en /api/prestamos/[id]/aceptar-tyc-otp cuando
+      // el cliente completa el flujo de firma (OTP + fotos + firma manuscrita).
       if (esRenovacion && prestamoARenovarId) {
         const prestamoAnterior = await tx.prestamo.findUnique({
           where: { id: prestamoARenovarId },
@@ -618,41 +630,35 @@ export async function POST(req: NextRequest) {
           const excedente = Math.max(0, capitalNuevo - saldoAnterior)
           const diferencia = saldoAnterior - capitalNuevo
 
-          // Finalizar el préstamo anterior (CANCELADO)
-          await tx.prestamo.update({
-            where: { id: prestamoARenovarId },
-            data: {
-              estado: 'CANCELADO',
-              saldoCapital: 0,
-              saldoInteres: 0,
-              saldoTotal: 0,
-              notas: `Finalizado por renovación - nuevo préstamo: ${codigo}`,
-            },
-          })
+          // === NOTA IMPORTANTE ===
+          // NO se modifica el estado del préstamo anterior aquí.
+          // Queda en su estado actual (ACTIVO/EN_MORA/JURIDICO) hasta que el cliente
+          // acepte los T&C del nuevo préstamo.
+          // La cancelación se ejecuta en aceptar-tyc-otp -> cancelarPrestamoAnteriorSiRenovacion().
 
-          // === Bitácora del préstamo ANTERIOR ===
+          // === Bitácora del préstamo ANTERIOR (aviso de renovación en trámite) ===
           await tx.bitacoraPrestamo.create({
             data: {
               prestamoId: prestamoARenovarId,
               prestamoCodigo: prestamoAnterior.codigo,
               usuarioNombre: 'Sistema',
               tipo: 'OTRO',
-              titulo: `CRÉDITO CERRADO POR RENOVACIÓN`,
-              descripcion: `Este crédito fue finalizado (CANCELADO) porque el cliente solicitó una renovación.\n\n` +
-                `═══ ORIGEN DEL CIERRE ═══\n` +
-                `• Crédito anterior (este): ${prestamoAnterior.codigo}\n` +
-                `• Saldo pendiente al cierre: ${formatearMoneda(saldoAnterior)}\n` +
-                `• Estado anterior: ${prestamoAnterior.estado}\n` +
-                `• Estado actual: CANCELADO\n\n` +
+              titulo: `RENOVACIÓN EN TRÁMITE (PENDIENTE ACEPTACIÓN T&C)`,
+              descripcion: `Se creó un nuevo préstamo ${codigo} como renovación de este crédito.\n\n` +
+                `═══ ESTADO ACTUAL ═══\n` +
+                `• Este crédito sigue ACTIVO hasta que el cliente acepte los T&C del nuevo.\n` +
+                `• Saldo pendiente: ${formatearMoneda(saldoAnterior)}\n` +
+                `• Estado: ${prestamoAnterior.estado} (sin cambios)\n\n` +
                 `═══ NUEVO CRÉDITO ═══\n` +
                 `• Nuevo código: ${codigo}\n` +
                 `• Capital nuevo: ${formatearMoneda(capitalNuevo)}\n` +
-                `• Excedente entregado al cliente: ${formatearMoneda(excedente)}\n` +
+                `• Excedente a entregar al cliente: ${formatearMoneda(excedente)}\n` +
                 (diferencia > 0
-                  ? `• Cliente abonó diferencia: ${formatearMoneda(diferencia)}\n`
+                  ? `• Cliente abonará diferencia: ${formatearMoneda(diferencia)}\n`
                   : '') +
-                `\n📅 Fecha de renovación: ${new Date().toLocaleString('es-CO')}`,
-              resultado: `Renovado → ${codigo}`,
+                `\n📅 Fecha de inicio del trámite: ${new Date().toLocaleString('es-CO')}\n` +
+                `⏳ Pendiente: cliente debe aceptar T&C del nuevo crédito para que este se CANCELE.`,
+              resultado: `Renovación en trámite → ${codigo}`,
               fechaEvento: new Date(),
             },
           })
@@ -664,44 +670,46 @@ export async function POST(req: NextRequest) {
               prestamoCodigo: codigo,
               usuarioNombre: 'Sistema',
               tipo: 'OTRO',
-              titulo: `CRÉDITO CREADO POR RENOVACIÓN`,
+              titulo: `CRÉDITO CREADO POR RENOVACIÓN (PENDIENTE ACEPTACIÓN T&C)`,
               descripcion: `Este crédito fue creado como renovación de un crédito anterior.\n\n` +
                 `═══ ORIGEN DEL CRÉDITO ═══\n` +
-                `• Crédito anterior (renovado): ${prestamoAnterior.codigo}\n` +
+                `• Crédito anterior (en trámite de renovación): ${prestamoAnterior.codigo}\n` +
                 `• Saldo pendiente del crédito anterior: ${formatearMoneda(saldoAnterior)}\n` +
-                `• Estado del crédito anterior: CANCELADO\n\n` +
+                `• Estado del crédito anterior: ${prestamoAnterior.estado} (sigue activo)\n\n` +
                 `═══ DETALLE DE LA RENOVACIÓN ═══\n` +
                 `• Capital nuevo solicitado: ${formatearMoneda(capitalNuevo)}\n` +
                 `• Saldo trasladado del crédito anterior: ${formatearMoneda(saldoAnterior)}\n` +
-                `• Excedente entregado al cliente (efectivo): ${formatearMoneda(excedente)}\n` +
+                `• Excedente a entregar al cliente (efectivo): ${formatearMoneda(excedente)}\n` +
                 (diferencia > 0
-                  ? `• Cliente abonó la diferencia: ${formatearMoneda(diferencia)}\n`
+                  ? `• Cliente abonará la diferencia: ${formatearMoneda(diferencia)}\n`
                   : '') +
-                `\n💡 El cliente recibió ${formatearMoneda(excedente)} en efectivo. ` +
-                `El crédito anterior ${prestamoAnterior.codigo} quedó CANCELADO.\n\n` +
-                `📅 Fecha de renovación: ${new Date().toLocaleString('es-CO')}`,
-              resultado: `Renovación de ${prestamoAnterior.codigo}`,
+                `\n⏳ El crédito anterior ${prestamoAnterior.codigo} se cancelará automáticamente ` +
+                `cuando el cliente acepte los T&C de este nuevo préstamo.\n\n` +
+                `📅 Fecha de creación: ${new Date().toLocaleString('es-CO')}`,
+              resultado: `Renovación de ${prestamoAnterior.codigo} (pendiente T&C)`,
               fechaEvento: new Date(),
             },
           })
 
-          // === Audit log de la renovación ===
+          // === Audit log de la renovación (pendiente T&C) ===
           await tx.auditLog.create({
             data: {
               usuarioNombre: 'Sistema',
-              accion: 'PRESTAMO_RENOVADO',
+              accion: 'PRESTAMO_RENOVADO_PENDIENTE_TYC',
               modulo: 'prestamos',
               entidadId: nuevo.id,
               entidadNombre: `${codigo} - ${cliente.nombre}`,
               detalles: JSON.stringify({
                 prestamoAnteriorId: prestamoARenovarId,
                 prestamoAnteriorCodigo: prestamoAnterior.codigo,
+                prestamoAnteriorEstadoAlCrear: prestamoAnterior.estado,
                 prestamoNuevoId: nuevo.id,
                 prestamoNuevoCodigo: codigo,
                 saldoAnterior,
                 capitalNuevo,
                 excedente,
                 diferencia: diferencia > 0 ? diferencia : 0,
+                nota: 'El crédito anterior NO se canceló. Pendiente aceptación T&C del nuevo.',
               }),
               exito: true,
             },

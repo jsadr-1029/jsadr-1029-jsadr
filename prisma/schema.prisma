@@ -359,6 +359,20 @@ model Prestamo {
   cobroPagareCarta    Boolean @default(false)
   valorPagareCarta    Float   @default(19900)  // editable por gestor
 
+  // === RENOVACIÓN DIFERIDA (Tarea T) ===
+  // Cuando un préstamo se crea como renovación de otro, NO se cancela el crédito
+  // anterior inmediatamente. Se guarda la referencia aquí y se cancela recién
+  // cuando el cliente acepta los T&C del nuevo préstamo (firmar TyC).
+  // - renovacionPendienteTyc: true mientras el crédito anterior sigue activo
+  //   esperando que el cliente acepte los T&C del nuevo.
+  // - renovacionPrestamoAnteriorId: ID del crédito anterior que será cancelado
+  //   al aceptarse los T&C.
+  // - renovacionFechaCancelacionAnterior: timestamp en que se canceló el
+  //   anterior (auditoría / depuración).
+  renovacionPendienteTyc           Boolean    @default(false)
+  renovacionPrestamoAnteriorId     String?
+  renovacionFechaCancelacionAnterior DateTime?
+
   notas               String?
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt

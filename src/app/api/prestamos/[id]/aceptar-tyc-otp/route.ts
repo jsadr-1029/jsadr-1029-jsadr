@@ -1,12 +1,161 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { calcularPrestamo, getTasaMoraAnual } from '@/lib/finanzas'
+import { calcularPrestamo, getTasaMoraAnual, formatearMoneda } from '@/lib/finanzas'
 import { generarCodigoOtp, hashOtp, verificarOtp, registrarOtp } from '@/lib/otp'
 import { enviarWhatsApp, guardarNotificacion } from '@/lib/whatsapp'
 import { enviarEmail } from '@/lib/email'
 import crypto from 'crypto'
 import { sanitizeError } from '@/lib/error-handler'
 import { requireRole } from '@/lib/auth-guard'
+
+// =====================================================
+// Helper: cancelar crédito anterior si el préstamo actual es renovación
+// (Tarea T) — Se ejecuta únicamente cuando el cliente completa la aceptación
+// de T&C del nuevo préstamo. El crédito anterior se cancela en ese momento
+// (no antes) para que el cliente no pierda su crédito activo mientras no
+// haya aceptado formalmente las nuevas condiciones.
+// =====================================================
+async function cancelarPrestamoAnteriorSiRenovacion(prestamoNuevoId: string) {
+  const nuevo = await db.prestamo.findUnique({
+    where: { id: prestamoNuevoId },
+    select: {
+      id: true,
+      codigo: true,
+      renovacionPendienteTyc: true,
+      renovacionPrestamoAnteriorId: true,
+      montoPrincipal: true,
+      cliente: { select: { id: true, nombre: true } },
+    },
+  })
+
+  if (!nuevo) return null
+  if (!nuevo.renovacionPendienteTyc || !nuevo.renovacionPrestamoAnteriorId) return null
+
+  const anteriorId = nuevo.renovacionPrestamoAnteriorId
+
+  // Transacción atómica: cancela el anterior + bitácoras + audit log + marca el nuevo
+  const resultado = await db.$transaction(async (tx) => {
+    const anterior = await tx.prestamo.findUnique({
+      where: { id: anteriorId },
+      include: { cliente: { select: { nombre: true } } },
+    })
+    if (!anterior) {
+      // El crédito anterior ya no existe (posible purga de BD). Solo limpiamos la bandera.
+      await tx.prestamo.update({
+        where: { id: prestamoNuevoId },
+        data: {
+          renovacionPendienteTyc: false,
+          renovacionFechaCancelacionAnterior: new Date(),
+        },
+      })
+      return { anterior: null, nuevo }
+    }
+
+    const saldoAnterior = anterior.saldoTotal || 0
+    const capitalNuevo = nuevo.montoPrincipal
+    const excedente = Math.max(0, capitalNuevo - saldoAnterior)
+    const diferencia = saldoAnterior - capitalNuevo
+
+    // 1) Cancelar el crédito anterior
+    await tx.prestamo.update({
+      where: { id: anteriorId },
+      data: {
+        estado: 'CANCELADO',
+        saldoCapital: 0,
+        saldoInteres: 0,
+        saldoTotal: 0,
+        notas: `Finalizado por renovación - nuevo préstamo: ${nuevo.codigo} (aceptado por el cliente el ${new Date().toLocaleString('es-CO')})`,
+      },
+    })
+
+    // 2) Bitácora del crédito ANTERIOR
+    await tx.bitacoraPrestamo.create({
+      data: {
+        prestamoId: anteriorId,
+        prestamoCodigo: anterior.codigo,
+        usuarioNombre: 'Sistema',
+        tipo: 'OTRO',
+        titulo: `CRÉDITO CANCELADO POR RENOVACIÓN (T&C ACEPTADOS)`,
+        descripcion:
+          `Este crédito fue finalizado (CANCELADO) porque el cliente aceptó los T&C del nuevo préstamo ${nuevo.codigo}.\n\n` +
+          `═══ ORIGEN DEL CIERRE ═══\n` +
+          `• Crédito anterior (este): ${anterior.codigo}\n` +
+          `• Saldo pendiente al cierre: ${formatearMoneda(saldoAnterior)}\n` +
+          `• Estado anterior: ${anterior.estado}\n` +
+          `• Estado actual: CANCELADO\n\n` +
+          `═══ NUEVO CRÉDITO ═══\n` +
+          `• Nuevo código: ${nuevo.codigo}\n` +
+          `• Capital nuevo: ${formatearMoneda(capitalNuevo)}\n` +
+          `• Excedente entregado al cliente: ${formatearMoneda(excedente)}\n` +
+          (diferencia > 0
+            ? `• Cliente abonó diferencia: ${formatearMoneda(diferencia)}\n`
+            : '') +
+          `\n📅 Fecha de cancelación: ${new Date().toLocaleString('es-CO')}`,
+        resultado: `Cancelado → renovación ${nuevo.codigo}`,
+        fechaEvento: new Date(),
+      },
+    })
+
+    // 3) Bitácora del NUEVO crédito (aviso de cancelación del anterior)
+    await tx.bitacoraPrestamo.create({
+      data: {
+        prestamoId: nuevo.id,
+        prestamoCodigo: nuevo.codigo,
+        usuarioNombre: 'Sistema',
+        tipo: 'OTRO',
+        titulo: `CRÉDITO ANTERIOR CANCELADO (T&C ACEPTADOS)`,
+        descripcion:
+          `El cliente aceptó los T&C de este préstamo, por lo que el crédito anterior ${anterior.codigo} fue CANCELADO automáticamente.\n\n` +
+          `═══ DETALLE ═══\n` +
+          `• Crédito anterior: ${anterior.codigo}\n` +
+          `• Saldo pendiente cancelado: ${formatearMoneda(saldoAnterior)}\n` +
+          `• Excedente entregado al cliente: ${formatearMoneda(excedente)}\n` +
+          (diferencia > 0
+            ? `• Diferencia abonada por el cliente: ${formatearMoneda(diferencia)}\n`
+            : '') +
+          `\n📅 Fecha: ${new Date().toLocaleString('es-CO')}`,
+        resultado: `Crédito anterior ${anterior.codigo} cancelado`,
+        fechaEvento: new Date(),
+      },
+    })
+
+    // 4) Audit log
+    await tx.auditLog.create({
+      data: {
+        usuarioNombre: 'Sistema',
+        accion: 'PRESTAMO_ANTERIOR_CANCELADO_TRAS_TYC',
+        modulo: 'prestamos',
+        entidadId: nuevo.id,
+        entidadNombre: `${nuevo.codigo} - ${nuevo.cliente?.nombre || ''}`,
+        detalles: JSON.stringify({
+          prestamoAnteriorId: anteriorId,
+          prestamoAnteriorCodigo: anterior.codigo,
+          prestamoAnteriorEstadoPrevio: anterior.estado,
+          prestamoNuevoId: nuevo.id,
+          prestamoNuevoCodigo: nuevo.codigo,
+          saldoAnterior,
+          capitalNuevo,
+          excedente,
+          diferencia: diferencia > 0 ? diferencia : 0,
+        }),
+        exito: true,
+      },
+    })
+
+    // 5) Marcar el nuevo préstamo: ya no está pendiente de T&C para la renovación
+    await tx.prestamo.update({
+      where: { id: prestamoNuevoId },
+      data: {
+        renovacionPendienteTyc: false,
+        renovacionFechaCancelacionAnterior: new Date(),
+      },
+    })
+
+    return { anterior, nuevo }
+  })
+
+  return resultado
+}
 
 // GET /api/prestamos/[id]/aceptar-tyc-otp
 // Ejecuta check_otp automáticamente — usado por el portal del cliente
@@ -338,6 +487,23 @@ Ambas fotos fueron guardadas en DocumentoGestor y se incluyen como respaldo de f
     include: { cliente: true },
   })
 
+  // === Tarea T: Si este préstamo es una renovación, cancelar el crédito anterior ===
+  // El cliente ya aceptó los T&C, completó OTP + fotos + (en este flujo) ya está ACTIVO.
+  // Es el momento seguro para cancelar el crédito anterior.
+  let renovacionCancelacionInfo: { anteriorCodigo?: string; anteriorCancelado?: boolean } = {}
+  try {
+    const res = await cancelarPrestamoAnteriorSiRenovacion(prestamoId)
+    if (res?.anterior) {
+      renovacionCancelacionInfo = {
+        anteriorCodigo: res.anterior.codigo,
+        anteriorCancelado: true,
+      }
+    }
+  } catch (e) {
+    // No bloquear la activación del nuevo préstamo si falla la cancelación del anterior
+    console.error('[aceptar-tyc-otp/confirmarConFoto] Error cancelando crédito anterior:', e)
+  }
+
   // === Notificar al cliente por correo (canal obligatorio) ===
   const mensajeCorreo = `
 Hola ${prestamo.cliente.nombre},
@@ -632,6 +798,23 @@ async function confirmarActivacion(prestamoId: string) {
     },
   })
 
+  // === Tarea T: Si este préstamo es una renovación, cancelar el crédito anterior ===
+  // El cliente ya completó todo el flujo (fotos + firma manuscrita + OTP validado)
+  // y el préstamo quedó ACTIVO. Es el momento seguro para cancelar el crédito anterior.
+  let renovacionCancelacionInfo: { anteriorCodigo?: string; anteriorCancelado?: boolean } = {}
+  try {
+    const res = await cancelarPrestamoAnteriorSiRenovacion(prestamoId)
+    if (res?.anterior) {
+      renovacionCancelacionInfo = {
+        anteriorCodigo: res.anterior.codigo,
+        anteriorCancelado: true,
+      }
+    }
+  } catch (e) {
+    // No bloquear la activación del nuevo préstamo si falla la cancelación del anterior
+    console.error('[aceptar-tyc-otp/confirmarActivacion] Error cancelando crédito anterior:', e)
+  }
+
   // Bitácora
   try {
     await db.bitacoraPrestamo.create({
@@ -641,7 +824,11 @@ async function confirmarActivacion(prestamoId: string) {
         usuarioNombre: 'Cliente (Portal)',
         tipo: 'OTRO',
         titulo: 'Préstamo activado por el cliente',
-        descripcion: `El cliente completó el flujo de firma (fotos + firma manuscrita + OTP) desde el portal. Firma ID: ${firma.id}.`,
+        descripcion:
+          `El cliente completó el flujo de firma (fotos + firma manuscrita + OTP) desde el portal. Firma ID: ${firma.id}.` +
+          (renovacionCancelacionInfo.anteriorCancelado
+            ? `\n\n♻️ Como este crédito es una renovación, el crédito anterior ${renovacionCancelacionInfo.anteriorCodigo} fue CANCELADO automáticamente.`
+            : ''),
       },
     })
   } catch (e) {
@@ -650,7 +837,11 @@ async function confirmarActivacion(prestamoId: string) {
 
   return NextResponse.json({
     success: true,
-    message: 'Préstamo activado correctamente.',
+    message:
+      'Préstamo activado correctamente.' +
+      (renovacionCancelacionInfo.anteriorCancelado
+        ? ` El crédito anterior ${renovacionCancelacionInfo.anteriorCodigo} fue cancelado automáticamente.`
+        : ''),
     data: { prestamoId, estado: 'ACTIVO', firmaId: firma.id },
   })
 }
