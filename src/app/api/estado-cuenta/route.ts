@@ -545,6 +545,41 @@ function generarEstadoCuentaHTML({
         </tbody>
       </table>
 
+      ${p.cobroPagareCarta ? `
+      <div class="concepto-cobro" style="margin-top: 12px; border-left: 4px solid #7c3aed; background: #faf5ff; padding: 10px 14px; border-radius: 0 8px 8px 0;">
+        <div style="font-weight: bold; color: #6d28d9; font-size: 11px; margin-bottom: 4px;">📄 CONCEPTO: Pagaré + Carta de Instrucciones</div>
+        <div style="font-size: 10px; color: #4c1d95; line-height: 1.5;">
+          Se cobra un valor único de <strong>${formatearMoneda(p.valorPagareCarta || 19900)}</strong> por la elaboración y gestión del pagaré y la carta de instrucciones
+          asociados al crédito <strong>${p.codigo}</strong>. Este cargo se aplica una sola vez al inicio del crédito y está incluido en la primera cuota.
+          El pagaré y la carta de instrucciones constituyen los documentos legales que respaldan la obligación financiera del cliente.
+        </div>
+      </div>
+      ` : ''}
+
+      ${p.flexibilidadFinanciera ? `
+      <div class="concepto-cobro" style="margin-top: 8px; border-left: 4px solid #059669; background: #ecfdf5; padding: 10px 14px; border-radius: 0 8px 8px 0;">
+        <div style="font-weight: bold; color: #047857; font-size: 11px; margin-bottom: 4px;">✨ CONCEPTO: Flexibilidad Financiera (${p.flexibilidadModalidad || 'BASICA'})</div>
+        <div style="font-size: 10px; color: #064e3b; line-height: 1.5;">
+          Se cobra un valor único de <strong>${formatearMoneda(p.flexibilidadCosto || 0)}</strong> por el beneficio de Flexibilidad Financiera
+          (${p.flexibilidadModalidad === 'PREMIUM' ? 'Premium — 2 usos disponibles' : 'Básica — 1 uso disponible'} durante la vigencia del crédito).
+          Este cargo se aplica una sola vez al inicio del crédito y está incluido en la primera cuota.
+          El beneficio permite al cliente <strong>trasladar una cuota al final del crédito</strong> o <strong>solicitar cambio de fecha de pago</strong>
+          (genera documento "Otro Sí" firmado electrónicamente con OTP), evitando la generación de intereses moratorios por impago puntual.
+          Usos disponibles restantes: <strong>${p.flexibilidadUsosDisponibles ?? (p.flexibilidadModalidad === 'PREMIUM' ? 2 : 1)}</strong> de ${p.flexibilidadModalidad === 'PREMIUM' ? '2' : '1'}.
+        </div>
+      </div>
+      ` : ''}
+
+      ${p.fondoGarantiaCargado && p.fondoGarantiaMonto > 0 ? `
+      <div class="concepto-cobro" style="margin-top: 8px; border-left: 4px solid #0891b2; background: #ecfeff; padding: 10px 14px; border-radius: 0 8px 8px 0;">
+        <div style="font-weight: bold; color: #0e7490; font-size: 11px; margin-bottom: 4px;">🛡️ CONCEPTO: Fondo de Garantía</div>
+        <div style="font-size: 10px; color: #155e75; line-height: 1.5;">
+          Se cobra un valor de <strong>${formatearMoneda(p.fondoGarantiaMonto)}</strong> correspondiente al fondo de garantía (${(p.fondoGarantiaTasa * 100).toFixed(2)}% del monto del crédito).
+          Este fondo protege al cliente en caso de imprevistos y será devuelto al finalizar el crédito, previa verificación de cumplimiento de obligaciones.
+        </div>
+      </div>
+      ` : ''}
+
       ${p.firmas && p.firmas.length > 0 ? `
       <div class="firma-aceptacion" style="margin-top: 20px; border: 2px solid #16a34a; border-radius: 10px; padding: 16px 20px; background: linear-gradient(135deg, #f0fdf4 0%, #ecfdf5 100%);">
         <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 12px; padding-bottom: 10px; border-bottom: 1px dashed #16a34a;">

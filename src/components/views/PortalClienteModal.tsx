@@ -2344,11 +2344,17 @@ function SimuladorCredito({
   const [resultado, setResultado] = useState<ResultadoCalculo | null>(null)
 
   // === Flexibilidad Financiera (beneficio visible para TODOS los clientes) ===
+  // DOS tarifas:
+  //   - BASICA:  $15.000 COP — 1 uso durante la vigencia
+  //   - PREMIUM: $34.900 COP — 2 usos durante la vigencia
   // Regla de negocio: la opción DEBE aparecer en todas las simulaciones del
   // portal del cliente. Solo se puede ACTIVAR si la simulación tiene 4 o más
   // cuotas; con menos cuotas se muestra inhabilitada con explicación.
   const [flexibilidadFinanciera, setFlexibilidadFinanciera] = useState(false)
-  const FLEXIBILIDAD_COSTO = 10000
+  const [flexibilidadModalidad, setFlexibilidadModalidad] = useState<'BASICA' | 'PREMIUM'>('BASICA')
+  const FLEXIBILIDAD_COSTO_BASICA = 15000
+  const FLEXIBILIDAD_COSTO_PREMIUM = 34900
+  const FLEXIBILIDAD_COSTO = flexibilidadModalidad === 'PREMIUM' ? FLEXIBILIDAD_COSTO_PREMIUM : FLEXIBILIDAD_COSTO_BASICA
 
   // === Flujo de Clave Dinámica (confirmación para enviar solicitud) ===
   const [claveDinamicaSolicitada, setClaveDinamicaSolicitada] = useState(false)
@@ -2546,6 +2552,10 @@ function SimuladorCredito({
           frecuencia,
           primerPagoFecha: fechaPrimerPago,
           codigoConfirmacion,
+          // === Flexibilidad Financiera (2 tarifas) ===
+          flexibilidadFinanciera,
+          flexibilidadModalidad,
+          flexibilidadCosto: FLEXIBILIDAD_COSTO,
         }),
       })
       const json = await res.json()
@@ -2743,6 +2753,7 @@ function SimuladorCredito({
           </div>
 
           {/* === Flexibilidad Financiera (visible para TODOS los clientes) === */}
+          {/* DOS tarifas: Básica $15.000 (1 uso) | Premium $34.900 (2 usos) */}
           {/* Regla: la opción siempre se muestra. Si la simulación tiene < 4 cuotas, */}
           {/* se muestra inhabilitada con explicación. Si tiene ≥ 4, se puede activar. */}
           {(() => {
@@ -2780,14 +2791,14 @@ function SimuladorCredito({
                             }`}
                           >
                             {flexibilidadFinanciera && elegible
-                              ? `✨ +${formatearMoneda(FLEXIBILIDAD_COSTO)}`
-                              : `Opcional · ${formatearMoneda(FLEXIBILIDAD_COSTO)}`}
+                              ? `✨ ${flexibilidadModalidad} · +${formatearMoneda(FLEXIBILIDAD_COSTO)}`
+                              : 'Opcional — 2 tarifas'}
                           </Badge>
                         </p>
                         <p className="text-[10px] text-muted-foreground truncate">
                           {elegible
                             ? flexibilidadFinanciera
-                              ? 'Activa en esta solicitud'
+                              ? `Activa · ${flexibilidadModalidad === 'PREMIUM' ? '2 usos' : '1 uso'} en la vigencia`
                               : 'Beneficio opcional disponible'
                             : `Requiere 4+ cuotas · Actual: ${cuotas}`}
                         </p>
@@ -2817,11 +2828,64 @@ function SimuladorCredito({
                       </p>
                     )}
                   </div>
+
+                  {/* === Selector de modalidad (2 tarifas) === */}
                   {flexibilidadFinanciera && elegible && (
-                    <div className="pt-1.5 mt-1 border-t border-emerald-500/20 text-[10px] text-emerald-200/80">
-                      💡 Al aprobarse tu préstamo, podrás activar el beneficio pagando{' '}
-                      <strong>{formatearMoneda(FLEXIBILIDAD_COSTO)}</strong> adicionales.
-                      Los Otros Síes NO modifican el pagaré ni la carta originales.
+                    <div className="grid grid-cols-2 gap-2 mt-2">
+                      <button
+                        type="button"
+                        onClick={() => setFlexibilidadModalidad('BASICA')}
+                        className={`text-left p-2 rounded-lg border transition-all ${
+                          flexibilidadModalidad === 'BASICA'
+                            ? 'border-emerald-500 bg-emerald-500/15'
+                            : 'border-emerald-500/30 bg-emerald-500/5 hover:border-emerald-400'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between mb-0.5">
+                          <span className="text-[11px] font-bold">Básica</span>
+                          <span className="text-sm font-bold text-emerald-300">$15.000</span>
+                        </div>
+                        <p className="text-[9px] text-muted-foreground leading-tight">
+                          1 uso · una vez en la vigencia
+                        </p>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setFlexibilidadModalidad('PREMIUM')}
+                        className={`text-left p-2 rounded-lg border transition-all ${
+                          flexibilidadModalidad === 'PREMIUM'
+                            ? 'border-emerald-500 bg-emerald-500/15'
+                            : 'border-emerald-500/30 bg-emerald-500/5 hover:border-emerald-400'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between mb-0.5">
+                          <span className="text-[11px] font-bold flex items-center gap-1">
+                            Premium
+                            <span className="text-[8px] px-1 py-0 rounded bg-amber-400/20 text-amber-300 border border-amber-400/30">REC</span>
+                          </span>
+                          <span className="text-sm font-bold text-emerald-300">$34.900</span>
+                        </div>
+                        <p className="text-[9px] text-muted-foreground leading-tight">
+                          2 usos · para las dos cuotas del mes
+                        </p>
+                      </button>
+                    </div>
+                  )}
+
+                  {/* === Ejemplo de beneficio === */}
+                  {flexibilidadFinanciera && elegible && (
+                    <div className="mt-2 p-2 rounded-md bg-amber-500/10 border border-amber-500/30 text-[10px] text-amber-100 leading-relaxed">
+                      <div className="font-semibold mb-0.5">💡 ¿Cómo te beneficia?</div>
+                      <p>
+                        Si tu cuota es <strong>$200.000</strong> y no puedes pagar a tiempo, se generarían
+                        intereses moratorios diarios (ej: <strong>$6.000/día</strong>) — en 5 días serían{' '}
+                        <strong>$30.000</strong> solo en mora.
+                      </p>
+                      <p className="mt-1">
+                        Con Flexibilidad Financiera puedes <strong>trasladar la cuota al final del crédito</strong> o{' '}
+                        <strong>cambiar la fecha de pago</strong>, <strong>evitando el cobro de mora</strong>.
+                        {' '}El cobro de <strong>{formatearMoneda(FLEXIBILIDAD_COSTO)}</strong> se hace una sola vez al inicio del crédito (cargado en la primera cuota).
+                      </p>
                     </div>
                   )}
                 </CardContent>
@@ -2989,6 +3053,11 @@ interface SolicitudWebItem {
   fechaRevision: string | null
   fechaConversion: string | null
   prestamoCreadoId: string | null
+  // === Campos nuevos: flujo de firma + flexibilidad ===
+  estadoFlujoFirma?: string
+  flexibilidadFinanciera?: boolean
+  flexibilidadModalidad?: string | null
+  flexibilidadCosto?: number
 }
 
 function MisSolicitudesPanel({ cedula, token }: { cedula: string; token?: string }) {
@@ -3147,6 +3216,23 @@ function MisSolicitudesPanel({ cedula, token }: { cedula: string; token?: string
                   <SolicitudTimeline estado={s.estado} />
                 </div>
 
+                {/* === Flujo de firma del cliente (cuando la solicitud fue aprobada) === */}
+                {/* Cuando el admin aprueba/crea préstamo, el cliente debe: */}
+                {/* 1) Cargar fotos (cédula + selfie) */}
+                {/* 2) Firma manuscrita */}
+                {/* 3) Código OTP */}
+                {(s.estado === 'APROBADA' || s.estado === 'CONVERTIDA') && s.prestamoCreadoId && (
+                  <div className="mt-2.5">
+                    <FlujoFirmaClient
+                      solicitudId={s.id}
+                      prestamoId={s.prestamoCreadoId}
+                      estadoFlujoFirma={s.estadoFlujoFirma || 'EN_FIRMA_CLIENTE'}
+                      token={token}
+                      onCompletado={() => cargar()}
+                    />
+                  </div>
+                )}
+
                 {expanded && (
                   <div className="mt-2.5 pt-2 border-t border-white/10 space-y-2 fade-scale">
                     <div className="grid grid-cols-2 gap-2 text-[10px]">
@@ -3191,6 +3277,454 @@ function MisSolicitudesPanel({ cedula, token }: { cedula: string; token?: string
         })
       )}
     </div>
+  )
+}
+
+// =====================================================
+// Componente: Flujo de firma del cliente (cargue fotos + firma + OTP)
+// Se muestra cuando una solicitud fue aprobada y se creó el préstamo.
+// El cliente debe completar 3 pasos:
+//   1. Cargar foto de cédula + selfie
+//   2. Dibujar firma manuscrita
+//   3. Ingresar código OTP recibido por correo/WhatsApp
+// =====================================================
+function FlujoFirmaClient({
+  solicitudId,
+  prestamoId,
+  estadoFlujoFirma,
+  token,
+  onCompletado,
+}: {
+  solicitudId: string
+  prestamoId: string
+  estadoFlujoFirma: string
+  token?: string
+  onCompletado?: () => void
+}) {
+  const { toast } = useToast()
+  const [paso, setPaso] = useState<1 | 2 | 3 | 4>(1) // 1=fotos, 2=firma, 3=OTP, 4=completado
+  const [fotoDocumento, setFotoDocumento] = useState<string | null>(null)
+  const [fotoSelfie, setFotoSelfie] = useState<string | null>(null)
+  const [guardandoFotos, setGuardandoFotos] = useState(false)
+  const [firmaDibujada, setFirmaDibujada] = useState<string | null>(null)
+  const [guardandoFirma, setGuardandoFirma] = useState(false)
+  const [otpEnviado, setOtpEnviado] = useState(false)
+  const [otpValor, setOtpValor] = useState('')
+  const [enviandoOtp, setEnviandoOtp] = useState(false)
+  const [validandoOtp, setValidandoOtp] = useState(false)
+  const [otpCanal, setOtpCanal] = useState<'EMAIL' | 'WHATSAPP'>('EMAIL')
+  const canvasRef = useRef<HTMLCanvasElement | null>(null)
+  const isDrawing = useRef(false)
+
+  // === Si el flujo ya está completado, mostrar pantalla final ===
+  useEffect(() => {
+    if (estadoFlujoFirma === 'FIRMA_COMPLETADA') setPaso(4)
+  }, [estadoFlujoFirma])
+
+  // === Manejo del canvas para firma manuscrita ===
+  const empezarDibujo = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
+    const canvas = canvasRef.current
+    if (!canvas) return
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return
+    isDrawing.current = true
+    ctx.beginPath()
+    const rect = canvas.getBoundingClientRect()
+    const x = 'touches' in e ? e.touches[0].clientX - rect.left : (e as React.MouseEvent).clientX - rect.left
+    const y = 'touches' in e ? e.touches[0].clientY - rect.top : (e as React.MouseEvent).clientY - rect.top
+    ctx.moveTo(x, y)
+  }
+  const moverDibujo = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
+    if (!isDrawing.current) return
+    const canvas = canvasRef.current
+    if (!canvas) return
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return
+    const rect = canvas.getBoundingClientRect()
+    const x = 'touches' in e ? e.touches[0].clientX - rect.left : (e as React.MouseEvent).clientX - rect.left
+    const y = 'touches' in e ? e.touches[0].clientY - rect.top : (e as React.MouseEvent).clientY - rect.top
+    ctx.lineWidth = 2.5
+    ctx.lineCap = 'round'
+    ctx.strokeStyle = '#0f172a'
+    ctx.lineTo(x, y)
+    ctx.stroke()
+  }
+  const terminarDibujo = () => {
+    isDrawing.current = false
+    const canvas = canvasRef.current
+    if (canvas) setFirmaDibujada(canvas.toDataURL('image/png'))
+  }
+  const limpiarFirma = () => {
+    const canvas = canvasRef.current
+    if (!canvas) return
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return
+    ctx.clearRect(0, 0, canvas.width, canvas.height)
+    setFirmaDibujada(null)
+  }
+
+  // === Paso 1: Guardar fotos ===
+  const guardarFotos = async () => {
+    if (!fotoDocumento || !fotoSelfie) {
+      toast({ title: 'Faltan fotos', description: 'Sube la foto de tu cédula y tu selfie.', variant: 'destructive' })
+      return
+    }
+    try {
+      setGuardandoFotos(true)
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+      if (token) headers['x-portal-token'] = token
+      const res = await fetch(`/api/prestamos/${prestamoId}/aceptar-tyc-otp`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          accion: 'guardar_fotos_simple',
+          fotoDocumentoBase64: fotoDocumento,
+          fotoSelfieBase64: fotoSelfie,
+        }),
+      })
+      const json = await res.json()
+      if (json.success) {
+        toast({ title: 'Fotos guardadas', description: 'Ahora dibuja tu firma manuscrita.' })
+        setPaso(2)
+      } else {
+        toast({ title: 'Error', description: json.error || 'No se pudieron guardar las fotos', variant: 'destructive' })
+      }
+    } catch (e: any) {
+      toast({ title: 'Error', description: e.message, variant: 'destructive' })
+    } finally {
+      setGuardandoFotos(false)
+    }
+  }
+
+  // === Paso 2: Guardar firma manuscrita ===
+  const guardarFirma = async () => {
+    if (!firmaDibujada) {
+      toast({ title: 'Firma requerida', description: 'Dibuja tu firma en el recuadro.', variant: 'destructive' })
+      return
+    }
+    try {
+      setGuardandoFirma(true)
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+      if (token) headers['x-portal-token'] = token
+      const res = await fetch(`/api/prestamos/${prestamoId}/aceptar-tyc-otp`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          accion: 'guardar_firma_manuscrita',
+          imagenFirmaBase64: firmaDibujada,
+        }),
+      })
+      const json = await res.json()
+      if (json.success) {
+        toast({ title: 'Firma guardada', description: 'Ahora solicita tu código OTP.' })
+        setPaso(3)
+      } else {
+        toast({ title: 'Error', description: json.error || 'No se pudo guardar la firma', variant: 'destructive' })
+      }
+    } catch (e: any) {
+      toast({ title: 'Error', description: e.message, variant: 'destructive' })
+    } finally {
+      setGuardandoFirma(false)
+    }
+  }
+
+  // === Paso 3: Enviar OTP ===
+  const enviarOTP = async () => {
+    try {
+      setEnviandoOtp(true)
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+      if (token) headers['x-portal-token'] = token
+      const res = await fetch(`/api/prestamos/${prestamoId}/aceptar-tyc-otp`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ accion: 'enviar_otp', canal: otpCanal }),
+      })
+      const json = await res.json()
+      if (json.success) {
+        setOtpEnviado(true)
+        toast({ title: 'Código enviado', description: `Revisa tu ${otpCanal === 'EMAIL' ? 'correo' : 'WhatsApp'}.` })
+      } else {
+        toast({ title: 'Error', description: json.error || 'No se pudo enviar el OTP', variant: 'destructive' })
+      }
+    } catch (e: any) {
+      toast({ title: 'Error', description: e.message, variant: 'destructive' })
+    } finally {
+      setEnviandoOtp(false)
+    }
+  }
+
+  // === Paso 3b: Validar OTP y activar préstamo ===
+  const validarOTP = async () => {
+    if (!otpValor || otpValor.length !== 6) {
+      toast({ title: 'Código inválido', description: 'Ingresa los 6 dígitos.', variant: 'destructive' })
+      return
+    }
+    try {
+      setValidandoOtp(true)
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+      if (token) headers['x-portal-token'] = token
+      // 1. Validar OTP
+      const resVal = await fetch(`/api/prestamos/${prestamoId}/aceptar-tyc-otp`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ accion: 'validar_otp', otp: otpValor }),
+      })
+      const jsonVal = await resVal.json()
+      if (!jsonVal.success) {
+        toast({ title: 'OTP inválido', description: jsonVal.error || 'Verifica el código e intenta nuevamente', variant: 'destructive' })
+        return
+      }
+      // 2. Confirmar (activa el préstamo)
+      const resConf = await fetch(`/api/prestamos/${prestamoId}/aceptar-tyc-otp`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ accion: 'confirmar_activacion' }),
+      })
+      const jsonConf = await resConf.json()
+      if (jsonConf.success) {
+        toast({ title: '¡Préstamo activado!', description: 'Tu crédito ha sido activado correctamente.' })
+        setPaso(4)
+        onCompletado?.()
+      } else {
+        toast({ title: 'Activación pendiente', description: jsonConf.error || 'Tu OTP fue validado. Contacta al asesor para activar el crédito.' })
+      }
+    } catch (e: any) {
+      toast({ title: 'Error', description: e.message, variant: 'destructive' })
+    } finally {
+      setValidandoOtp(false)
+    }
+  }
+
+  // === Manejar carga de archivos (fotos) ===
+  const manejarArchivo = (e: React.ChangeEvent<HTMLInputElement>, tipo: 'documento' | 'selfie') => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    if (file.size > 10 * 1024 * 1024) {
+      toast({ title: 'Archivo demasiado grande', description: 'Máximo 10MB.', variant: 'destructive' })
+      return
+    }
+    if (!file.type.startsWith('image/')) {
+      toast({ title: 'Formato inválido', description: 'Solo se permiten imágenes.', variant: 'destructive' })
+      return
+    }
+    const reader = new FileReader()
+    reader.onload = () => {
+      const result = reader.result as string
+      if (tipo === 'documento') setFotoDocumento(result)
+      else setFotoSelfie(result)
+    }
+    reader.readAsDataURL(file)
+  }
+
+  // === Tomar foto con cámara ===
+  const tomarFoto = async (tipo: 'documento' | 'selfie') => {
+    try {
+      const facingMode = tipo === 'selfie' ? 'user' : 'environment'
+      const dataUrl = await capturarFoto(facingMode)
+      if (tipo === 'documento') setFotoDocumento(dataUrl)
+      else setFotoSelfie(dataUrl)
+    } catch (e: any) {
+      toast({ title: 'Error cámara', description: e.message, variant: 'destructive' })
+    }
+  }
+
+  const pasos = [
+    { n: 1, label: 'Fotos', icon: Camera },
+    { n: 2, label: 'Firma', icon: FileSignature },
+    { n: 3, label: 'OTP', icon: KeyRound },
+    { n: 4, label: 'Activado', icon: CheckCircle },
+  ] as const
+
+  return (
+    <Card className="premium-card rounded-2xl border-2 border-violet-500/40 bg-gradient-to-br from-violet-500/5 to-fuchsia-500/5">
+      <CardContent className="p-3 space-y-3">
+        <div className="flex items-center gap-2">
+          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-violet-500 to-fuchsia-600 flex items-center justify-center shadow-md">
+            <FileSignature className="w-4 h-4 text-white" />
+          </div>
+          <div className="flex-1">
+            <p className="text-xs font-bold">Flujo de firma del crédito</p>
+            <p className="text-[10px] text-muted-foreground">
+              Tu solicitud fue aprobada. Completa estos 3 pasos para activar tu crédito.
+            </p>
+          </div>
+        </div>
+
+        {/* === Indicador de pasos === */}
+        <div className="flex items-center gap-1">
+          {pasos.map((p, i) => {
+            const completado = paso > p.n
+            const activo = paso === p.n
+            const Icon = p.icon
+            return (
+              <div key={p.n} className="flex items-center flex-1 min-w-0">
+                <div className="flex flex-col items-center gap-0.5 min-w-0">
+                  <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold border transition-all ${
+                    completado
+                      ? 'bg-emerald-500 text-white border-emerald-400'
+                      : activo
+                        ? 'bg-violet-500 text-white border-violet-400 shadow-md shadow-violet-500/40'
+                        : 'bg-white/5 text-muted-foreground border-white/10'
+                  }`}>
+                    {completado ? <CheckCircle className="w-3 h-3" /> : <Icon className="w-3 h-3" />}
+                  </div>
+                  <span className={`text-[8px] truncate ${completado || activo ? 'text-violet-300' : 'text-muted-foreground'}`}>{p.label}</span>
+                </div>
+                {i < pasos.length - 1 && (
+                  <div className={`h-0.5 flex-1 mx-0.5 ${completado ? 'bg-emerald-500/40' : 'bg-white/10'}`} />
+                )}
+              </div>
+            )
+          })}
+        </div>
+
+        {/* === Paso 1: Cargue de fotos === */}
+        {paso === 1 && (
+          <div className="space-y-2 fade-scale">
+            <p className="text-[11px] text-muted-foreground">
+              Sube una foto nítida de tu cédula (frente) y un selfie sosteniéndola.
+            </p>
+            <div className="grid grid-cols-2 gap-2">
+              <div className="space-y-1.5">
+                <Label className="text-[10px] font-semibold">Foto cédula</Label>
+                {fotoDocumento ? (
+                  <div className="relative">
+                    <img src={fotoDocumento} alt="Cédula" className="w-full h-24 object-cover rounded-md border border-white/10" />
+                    <button type="button" onClick={() => setFotoDocumento(null)} className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-red-500 text-white text-[10px]">×</button>
+                  </div>
+                ) : (
+                  <div className="space-y-1">
+                    <button type="button" onClick={() => tomarFoto('documento')} className="w-full p-2 rounded-md border-2 border-dashed border-violet-500/30 hover:border-violet-500/50 text-violet-300 text-[10px] flex flex-col items-center gap-0.5">
+                      <Camera className="w-3.5 h-3.5" />
+                      Tomar foto
+                    </button>
+                    <label className="w-full p-2 rounded-md border-2 border-dashed border-white/15 hover:border-white/30 text-muted-foreground text-[10px] flex flex-col items-center gap-0.5 cursor-pointer">
+                      <Upload className="w-3.5 h-3.5" />
+                      Subir archivo
+                      <input type="file" accept="image/*" className="hidden" onChange={(e) => manejarArchivo(e, 'documento')} />
+                    </label>
+                  </div>
+                )}
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-[10px] font-semibold">Selfie con cédula</Label>
+                {fotoSelfie ? (
+                  <div className="relative">
+                    <img src={fotoSelfie} alt="Selfie" className="w-full h-24 object-cover rounded-md border border-white/10" />
+                    <button type="button" onClick={() => setFotoSelfie(null)} className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-red-500 text-white text-[10px]">×</button>
+                  </div>
+                ) : (
+                  <div className="space-y-1">
+                    <button type="button" onClick={() => tomarFoto('selfie')} className="w-full p-2 rounded-md border-2 border-dashed border-violet-500/30 hover:border-violet-500/50 text-violet-300 text-[10px] flex flex-col items-center gap-0.5">
+                      <Camera className="w-3.5 h-3.5" />
+                      Tomar selfie
+                    </button>
+                    <label className="w-full p-2 rounded-md border-2 border-dashed border-white/15 hover:border-white/30 text-muted-foreground text-[10px] flex flex-col items-center gap-0.5 cursor-pointer">
+                      <Upload className="w-3.5 h-3.5" />
+                      Subir archivo
+                      <input type="file" accept="image/*" className="hidden" onChange={(e) => manejarArchivo(e, 'selfie')} />
+                    </label>
+                  </div>
+                )}
+              </div>
+            </div>
+            <Button onClick={guardarFotos} disabled={!fotoDocumento || !fotoSelfie || guardandoFotos} className="w-full h-8 text-[11px]" size="sm">
+              {guardandoFotos ? <><Loader2 className="w-3 h-3 mr-1 animate-spin" /> Guardando…</> : 'Continuar a firma →'}
+            </Button>
+          </div>
+        )}
+
+        {/* === Paso 2: Firma manuscrita === */}
+        {paso === 2 && (
+          <div className="space-y-2 fade-scale">
+            <Label className="text-[10px] font-semibold">Dibuja tu firma manuscrita</Label>
+            <canvas
+              ref={canvasRef}
+              width={400}
+              height={140}
+              onMouseDown={empezarDibujo}
+              onMouseMove={moverDibujo}
+              onMouseUp={terminarDibujo}
+              onMouseLeave={terminarDibujo}
+              onTouchStart={empezarDibujo}
+              onTouchMove={moverDibujo}
+              onTouchEnd={terminarDibujo}
+              className="w-full h-28 bg-white rounded-md border-2 border-violet-500/30 touch-none cursor-crosshair"
+            />
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={limpiarFirma} className="flex-1 h-8 text-[11px]" size="sm">
+                Limpiar
+              </Button>
+              <Button onClick={guardarFirma} disabled={!firmaDibujada || guardandoFirma} className="flex-1 h-8 text-[11px]" size="sm">
+                {guardandoFirma ? <><Loader2 className="w-3 h-3 mr-1 animate-spin" /> Guardando…</> : 'Continuar a OTP →'}
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {/* === Paso 3: OTP === */}
+        {paso === 3 && (
+          <div className="space-y-2 fade-scale">
+            <Label className="text-[10px] font-semibold">Verifica tu identidad con OTP</Label>
+            <p className="text-[10px] text-muted-foreground">
+              Te enviaremos un código de 6 dígitos para confirmar la activación del crédito.
+            </p>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => setOtpCanal('EMAIL')}
+                className={`flex-1 p-2 rounded-md border text-[10px] flex items-center justify-center gap-1 ${otpCanal === 'EMAIL' ? 'border-violet-500 bg-violet-500/15 text-violet-200' : 'border-white/15 text-muted-foreground'}`}
+              >
+                <Mail className="w-3 h-3" /> Correo
+              </button>
+              <button
+                type="button"
+                onClick={() => setOtpCanal('WHATSAPP')}
+                className={`flex-1 p-2 rounded-md border text-[10px] flex items-center justify-center gap-1 ${otpCanal === 'WHATSAPP' ? 'border-violet-500 bg-violet-500/15 text-violet-200' : 'border-white/15 text-muted-foreground'}`}
+              >
+                <Smartphone className="w-3 h-3" /> WhatsApp
+              </button>
+            </div>
+            {!otpEnviado ? (
+              <Button onClick={enviarOTP} disabled={enviandoOtp} className="w-full h-8 text-[11px]" size="sm">
+                {enviandoOtp ? <><Loader2 className="w-3 h-3 mr-1 animate-spin" /> Enviando…</> : 'Enviar código OTP'}
+              </Button>
+            ) : (
+              <>
+                <Input
+                  type="text"
+                  inputMode="numeric"
+                  maxLength={6}
+                  placeholder="______"
+                  value={otpValor}
+                  onChange={(e) => setOtpValor(e.target.value.replace(/\D/g, ''))}
+                  className="text-center text-lg tracking-widest h-10 font-mono"
+                />
+                <Button onClick={validarOTP} disabled={otpValor.length !== 6 || validandoOtp} className="w-full h-8 text-[11px]" size="sm">
+                  {validandoOtp ? <><Loader2 className="w-3 h-3 mr-1 animate-spin" /> Validando…</> : 'Validar y activar crédito'}
+                </Button>
+                <button type="button" onClick={enviarOTP} disabled={enviandoOtp} className="w-full text-[10px] text-muted-foreground hover:text-foreground">
+                  ¿No recibiste el código? Reenviar
+                </button>
+              </>
+            )}
+          </div>
+        )}
+
+        {/* === Paso 4: Completado === */}
+        {paso === 4 && (
+          <div className="text-center py-4 fade-scale">
+            <div className="w-12 h-12 mx-auto rounded-full bg-emerald-500/20 flex items-center justify-center mb-2">
+              <CheckCircle className="w-7 h-7 text-emerald-400" />
+            </div>
+            <p className="text-sm font-bold text-emerald-300">¡Crédito activado!</p>
+            <p className="text-[10px] text-muted-foreground mt-1">
+              Tu préstamo fue activado correctamente. Ya puedes verlo en la sección "Mis Préstamos".
+            </p>
+          </div>
+        )}
+      </CardContent>
+    </Card>
   )
 }
 

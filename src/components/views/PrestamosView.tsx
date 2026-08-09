@@ -91,6 +91,12 @@ export interface SimulacionParams {
   plazoMeses: string
   frecuencia: Frecuencia
   origen?: string
+  // === ID de la solicitud web origen (para auto-marcarla como CONVERTIDA) ===
+  solicitudWebId?: string
+  // === Flexibilidad financiera elegida por el cliente en la simulación ===
+  flexibilidadFinanciera?: boolean
+  flexibilidadModalidad?: 'BASICA' | 'PREMIUM'
+  flexibilidadCosto?: number
 }
 
 // Tipo mínimo estructuralmente compatible con la interfaz SolicitudWeb
@@ -105,6 +111,10 @@ interface SolicitudWebMin {
   numeroCuotas: number
   frecuencia: string
   tasaUtilizada: number
+  // === Campos opcionales para preservar la flexibilidad elegida por el cliente ===
+  flexibilidadFinanciera?: boolean
+  flexibilidadModalidad?: string | null
+  flexibilidadCosto?: number
 }
 
 // =====================================================
@@ -206,15 +216,35 @@ function PrestamosPanel({
   const [infoPrestamoRenovacion, setInfoPrestamoRenovacion] = useState<any>(null)
 
   // === Flexibilidad Financiera (beneficio opcional) ===
-  // Se ofrece cuando el número de cuotas >= 4. Costo adicional fijo de $10.000 COP.
+  // Se ofrece cuando el número de cuotas >= 4. DOS tarifas:
+  //   - BASICA:  $15.000 COP — permite usar el beneficio 1 sola vez durante la vigencia
+  //   - PREMIUM: $34.900 COP — permite usar el beneficio 2 veces durante la vigencia
   // Permite al cliente:
   //   1) Trasladar UNA cuota al final del crédito
   //   2) Solicitar cambio de fecha de pago (genera documento "Otro Sí")
   //
   // - flexibilidadFinanciera: si el cliente adquirió el beneficio en esta solicitud
-  // - flexibilidadCosto: monto COP (por defecto 10000)
+  // - flexibilidadModalidad: "BASICA" | "PREMIUM"
+  // - flexibilidadCosto: monto COP (15000 o 34900)
+  // - El cobro se hace UNA sola vez al inicio, cargado en la primera cuota
   const [flexibilidadFinanciera, setFlexibilidadFinanciera] = useState(false)
-  const [flexibilidadCosto] = useState(10000)
+  const [flexibilidadModalidad, setFlexibilidadModalidad] = useState<'BASICA' | 'PREMIUM'>('BASICA')
+  const FLEXIBILIDAD_COSTO_BASICA = 15000
+  const FLEXIBILIDAD_COSTO_PREMIUM = 34900
+  const flexibilidadCosto = flexibilidadModalidad === 'PREMIUM' ? FLEXIBILIDAD_COSTO_PREMIUM : FLEXIBILIDAD_COSTO_BASICA
+
+  // === Cobro de Pagaré + Carta de Instrucciones ===
+  // Cargo editable (por defecto $19.900 COP) que se cobra UNA sola vez al cliente
+  // cuando el préstamo incluye generar pagare + carta de instrucciones.
+  // Se explica en el estado de cuenta como concepto "Pagaré + Carta de Instrucciones".
+  const [cobroPagareCarta, setCobroPagareCarta] = useState(true)
+  const [valorPagareCarta, setValorPagareCarta] = useState<number>(19900)
+
+  // === ID de la solicitud web origen (para auto-marcarla como CONVERTIDA) ===
+  // Cuando el admin convierte una solicitud web en préstamo, este ID se pasa
+  // al backend para que marque automáticamente la solicitud como CONVERTIDA
+  // y active el flujo de firma del lado del cliente.
+  const [solicitudWebOrigenId, setSolicitudWebOrigenId] = useState<string | null>(null)
 
   // === Función: cargar saldo pendiente del préstamo a renovar ===
   const seleccionarPrestamoARenovar = async (prestamoId: string) => {
@@ -604,6 +634,14 @@ function PrestamosPanel({
     if (simulacionInicial.tasaInteresAnual) setTasaInteresAnual(simulacionInicial.tasaInteresAnual)
     if (simulacionInicial.plazoMeses) setPlazoMeses(simulacionInicial.plazoMeses)
     if (simulacionInicial.frecuencia) setFrecuencia(simulacionInicial.frecuencia)
+    // === Preservar ID de la solicitud web origen ===
+    setSolicitudWebOrigenId(simulacionInicial.solicitudWebId || null)
+    // === Preservar flexibilidad financiera elegida por el cliente ===
+    if (simulacionInicial.flexibilidadFinanciera) {
+      setFlexibilidadFinanciera(true)
+      const modalidad = (simulacionInicial.flexibilidadModalidad || 'BASICA').toUpperCase() === 'PREMIUM' ? 'PREMIUM' : 'BASICA'
+      setFlexibilidadModalidad(modalidad)
+    }
     setModalAbierto(true)
   }, [simulacionInicial])
 
@@ -789,11 +827,13 @@ function PrestamosPanel({
       }
 
       // === Flexibilidad Financiera (beneficio opcional, cuotas >= 4) ===
-      // Solo se envía si el usuario activó el beneficio. El backend lo guarda
-      // en el préstamo y queda disponible para que el cliente lo active (pagando)
-      // y solicite Otros Síes después.
+      // DOS tarifas:
+      //   - BASICA  ($15.000): 1 uso durante la vigencia
+      //   - PREMIUM ($34.900): 2 usos durante la vigencia
+      // El cobro se hace UNA sola vez al inicio del crédito, cargado en la primera cuota.
       if (flexibilidadFinanciera) {
         body.flexibilidadFinanciera = true
+        body.flexibilidadModalidad = flexibilidadModalidad
         body.flexibilidadCosto = flexibilidadCosto
       }
 
@@ -801,6 +841,21 @@ function PrestamosPanel({
       // Solo se envía si el gestor activó el fondo. La tasa se envía como decimal (0.05 = 5%).
       body.incluirFondoGarantia = incluirFondoGarantia
       body.tasaFondoGarantia = tasaFondoGarantia / 100 // Convertir % a decimal
+
+      // === Cobro de Pagaré + Carta de Instrucciones ===
+      // Cargo editable (por defecto $19.900 COP) cobrado UNA sola vez al inicio.
+      // Se explica en el estado de cuenta como concepto "Pagaré + Carta de Instrucciones".
+      if (cobroPagareCarta && requiereDocumentos && (generarPagare || generarCarta)) {
+        body.cobroPagareCarta = true
+        body.valorPagareCarta = Number(valorPagareCarta) || 19900
+      }
+
+      // === ID de la solicitud web origen (para auto-marcarla como CONVERTIDA) ===
+      // Cuando se crea el préstamo, el backend marca la solicitud web como CONVERTIDA
+      // y activa el flujo de firma del lado del cliente.
+      if (solicitudWebOrigenId) {
+        body.solicitudWebOrigenId = solicitudWebOrigenId
+      }
 
 
       // === Renovación ===
@@ -2512,7 +2567,7 @@ ${linkFirmaCodeudor}
                   <div className="mt-2 pt-2 border-t border-primary/20 space-y-1.5">
                     <div className="text-xs font-semibold text-emerald-700 dark:text-emerald-300 flex items-center gap-1.5">
                       <Sparkles className="w-3.5 h-3.5" />
-                      Flexibilidad Financiera: ADQUIRIDA
+                      Flexibilidad Financiera: ADQUIRIDA ({flexibilidadModalidad})
                     </div>
                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs">
                       <div>
@@ -2522,21 +2577,21 @@ ${linkFirmaCodeudor}
                         </strong>
                       </div>
                       <div>
-                        <span className="text-muted-foreground">Estado:</span>{' '}
-                        <strong className="text-amber-700 dark:text-amber-300">
-                          Pendiente de activación
+                        <span className="text-muted-foreground">Usos disponibles:</span>{' '}
+                        <strong className="text-emerald-700 dark:text-emerald-300">
+                          {flexibilidadModalidad === 'PREMIUM' ? '2 veces' : '1 vez'} durante la vigencia
                         </strong>
                       </div>
                       <div>
-                        <span className="text-muted-foreground">Beneficios:</span>{' '}
+                        <span className="text-muted-foreground">Modalidad:</span>{' '}
                         <strong className="text-emerald-700 dark:text-emerald-300">
-                          Cambio de fecha + Traslado de cuota
+                          {flexibilidadModalidad === 'PREMIUM' ? 'Premium ($34.900)' : 'Básica ($15.000)'}
                         </strong>
                       </div>
                     </div>
                     <p className="text-[11px] text-emerald-700 dark:text-emerald-300">
-                      ✨ El cliente podrá activar el beneficio pagando {formatearMoneda(flexibilidadCosto)}.
-                      Al activarse, podrá generar Otros Síes con firma electrónica OTP.
+                      ✨ El cobro de {formatearMoneda(flexibilidadCosto)} se cargará UNA sola vez en la primera cuota.
+                      {' '}El cliente podrá usar el beneficio {flexibilidadModalidad === 'PREMIUM' ? '2 veces' : '1 vez'} durante la vigencia.
                     </p>
                   </div>
                 )}
@@ -2544,6 +2599,7 @@ ${linkFirmaCodeudor}
             )}
 
             {/* === FLEXIBILIDAD FINANCIERA (beneficio opcional, cuotas >= 4) === */}
+            {/* DOS tarifas: Básica $15.000 (1 uso) | Premium $34.900 (2 usos) */}
             {cuotasActuales >= 4 ? (
               <div className={`space-y-3 p-4 rounded-lg border-2 transition-colors ${
                 flexibilidadFinanciera
@@ -2574,32 +2630,162 @@ ${linkFirmaCodeudor}
                     }
                   >
                     {flexibilidadFinanciera
-                      ? `✨ ADQUIRIDO (+$${flexibilidadCosto.toLocaleString('es-CO')})`
-                      : `Opcional · $${flexibilidadCosto.toLocaleString('es-CO')}`}
+                      ? `✨ ADQUIRIDO (${flexibilidadModalidad})`
+                      : 'Opcional — 2 tarifas disponibles'}
                   </Badge>
                 </div>
                 <p className="text-xs text-emerald-700 dark:text-emerald-300">
                   {flexibilidadFinanciera
-                    ? '✅ Activo: el cliente podrá (previo pago del costo) trasladar una cuota al final del crédito o solicitar cambio de fecha de pago. Se generará un documento "Otro Sí" firmado electrónicamente con OTP.'
-                    : `Disponible porque el crédito tiene ${cuotasActuales} cuotas (≥ 4). Por un costo adicional de $${flexibilidadCosto.toLocaleString('es-CO')}, el cliente tendrá la posibilidad de:`}
+                    ? '✅ Activo. El cliente podrá trasladar una cuota al final del crédito o solicitar cambio de fecha de pago. Se generará un "Otro Sí" firmado electrónicamente con OTP. El cobro se realiza UNA sola vez al inicio del crédito (cargado en la primera cuota).'
+                    : `Disponible porque el crédito tiene ${cuotasActuales} cuotas (≥ 4). El cliente podrá trasladar UNA cuota al final del crédito o solicitar cambio de fecha (genera "Otro Sí" sin modificar pagaré/carta originales).`}
                 </p>
+
+                {/* === Selector de modalidad (2 tarifas) — solo si está activo === */}
+                {flexibilidadFinanciera && (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-2">
+                    {/* Básica */}
+                    <button
+                      type="button"
+                      onClick={() => setFlexibilidadModalidad('BASICA')}
+                      className={`text-left p-3 rounded-lg border-2 transition-all ${
+                        flexibilidadModalidad === 'BASICA'
+                          ? 'border-emerald-500 bg-emerald-200/60 dark:bg-emerald-900/60'
+                          : 'border-emerald-300/40 dark:border-emerald-800/60 bg-emerald-50/40 dark:bg-emerald-950/40 hover:border-emerald-400'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-sm font-bold text-emerald-900 dark:text-emerald-100">Básica</span>
+                        <span className="text-lg font-bold text-emerald-700 dark:text-emerald-300">$15.000</span>
+                      </div>
+                      <p className="text-[11px] text-emerald-800 dark:text-emerald-200">
+                        ✅ <strong>1 uso</strong> durante la vigencia del crédito.
+                      </p>
+                      <p className="text-[10px] text-emerald-700/80 dark:text-emerald-300/80 mt-1">
+                        Nota: esta opción solo podrá usarse una vez durante la vigencia del crédito.
+                      </p>
+                    </button>
+
+                    {/* Premium */}
+                    <button
+                      type="button"
+                      onClick={() => setFlexibilidadModalidad('PREMIUM')}
+                      className={`text-left p-3 rounded-lg border-2 transition-all ${
+                        flexibilidadModalidad === 'PREMIUM'
+                          ? 'border-emerald-500 bg-emerald-200/60 dark:bg-emerald-900/60'
+                          : 'border-emerald-300/40 dark:border-emerald-800/60 bg-emerald-50/40 dark:bg-emerald-950/40 hover:border-emerald-400'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-sm font-bold text-emerald-900 dark:text-emerald-100 flex items-center gap-1">
+                          Premium
+                          <span className="text-[9px] px-1 py-0.5 rounded bg-amber-400/30 text-amber-800 dark:text-amber-200 border border-amber-400/40">RECOMENDADA</span>
+                        </span>
+                        <span className="text-lg font-bold text-emerald-700 dark:text-emerald-300">$34.900</span>
+                      </div>
+                      <p className="text-[11px] text-emerald-800 dark:text-emerald-200">
+                        ✅ <strong>2 usos</strong> durante la vigencia del crédito (para las dos cuotas del mes).
+                      </p>
+                      <p className="text-[10px] text-emerald-700/80 dark:text-emerald-300/80 mt-1">
+                        Nota: esta opción podrá usarse dos veces durante la vigencia del crédito.
+                      </p>
+                    </button>
+                  </div>
+                )}
+
+                {/* === Ejemplo de beneficio === */}
+                {flexibilidadFinanciera && (
+                  <div className="mt-3 p-3 rounded-md bg-amber-50 dark:bg-amber-950/30 border border-amber-300 dark:border-amber-800 text-[11px] text-amber-900 dark:text-amber-100">
+                    <div className="font-semibold mb-1 flex items-center gap-1.5">
+                      <span>💡</span> Ejemplo: cómo beneficia al cliente
+                    </div>
+                    <p className="leading-relaxed">
+                      Imagina que el cliente tiene una cuota de <strong>$200.000</strong> con vencimiento el <strong>5 de agosto</strong>,
+                      y por un imprevisto no podrá pagar a tiempo. Sin Flexibilidad Financiera, se generarían
+                      intereses moratorios diarios (ej: <strong>$6.000/día</strong>) — en 5 días serían <strong>$30.000</strong> solo en mora.
+                    </p>
+                    <p className="mt-1.5 leading-relaxed">
+                      Con Flexibilidad Financiera ({flexibilidadModalidad === 'PREMIUM' ? 'Premium $34.900' : 'Básica $15.000'}),
+                      el cliente puede <strong>trasladar esa cuota al final del crédito</strong> o <strong>cambiar la fecha de pago</strong>,
+                      <strong> evitando el cobro de mora</strong>. El ahorro supera ampliamente el costo del beneficio.
+                      {' '}El cobro de {formatearMoneda(flexibilidadCosto)} se cargará una sola vez en la <strong>primera cuota</strong>.
+                    </p>
+                  </div>
+                )}
+
                 {!flexibilidadFinanciera && (
                   <ul className="list-disc list-inside text-xs text-emerald-800 dark:text-emerald-200 ml-2 space-y-0.5">
                     <li>Trasladar UNA cuota al final del crédito</li>
                     <li>Solicitar cambio de fecha de pago (se genera "Otro Sí" sin modificar pagare/carta originales)</li>
                   </ul>
                 )}
-                {flexibilidadFinanciera && (
-                  <div className="mt-2 pt-2 border-t border-emerald-300 dark:border-emerald-700 text-[11px] text-emerald-700 dark:text-emerald-300">
-                    💡 El cliente deberá pagar el costo de <strong>${flexibilidadCosto.toLocaleString('es-CO')}</strong> para activar el beneficio.
-                    Una vez activado, podrá generar Otros Síes desde el detalle del préstamo.
-                  </div>
-                )}
               </div>
             ) : (
               <div className="p-3 rounded-md bg-muted/30 border border-dashed border-muted-foreground/30 text-xs text-muted-foreground">
                 ℹ️ <strong>Flexibilidad Financiera</strong> está disponible solo para créditos con
                 <strong> 4 o más cuotas</strong>. Actualmente: {cuotasActuales} cuota(s).
+              </div>
+            )}
+
+            {/* === COBRO DE PAGARÉ + CARTA DE INSTRUCCIONES === */}
+            {/* Cargo editable $19.900 — se cobra UNA sola vez al inicio del crédito */}
+            {requiereDocumentos && (generarPagare || generarCarta) && (
+              <div className={`space-y-3 p-4 rounded-lg border-2 transition-colors ${
+                cobroPagareCarta
+                  ? 'bg-violet-100 dark:bg-violet-900/40 border-violet-500 dark:border-violet-500'
+                  : 'bg-violet-50 dark:bg-violet-950/30 border-violet-300 dark:border-violet-800'
+              }`}>
+                <div className="flex items-center justify-between gap-2 flex-wrap">
+                  <div className="flex items-center gap-2">
+                    <Switch
+                      checked={cobroPagareCarta}
+                      onCheckedChange={setCobroPagareCarta}
+                      id="cobroPagareCarta"
+                    />
+                    <Label
+                      htmlFor="cobroPagareCarta"
+                      className="text-sm cursor-pointer font-semibold text-violet-900 dark:text-violet-100 flex items-center gap-1.5"
+                    >
+                      <FileText className="w-4 h-4 text-violet-600 dark:text-violet-300" />
+                      Cobro de Pagaré + Carta de Instrucciones
+                    </Label>
+                  </div>
+                  <Badge
+                    variant="outline"
+                    className={
+                      cobroPagareCarta
+                        ? 'text-violet-700 dark:text-violet-200 border-violet-400 dark:border-violet-500 bg-violet-200 dark:bg-violet-800'
+                        : 'text-muted-foreground border-muted-foreground/30'
+                    }
+                  >
+                    {cobroPagareCarta ? `Facturado: $${valorPagareCarta.toLocaleString('es-CO')}` : 'Sin cobro'}
+                  </Badge>
+                </div>
+                {cobroPagareCarta && (
+                  <>
+                    <p className="text-xs text-violet-700 dark:text-violet-300">
+                      ✅ Cargo único aplicado al cliente por la generación del pagaré y carta de instrucciones.
+                      {' '}Se explica en el estado de cuenta como concepto "Pagaré + Carta de Instrucciones".
+                      {' '}El valor es <strong>editable</strong> (puede variar según el cliente).
+                    </p>
+                    <div className="flex items-center gap-2 mt-1">
+                      <Label htmlFor="valorPagareCarta" className="text-xs text-violet-800 dark:text-violet-200 whitespace-nowrap">
+                        Valor a cobrar (COP):
+                      </Label>
+                      <Input
+                        id="valorPagareCarta"
+                        type="number"
+                        min={0}
+                        step={100}
+                        value={valorPagareCarta}
+                        onChange={(e) => setValorPagareCarta(Number(e.target.value) || 0)}
+                        className="w-40 h-9"
+                      />
+                      <span className="text-[11px] text-muted-foreground">
+                        ≈ ${valorPagareCarta.toLocaleString('es-CO')}
+                      </span>
+                    </div>
+                  </>
+                )}
               </div>
             )}
 
@@ -3097,13 +3283,19 @@ export function PrestamosView({
       plazoMeses: solicitud.numeroCuotas?.toString() ?? '12',
       frecuencia: (solicitud.frecuencia as Frecuencia) || 'MENSUAL',
       origen: `Solicitud web ${solicitud.codigo}`,
+      // === Preservar ID de la solicitud web para auto-marcarla como CONVERTIDA ===
+      solicitudWebId: solicitud.id,
+      // === Preservar flexibilidad financiera elegida por el cliente ===
+      flexibilidadFinanciera: solicitud.flexibilidadFinanciera,
+      flexibilidadModalidad: (solicitud.flexibilidadModalidad === 'PREMIUM' ? 'PREMIUM' : 'BASICA'),
+      flexibilidadCosto: solicitud.flexibilidadCosto,
     }
     setSimulacionInicial(params)
     setTab('solicitudes')
     toast({
       title: 'Solicitud cargada',
-      description: `Se precargó el formulario con los datos de la solicitud ${solicitud.codigo}. Completa la información restante para crear el préstamo.`,
-      duration: 6000,
+      description: `Se precargó el formulario con los datos de la solicitud ${solicitud.codigo}. Completa la información restante para crear el préstamo. Al crear, la solicitud se marcará como CONVERTIDA y el cliente verá el flujo de firma en su portal.`,
+      duration: 7000,
     })
   }
 

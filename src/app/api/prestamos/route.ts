@@ -124,10 +124,12 @@ export async function POST(req: NextRequest) {
       valorDiasCausados,
       // === Flexibilidad Financiera ===
       // Beneficio opcional que se ofrece cuando el número de cuotas >= 4.
-      // Costo adicional fijo de $10.000 COP. Permite al cliente:
-      //   1. Trasladar una cuota al final del crédito
-      //   2. Solicitar cambio de fecha de pago (genera documento "Otro Sí")
+      // DOS tarifas:
+      //   - BASICA:  $15.000 COP — 1 uso durante la vigencia
+      //   - PREMIUM: $34.900 COP — 2 usos durante la vigencia
+      // El cobro se hace UNA sola vez al inicio del crédito, cargado en la primera cuota.
       flexibilidadFinanciera,
+      flexibilidadModalidad,
       flexibilidadCosto,
       // === Fondo de Garantía (opcional, tasa configurable) ===
       // El gestor decide si el crédito lleva o no fondo de garantía.
@@ -135,6 +137,13 @@ export async function POST(req: NextRequest) {
       // Ya NO se activa automáticamente en el primer préstamo.
       incluirFondoGarantia,
       tasaFondoGarantia,
+      // === Cobro de Pagaré + Carta de Instrucciones ===
+      // Cargo editable (por defecto $19.900 COP) cobrado UNA sola vez al cliente
+      // cuando el préstamo incluye generar pagare + carta de instrucciones.
+      cobroPagareCarta,
+      valorPagareCarta,
+      // === ID de la solicitud web origen (para auto-marcarla como CONVERTIDA) ===
+      solicitudWebOrigenId,
     } = body
 
     // === Resolver la fecha del préstamo ===
@@ -562,15 +571,30 @@ export async function POST(req: NextRequest) {
           valorDiasCausados: valorDiasCausadosNum > 0 ? valorDiasCausadosNum : null,
           fechaPrimerCorte: fechaPrimerCorte || null,
           // === Flexibilidad Financiera (beneficio opcional, cuotas >= 4) ===
+          // DOS tarifas: BASICA $15.000 (1 uso) | PREMIUM $34.900 (2 usos)
+          // El cobro se hace UNA sola vez al inicio del crédito (cargado en la primera cuota).
           flexibilidadFinanciera: !!flexibilidadFinanciera,
-          flexibilidadCosto:
-            flexibilidadFinanciera && flexibilidadCosto
-              ? parseFloat(flexibilidadCosto)
-              : flexibilidadFinanciera
-                ? 10000
-                : 0,
-          flexibilidadActivada: false,
-          flexibilidadFechaActivacion: null,
+          flexibilidadCosto: (() => {
+            if (!flexibilidadFinanciera) return 0
+            const modalidad = (flexibilidadModalidad || 'BASICA').toUpperCase()
+            if (flexibilidadCosto && parseFloat(flexibilidadCosto) > 0) return parseFloat(flexibilidadCosto)
+            return modalidad === 'PREMIUM' ? 34900 : 15000
+          })(),
+          flexibilidadModalidad: flexibilidadFinanciera
+            ? ((flexibilidadModalidad || 'BASICA').toUpperCase() === 'PREMIUM' ? 'PREMIUM' : 'BASICA')
+            : null,
+          flexibilidadUsosDisponibles: flexibilidadFinanciera
+            ? ((flexibilidadModalidad || 'BASICA').toUpperCase() === 'PREMIUM' ? 2 : 1)
+            : 0,
+          flexibilidadUsosEjercidos: 0,
+          flexibilidadActivada: !!flexibilidadFinanciera,  // se cobra al inicio, queda activo
+          flexibilidadFechaActivacion: flexibilidadFinanciera ? new Date() : null,
+          flexibilidadCobroAplicado: false,  // se marca true cuando se cargue en la primera cuota
+          // === Cobro de Pagaré + Carta de Instrucciones ===
+          cobroPagareCarta: !!cobroPagareCarta,
+          valorPagareCarta: cobroPagareCarta
+            ? (Number(valorPagareCarta) > 0 ? Number(valorPagareCarta) : 19900)
+            : 0,
           notas: notas || null,
         },
         include: { cliente: true },
@@ -682,6 +706,48 @@ export async function POST(req: NextRequest) {
 
       return nuevo
     })
+
+    // === Auto-marcar la solicitud web origen como CONVERTIDA ===
+    // Si el préstamo se creó a partir de una solicitud web del portal del cliente,
+    // marcamos la solicitud como CONVERTIDA y activamos el flujo de firma del lado del cliente.
+    // El cliente verá en su portal el flujo: cargue de fotos + firma manuscrita + OTP.
+    if (solicitudWebOrigenId) {
+      try {
+        const now = new Date()
+        const solicitudActual = await db.solicitudWeb.findUnique({
+          where: { id: solicitudWebOrigenId },
+          select: { estado: true, historialEstados: true },
+        })
+        if (solicitudActual && solicitudActual.estado !== 'CONVERTIDA') {
+          let historial: any[] = []
+          try {
+            historial = solicitudActual.historialEstados ? JSON.parse(solicitudActual.historialEstados) : []
+          } catch {
+            historial = []
+          }
+          historial.push({
+            estado: 'CONVERTIDA',
+            fecha: now.toISOString(),
+            usuario: 'Sistema (auto)',
+            observacion: `Convertida automáticamente al crear préstamo ${codigo}. Flujo de firma activado para el cliente.`,
+          })
+          await db.solicitudWeb.update({
+            where: { id: solicitudWebOrigenId },
+            data: {
+              estado: 'CONVERTIDA',
+              prestamoCreadoId: prestamo.id,
+              fechaConversion: now,
+              estadoFlujoFirma: 'EN_FIRMA_CLIENTE',
+              fechaRevision: now,
+              historialEstados: JSON.stringify(historial),
+            },
+          })
+        }
+      } catch (e) {
+        // No bloquear la creación del préstamo si falla la actualización de la solicitud
+        console.error('[prestamos POST] Error auto-marcando solicitud web como CONVERTIDA:', e)
+      }
+    }
 
     // WhatsApp inicial (solicitud creada)
     const primerCuota = calculo.tablaAmortizacion[0]

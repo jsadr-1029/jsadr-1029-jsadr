@@ -35,6 +35,9 @@ export async function POST(
     if (accion === 'enviar_otp') return await enviarOTP(prestamoId, body)
     if (accion === 'validar_otp') return await validarOTP(prestamoId, body)
     if (accion === 'confirmar_con_foto') return await confirmarConFoto(prestamoId, body)
+    if (accion === 'guardar_fotos_simple') return await guardarFotosSimple(prestamoId, body)
+    if (accion === 'guardar_firma_manuscrita') return await guardarFirmaManuscrita(prestamoId, body)
+    if (accion === 'confirmar_activacion') return await confirmarActivacion(prestamoId)
     if (accion === 'check_otp') return await checkOTP(prestamoId)
 
     return NextResponse.json({ success: false, error: 'Acción no válida' }, { status: 400 })
@@ -48,7 +51,12 @@ async function enviarOTP(prestamoId: string, body: any) {
   const canalFinal = canal || 'AMBOS'
   const prestamo = await db.prestamo.findUnique({ where: { id: prestamoId }, include: { cliente: true } })
   if (!prestamo) return NextResponse.json({ success: false, error: 'Préstamo no encontrado' }, { status: 404 })
-  if (prestamo.estado !== 'PENDIENTE_ACEPTACION') return NextResponse.json({ success: false, error: 'El préstamo no está pendiente de aceptación' }, { status: 400 })
+  // === Permitir OTP en estados SOLICITUD o PENDIENTE_ACEPTACION ===
+  // El flujo de firma del cliente se habilita cuando la solicitud web fue aprobada.
+  // El préstamo puede estar en estado SOLICITUD (recién creado) o PENDIENTE_ACEPTACION.
+  if (prestamo.estado !== 'PENDIENTE_ACEPTACION' && prestamo.estado !== 'SOLICITUD') {
+    return NextResponse.json({ success: false, error: 'El préstamo no está pendiente de aceptación' }, { status: 400 })
+  }
   if (!prestamo.cliente) return NextResponse.json({ success: false, error: 'Cliente no encontrado' }, { status: 404 })
   if (canalFinal === 'EMAIL' && !prestamo.cliente.email) return NextResponse.json({ success: false, error: 'El cliente no tiene correo electrónico' }, { status: 400 })
 
@@ -417,4 +425,232 @@ async function checkOTP(prestamoId: string) {
   if (new Date() > exp) return NextResponse.json({ success: true, data: { activo: false, expirado: true } })
   const segundosRestantes = Math.max(0, Math.floor((exp.getTime() - Date.now()) / 1000))
   return NextResponse.json({ success: true, data: { activo: true, canal: firma.otpCanal, segundosRestantes, minutosRestantes: Math.floor(segundosRestantes / 60), otpValidado: firma.otpValidado, verificado: firma.otpValidado, intentosUsados: firma.intentosOTP, intentosMaximos: firma.maxIntentos, fechaEnvio: firma.otpFechaEnvio, fechaExpiracion: exp } })
+}
+
+// =====================================================
+// NUEVAS ACCIONES — Flujo de firma del cliente desde el portal
+// (cuando la solicitud fue aprobada/convertida en préstamo)
+// =====================================================
+
+// === guardar_fotos_simple: guarda fotos SIN requerir OTP validado ===
+// Paso 1 del flujo: el cliente sube cédula + selfie.
+// NO activa el préstamo — solo registra las fotos en la FirmaElectronica.
+async function guardarFotosSimple(prestamoId: string, body: any) {
+  const { fotoDocumentoBase64, fotoSelfieBase64 } = body
+  if (!fotoDocumentoBase64 || !fotoSelfieBase64) {
+    return NextResponse.json({ success: false, error: 'Ambas fotos son obligatorias (cédula y selfie).' }, { status: 400 })
+  }
+  const validarImagen = (data: string): boolean => {
+    if (!data.startsWith('data:image/')) return false
+    return data.startsWith('data:image/jpeg') || data.startsWith('data:image/png') || data.startsWith('data:image/webp')
+  }
+  if (!validarImagen(fotoDocumentoBase64) || !validarImagen(fotoSelfieBase64)) {
+    return NextResponse.json({ success: false, error: 'Las fotos deben ser JPEG, PNG o WebP.' }, { status: 400 })
+  }
+  const MAX_SIZE = 14 * 1024 * 1024
+  if (fotoDocumentoBase64.length > MAX_SIZE || fotoSelfieBase64.length > MAX_SIZE) {
+    return NextResponse.json({ success: false, error: 'Las fotos exceden el tamaño máximo (10MB cada una).' }, { status: 400 })
+  }
+
+  const prestamo = await db.prestamo.findUnique({ where: { id: prestamoId }, include: { cliente: true } })
+  if (!prestamo) return NextResponse.json({ success: false, error: 'Préstamo no encontrado' }, { status: 404 })
+
+  // Buscar o crear FirmaElectronica(tipo='TYC')
+  let firma = await db.firmaElectronica.findFirst({
+    where: { prestamoId, tipo: 'TYC' },
+    orderBy: { createdAt: 'desc' },
+  })
+  const hashDocumento = crypto.createHash('sha256').update(fotoDocumentoBase64).digest('hex')
+  const hashSelfie = crypto.createHash('sha256').update(fotoSelfieBase64).digest('hex')
+
+  if (firma) {
+    await db.firmaElectronica.update({
+      where: { id: firma.id },
+      data: {
+        fotoDocumento: fotoDocumentoBase64,
+        fotoDocumentoHash: hashDocumento,
+        fotoSelfie: fotoSelfieBase64,
+        fotoSelfieHash: hashSelfie,
+        fechaSubidaFotos: new Date(),
+        estadoFirma: 'FOTOS_SUBIDAS',
+      },
+    })
+  } else {
+    firma = await db.firmaElectronica.create({
+      data: {
+        prestamoId,
+        clienteId: prestamo.clienteId,
+        tipo: 'TYC',
+        imagenFirma: '',
+        fotoDocumento: fotoDocumentoBase64,
+        fotoDocumentoHash: hashDocumento,
+        fotoSelfie: fotoSelfieBase64,
+        fotoSelfieHash: hashSelfie,
+        fechaSubidaFotos: new Date(),
+        estadoFirma: 'FOTOS_SUBIDAS',
+        firmanteRol: 'DEUDOR',
+        firmanteNombre: prestamo.cliente?.nombre || '',
+        firmanteCedula: prestamo.cliente?.cedula || '',
+      },
+    })
+  }
+
+  // Guardar en DocumentoGestor (trazabilidad)
+  await db.documentoGestor.create({
+    data: {
+      prestamoId,
+      clienteId: prestamo.clienteId,
+      tipo: 'FOTO_CEDULA',
+      titulo: `Foto de cédula - ${prestamo.codigo}`,
+      descripcion: `Subida por el cliente en el flujo de firma del portal.`,
+      archivoBase64: fotoDocumentoBase64,
+      archivoNombre: `cedula_${prestamo.codigo}.jpg`,
+      archivoTipo: 'image/jpeg',
+      archivoTamano: Math.floor(fotoDocumentoBase64.length * 0.75),
+      subidoPor: 'CLIENTE_PORTAL',
+    },
+  })
+  await db.documentoGestor.create({
+    data: {
+      prestamoId,
+      clienteId: prestamo.clienteId,
+      tipo: 'FOTO_SELFI',
+      titulo: `Selfie - ${prestamo.codigo}`,
+      descripcion: `Subida por el cliente en el flujo de firma del portal.`,
+      archivoBase64: fotoSelfieBase64,
+      archivoNombre: `selfie_${prestamo.codigo}.jpg`,
+      archivoTipo: 'image/jpeg',
+      archivoTamano: Math.floor(fotoSelfieBase64.length * 0.75),
+      subidoPor: 'CLIENTE_PORTAL',
+    },
+  })
+
+  return NextResponse.json({ success: true, message: 'Fotos guardadas correctamente.' })
+}
+
+// === guardar_firma_manuscrita: guarda la firma dibujada en canvas ===
+// Paso 2 del flujo: el cliente dibuja su firma manuscrita.
+async function guardarFirmaManuscrita(prestamoId: string, body: any) {
+  const { imagenFirmaBase64 } = body
+  if (!imagenFirmaBase64 || !imagenFirmaBase64.startsWith('data:image/png')) {
+    return NextResponse.json({ success: false, error: 'La firma debe ser una imagen PNG válida.' }, { status: 400 })
+  }
+
+  const prestamo = await db.prestamo.findUnique({ where: { id: prestamoId }, include: { cliente: true } })
+  if (!prestamo) return NextResponse.json({ success: false, error: 'Préstamo no encontrado' }, { status: 404 })
+
+  let firma = await db.firmaElectronica.findFirst({
+    where: { prestamoId, tipo: 'TYC' },
+    orderBy: { createdAt: 'desc' },
+  })
+
+  if (firma) {
+    await db.firmaElectronica.update({
+      where: { id: firma.id },
+      data: {
+        imagenFirma: imagenFirmaBase64,
+        estadoFirma: 'FIRMA_DIBUJADA',
+      },
+    })
+  } else {
+    firma = await db.firmaElectronica.create({
+      data: {
+        prestamoId,
+        clienteId: prestamo.clienteId,
+        tipo: 'TYC',
+        imagenFirma: imagenFirmaBase64,
+        estadoFirma: 'FIRMA_DIBUJADA',
+        firmanteRol: 'DEUDOR',
+        firmanteNombre: prestamo.cliente?.nombre || '',
+        firmanteCedula: prestamo.cliente?.cedula || '',
+      },
+    })
+  }
+
+  return NextResponse.json({ success: true, message: 'Firma manuscrita guardada correctamente.' })
+}
+
+// === confirmar_activacion: activa el préstamo después de OTP validado ===
+// Paso final: marca la firma como COMPLETADA y activa el préstamo.
+// Requiere que el OTP haya sido validado previamente.
+async function confirmarActivacion(prestamoId: string) {
+  const firma = await db.firmaElectronica.findFirst({
+    where: { prestamoId, tipo: 'TYC', otpValidado: true },
+    orderBy: { createdAt: 'desc' },
+    include: { prestamo: { include: { cliente: true } } },
+  })
+  if (!firma) {
+    return NextResponse.json({ success: false, error: 'Debes validar el OTP antes de activar el crédito.' }, { status: 400 })
+  }
+  if (firma.estadoFirma === 'COMPLETADA') {
+    return NextResponse.json({ success: true, message: 'El préstamo ya estaba activado.', yaActivado: true })
+  }
+  if (!firma.fotoDocumento || !firma.fotoSelfie) {
+    return NextResponse.json({ success: false, error: 'Faltan las fotos. Vuelve al paso 1.' }, { status: 400 })
+  }
+  if (!firma.imagenFirma) {
+    return NextResponse.json({ success: false, error: 'Falta la firma manuscrita. Vuelve al paso 2.' }, { status: 400 })
+  }
+
+  // Calcular fecha de vencimiento del préstamo
+  const prestamo = firma.prestamo
+  let fechaVencimiento: Date | null = null
+  if (prestamo) {
+    try {
+      const calc = calcularPrestamo({
+        montoPrincipal: prestamo.montoPrincipal,
+        tasaInteresAnual: prestamo.tasaInteresAnual,
+        tasaMoraAnual: getTasaMoraAnual(prestamo),
+        plazoMeses: prestamo.plazoMeses,
+        frecuencia: prestamo.frecuencia as any,
+      })
+      fechaVencimiento = calc.fechaVencimiento || null
+    } catch (e) {
+      // Si falla el cálculo, no bloquear la activación
+    }
+  }
+
+  // Marcar firma como completada
+  await db.firmaElectronica.update({
+    where: { id: firma.id },
+    data: {
+      estadoFirma: 'COMPLETADA',
+      fechaFirmaCompleta: new Date(),
+    },
+  })
+
+  // Activar el préstamo
+  await db.prestamo.update({
+    where: { id: prestamoId },
+    data: {
+      firmaId: firma.id,
+      tycAceptado: true,
+      tycFechaAceptacion: new Date(),
+      estado: 'ACTIVO',
+      fechaDesembolso: new Date(),
+      fechaVencimiento: fechaVencimiento,
+    },
+  })
+
+  // Bitácora
+  try {
+    await db.bitacoraPrestamo.create({
+      data: {
+        prestamoId,
+        prestamoCodigo: prestamo?.codigo || '',
+        usuarioNombre: 'Cliente (Portal)',
+        tipo: 'OTRO',
+        titulo: 'Préstamo activado por el cliente',
+        descripcion: `El cliente completó el flujo de firma (fotos + firma manuscrita + OTP) desde el portal. Firma ID: ${firma.id}.`,
+      },
+    })
+  } catch (e) {
+    // No bloquear
+  }
+
+  return NextResponse.json({
+    success: true,
+    message: 'Préstamo activado correctamente.',
+    data: { prestamoId, estado: 'ACTIVO', firmaId: firma.id },
+  })
 }

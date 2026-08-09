@@ -149,7 +149,19 @@ export async function POST(req: NextRequest) {
       frecuencia,
       primerPagoFecha,
       codigoConfirmacion,
+      flexibilidadFinanciera,
+      flexibilidadModalidad,
+      flexibilidadCosto,
     } = body || {}
+
+    // === Persistir Flexibilidad Financiera (2 tarifas) ===
+    const flexElegida = !!flexibilidadFinanciera
+    const modalidadElegida = (flexibilidadModalidad || 'BASICA').toUpperCase() === 'PREMIUM' ? 'PREMIUM' : 'BASICA'
+    const flexCostoFinal = flexElegida
+      ? (Number(flexibilidadCosto) > 0
+          ? Number(flexibilidadCosto)
+          : (modalidadElegida === 'PREMIUM' ? 34900 : 15000))
+      : 0
 
     // Validar campos requeridos
     if (!clienteId || !token || !valorSolicitado || !numeroCuotas || !frecuencia) {
@@ -413,6 +425,11 @@ export async function POST(req: NextRequest) {
         navegador: clientInfo.userAgent,
         canalOrigen: 'PORTAL_CLIENTE',
         estado: 'PENDIENTE',
+        estadoFlujoFirma: 'PENDIENTE',
+        // === Flexibilidad Financiera (2 tarifas) persistida en la solicitud ===
+        flexibilidadFinanciera: flexElegida,
+        flexibilidadModalidad: flexElegida ? modalidadElegida : null,
+        flexibilidadCosto: flexCostoFinal,
         historialEstados,
       },
     })
@@ -529,6 +546,14 @@ export async function PATCH(req: NextRequest) {
           )
         }
         dataUpdate.estado = estado
+        // === Sincronizar estadoFlujoFirma con el estado de la solicitud ===
+        // Cuando el admin aprueba la solicitud (APROBADA) o la convierte, el cliente
+        // debe ver el flujo de firma (cargue de fotos + firma manuscrita + OTP) en el portal.
+        if (estado === 'APROBADA' || estado === 'CONVERTIDA') {
+          dataUpdate.estadoFlujoFirma = 'EN_FIRMA_CLIENTE'
+        } else if (estado === 'RECHAZADA') {
+          dataUpdate.estadoFlujoFirma = 'PENDIENTE'
+        }
         historial.push({
           estado,
           fecha: now.toISOString(),
@@ -593,11 +618,14 @@ export async function PATCH(req: NextRequest) {
         dataUpdate.estado = 'CONVERTIDA'
         dataUpdate.prestamoCreadoId = prestamoCreadoId
         dataUpdate.fechaConversion = now
+        // === Activar flujo de firma del lado del cliente ===
+        // El cliente verá en el portal el flujo: cargue de fotos + firma manuscrita + OTP
+        dataUpdate.estadoFlujoFirma = 'EN_FIRMA_CLIENTE'
         historial.push({
           estado: 'CONVERTIDA',
           fecha: now.toISOString(),
           usuario: revisadoPor || auth.nombre,
-          observacion: `Convertida en préstamo ${prestamoCreadoId}`,
+          observacion: `Convertida en préstamo ${prestamoCreadoId}. Flujo de firma activado para el cliente.`,
         })
         break
       }

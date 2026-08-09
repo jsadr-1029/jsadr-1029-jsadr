@@ -93,6 +93,11 @@ interface SolicitudWeb {
   prestamoCreadoId: string | null
   fechaConversion: string | null
   historialEstados: string | null
+  // === Campos nuevos: flujo de firma + flexibilidad ===
+  estadoFlujoFirma?: string
+  flexibilidadFinanciera?: boolean
+  flexibilidadModalidad?: string | null
+  flexibilidadCosto?: number
 }
 
 interface SolicitudDetalle extends SolicitudWeb {

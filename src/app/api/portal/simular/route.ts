@@ -6,7 +6,7 @@ import { calcularPrestamo, generarCronograma } from '@/lib/finance'
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
-    const { monto, categoriaId, plazoMeses, frecuencia, token, flexibilidadFinanciera } = body
+    const { monto, categoriaId, plazoMeses, frecuencia, token, flexibilidadFinanciera, flexibilidadModalidad } = body
 
     if (!token) return NextResponse.json({ error: 'Token requerido' }, { status: 401 })
     const cliente = await db.cliente.findFirst({ where: { tokenSesion: token } })
@@ -15,16 +15,24 @@ export async function POST(req: NextRequest) {
     }
 
     // === Flexibilidad Financiera ===
-    // Si el cliente la activó en la simulación, el sistema la incluye en el resultado.
-    // Solo está disponible si el número de cuotas >= 4.
-    const FLEXIBILIDAD_COSTO = 10000
+    // DOS tarifas:
+    //   - BASICA:  $15.000 COP — 1 uso durante la vigencia
+    //   - PREMIUM: $34.900 COP — 2 usos durante la vigencia
+    // El cobro se hace UNA sola vez al inicio del crédito (cargado en la primera cuota).
+    const FLEXIBILIDAD_COSTO_BASICA = 15000
+    const FLEXIBILIDAD_COSTO_PREMIUM = 34900
     const plazoNumFlex = Number(plazoMeses) || 1
     const frecFlex = frecuencia || 'MENSUAL'
     let cuotasSimuladas = plazoNumFlex
     if (frecFlex === 'QUINCENAL') cuotasSimuladas = plazoNumFlex * 2
     else if (frecFlex === 'SEMANAL') cuotasSimuladas = plazoNumFlex * 4
     const flexElegible = cuotasSimuladas >= 4
+    const modalidadElegida = (flexibilidadModalidad || 'BASICA').toUpperCase() === 'PREMIUM' ? 'PREMIUM' : 'BASICA'
     const flexActivada = !!flexibilidadFinanciera && flexElegible
+    const flexCostoCalculado = flexElegible
+      ? (modalidadElegida === 'PREMIUM' ? FLEXIBILIDAD_COSTO_PREMIUM : FLEXIBILIDAD_COSTO_BASICA)
+      : 0
+    const flexUsosDisponibles = flexActivada ? (modalidadElegida === 'PREMIUM' ? 2 : 1) : 0
 
     let categoria: Awaited<ReturnType<typeof db.categoriaCliente.findUnique>> = null
     if (categoriaId) {
@@ -115,10 +123,29 @@ export async function POST(req: NextRequest) {
         categoria: { id: categoria.id, nombre: categoria.nombre, codigo: categoria.codigo },
         ...calc,
         // === Flexibilidad Financiera (solo si cuotas >= 4) ===
+        // DOS tarifas: BASICA $15.000 (1 uso) | PREMIUM $34.900 (2 usos)
         flexibilidadFinanciera: flexActivada,
         flexibilidadElegible: flexElegible,
-        flexibilidadCosto: flexElegible ? FLEXIBILIDAD_COSTO : 0,
+        flexibilidadModalidad: flexActivada ? modalidadElegida : null,
+        flexibilidadCosto: flexCostoCalculado,
         flexibilidadCuotasRequeridas: 4,
+        flexibilidadUsosDisponibles: flexUsosDisponibles,
+        flexibilidadTarifas: flexElegible
+          ? [
+              {
+                modalidad: 'BASICA',
+                costo: FLEXIBILIDAD_COSTO_BASICA,
+                usosDisponibles: 1,
+                descripcion: '1 uso durante la vigencia del crédito',
+              },
+              {
+                modalidad: 'PREMIUM',
+                costo: FLEXIBILIDAD_COSTO_PREMIUM,
+                usosDisponibles: 2,
+                descripcion: '2 usos durante la vigencia del crédito (para las dos cuotas del mes)',
+              },
+            ]
+          : [],
       },
       cronograma,
     })
