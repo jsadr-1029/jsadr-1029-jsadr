@@ -1116,6 +1116,12 @@ import {
 import { DATASET_JURIDICO_COLOMBIA } from './bot-dataset-juridico-colombia'
 // === Refuerzo avanzado: perfil profesional (25 años exp), jurisprudencia, doctrina ===
 import { DATASET_JURIDICO_AVANZADO } from './bot-dataset-juridico-avanzado'
+// === Dataset MASIVO conversacional: 47+ preguntas en estilo fluido (no menú) ===
+// Cubre 500+ consultas reales de clientes en TODAS las ramas del derecho colombiano
+import { DATASET_JURIDICO_MASIVO } from './bot-dataset-juridico-masivo'
+// === Dataset de REFUERZO (auditoría 100%): cubre huecos detectados en pruebas ===
+// de validación y preguntas conversacionales adicionales
+import { DATASET_JURIDICO_REFUERZO } from './bot-dataset-juridico-refuerzo'
 // === Nuevos conocimientos para todos los bots ===
 import { DATASETS_NUEVOS_POR_BOT } from './bot-datasets-nuevos'
 
@@ -1130,10 +1136,20 @@ const DATASETS_EXTRA_POR_BOT: Record<string, ItemEntrenamiento[]> = {
   //   (2) normativa colombiana exhaustiva (Leyes, CGP, C.C., C.Co, jurisprudencia básica)
   //   (3) dataset AVANZADO: perfil profesional 25 años, especialización, maestría,
   //       jurisprudencia de leading cases, doctrina, estrategia, casos prácticos
+  //   (4) dataset MASIVO conversacional fluido: 47+ consultas reales en estilo natural
+  //       (no menú) cubriendo civil, comercial, penal, procesal, laboral, familia,
+  //       inmobiliario, consumidor, datos, financiero, tributario, constitucional,
+  //       administrativo, compliance, internacional privado
+  //   (5) dataset REFUERZO: 21 items que reparan hallazgos de auditoría (prescripción,
+  //       jurisprudencia centrales de riesgo, acción pauliana, SAGRILAFT, SARLAFT,
+  //       negociación acuerdos, S.A.S., protesto, embargo/remate, despido, cesantías,
+  //       fuero maternidad, defensor consumidor, PQR, derechos ARCO, concursal, C.Co)
   JURIDICO: [
     ...DATASET_ADMIN_BOTS_EXTRA.filter(d => d.id.startsWith('JU-')),
     ...DATASET_JURIDICO_COLOMBIA,
     ...DATASET_JURIDICO_AVANZADO,
+    ...DATASET_JURIDICO_MASIVO,
+    ...DATASET_JURIDICO_REFUERZO,
     ...(DATASETS_NUEVOS_POR_BOT.JURIDICO || []),
   ],
   SEGURIDAD: [...DATASET_ADMIN_BOTS_EXTRA.filter(d => d.id.startsWith('CB-')), ...(DATASETS_NUEVOS_POR_BOT.SEGURIDAD || [])],
