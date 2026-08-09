@@ -537,6 +537,10 @@ export async function POST(req: NextRequest) {
           totalInteres: calculo.totalInteres,
           totalPagar: calculo.totalPagar,
           tasaAplicada: calculo.tasaAplicada,
+          // === Guardar la modalidad de amortización para que las renovaciones
+          // puedan detectar si el crédito original era FRANCES / TASA_FIJA /
+          // CUOTA_PERSONALIZADA y auto-rellenar el formulario correctamente.
+          modalidadAmortizacion: (modalidad || 'FRANCES').toUpperCase(),
           moraCompuestaDiaria: true,
           estado: aprobarYEnviarTyC ? 'PENDIENTE_ACEPTACION' : 'SOLICITUD',
           // === Fechas basadas en fechaBasePrestamo (fecha asignada) ===
@@ -699,6 +703,35 @@ export async function POST(req: NextRequest) {
                 diferencia: diferencia > 0 ? diferencia : 0,
               }),
               exito: true,
+            },
+          })
+
+          // === Registro formal de la renovación (RenovacionPrestamo) ===
+          // Crea un registro auditable que vincula el crédito anterior con el
+          // nuevo, almacenando TODAS las nuevas condiciones para trazabilidad.
+          // Esto complementa los bitácoras y audit logs con un modelo estructurado.
+          const fechaInicioPago = calculo.fechaVencimiento
+            ? new Date(calculo.fechaVencimiento)
+            : new Date(fechaBasePrestamo)
+
+          await tx.renovacionPrestamo.create({
+            data: {
+              prestamoOriginalId: prestamoARenovarId,
+              prestamoNuevoId: nuevo.id,
+              saldoAnterior,
+              nuevoMontoPrestado: capitalNuevo,
+              nuevaTasaInteresAnual: tasaAnualFinal,
+              nuevoPlazoMeses: plazoFinal,
+              nuevaFrecuencia: frecuencia,
+              nuevoNumeroCuotas: calculo.numeroCuotas,
+              nuevaMontoCuota: calculo.montoCuota,
+              nuevoTotalInteres: calculo.totalInteres,
+              nuevoTotalPagar: calculo.totalPagar,
+              fechaInicioPago,
+              motivoRenovacion: notas
+                ? `Renovación automática desde solicitud. Notas: ${notas}`
+                : 'Renovación automática desde solicitud de préstamo',
+              usuarioNombre: 'Sistema',
             },
           })
         }

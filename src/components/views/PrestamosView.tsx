@@ -246,7 +246,75 @@ function PrestamosPanel({
   // y active el flujo de firma del lado del cliente.
   const [solicitudWebOrigenId, setSolicitudWebOrigenId] = useState<string | null>(null)
 
-  // === Función: cargar saldo pendiente del préstamo a renovar ===
+  // === Función: aplicar condiciones de un préstamo al formulario ===
+  // Extraída para reutilizar tanto al seleccionar un crédito a renovar como
+  // al pulsar "Restablecer condiciones originales".
+  const aplicarCondicionesAlFormulario = (p: any) => {
+    if (!p) return
+    // Determinar la modalidad del crédito original
+    const modOriginal = (p.modalidadAmortizacion || 'FRANCES').toUpperCase()
+    const esTasaFijaOrig = modOriginal === 'TASA_FIJA'
+    const esCuotaPersOrig = modOriginal === 'CUOTA_PERSONALIZADA'
+
+    // Capital
+    setMontoPrincipal(String(p.montoPrincipal ?? ''))
+
+    // Campos según modalidad
+    if (esCuotaPersOrig) {
+      setModalidad('CUOTA_PERSONALIZADA')
+      setTasaMensualPersonalizada(String(p.tasaInteresMensual ?? ''))
+      setMontoCuotaPersonalizada(String(p.montoCuota ?? ''))
+      setNumeroCuotasPersonalizada(String(p.numeroCuotas ?? ''))
+    } else if (esTasaFijaOrig) {
+      setModalidad('TASA_FIJA')
+      setTasaMensualFija(String(p.tasaInteresMensual ?? ''))
+      setNumeroCuotasFija(String(p.numeroCuotas ?? ''))
+    } else {
+      setModalidad('FRANCES')
+      setTasaInteresAnual(String(p.tasaInteresAnual ?? ''))
+      setPlazoMeses(String(p.plazoMeses ?? ''))
+    }
+
+    // Tasa moratoria diaria (común a todas las modalidades)
+    setTasaMoraAnual(String(p.tasaMoraDiaria ?? ''))
+
+    // Frecuencia
+    if (p.frecuencia) {
+      setFrecuencia(p.frecuencia as Frecuencia)
+    }
+
+    // Categoría
+    if (p.categoriaId) {
+      setCategoriaId(p.categoriaId)
+    }
+
+    // Documentos
+    setRequiereDocumentos(p.requiereDocumentos ?? true)
+    setGenerarPagare(p.generarPagare ?? true)
+    setGenerarCarta(p.generarCarta ?? true)
+
+    // Cobro Pagaré + Carta
+    setCobroPagareCarta(p.cobroPagareCarta ?? false)
+    if (p.valorPagareCarta != null) {
+      setValorPagareCarta(Number(p.valorPagareCarta))
+    }
+
+    // Fondo de Garantía
+    setIncluirFondoGarantia(p.fondoGarantiaCargado ?? false)
+    if (p.fondoGarantiaTasa != null && Number(p.fondoGarantiaTasa) > 0) {
+      setTasaFondoGarantia(Number(p.fondoGarantiaTasa))
+    }
+
+    // Periodo de corte
+    if (p.periodoCorte) {
+      setPeriodoCorte(p.periodoCorte)
+    }
+  }
+
+  // === Función: cargar saldo pendiente del préstamo a renovar + auto-rellenar formulario ===
+  // Cuando el admin selecciona un crédito a renovar, el sistema "arrastra"
+  // automáticamente todas las condiciones (tasa, monto, cuotas, frecuencia,
+  // modalidad, etc.) para que el admin pueda modificarlas.
   const seleccionarPrestamoARenovar = async (prestamoId: string) => {
     setPrestamoARenovar(prestamoId)
     if (!prestamoId) {
@@ -262,7 +330,9 @@ function PrestamosPanel({
         // Calcular saldo pendiente total (capital + interés - pagado)
         const saldoPendiente = prestamo.saldoTotal || 0
         setSaldoPendienteRenovacion(saldoPendiente)
-        setInfoPrestamoRenovacion({
+
+        // Guardar TODAS las condiciones originales para referencia y comparación
+        const condicionesOriginales = {
           codigo: prestamo.codigo,
           montoPrincipal: prestamo.montoPrincipal,
           montoCuota: prestamo.montoCuota,
@@ -271,11 +341,118 @@ function PrestamosPanel({
           saldoTotal: prestamo.saldoTotal,
           estado: prestamo.estado,
           fechaDesembolso: prestamo.fechaDesembolso,
+          modalidadAmortizacion: prestamo.modalidadAmortizacion || 'FRANCES',
+          tasaInteresAnual: prestamo.tasaInteresAnual,
+          tasaInteresMensual: prestamo.tasaInteresMensual,
+          tasaMoraDiaria: prestamo.tasaMoraDiaria,
+          plazoMeses: prestamo.plazoMeses,
+          frecuencia: prestamo.frecuencia,
+          categoriaId: prestamo.categoriaId,
+          requiereDocumentos: prestamo.requiereDocumentos,
+          generarPagare: prestamo.generarPagare,
+          generarCarta: prestamo.generarCarta,
+          cobroPagareCarta: prestamo.cobroPagareCarta,
+          valorPagareCarta: prestamo.valorPagareCarta,
+          fondoGarantiaCargado: prestamo.fondoGarantiaCargado,
+          fondoGarantiaTasa: prestamo.fondoGarantiaTasa,
+          periodoCorte: prestamo.periodoCorte,
+          totalInteres: prestamo.totalInteres,
+          totalPagar: prestamo.totalPagar,
+        }
+        setInfoPrestamoRenovacion(condicionesOriginales)
+
+        // === AUTO-RELLENAR el formulario con las condiciones del crédito a renovar ===
+        // El admin puede modificar cualquier campo después.
+        aplicarCondicionesAlFormulario(prestamo)
+
+        toast({
+          title: '✅ Condiciones cargadas',
+          description: `Se cargaron las condiciones del crédito ${prestamo.codigo}. Modifica los campos que necesites cambiar.`,
         })
       }
     } catch (e: any) {
       console.error('Error cargando préstamo a renovar:', e)
+      toast({
+        title: 'Error',
+        description: 'No se pudieron cargar las condiciones del crédito',
+        variant: 'destructive',
+      })
     }
+  }
+
+  // === Función: restablecer las condiciones originales en el formulario ===
+  // Permite al admin volver a las condiciones del crédito original si modificó
+  // algún campo por error.
+  const restablecerCondicionesOriginales = () => {
+    if (!infoPrestamoRenovacion) return
+    aplicarCondicionesAlFormulario(infoPrestamoRenovacion)
+    toast({
+      title: '🔄 Condiciones restablecidas',
+      description: `Se restauraron las condiciones originales del crédito ${infoPrestamoRenovacion.codigo}.`,
+    })
+  }
+
+  // === Función: detectar qué campos cambiaron vs el crédito original ===
+  // Devuelve un array de { campo, original, actual } para mostrar un resumen
+  // visual de las modificaciones.
+  const detectarCambios = () => {
+    if (!infoPrestamoRenovacion) return []
+    const p = infoPrestamoRenovacion
+    const cambios: { campo: string; original: string; actual: string }[] = []
+
+    const montoActual = parseFloat(montoPrincipal) || 0
+    if (montoActual !== (p.montoPrincipal || 0)) {
+      cambios.push({ campo: 'Capital', original: formatearMoneda(p.montoPrincipal), actual: formatearMoneda(montoActual) })
+    }
+
+    const tasaMorActual = parseFloat(tasaMoraAnual) || 0
+    if (tasaMorActual !== (p.tasaMoraDiaria || 0)) {
+      cambios.push({ campo: 'Tasa moratoria diaria', original: `${p.tasaMoraDiaria}%`, actual: `${tasaMorActual}%` })
+    }
+
+    if (frecuencia !== p.frecuencia) {
+      cambios.push({ campo: 'Frecuencia', original: p.frecuencia || '—', actual: frecuencia })
+    }
+
+    const modOriginal = (p.modalidadAmortizacion || 'FRANCES').toUpperCase()
+    if (modalidad !== modOriginal) {
+      cambios.push({ campo: 'Modalidad', original: modOriginal, actual: modalidad })
+    } else if (modalidad === 'FRANCES') {
+      const tasaActual = parseFloat(tasaInteresAnual) || 0
+      if (tasaActual !== (p.tasaInteresAnual || 0)) {
+        cambios.push({ campo: 'Tasa anual', original: `${p.tasaInteresAnual}%`, actual: `${tasaActual}%` })
+      }
+      const plazoActual = parseInt(plazoMeses) || 0
+      if (plazoActual !== (p.plazoMeses || 0)) {
+        cambios.push({ campo: 'Plazo (meses)', original: String(p.plazoMeses), actual: String(plazoActual) })
+      }
+    } else if (modalidad === 'TASA_FIJA') {
+      const tasaMensActual = parseFloat(tasaMensualFija) || 0
+      const tasaMensOrig = p.tasaInteresMensual || 0
+      if (tasaMensActual !== tasaMensOrig) {
+        cambios.push({ campo: 'Tasa mensual', original: `${tasaMensOrig}%`, actual: `${tasaMensActual}%` })
+      }
+      const cuotasActual = parseInt(numeroCuotasFija) || 0
+      if (cuotasActual !== (p.numeroCuotas || 0)) {
+        cambios.push({ campo: 'N° cuotas', original: String(p.numeroCuotas), actual: String(cuotasActual) })
+      }
+    } else if (modalidad === 'CUOTA_PERSONALIZADA') {
+      const tasaMensActual = parseFloat(tasaMensualPersonalizada) || 0
+      const tasaMensOrig = p.tasaInteresMensual || 0
+      if (tasaMensActual !== tasaMensOrig) {
+        cambios.push({ campo: 'Tasa mensual', original: `${tasaMensOrig}%`, actual: `${tasaMensActual}%` })
+      }
+      const cuotaActual = parseFloat(montoCuotaPersonalizada) || 0
+      if (cuotaActual !== (p.montoCuota || 0)) {
+        cambios.push({ campo: 'Cuota', original: formatearMoneda(p.montoCuota), actual: formatearMoneda(cuotaActual) })
+      }
+      const cuotasActual = parseInt(numeroCuotasPersonalizada) || 0
+      if (cuotasActual !== (p.numeroCuotas || 0)) {
+        cambios.push({ campo: 'N° cuotas', original: String(p.numeroCuotas), actual: String(cuotasActual) })
+      }
+    }
+
+    return cambios
   }
 
   // === Función: al activar el switch de codeudor, precargar automáticamente ===
@@ -1833,35 +2010,52 @@ ${linkFirmaCodeudor}
               )}
             </div>
 
-            {/* === Si es renovación, mostrar préstamos del cliente === */}
+            {/* === Si es renovación, mostrar créditos ACTIVOS del cliente === */}
             {esRenovacion && clienteId && (
               <div className="space-y-3 p-3 rounded-md bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800">
                 <div className="space-y-2">
                   <Label className="text-xs font-medium text-amber-900 dark:text-amber-100">
-                    Selecciona el crédito a renovar
+                    Selecciona el crédito activo a renovar
                   </Label>
                   <Select value={prestamoARenovar} onValueChange={seleccionarPrestamoARenovar}>
                     <SelectTrigger className="border-amber-400 dark:border-amber-600">
-                      <SelectValue placeholder="Selecciona el crédito previo del cliente" />
+                      <SelectValue placeholder="Selecciona el crédito activo del cliente" />
                     </SelectTrigger>
                     <SelectContent>
                       {prestamos
-                        .filter((p) => p.cliente?.id === clienteId && p.estado !== 'RECHAZADO' && p.estado !== 'CANCELADO')
+                        .filter((p) =>
+                          p.cliente?.id === clienteId &&
+                          ['ACTIVO', 'EN_MORA', 'JURIDICO'].includes(p.estado)
+                        )
                         .map((p) => (
                           <SelectItem key={p.id} value={p.id}>
-                            {p.codigo} - {formatearMoneda(p.montoPrincipal)} - {p.cuotasPagadas}/{p.numeroCuotas} cuotas - Saldo: {formatearMoneda(p.saldoTotal)}
+                            {p.codigo} · {formatearMoneda(p.montoPrincipal)} · {p.cuotasPagadas}/{p.numeroCuotas} cuotas · Saldo: {formatearMoneda(p.saldoTotal)} · {p.estado === 'ACTIVO' ? '✅ Activo' : p.estado === 'EN_MORA' ? '⚠️ En mora' : '⚖️ Jurídico'}
                           </SelectItem>
                         ))}
                     </SelectContent>
                   </Select>
+                  <p className="text-[10px] text-amber-700 dark:text-amber-300">
+                    💡 Solo se muestran créditos en estado ACTIVO, EN_MORA o JURIDICO (renovables). Al seleccionar uno, el formulario se auto-rellenará con sus condiciones para que las modifiques.
+                  </p>
                 </div>
 
-                {/* === Info del préstamo a renovar === */}
+                {/* === Info del préstamo a renovar + condiciones originales === */}
                 {infoPrestamoRenovacion && (
-                  <div className="p-3 rounded-md bg-amber-100 dark:bg-amber-900/30 border border-amber-400 dark:border-amber-600 text-xs space-y-2">
-                    <p className="font-semibold text-amber-900 dark:text-amber-100">
-                      📋 Crédito a renovar: {infoPrestamoRenovacion.codigo}
-                    </p>
+                  <div className="p-3 rounded-md bg-amber-100 dark:bg-amber-900/30 border border-amber-400 dark:border-amber-600 text-xs space-y-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="font-semibold text-amber-900 dark:text-amber-100">
+                        📋 Crédito a renovar: {infoPrestamoRenovacion.codigo}
+                      </p>
+                      <button
+                        type="button"
+                        onClick={restablecerCondicionesOriginales}
+                        className="px-2 py-1 rounded text-[10px] font-medium bg-amber-200 hover:bg-amber-300 dark:bg-amber-800 dark:hover:bg-amber-700 text-amber-900 dark:text-amber-100 border border-amber-400 dark:border-amber-600 transition-colors"
+                        title="Volver a cargar las condiciones originales del crédito en el formulario"
+                      >
+                        🔄 Restablecer condiciones originales
+                      </button>
+                    </div>
+
                     <div className="grid grid-cols-2 gap-2 text-amber-900 dark:text-amber-100">
                       <div>
                         <span className="text-amber-700 dark:text-amber-300">Capital original:</span>{' '}
@@ -1879,7 +2073,72 @@ ${linkFirmaCodeudor}
                         <span className="text-amber-700 dark:text-amber-300">Saldo pendiente:</span>{' '}
                         <strong className="text-base">{formatearMoneda(infoPrestamoRenovacion.saldoTotal)}</strong>
                       </div>
+                      <div>
+                        <span className="text-amber-700 dark:text-amber-300">Modalidad:</span>{' '}
+                        <strong>{infoPrestamoRenovacion.modalidadAmortizacion}</strong>
+                      </div>
+                      <div>
+                        <span className="text-amber-700 dark:text-amber-300">Frecuencia:</span>{' '}
+                        <strong>{infoPrestamoRenovacion.frecuencia}</strong>
+                      </div>
+                      <div>
+                        <span className="text-amber-700 dark:text-amber-300">Tasa anual:</span>{' '}
+                        <strong>{infoPrestamoRenovacion.tasaInteresAnual?.toFixed(2)}%</strong>
+                      </div>
+                      <div>
+                        <span className="text-amber-700 dark:text-amber-300">Tasa mensual:</span>{' '}
+                        <strong>{infoPrestamoRenovacion.tasaInteresMensual?.toFixed(4)}%</strong>
+                      </div>
+                      <div>
+                        <span className="text-amber-700 dark:text-amber-300">Tasa moratoria diaria:</span>{' '}
+                        <strong>{infoPrestamoRenovacion.tasaMoraDiaria}%</strong>
+                      </div>
+                      <div>
+                        <span className="text-amber-700 dark:text-amber-300">Plazo:</span>{' '}
+                        <strong>{infoPrestamoRenovacion.plazoMeses} meses</strong>
+                      </div>
                     </div>
+
+                    {/* === Banner: condiciones cargadas automáticamente === */}
+                    <div className="p-2 rounded bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-300 dark:border-emerald-700 text-emerald-800 dark:text-emerald-200">
+                      <p className="font-medium">
+                        ✅ Condiciones cargadas automáticamente en el formulario
+                      </p>
+                      <p className="mt-0.5 text-[10px]">
+                        Modifica los campos que necesites cambiar (tasa, monto, cuotas, frecuencia, etc.). Los campos sin modificar conservarán los valores originales del crédito.
+                      </p>
+                    </div>
+
+                    {/* === Resumen de cambios detectados === */}
+                    {(() => {
+                      const cambios = detectarCambios()
+                      if (cambios.length === 0) {
+                        return (
+                          <div className="p-2 rounded bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300">
+                            <p className="font-medium">📋 Sin cambios detectados</p>
+                            <p className="mt-0.5 text-[10px]">Las condiciones del formulario coinciden con el crédito original.</p>
+                          </div>
+                        )
+                      }
+                      return (
+                        <div className="p-2 rounded bg-blue-50 dark:bg-blue-950/30 border border-blue-300 dark:border-blue-700 text-blue-900 dark:text-blue-100">
+                          <p className="font-medium">
+                            ✏️ {cambios.length} cambio(s) detectado(s) vs el crédito original:
+                          </p>
+                          <div className="mt-1 space-y-0.5">
+                            {cambios.map((c, i) => (
+                              <div key={i} className="flex justify-between gap-2 text-[10px]">
+                                <span className="text-blue-700 dark:text-blue-300">{c.campo}:</span>
+                                <span className="line-through text-red-600 dark:text-red-400">{c.original}</span>
+                                <span className="text-blue-500">→</span>
+                                <span className="font-semibold text-emerald-700 dark:text-emerald-300">{c.actual}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )
+                    })()}
+
                     <div className="pt-2 border-t border-amber-300 dark:border-amber-700">
                       <p className="text-amber-800 dark:text-amber-200">
                         💡 Al crear la nueva solicitud:
@@ -1900,9 +2159,12 @@ ${linkFirmaCodeudor}
                     ⚠️ Selecciona primero un cliente para ver sus créditos activos
                   </p>
                 )}
-                {clienteId && prestamos.filter((p) => p.cliente?.id === clienteId && p.estado !== 'RECHAZADO' && p.estado !== 'CANCELADO').length === 0 && (
+                {clienteId && prestamos.filter((p) =>
+                  p.cliente?.id === clienteId &&
+                  ['ACTIVO', 'EN_MORA', 'JURIDICO'].includes(p.estado)
+                ).length === 0 && (
                   <p className="text-xs text-amber-700 dark:text-amber-300">
-                    ℹ️ Este cliente no tiene créditos activos para renovar
+                    ℹ️ Este cliente no tiene créditos activos (ACTIVO / EN_MORA / JURIDICO) para renovar
                   </p>
                 )}
               </div>
