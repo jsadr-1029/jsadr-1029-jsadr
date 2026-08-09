@@ -72,6 +72,7 @@ function isPublicEndpoint(pathname: string): boolean {
     pathname.startsWith('/api/auth/mfa') ||
     pathname.startsWith('/api/auth/refresh') ||
     pathname.startsWith('/api/auth/recuperar-clave') ||
+    pathname.startsWith('/api/auth/restablecer-clave') || // magic link password reset (v4.14)
     pathname.startsWith('/api/portal/auth') ||
     pathname.startsWith('/api/portal/') || // portal usa x-portal-token
     pathname.startsWith('/api/admin/portal/auth') || // login del portal admin companion (P_jsadr / 731649)
@@ -194,6 +195,7 @@ function getRateLimitForPath(pathname: string): { max: number; key: string } | n
     pathname.startsWith('/api/chat/totp') ||
     pathname.includes('/aceptar-tyc-otp') ||
     pathname.startsWith('/api/auth/recuperar-clave') ||
+    pathname.startsWith('/api/auth/restablecer-clave') || // magic link password reset (v4.14)
     pathname.startsWith('/api/seguridad/recuperacion-claves')
   ) {
     return { max: RATE_LIMIT_OTP, key: `otp:${pathname}` }
