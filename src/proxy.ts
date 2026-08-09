@@ -96,6 +96,11 @@ function isPublicEndpoint(pathname: string): boolean {
     // token único e intransferible (hash SHA-256 del documento).
     pathname === '/api/verificar' ||
     pathname === '/api/documentos/verificar' ||
+    // === Estado de mantenimiento (público) ===
+    // La página de login consulta este endpoint para mostrar el mensaje
+    // de mantenimiento a los clientes. NO requiere autenticación porque
+    // el cliente aún no ha iniciado sesión.
+    pathname === '/api/estado-mantenimiento' ||
     // === Cron endpoints (v4.4) — autenticados por X-Cron-Secret ===
     pathname.startsWith('/api/recordatorios/cron') ||
     pathname.startsWith('/api/pagos/cron')
