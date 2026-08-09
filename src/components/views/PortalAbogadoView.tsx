@@ -739,7 +739,7 @@ function ChatInternoAbogado({ token, nombre }: { token: string; nombre: string }
       const res = await fetch('/api/juridico/portal/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token, contenido }),
+        body: JSON.stringify({ token, mensaje: contenido }),
       })
       const json = await res.json()
       if (json.success) {

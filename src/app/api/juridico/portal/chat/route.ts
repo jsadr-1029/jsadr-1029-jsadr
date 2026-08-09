@@ -447,7 +447,8 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
     const token = body.token || req.headers.get('x-juridico-token')
-    const mensaje = body.mensaje
+    // Tolerante a ambos nombres de campo: 'mensaje' (canónico) o 'contenido' (legacy)
+    const mensaje = body.mensaje || body.contenido || body.texto
     const casoId = body.casoId || null
 
     if (!token || !mensaje) {
