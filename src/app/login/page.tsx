@@ -99,6 +99,36 @@ export default function LoginPage() {
   const [imagenQRError, setImagenQRError] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
 
+  // === ESTADO DE MANTENIMIENTO ===
+  // Consulta el endpoint público /api/estado-mantenimiento al cargar la
+  // página. Si el modo mantenimiento está activo, muestra un banner
+  // prominente con el mensaje configurado por el admin. Esto informa a
+  // los clientes por qué no pueden ingresar.
+  interface EstadoMantenimiento {
+    activo: boolean
+    mensaje: string
+    inicio: string | null
+    fin: string | null
+    permitirAdmin: boolean
+  }
+  const [mantenimiento, setMantenimiento] = useState<EstadoMantenimiento | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    fetch('/api/estado-mantenimiento')
+      .then((r) => r.json())
+      .then((data: EstadoMantenimiento) => {
+        if (!cancelled) setMantenimiento(data)
+      })
+      .catch(() => {
+        // Si falla, asumir que el sistema está operativo
+        if (!cancelled) setMantenimiento(null)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
   useEffect(() => {
     setTimeout(() => inputRef.current?.focus(), 200)
   }, [])
@@ -621,6 +651,50 @@ export default function LoginPage() {
             <div className="h-1 bg-gradient-to-r from-indigo-500 via-purple-500 to-fuchsia-500" />
 
             <div className="p-7 sm:p-9">
+              {/* === BANNER DE MANTENIMIENTO ===
+                  Se muestra cuando el admin activa el modo mantenimiento desde
+                  Configuración Global → Mantenimiento. Informa al cliente por
+                  qué no puede ingresar. Si permitirAdmin=true, los admin pueden
+                  seguir intentando ingresar. */}
+              {mantenimiento?.activo && (
+                <div className="mb-6 rounded-xl border-2 border-amber-400/60 bg-gradient-to-br from-amber-950/60 via-orange-950/40 to-red-950/60 p-4 shadow-lg shadow-amber-500/10">
+                  <div className="flex items-start gap-3">
+                    <div className="shrink-0 w-10 h-10 rounded-lg bg-amber-500/30 flex items-center justify-center">
+                      <AlertCircle className="w-6 h-6 text-amber-300" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-bold text-amber-200 uppercase tracking-wider">
+                        Sistema en Mantenimiento
+                      </p>
+                      <p className="text-sm text-amber-100/90 mt-1 leading-relaxed">
+                        {mantenimiento.mensaje || 'El sistema se encuentra en mantenimiento. Volveremos pronto.'}
+                      </p>
+                      {(mantenimiento.inicio || mantenimiento.fin) && (
+                        <div className="mt-2 pt-2 border-t border-amber-400/20 text-[11px] text-amber-200/70 space-y-0.5">
+                          {mantenimiento.inicio && (
+                            <p>
+                              <Clock className="w-3 h-3 inline mr-1" />
+                              Inicio: {new Date(mantenimiento.inicio).toLocaleString('es-CO', { timeZone: 'America/Bogota' })}
+                            </p>
+                          )}
+                          {mantenimiento.fin && (
+                            <p>
+                              <Clock className="w-3 h-3 inline mr-1" />
+                              Fin estimado: {new Date(mantenimiento.fin).toLocaleString('es-CO', { timeZone: 'America/Bogota' })}
+                            </p>
+                          )}
+                        </div>
+                      )}
+                      {mantenimiento.permitirAdmin && (
+                        <p className="mt-2 text-[11px] text-amber-300/60 italic">
+                          Los administradores pueden iniciar sesión para realizar tareas.
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {/* Header */}
               <div className="mb-7">
                 <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded-full bg-indigo-500/10 border border-indigo-500/20 mb-4">

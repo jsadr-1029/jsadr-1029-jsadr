@@ -80,6 +80,7 @@ import {
   Send,
   ShieldCheck,
   Bot,
+  Eye,
 } from 'lucide-react'
 import { SnapshotsProyectoView } from '@/components/views/SnapshotsProyectoView'
 import { BotIcons } from '@/components/views/BotIcons'
@@ -2673,11 +2674,12 @@ function EstadoPanel() {
   )
 }
 
-// === 11. MANTENIMIENTO ===
+// === 11. MANTENIMIENTO — Centro de Operaciones ===
 function MantenimientoPanel() {
   const [data, setData] = useState<Mantenimiento | null>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [toggling, setToggling] = useState(false)
   const { toast } = useToast()
 
   const cargar = useCallback(async () => {
@@ -2690,6 +2692,7 @@ function MantenimientoPanel() {
 
   useEffect(() => { cargar() }, [cargar])
 
+  // === Guardar toda la configuración ===
   const guardar = async () => {
     if (!data) return
     setSaving(true)
@@ -2699,39 +2702,275 @@ function MantenimientoPanel() {
     setSaving(false)
   }
 
+  // === TOGGLE RÁPIDO — Activa/desactiva el modo mantenimiento con un click ===
+  // Este es el botón principal del "centro de operaciones": permite al admin
+  // activar el mantenimiento de emergencia sin tener que hacer scroll y guardar
+  // toda la configuración. Pone un mensaje por defecto y guarda inmediatamente.
+  const toggleMantenimiento = async () => {
+    if (!data) return
+    setToggling(true)
+    const nuevoEstado = !data.activo
+    const nuevoData = {
+      ...data,
+      activo: nuevoEstado,
+      // Si se activa sin mensaje, poner uno por defecto
+      mensaje: nuevoEstado && !data.mensaje
+        ? 'El sistema se encuentra en mantenimiento programado. Volveremos pronto.'
+        : data.mensaje,
+    }
+    setData(nuevoData)
+    const json = await patchSeccion('mantenimiento', nuevoData as unknown as Record<string, unknown>, 'Toggle mantenimiento')
+    if (json.success) {
+      toast({
+        title: nuevoEstado ? '🚧 Mantenimiento ACTIVADO' : '✅ Sistema operativo',
+        description: nuevoEstado
+          ? 'Los clientes verán el mensaje de mantenimiento al intentar iniciar sesión.'
+          : 'Los clientes pueden iniciar sesión normalmente.',
+        variant: nuevoEstado ? 'destructive' : 'default',
+      })
+    } else {
+      // Revertir en caso de error
+      setData(data)
+      toast({ title: 'Error al cambiar mantenimiento', description: json.error, variant: 'destructive' })
+    }
+    setToggling(false)
+  }
+
   if (loading || !data) return <p className="text-muted-foreground p-4">Cargando…</p>
 
+  const estaActivo = data.activo
+
   return (
-    <Card>
-      <CardHeader className="flex flex-row items-center justify-between">
-        <CardTitle className="flex items-center gap-2"><Wrench className="w-5 h-5" /> Modo Mantenimiento</CardTitle>
-        <Button onClick={guardar} disabled={saving}><Save className="w-4 h-4 mr-2" /> {saving ? 'Guardando…' : 'Guardar'}</Button>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <div className="flex items-center justify-between p-4 rounded-lg border border-white/10 bg-white/5">
-          <div className="flex items-center gap-3">
-            {data.activo ? <AlertTriangle className="w-6 h-6 text-amber-400" /> : <CheckCircle className="w-6 h-6 text-emerald-400" />}
+    <div className="space-y-6">
+      {/* =====================================================
+          BANNER PRINCIPAL — Estado del sistema + Toggle grande
+          ===================================================== */}
+      <div className={`relative overflow-hidden rounded-2xl border-2 transition-all ${
+        estaActivo
+          ? 'border-amber-400 bg-gradient-to-br from-amber-900/40 via-orange-900/30 to-red-900/40 shadow-lg shadow-amber-500/20'
+          : 'border-emerald-400 bg-gradient-to-br from-emerald-900/40 via-green-900/30 to-teal-900/40 shadow-lg shadow-emerald-500/20'
+      }`}>
+        {/* Patrón de fondo */}
+        <div className="absolute inset-0 opacity-10">
+          {estaActivo ? (
+            // Patrón de advertencia
+            <div className="w-full h-full" style={{
+              backgroundImage: 'repeating-linear-gradient(45deg, transparent, transparent 20px, rgba(251,191,36,0.4) 20px, rgba(251,191,36,0.4) 40px)',
+            }} />
+          ) : (
+            // Patrón de OK
+            <div className="w-full h-full" style={{
+              backgroundImage: 'radial-gradient(circle, rgba(16,185,129,0.3) 1px, transparent 1px)',
+              backgroundSize: '20px 20px',
+            }} />
+          )}
+        </div>
+
+        <div className="relative p-6 md:p-8">
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-6">
+            {/* Estado actual */}
+            <div className="flex items-center gap-4">
+              <div className={`w-16 h-16 rounded-2xl flex items-center justify-center shadow-xl ${
+                estaActivo ? 'bg-amber-500/30' : 'bg-emerald-500/30'
+              }`}>
+                {estaActivo ? (
+                  <AlertTriangle className="w-9 h-9 text-amber-300" />
+                ) : (
+                  <CheckCircle className="w-9 h-9 text-emerald-300" />
+                )}
+              </div>
+              <div>
+                <p className={`text-xs font-bold uppercase tracking-wider mb-1 ${
+                  estaActivo ? 'text-amber-300' : 'text-emerald-300'
+                }`}>
+                  Estado del Sistema
+                </p>
+                <h2 className={`text-2xl font-bold ${
+                  estaActivo ? 'text-amber-100' : 'text-emerald-100'
+                }`}>
+                  {estaActivo ? 'En Mantenimiento' : 'Operativo'}
+                </h2>
+                <p className={`text-sm mt-1 ${
+                  estaActivo ? 'text-amber-200/70' : 'text-emerald-200/70'
+                }`}>
+                  {estaActivo
+                    ? 'Los clientes no pueden iniciar sesión — ven el mensaje de mantenimiento.'
+                    : 'Los clientes pueden iniciar sesión normalmente.'}
+                </p>
+              </div>
+            </div>
+
+            {/* Toggle grande */}
+            <button
+              type="button"
+              onClick={toggleMantenimiento}
+              disabled={toggling}
+              className={`shrink-0 px-6 py-4 rounded-xl font-bold text-white shadow-lg transition-all hover:scale-105 active:scale-95 disabled:opacity-60 disabled:hover:scale-100 ${
+                estaActivo
+                  ? 'bg-gradient-to-r from-emerald-500 to-green-600 hover:from-emerald-600 hover:to-green-700'
+                  : 'bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700'
+              }`}
+            >
+              {toggling ? (
+                <>
+                  <Loader2 className="w-5 h-5 mr-2 inline animate-spin" />
+                  Procesando…
+                </>
+              ) : estaActivo ? (
+                <>
+                  <CheckCircle className="w-5 h-5 mr-2 inline" />
+                  Desactivar Mantenimiento
+                </>
+              ) : (
+                <>
+                  <AlertTriangle className="w-5 h-5 mr-2 inline" />
+                  Activar Mantenimiento
+                </>
+              )}
+            </button>
+          </div>
+
+          {/* Info de timing */}
+          {(data.inicio || data.fin) && (
+            <div className="mt-6 pt-4 border-t border-white/10 grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {data.inicio && (
+                <div className="rounded-lg bg-black/20 p-3">
+                  <p className="text-xs text-white/60 font-medium">Inicio programado</p>
+                  <p className="text-sm text-white font-mono mt-0.5">
+                    {new Date(data.inicio).toLocaleString('es-CO', { timeZone: 'America/Bogota' })}
+                  </p>
+                </div>
+              )}
+              {data.fin && (
+                <div className="rounded-lg bg-black/20 p-3">
+                  <p className="text-xs text-white/60 font-medium">Fin programado</p>
+                  <p className="text-sm text-white font-mono mt-0.5">
+                    {new Date(data.fin).toLocaleString('es-CO', { timeZone: 'America/Bogota' })}
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* =====================================================
+          CONFIGURACIÓN DETALLADA
+          ===================================================== */}
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between">
+          <CardTitle className="flex items-center gap-2">
+            <Wrench className="w-5 h-5" />
+            Configuración Detallada de Mantenimiento
+          </CardTitle>
+          <Button onClick={guardar} disabled={saving}>
+            {saving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
+            {saving ? 'Guardando…' : 'Guardar cambios'}
+          </Button>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {/* Toggle activo */}
+          <div className="flex items-center justify-between p-4 rounded-lg border border-white/10 bg-white/5">
+            <div className="flex items-center gap-3">
+              {estaActivo ? <AlertTriangle className="w-5 h-5 text-amber-400" /> : <CheckCircle className="w-5 h-5 text-emerald-400" />}
+              <div>
+                <div className="font-semibold">Modo mantenimiento</div>
+                <div className="text-xs text-muted-foreground">
+                  Activa/desactiva el modo mantenimiento para usuarios finales
+                </div>
+              </div>
+            </div>
+            <Switch checked={data.activo} onCheckedChange={(v) => setData({ ...data, activo: v })} />
+          </div>
+
+          {/* Mensaje a mostrar */}
+          <div>
+            <Label className="text-sm font-medium">Mensaje a mostrar en el login</Label>
+            <p className="text-xs text-muted-foreground mb-2">
+              Este texto se mostrará a los clientes cuando intenten iniciar sesión durante el mantenimiento.
+            </p>
+            <Textarea
+              value={data.mensaje}
+              onChange={(e) => setData({ ...data, mensaje: e.target.value })}
+              rows={3}
+              placeholder="El sistema se encuentra en mantenimiento. Volveremos pronto."
+            />
+          </div>
+
+          {/* Fechas programadas */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <div className="font-semibold">{data.activo ? 'Sistema en mantenimiento' : 'Sistema operativo'}</div>
-              <div className="text-xs text-muted-foreground">Activa/desactiva el modo mantenimiento para usuarios finales</div>
+              <Label className="text-sm font-medium">Inicio programado (opcional)</Label>
+              <p className="text-xs text-muted-foreground mb-2">Formato: YYYY-MM-DDTHH:MM</p>
+              <Input
+                value={data.inicio ? new Date(data.inicio).toISOString().slice(0, 16) : ''}
+                onChange={(e) => setData({ ...data, inicio: e.target.value || null })}
+                type="datetime-local"
+              />
+            </div>
+            <div>
+              <Label className="text-sm font-medium">Fin programado (opcional)</Label>
+              <p className="text-xs text-muted-foreground mb-2">Formato: YYYY-MM-DDTHH:MM</p>
+              <Input
+                value={data.fin ? new Date(data.fin).toISOString().slice(0, 16) : ''}
+                onChange={(e) => setData({ ...data, fin: e.target.value || null })}
+                type="datetime-local"
+              />
             </div>
           </div>
-          <Switch checked={data.activo} onCheckedChange={(v) => setData({ ...data, activo: v })} />
-        </div>
-        <div>
-          <Label>Mensaje a mostrar</Label>
-          <Textarea value={data.mensaje} onChange={(e) => setData({ ...data, mensaje: e.target.value })} rows={3} />
-        </div>
-        <div className="grid grid-cols-2 gap-4">
-          <Field label="Inicio (ISO)" value={data.inicio || ''} onChange={(v) => setData({ ...data, inicio: v })} />
-          <Field label="Fin (ISO)" value={data.fin || ''} onChange={(v) => setData({ ...data, fin: v })} />
-        </div>
-        <div className="flex items-center gap-2">
-          <Switch checked={data.permitirAdmin} onCheckedChange={(v) => setData({ ...data, permitirAdmin: v })} />
-          <Label>Permitir acceso a administradores durante mantenimiento</Label>
-        </div>
-      </CardContent>
-    </Card>
+
+          {/* Permitir admin */}
+          <div className="flex items-center gap-3 p-4 rounded-lg border border-white/10 bg-white/5">
+            <Switch checked={data.permitirAdmin} onCheckedChange={(v) => setData({ ...data, permitirAdmin: v })} />
+            <div>
+              <div className="font-medium">Permitir acceso a administradores</div>
+              <div className="text-xs text-muted-foreground">
+                Los administradores podrán iniciar sesión durante el mantenimiento para realizar tareas.
+              </div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* =====================================================
+          VISTA PREVIA — Cómo lo verá el cliente
+          ===================================================== */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Eye className="w-5 h-5" />
+            Vista Previa — Cómo lo verá el cliente
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className={`rounded-xl p-6 border-2 ${
+            estaActivo
+              ? 'border-amber-400 bg-amber-950/30'
+              : 'border-emerald-400 bg-emerald-950/20'
+          }`}>
+            <div className="flex items-start gap-3">
+              {estaActivo ? (
+                <AlertTriangle className="w-6 h-6 text-amber-400 shrink-0 mt-0.5" />
+              ) : (
+                <CheckCircle className="w-6 h-6 text-emerald-400 shrink-0 mt-0.5" />
+              )}
+              <div>
+                <p className={`font-bold text-lg ${
+                  estaActivo ? 'text-amber-200' : 'text-emerald-200'
+                }`}>
+                  {estaActivo ? 'Sistema en Mantenimiento' : 'Sistema Operativo'}
+                </p>
+                <p className={`text-sm mt-1 ${
+                  estaActivo ? 'text-amber-100/80' : 'text-emerald-100/80'
+                }`}>
+                  {data.mensaje || 'El sistema se encuentra en mantenimiento. Volveremos pronto.'}
+                </p>
+              </div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
   )
 }
 

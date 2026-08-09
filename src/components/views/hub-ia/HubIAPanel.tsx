@@ -419,24 +419,19 @@ export function HubIAPanel() {
                   )}
                 </CardTitle>
                 <p className="text-xs text-slate-500 mt-0.5">
-                  Hub multi-IA: Z.AI + OpenAI · orquestador con tools, security gateway y auditoría · 20 herramientas
+                  Asistente IA con Z.AI (GLM) · 100% gratuito · sin API keys externas · orquestador con tools, security gateway y auditoría · 20 herramientas
                 </p>
               </div>
             </div>
             <div className="flex items-center gap-2 flex-wrap">
               {config && (
                 <>
-                  <Badge variant="outline" className="text-[10px]">
-                    ZAI: {config.providers.zai.disponible ? '🟢' : '🔴'}
+                  <Badge variant="outline" className="text-[10px]" title="Z.AI usa credenciales sandbox — sin API key, sin costos">
+                    ZAI: {config.providers.zai.disponible ? '🟢 Gratuito' : '🔴'}
                   </Badge>
-                  <Badge variant="outline" className="text-[10px]">
-                    OpenAI: {config.providers.openai.configured ? (config.providers.openai.disponible ? '🟢' : '🟡') : '⚪'}
+                  <Badge variant="outline" className="text-[10px] text-emerald-700 border-emerald-300 bg-emerald-50">
+                    💰 Sin costos
                   </Badge>
-                  {config.usoMensual && (
-                    <Badge variant="outline" className="text-[10px]" title={`Gastado $${config.usoMensual.gastado.toFixed(2)} de $${config.usoMensual.limite.toFixed(2)}`}>
-                      💰 {config.usoMensual.porcentaje.toFixed(0)}% uso mensual
-                    </Badge>
-                  )}
                   <Select value={config.estadoAgente} onValueChange={(v) => cambiarEstadoAgente(v as EstadoAgente)}>
                     <SelectTrigger className="h-7 w-36 text-xs">
                       <SelectValue />
@@ -533,7 +528,18 @@ export function HubIAPanel() {
 
           {/* Chat principal */}
           <div className="lg:col-span-3 space-y-3">
-            {/* Selector de provider */}
+            {/* Banner informativo — Z.AI gratuito, sin API keys */}
+            <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs">
+              <Badge variant="outline" className="text-[10px] text-emerald-700 border-emerald-400 bg-emerald-100">
+                100% Gratuito
+              </Badge>
+              <span>
+                Este asistente funciona con <strong>Z.AI (GLM)</strong> usando credenciales sandbox.
+                No requiere API keys externas ni genera costos por uso.
+              </span>
+            </div>
+
+            {/* Selector de provider — solo ZAI */}
             <div className="flex items-center gap-2 flex-wrap">
               <Label className="text-xs text-slate-600">Proveedor:</Label>
               <Select value={providerSel} onValueChange={(v) => setProviderSel(v as any)}>
@@ -541,17 +547,10 @@ export function HubIAPanel() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="auto">⚙️ Automático</SelectItem>
-                  <SelectItem value="zai">🤖 Z.AI (GLM)</SelectItem>
-                  <SelectItem value="openai">🧠 OpenAI / ChatGPT</SelectItem>
-                  <SelectItem value="multi">🔀 Multi-IA (ZAI + OpenAI + comparación)</SelectItem>
+                  <SelectItem value="zai">🤖 Z.AI (GLM) — Gratuito</SelectItem>
+                  <SelectItem value="auto">⚙️ Automático (ZAI)</SelectItem>
                 </SelectContent>
               </Select>
-              {providerSel === 'multi' && (
-                <Badge variant="outline" className="text-[10px] text-purple-700 border-purple-300">
-                  <GitCompare className="w-3 h-3 mr-1" /> Comparación
-                </Badge>
-              )}
               {config?.estadoAgente !== 'operativo' && (
                 <Badge variant="destructive" className="text-[10px]">
                   <ShieldAlert className="w-3 h-3 mr-1" />
@@ -573,7 +572,7 @@ export function HubIAPanel() {
               {mensajes.length === 0 ? (
                 <div className="h-full flex flex-col items-center justify-center text-center text-slate-400">
                   <Bot className="w-10 h-10 mb-2 opacity-50" />
-                  <p className="text-sm font-medium">Asistente IA Operativo</p>
+                  <p className="text-sm font-medium">Asistente IA Operativo (Z.AI · Gratuito)</p>
                   <p className="text-xs mt-1 max-w-sm">
                     Escribe una instrucción en lenguaje natural. La IA puede consultar información real
                     de la plataforma y ejecutar acciones autorizadas.
@@ -584,7 +583,6 @@ export function HubIAPanel() {
                     <p>• "Genera un reporte de cartera"</p>
                     <p>• "Detecta errores de las últimas 24h"</p>
                     <p>• "Crea una alerta sobre riesgo de liquidez"</p>
-                    <p>• "Consulta a ZAI y ChatGPT sobre cómo mejorar el módulo"</p>
                   </div>
                 </div>
               ) : (
@@ -860,11 +858,8 @@ function MensajeItem({ mensaje }: { mensaje: Mensaje }) {
 // =====================================================
 
 function ConfigPanel({ config, onSaved }: { config: ConfigResponse; onSaved: () => void }) {
-  const [openaiKey, setOpenaiKey] = useState('')
-  const [openaiModelo, setOpenaiModelo] = useState(config.providers.openai.modeloDefault || 'gpt-4o-mini')
-  const [providerDefault, setProviderDefault] = useState(config.providerDefault || 'auto')
+  const [providerDefault, setProviderDefault] = useState(config.providerDefault || 'zai')
   const [modoDefault, setModoDefault] = useState(config.modoDefault || 'supervisado')
-  const [limiteUsd, setLimiteUsd] = useState(String(config.limiteMensualUsd || 50))
   const [guardando, setGuardando] = useState(false)
   const { toast } = useToast()
 
@@ -896,16 +891,23 @@ function ConfigPanel({ config, onSaved }: { config: ConfigResponse; onSaved: () 
       <Card>
         <CardHeader>
           <CardTitle className="text-sm flex items-center gap-2">
-            <Cpu className="w-4 h-4" /> Proveedores IA
+            <Cpu className="w-4 h-4" /> Proveedor IA
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          {/* ZAI */}
-          <div className="p-3 rounded-lg border border-slate-200">
+          {/* ZAI — Proveedor único y gratuito */}
+          <div className="p-4 rounded-lg border-2 border-emerald-300 bg-emerald-50/50">
             <div className="flex items-center justify-between mb-2">
               <div>
-                <p className="text-xs font-semibold text-slate-700">Z.AI (GLM)</p>
-                <p className="text-[10px] text-slate-500">SDK sandbox · sin API key</p>
+                <p className="text-sm font-semibold text-slate-800 flex items-center gap-2">
+                  Z.AI (GLM)
+                  <Badge variant="outline" className="text-[10px] text-emerald-700 border-emerald-400 bg-emerald-100">
+                    100% Gratuito
+                  </Badge>
+                </p>
+                <p className="text-[11px] text-slate-600 mt-0.5">
+                  SDK sandbox · sin API key · sin costos por uso
+                </p>
               </div>
               <Badge variant={config.providers.zai.disponible ? 'default' : 'destructive'} className="text-[10px]">
                 {config.providers.zai.disponible ? 'Conectado' : 'Error'}
@@ -914,63 +916,25 @@ function ConfigPanel({ config, onSaved }: { config: ConfigResponse; onSaved: () 
             {config.providers.zai.error && (
               <p className="text-[10px] text-red-600">{config.providers.zai.error}</p>
             )}
+            <div className="mt-3 pt-3 border-t border-emerald-200 text-[11px] text-emerald-800 leading-relaxed">
+              <p className="font-medium mb-1">✅ Beneficios:</p>
+              <ul className="list-disc list-inside space-y-0.5 text-emerald-700">
+                <li>No requiere API keys externas</li>
+                <li>No genera costos ni consume créditos</li>
+                <li>Funciona con credenciales sandbox del entorno</li>
+                <li>Modelo GLM con capacidades completas</li>
+              </ul>
+            </div>
           </div>
 
-          {/* OpenAI */}
-          <div className="p-3 rounded-lg border border-slate-200 space-y-3">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-xs font-semibold text-slate-700">OpenAI / ChatGPT</p>
-                <p className="text-[10px] text-slate-500">API oficial · requiere API key</p>
-              </div>
-              <Badge
-                variant={config.providers.openai.disponible ? 'default' : config.providers.openai.configured ? 'secondary' : 'outline'}
-                className="text-[10px]"
-              >
-                {config.providers.openai.disponible
-                  ? 'Conectado'
-                  : config.providers.openai.configured
-                  ? 'Configurado (error)'
-                  : 'No configurado'}
-              </Badge>
-            </div>
-            {config.providers.openai.error && config.providers.openai.configured && (
-              <p className="text-[10px] text-red-600">{config.providers.openai.error}</p>
-            )}
-            <div>
-              <Label className="text-[10px] text-slate-600">API Key (cifrada AES-256)</Label>
-              <Input
-                type="password"
-                value={openaiKey}
-                onChange={(e) => setOpenaiKey(e.target.value)}
-                placeholder={config.providers.openai.apiKeySet ? '•••••••• (configurada)' : 'sk-...'}
-                className="h-7 text-xs"
-              />
-              <Button
-                size="sm"
-                onClick={() => guardar('openai_api_key', openaiKey)}
-                disabled={!openaiKey || guardando}
-                className="h-7 mt-1 text-xs"
-              >
-                {guardando ? <Loader2 className="w-3 h-3 animate-spin" /> : <ShieldCheck className="w-3 h-3 mr-1" />}
-                Guardar API key (cifrada)
-              </Button>
-            </div>
-            <div>
-              <Label className="text-[10px] text-slate-600">Modelo</Label>
-              <Select value={openaiModelo} onValueChange={(v) => { setOpenaiModelo(v); guardar('openai_modelo', v) }}>
-                <SelectTrigger className="h-7 text-xs">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="gpt-4o-mini">gpt-4o-mini (económico)</SelectItem>
-                  <SelectItem value="gpt-4o">gpt-4o (avanzado)</SelectItem>
-                  <SelectItem value="gpt-4-turbo">gpt-4-turbo</SelectItem>
-                  <SelectItem value="gpt-3.5-turbo">gpt-3.5-turbo (más barato)</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
+          {/* Nota sobre OpenAI eliminado */}
+          <Alert className="bg-blue-50 border-blue-200">
+            <AlertDescription className="text-[11px] text-blue-800">
+              ℹ️ El soporte para OpenAI/ChatGPT fue desactivado para evitar costos por API.
+              El asistente ahora funciona exclusivamente con Z.AI (GLM), que es 100% gratuito
+              y no requiere configuración adicional.
+            </AlertDescription>
+          </Alert>
         </CardContent>
       </Card>
 
@@ -992,10 +956,8 @@ function ConfigPanel({ config, onSaved }: { config: ConfigResponse; onSaved: () 
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="auto">Automático (ZAI → OpenAI fallback)</SelectItem>
-                <SelectItem value="zai">Z.AI (preferido)</SelectItem>
-                <SelectItem value="openai">OpenAI (preferido)</SelectItem>
-                <SelectItem value="multi">Multi-IA (ZAI + OpenAI + comparación)</SelectItem>
+                <SelectItem value="zai">Z.AI (GLM) — Gratuito</SelectItem>
+                <SelectItem value="auto">Automático (ZAI)</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -1015,38 +977,16 @@ function ConfigPanel({ config, onSaved }: { config: ConfigResponse; onSaved: () 
               </SelectContent>
             </Select>
           </div>
-          <div>
-            <Label className="text-[10px] text-slate-600">Límite mensual (USD)</Label>
-            <div className="flex gap-2">
-              <Input
-                type="number"
-                value={limiteUsd}
-                onChange={(e) => setLimiteUsd(e.target.value)}
-                className="h-7 text-xs w-32"
-              />
-              <Button
-                size="sm"
-                onClick={() => guardar('limite_mensual_usd', limiteUsd)}
-                disabled={guardando}
-                className="h-7 text-xs"
-              >
-                Guardar
-              </Button>
-            </div>
-            {config.usoMensual && (
-              <div className="mt-2 text-[10px] text-slate-500">
-                Uso actual: ${config.usoMensual.gastado.toFixed(2)} / ${config.usoMensual.limite.toFixed(2)} ({config.usoMensual.porcentaje.toFixed(1)}%)
-                <div className="h-1.5 bg-slate-200 rounded-full mt-1 overflow-hidden">
-                  <div className={`h-full ${config.usoMensual.porcentaje > 80 ? 'bg-red-500' : config.usoMensual.porcentaje > 50 ? 'bg-amber-500' : 'bg-emerald-500'}`}
-                    style={{ width: `${Math.min(100, config.usoMensual.porcentaje)}%` }} />
-                </div>
-              </div>
-            )}
-          </div>
+          <Alert className="bg-emerald-50 border-emerald-200">
+            <AlertDescription className="text-[11px] text-emerald-800">
+              💰 <strong>Sin límite de costos:</strong> Como el asistente usa Z.AI (gratuito),
+              no hay límite mensual de gasto. El contador de uso interno se mantiene solo
+              para fines de auditoría y estadísticas, pero no genera cobros.
+            </AlertDescription>
+          </Alert>
           <Alert className="bg-blue-50 border-blue-200">
             <AlertDescription className="text-[11px] text-blue-800">
-              🔒 Las API keys se cifran con AES-256-CBC antes de almacenarse y nunca se exponen al frontend.
-              Las herramientas de modificación requieren confirmación explícita del administrador.
+              🔒 Las herramientas de modificación requieren confirmación explícita del administrador.
               El agente opera bajo Zero Trust: ningún input externo es tratado como instrucción confiable.
             </AlertDescription>
           </Alert>
@@ -1213,6 +1153,15 @@ function UsoPanel({ uso, onRefresh }: { uso: any; onRefresh: () => void }) {
 
   return (
     <div className="space-y-4">
+      {/* Banner — Sin costos */}
+      <Alert className="bg-emerald-50 border-emerald-300">
+        <AlertDescription className="text-[12px] text-emerald-900">
+          💰 <strong>Uso 100% gratuito:</strong> El asistente funciona exclusivamente con
+          Z.AI (GLM) que no genera costos. Las estadísticas a continuación son solo
+          informativas (para auditoría) — los montos en USD siempre serán $0.0000.
+        </AlertDescription>
+      </Alert>
+
       {/* Resumen */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <Card>
@@ -1236,7 +1185,8 @@ function UsoPanel({ uso, onRefresh }: { uso: any; onRefresh: () => void }) {
         <Card>
           <CardContent className="p-3">
             <div className="text-[10px] text-slate-500">Costo total (USD)</div>
-            <div className="text-xl font-bold text-emerald-700">${uso.total.costo.toFixed(4)}</div>
+            <div className="text-xl font-bold text-emerald-700">$0.0000</div>
+            <div className="text-[9px] text-emerald-600 mt-0.5">Gratuito (Z.AI)</div>
           </CardContent>
         </Card>
       </div>
@@ -1255,7 +1205,7 @@ function UsoPanel({ uso, onRefresh }: { uso: any; onRefresh: () => void }) {
                   <div className="flex gap-3 text-slate-500">
                     <span>{p._count} solicitudes</span>
                     <span>{(p._sum.tokensInput + p._sum.tokensOutput).toLocaleString()} tokens</span>
-                    <span className="font-medium text-emerald-700">${(p._sum.costo || 0).toFixed(4)}</span>
+                    <span className="font-medium text-emerald-700">$0.0000 (gratuito)</span>
                   </div>
                 </div>
               ))}

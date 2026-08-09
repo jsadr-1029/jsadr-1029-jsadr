@@ -175,26 +175,29 @@ consultar información real o ejecutar acciones autorizadas:
 // ---------------------------------------------------------
 // Router — selecciona proveedor
 // ---------------------------------------------------------
+// IMPORTANTE (2026-08-09): El asistente IA ahora usa EXCLUSIVAMENTE Z.AI (GLM)
+// que es 100% gratuito (SDK sandbox, sin API key, sin costos). El soporte para
+// OpenAI fue removido del UI pero el código subyacente se mantiene para
+// compatibilidad. Si alguien envía provider='openai' o 'multi' por la API,
+// se redirige automáticamente a ZAI.
 
 async function seleccionarProvider(solicitado: Provider): Promise<{
   provider: 'zai' | 'openai' | 'multi'
   openaiConfigurado: boolean
   zaiDisponible: boolean
 }> {
-  const [zaiOk, openaiOk] = await Promise.all([verificarZAI(), estaOpenAIConfigurado()])
-  if (solicitado === 'zai') return { provider: 'zai', openaiConfigurado: openaiOk, zaiDisponible: zaiOk.ok }
-  if (solicitado === 'openai') {
-    if (!openaiOk) throw new Error('OpenAI no está configurado. Establece OPENAI_API_KEY en Configuración Global → Asistente IA.')
-    return { provider: 'openai', openaiConfigurado: true, zaiDisponible: zaiOk.ok }
+  const zaiOk = await verificarZAI()
+  // OpenAI fue desactivado para evitar costos — siempre reportamos como no configurado
+  const openaiOk = false
+
+  // Cualquier solicitud (auto/zai/openai/multi) se redirige a ZAI
+  if (zaiOk.ok) {
+    return { provider: 'zai', openaiConfigurado: false, zaiDisponible: true }
   }
-  if (solicitado === 'multi') {
-    if (!openaiOk) throw new Error('Para modo Multi-IA necesitas configurar OpenAI (ZAI + OpenAI). Establece OPENAI_API_KEY en Configuración Global → Asistente IA.')
-    return { provider: 'multi', openaiConfigurado: true, zaiDisponible: zaiOk.ok }
-  }
-  // auto: preferir ZAI (gratis), fallback a OpenAI
-  if (zaiOk.ok) return { provider: 'zai', openaiConfigurado: openaiOk, zaiDisponible: true }
-  if (openaiOk) return { provider: 'openai', openaiConfigurado: true, zaiDisponible: false }
-  throw new Error('No hay proveedores IA disponibles. Configura al menos uno.')
+  throw new Error(
+    'El proveedor Z.AI no está disponible. Verifica la conexión del SDK sandbox. ' +
+    'El asistente funciona exclusivamente con Z.AI (gratuito, sin API key).'
+  )
 }
 
 // ---------------------------------------------------------

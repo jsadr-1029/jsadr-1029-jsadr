@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, lazy, Suspense } from 'react'
 import { useFetch, apiPost } from '@/hooks/use-fetch'
 import { Card, PageHeader, Badge, EmptyState, LoadingState } from '@/components/shared/ui'
 import {
@@ -31,6 +31,13 @@ import {
   Trash2,
   Send,
   Users,
+  Shield,
+  Plug,
+  Code2,
+  BookOpen,
+  Database as DatabaseIcon,
+  ShieldAlert,
+  type LucideIcon,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
@@ -45,8 +52,47 @@ import {
   DialogDescription,
   DialogFooter,
 } from '@/components/ui/dialog'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { toast } from 'sonner'
 import { EliminarConfirmacionDialog } from '@/components/views/EliminarConfirmacionDialog'
+import { getUserData } from '@/lib/api-client'
+import { useAuthReactive } from '@/hooks/use-auth-reactive'
+import { puedeAccederUsuario } from '@/lib/permisos'
+
+// =====================================================
+// Carga diferida (lazy) de los submódulos internos.
+// Esto evita inflar el bundle inicial de SeguridadView y
+// permite que cada submódulo se cargue solo cuando el
+// usuario lo selecciona en su pestaña correspondiente.
+// =====================================================
+const ConexionesView = lazy(() =>
+  import('@/components/views/ConexionesView').then((m) => ({ default: m.ConexionesView }))
+)
+const UsuariosView = lazy(() =>
+  import('@/components/views/UsuariosView').then((m) => ({ default: m.UsuariosView }))
+)
+const CodigoFuenteView = lazy(() =>
+  import('@/components/views/CodigoFuenteView').then((m) => ({ default: m.CodigoFuenteView }))
+)
+const ManualView = lazy(() =>
+  import('@/components/views/ManualView').then((m) => ({ default: m.ManualView }))
+)
+const AuditoriaSeguridadView = lazy(() =>
+  import('@/components/views/AuditoriaSeguridadView').then((m) => ({ default: m.AuditoriaSeguridadView }))
+)
+const ExportarView = lazy(() =>
+  import('@/components/views/ExportarView').then((m) => ({ default: m.ExportarView }))
+)
+
+// Wrapper simple para mostrar un loader mientras carga el chunk diferido
+function LazyFallback({ nombre }: { nombre: string }) {
+  return (
+    <div className="flex flex-col items-center justify-center py-16 text-white/60">
+      <Loader2 className="w-8 h-8 animate-spin mb-2 text-indigo-400" />
+      <p className="text-sm">Cargando {nombre}…</p>
+    </div>
+  )
+}
 
 // =====================================================
 // Tipos
@@ -119,6 +165,13 @@ function formatLastSync(value: string | null): string {
 // Componente principal
 // =====================================================
 export function SeguridadView() {
+  // === Pestana interna activa ===
+  // 'principal' = sincronizacion + modulos protegidos + recuperacion + historial
+  // Las demas pestanas cargan de forma diferida (lazy) los submodulos internos.
+  const [tab, setTab] = useState<
+    'principal' | 'conexiones' | 'usuarios' | 'codigo-fuente' | 'manual' | 'auditoria' | 'exportar'
+  >('principal')
+
   const [refreshKey, setRefreshKey] = useState(0)
   const { data, loading } = useFetch<{ modulos: ModuloSeguridad[] }>(`/api/seguridad/modulos`, { refreshKey })
   const modulos = data?.modulos || []
@@ -139,6 +192,37 @@ export function SeguridadView() {
     detalle?: string
   } | null>(null)
   const [eliminando, setEliminando] = useState(false)
+
+  // === RBAC interno de pestañas ===
+  // Cada pestaña se muestra solo si el usuario tiene permiso para acceder
+  // a la vista correspondiente. Así, un GESTOR solo verá "Exportar BD" y
+  // "Manual" (las vistas a las que tiene permiso), mientras que un ADMIN
+  // verá todas las pestañas.
+  const { rol: reactiveRol } = useAuthReactive()
+  const user = getUserData()
+  const rol = reactiveRol || user?.rol || ''
+  const puede = (v: string) => puedeAccederUsuario(user?.username, rol, v as any)
+
+  // Lista de pestañas con su key, label, icono y vista requerida
+  const todasTabs: Array<{ key: typeof tab; label: string; icon: LucideIcon; vista: string }> = [
+    { key: 'principal', label: 'Principal', icon: ShieldCheck, vista: 'seguridad' },
+    { key: 'conexiones', label: 'Conexiones API', icon: Plug, vista: 'conexiones' },
+    { key: 'usuarios', label: 'Usuarios', icon: Users, vista: 'usuarios' },
+    { key: 'codigo-fuente', label: 'Código Fuente', icon: Code2, vista: 'codigo-fuente' },
+    { key: 'manual', label: 'Manual', icon: BookOpen, vista: 'manual' },
+    { key: 'auditoria', label: 'Auditoría', icon: ShieldAlert, vista: 'auditoria' },
+    { key: 'exportar', label: 'Exportar BD', icon: DatabaseIcon, vista: 'exportar' },
+  ]
+  const tabsVisibles = todasTabs.filter((t) => puede(t.vista))
+
+  // Si la pestaña activa no es visible para el usuario (porque cambió de rol
+  // o porque la vista se cargó con un tab por defecto que no tiene permiso),
+  // cambiar a la primera pestaña visible.
+  useEffect(() => {
+    if (tabsVisibles.length > 0 && !tabsVisibles.some((t) => t.key === tab)) {
+      setTab(tabsVisibles[0].key)
+    }
+  }, [tabsVisibles, tab])
 
   const toggleProtegido = async (modulo: ModuloSeguridad) => {
     try {
@@ -221,10 +305,34 @@ export function SeguridadView() {
     <div className="space-y-6">
       <PageHeader
         title="Seguridad"
-        subtitle="Sincronización con plataformas + módulos protegidos del sistema"
+        subtitle="Centro de operaciones de seguridad · Sincronización, usuarios, conexiones, auditoría y BD"
         icon={ShieldCheck}
       />
 
+      {/* =================================================
+          Pestañas internas — submódulos de Seguridad
+          (los que antes eran submenús ahora son internos)
+          Cada pestaña se muestra solo si el usuario tiene permiso.
+          ================================================= */}
+      <Tabs value={tab} onValueChange={(v) => setTab(v as typeof tab)}>
+        <TabsList
+          className="flex overflow-x-auto whitespace-nowrap w-full gap-1 no-scrollbar h-auto"
+          style={{ gridTemplateColumns: `repeat(${tabsVisibles.length}, minmax(0, 1fr))` }}
+        >
+          {tabsVisibles.map((t) => {
+            const Icon = t.icon
+            return (
+              <TabsTrigger key={t.key} value={t.key} className="flex-1">
+                <Icon className="w-3.5 h-3.5 mr-1.5" />
+                {t.label}
+              </TabsTrigger>
+            )
+          })}
+        </TabsList>
+
+        {/* === Pestaña: Principal (contenido original) === */}
+        {puede('seguridad') && (
+        <TabsContent value="principal" className="mt-6 space-y-6">
       {/* =================================================
           SECCIÓN 1: Sincronización de plataformas
           ================================================= */}
@@ -691,6 +799,63 @@ export function SeguridadView() {
         recursoDetalle={pendienteEliminar?.detalle}
         cargando={eliminando}
       />
+        </TabsContent>
+        )}
+
+        {/* === Pestaña: Conexiones API (submódulo interno) === */}
+        {puede('conexiones') && (
+        <TabsContent value="conexiones" className="mt-6">
+          <Suspense fallback={<LazyFallback nombre="Conexiones API" />}>
+            <ConexionesView />
+          </Suspense>
+        </TabsContent>
+        )}
+
+        {/* === Pestaña: Usuarios (submódulo interno) === */}
+        {puede('usuarios') && (
+        <TabsContent value="usuarios" className="mt-6">
+          <Suspense fallback={<LazyFallback nombre="Usuarios" />}>
+            <UsuariosView />
+          </Suspense>
+        </TabsContent>
+        )}
+
+        {/* === Pestaña: Código Fuente (submódulo interno) === */}
+        {puede('codigo-fuente') && (
+        <TabsContent value="codigo-fuente" className="mt-6">
+          <Suspense fallback={<LazyFallback nombre="Código Fuente" />}>
+            <CodigoFuenteView />
+          </Suspense>
+        </TabsContent>
+        )}
+
+        {/* === Pestaña: Manual (submódulo interno) === */}
+        {puede('manual') && (
+        <TabsContent value="manual" className="mt-6">
+          <Suspense fallback={<LazyFallback nombre="Manual" />}>
+            <ManualView />
+          </Suspense>
+        </TabsContent>
+        )}
+
+        {/* === Pestaña: Auditoría Seguridad (submódulo interno) === */}
+        {puede('auditoria') && (
+        <TabsContent value="auditoria" className="mt-6">
+          <Suspense fallback={<LazyFallback nombre="Auditoría de Seguridad" />}>
+            <AuditoriaSeguridadView />
+          </Suspense>
+        </TabsContent>
+        )}
+
+        {/* === Pestaña: Exportar Base de Datos (submódulo interno) === */}
+        {puede('exportar') && (
+        <TabsContent value="exportar" className="mt-6">
+          <Suspense fallback={<LazyFallback nombre="Exportar Base de Datos" />}>
+            <ExportarView />
+          </Suspense>
+        </TabsContent>
+        )}
+      </Tabs>
     </div>
   )
 }

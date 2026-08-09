@@ -14,18 +14,10 @@ import {
   Scale,
   Zap,
   Shield,
-  ShieldAlert,
   Settings,
   Bell,
-  BarChart3,
   ChevronDown,
   Users,
-  Plug,
-  Code2,
-  BookOpen,
-  Landmark as CajasIcon,
-  Calculator,
-  Megaphone,
   type LucideIcon,
 } from 'lucide-react'
 import {
@@ -72,32 +64,23 @@ const primaryItems: NavItem[] = [
 
 /**
  * Módulos adicionales que se muestran dentro del Sheet "Más".
- * Estructura jerárquica coherente con el Sidebar:
- *   - Préstamos agrupa: Cajas, Campañas, Simulador
- *   - Seguridad agrupa: Conexiones API, Usuarios, Código Fuente, Manual
+ * Estructura simplificada — los submódulos son internos a cada vista:
+ *   - Préstamos: Clientes, Cajas, Campañas, Simulador son internos (tabs)
+ *   - Seguridad: Conexiones API, Usuarios, Código Fuente, Manual,
+ *     Auditoría Seguridad y Exportar Base de Datos son internos.
  */
 const moreItems: NavItem[] = [
   { key: 'juridico', label: 'Jurídico', icon: Scale },
   { key: 'automatizacion', label: 'Automatización', icon: Zap },
-  {
-    key: 'seguridad',
-    label: 'Seguridad',
-    icon: Shield,
-    children: [
-      { key: 'conexiones', label: 'Conexiones API', icon: Plug },
-      { key: 'usuarios', label: 'Usuarios', icon: Users },
-      { key: 'codigo-fuente', label: 'Código Fuente', icon: Code2 },
-      { key: 'manual', label: 'Manual', icon: BookOpen },
-    ],
-  },
-  { key: 'auditoria', label: 'Auditoría', icon: ShieldAlert },
+  { key: 'seguridad', label: 'Seguridad', icon: Shield },
   { key: 'admin', label: 'Administración', icon: Settings },
-  { key: 'exportar', label: 'Reportes', icon: BarChart3 },
   { key: 'notificaciones', label: 'Notificaciones', icon: Bell },
 ]
 
 /**
  * Grupo de módulos de Préstamos que se muestra como desplegable en el Sheet.
+ * Solo "Clientes" — los demás (cajas, campañas, simulador) son internos
+ * a la vista de Préstamos.
  */
 const prestamosGroup: NavItem = {
   key: 'prestamos',
@@ -105,9 +88,6 @@ const prestamosGroup: NavItem = {
   icon: FileText,
   children: [
     { key: 'clientes', label: 'Clientes', icon: Users },
-    { key: 'cajas', label: 'Cajas', icon: CajasIcon },
-    { key: 'campanas', label: 'Campañas', icon: Megaphone },
-    { key: 'simulador', label: 'Simulador', icon: Calculator },
   ],
 }
 

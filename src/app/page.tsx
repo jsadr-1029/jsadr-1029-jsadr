@@ -168,6 +168,21 @@ export default function Home() {
       // Login desde el perfil Cliente: llevar directo a la vista Portal
       setView('portal')
     } else if (viewParam) {
+      // === REDIRECCIÓN DE SUBMÓDULOS DE SEGURIDAD ===
+      // Las vistas 'conexiones', 'usuarios', 'codigo-fuente', 'manual',
+      // 'auditoria' y 'exportar' ahora son pestañas internas de SeguridadView.
+      // Si alguien accede por URL directa (ej: ?view=exportar), lo redirigimos
+      // a la vista 'seguridad' (donde verá la pestaña correspondiente).
+      const SUBMODULOS_SEGURIDAD = ['conexiones', 'usuarios', 'codigo-fuente', 'manual', 'auditoria', 'exportar']
+      if (SUBMODULOS_SEGURIDAD.includes(viewParam)) {
+        const u = getUserData()
+        // Solo redirigir si tiene permiso para 'seguridad'
+        if (u && puedeAccederUsuario(u.username, u.rol, 'seguridad')) {
+          setView('seguridad' as ViewKey)
+          return
+        }
+      }
+
       // Redirección post-login (ej: ?view=portal-admin para P_jsadr)
       // Solo aplicar si la vista está permitida para el rol/usuario.
       const u = getUserData()

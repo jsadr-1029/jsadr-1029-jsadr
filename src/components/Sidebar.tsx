@@ -1,9 +1,9 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { ViewKey } from '@/app/page'
 import { cn } from '@/lib/utils'
-import { getUserData } from '@/lib/api-client'
+import { getUserData, logout, switchUser, getImpersonation, apiJson } from '@/lib/api-client'
 import { vistasPermitidasUsuario } from '@/lib/permisos'
 import { useAuthReactive } from '@/hooks/use-auth-reactive'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -22,16 +22,13 @@ import {
   Inbox,
   Crown,
   Users,
-  Plug,
-  Code2,
-  BookOpen,
   Bell,
-  BarChart3,
-  Landmark as CajasIcon,
-  Calculator,
-  Megaphone,
   LayoutDashboard,
   ChevronDown,
+  LogOut,
+  Repeat,
+  ArrowLeftRight,
+  Loader2,
   type LucideIcon,
 } from 'lucide-react'
 import { useMemo } from 'react'
@@ -66,9 +63,11 @@ type MenuNode = LeafItem & {
 }
 
 // ---------- Catálogo completo con jerarquía ----------
-// Estructura:
-//   - Préstamos agrupa: Cajas, Campañas, Simulador
-//   - Seguridad agrupa: Conexiones API, Usuarios, Código Fuente, Manual
+// Estructura (simplificada — los submódulos son internos a cada vista):
+//   - Préstamos: tiene internamente Clientes, Cajas, Campañas, Simulador, Documentos, etc.
+//     (solo "Clientes" se mantiene como acceso rápido en el menú)
+//   - Seguridad: tiene internamente Conexiones API, Usuarios, Código Fuente, Manual,
+//     Auditoría Seguridad y Exportar Base de Datos. NO se muestran como submenú.
 const ALL_ITEMS: MenuNode[] = [
   { key: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, description: 'KPIs y resumen' },
   {
@@ -78,9 +77,6 @@ const ALL_ITEMS: MenuNode[] = [
     description: 'Solicitudes y créditos',
     children: [
       { key: 'clientes', label: 'Clientes', icon: Users, description: 'Empleados y clientes' },
-      { key: 'cajas', label: 'Cajas', icon: CajasIcon, description: 'Cajas menores y movimientos' },
-      { key: 'campanas', label: 'Campañas', icon: Megaphone, description: 'Campañas y promociones' },
-      { key: 'simulador', label: 'Simulador', icon: Calculator, description: 'Simulador de préstamos' },
     ],
   },
   { key: 'pagos', label: 'Pagos', icon: DollarSign, description: 'Recaudo y registro' },
@@ -90,23 +86,12 @@ const ALL_ITEMS: MenuNode[] = [
   { key: 'comunicaciones', label: 'Comunicaciones', icon: MessageSquare, description: 'Chat con clientes' },
   { key: 'notificaciones', label: 'Notificaciones', icon: Bell, description: 'Centro de avisos' },
   { key: 'automatizacion', label: 'Automatización', icon: Zap, description: 'Reglas y bots' },
-  {
-    key: 'seguridad',
-    label: 'Seguridad',
-    icon: Shield,
-    description: 'Auditoría y claves',
-    children: [
-      { key: 'conexiones', label: 'Conexiones API', icon: Plug, description: 'Integraciones externas' },
-      { key: 'usuarios', label: 'Usuarios', icon: Users, description: 'Gestión de usuarios y roles' },
-      { key: 'codigo-fuente', label: 'Código Fuente', icon: Code2, description: 'Inspección y backup del código' },
-      { key: 'manual', label: 'Manual', icon: BookOpen, description: 'Manual del sistema' },
-    ],
-  },
-  { key: 'auditoria', label: 'Auditoría Seguridad', icon: ShieldAlert, description: 'Auditoría técnica de seguridad' },
+  // Seguridad: ahora incluye internamente Conexiones API, Usuarios, Código Fuente,
+  // Manual, Auditoría Seguridad y Exportar Base de Datos. No se muestran como submenú.
+  { key: 'seguridad', label: 'Seguridad', icon: Shield, description: 'Auditoría, conexiones, usuarios y BD' },
   { key: 'admin', label: 'Administración', icon: Settings, description: 'Cuentas, categorías, contabilidad' },
   { key: 'portal-admin', label: 'Portal Admin', icon: Crown, description: 'Portal del administrador' },
   { key: 'configuracion', label: 'Configuración Global', icon: Settings2, description: 'Centro de configuración' },
-  { key: 'exportar', label: 'Reportes', icon: BarChart3, description: 'Exportación de datos' },
 ]
 
 export function Sidebar({ view, onChange, forceVisible = false, mobileOpen = false, onMobileOpenChange }: SidebarProps) {
@@ -252,6 +237,341 @@ interface SidebarContentProps {
   onChange: (v: ViewKey) => void
   onClose?: () => void
   rol?: string
+}
+
+// =====================================================
+// DrawerFooterAcciones — Botones de "Cambiar de cuenta"
+// y "Cerrar sesión" que se muestran al final del drawer
+// móvil. En desktop NO se muestran (el UserMenu superior
+// derecho ya los tiene).
+// =====================================================
+interface UsuarioCambio {
+  id: string
+  nombre: string
+  username: string
+  email: string | null
+  rol: string
+  activo: boolean
+}
+
+function DrawerFooterAcciones({ onClose }: { onClose?: () => void }) {
+  const { rol } = useAuthReactive()
+  const user = getUserData()
+  const effectiveRol = rol || user?.rol || ''
+  const adminOriginal = getImpersonation()
+  const [confirmLogout, setConfirmLogout] = useState(false)
+  const [switchModalOpen, setSwitchModalOpen] = useState(false)
+  const [usuariosCambio, setUsuariosCambio] = useState<UsuarioCambio[]>([])
+  const [loadingUsuarios, setLoadingUsuarios] = useState(false)
+  const [cambiandoA, setCambiandoA] = useState<string | null>(null)
+  const [switchError, setSwitchError] = useState<string | null>(null)
+
+  const abrirModalCambio = useCallback(async () => {
+    setSwitchError(null)
+    setSwitchModalOpen(true)
+    if (usuariosCambio.length === 0) {
+      setLoadingUsuarios(true)
+      try {
+        const data = await apiJson<{ success: boolean; data: UsuarioCambio[] }>('/api/usuarios?rol=all')
+        if (data.success && Array.isArray(data.data)) {
+          const yo = getUserData()
+          const filtrados = data.data.filter(
+            (u) =>
+              u.activo &&
+              ['GESTOR', 'CONSULTOR', 'ADMIN'].includes(u.rol) &&
+              u.id !== yo?.id
+          )
+          setUsuariosCambio(filtrados)
+        }
+      } catch (e: any) {
+        setSwitchError(e.message || 'Error al cargar usuarios')
+      } finally {
+        setLoadingUsuarios(false)
+      }
+    }
+  }, [usuariosCambio.length])
+
+  const ejecutarCambio = useCallback(async (target: UsuarioCambio) => {
+    setSwitchError(null)
+    setCambiandoA(target.id)
+    try {
+      const result = await switchUser(target.id, false)
+      if (!result.success) {
+        setSwitchError(result.error || 'No se pudo cambiar de cuenta')
+        setCambiandoA(null)
+        return
+      }
+      window.location.href = '/'
+    } catch (e: any) {
+      setSwitchError(e.message || 'Error inesperado')
+      setCambiandoA(null)
+    }
+  }, [])
+
+  const volverAAdmin = useCallback(async () => {
+    if (!adminOriginal) return
+    setSwitchError(null)
+    setCambiandoA(adminOriginal.id)
+    try {
+      const result = await switchUser(adminOriginal.id, true)
+      if (!result.success) {
+        setSwitchError(result.error || 'No se pudo volver a la cuenta de administrador')
+        setCambiandoA(null)
+        return
+      }
+      window.location.href = '/'
+    } catch (e: any) {
+      setSwitchError(e.message || 'Error inesperado')
+      setCambiandoA(null)
+    }
+  }, [adminOriginal])
+
+  const handleLogout = useCallback(() => {
+    setConfirmLogout(false)
+    logout()
+  }, [])
+
+  return (
+    <>
+      <div className="p-3 border-t border-sidebar-border space-y-1">
+        {/* Info compacta del usuario */}
+        {user && (
+          <div className="px-3 py-2 mb-1 rounded-lg bg-white/5 border border-white/10">
+            <p className="text-xs font-semibold text-white truncate">{user.nombre || 'Usuario'}</p>
+            <p className="text-[10px] text-white/50 truncate">@{user.username} · {effectiveRol}</p>
+          </div>
+        )}
+
+        {/* Cambiar de cuenta — SOLO ADMIN */}
+        {effectiveRol === 'ADMIN' && (
+          <button
+            type="button"
+            onClick={abrirModalCambio}
+            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-semibold text-fuchsia-200 hover:text-white hover:bg-fuchsia-500/20 transition-all"
+          >
+            <Repeat className="w-4 h-4" />
+            Cambiar de cuenta
+          </button>
+        )}
+
+        {/* Volver a admin — si está impersonando */}
+        {adminOriginal && (
+          <button
+            type="button"
+            onClick={volverAAdmin}
+            disabled={!!cambiandoA}
+            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-semibold text-amber-200 hover:text-white hover:bg-amber-500/20 transition-all disabled:opacity-60"
+          >
+            {cambiandoA === adminOriginal.id ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <ArrowLeftRight className="w-4 h-4" />
+            )}
+            Volver a {adminOriginal.nombre.split(' ')[0]}
+          </button>
+        )}
+
+        {/* Cerrar sesión */}
+        <button
+          type="button"
+          onClick={() => setConfirmLogout(true)}
+          className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-semibold text-red-300 hover:text-white hover:bg-red-500/20 transition-all"
+        >
+          <LogOut className="w-4 h-4" />
+          Cerrar sesión
+        </button>
+      </div>
+
+      {/* Confirmación de logout */}
+      {confirmLogout && (
+        <div className="fixed inset-0 z-[10000] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+          <div className="glass-card-strong rounded-2xl p-6 max-w-sm w-full">
+            <div className="flex items-center gap-3 mb-3">
+              <div className="w-10 h-10 rounded-full bg-red-500/20 flex items-center justify-center">
+                <LogOut className="w-5 h-5 text-red-400" />
+              </div>
+              <h3 className="text-base font-bold text-white">¿Cerrar sesión?</h3>
+            </div>
+            <p className="text-sm text-white/70 mb-5">
+              Vas a salir del sistema. Vas a tener que volver a iniciar sesión para acceder.
+            </p>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setConfirmLogout(false)}
+                className="flex-1 px-4 py-2 rounded-lg text-sm font-medium text-white/80 bg-white/5 hover:bg-white/10 transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleLogout}
+                className="flex-1 px-4 py-2 rounded-lg text-sm font-semibold text-white bg-gradient-to-r from-red-500 to-rose-600 hover:from-red-600 hover:to-rose-700 transition-all shadow-lg"
+              >
+                Sí, salir
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de cambio de cuenta */}
+      {switchModalOpen && (
+        <ModalCambioCuentaDrawer
+          usuarios={usuariosCambio}
+          loading={loadingUsuarios}
+          error={switchError}
+          cambiandoA={cambiandoA}
+          onSelect={ejecutarCambio}
+          onClose={() => {
+            if (!cambiandoA) setSwitchModalOpen(false)
+          }}
+        />
+      )}
+    </>
+  )
+}
+
+// =====================================================
+// ModalCambioCuentaDrawer — Modal para impersonar usuarios
+// =====================================================
+interface ModalCambioCuentaDrawerProps {
+  usuarios: UsuarioCambio[]
+  loading: boolean
+  error: string | null
+  cambiandoA: string | null
+  onSelect: (u: UsuarioCambio) => void
+  onClose: () => void
+}
+
+const ROLE_LABELS_M: Record<string, string> = {
+  ADMIN: 'Administrador',
+  GESTOR: 'Gestor',
+  CONSULTOR: 'Consultor',
+}
+
+const ROLE_COLORS_M: Record<string, string> = {
+  ADMIN: 'from-fuchsia-500 to-purple-600',
+  GESTOR: 'from-indigo-500 to-blue-600',
+  CONSULTOR: 'from-cyan-500 to-teal-600',
+}
+
+function ModalCambioCuentaDrawer({
+  usuarios,
+  loading,
+  error,
+  cambiandoA,
+  onSelect,
+  onClose,
+}: ModalCambioCuentaDrawerProps) {
+  return (
+    <div
+      className="fixed inset-0 z-[10001] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm"
+      onClick={onClose}
+    >
+      <div
+        className="glass-card-strong rounded-2xl p-6 max-w-md w-full max-h-[85vh] flex flex-col"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-fuchsia-500 to-purple-600 flex items-center justify-center shadow-lg">
+              <Repeat className="w-5 h-5 text-white" />
+            </div>
+            <div>
+              <h3 className="text-base font-bold text-white">Cambiar de cuenta</h3>
+              <p className="text-[11px] text-white/50">Solo disponible para el administrador</p>
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            disabled={!!cambiandoA}
+            className="p-2 rounded-lg text-white/60 hover:text-white hover:bg-white/10 transition-colors disabled:opacity-50"
+            aria-label="Cerrar"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4">
+              <line x1="18" y1="6" x2="6" y2="18" />
+              <line x1="6" y1="6" x2="18" y2="18" />
+            </svg>
+          </button>
+        </div>
+
+        <p className="text-xs text-white/60 mb-3 leading-relaxed">
+          Seleccioná el usuario al que querés cambiarte. No vas a necesitar contraseña.
+        </p>
+
+        <div className="flex-1 overflow-y-auto -mx-1 px-1">
+          {loading && (
+            <div className="flex flex-col items-center justify-center py-10 text-white/60">
+              <Loader2 className="w-6 h-6 animate-spin mb-2" />
+              <p className="text-xs">Cargando usuarios…</p>
+            </div>
+          )}
+
+          {!loading && error && (
+            <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/30 text-red-300 text-xs">
+              {error}
+            </div>
+          )}
+
+          {!loading && !error && usuarios.length === 0 && (
+            <div className="p-6 text-center text-white/50 text-sm">
+              No hay otros usuarios disponibles.
+            </div>
+          )}
+
+          {!loading && !error && usuarios.length > 0 && (
+            <div className="space-y-1.5">
+              {usuarios.map((u) => {
+                const color = ROLE_COLORS_M[u.rol] || 'from-slate-500 to-slate-700'
+                const initials = (u.nombre || '?')
+                  .trim()
+                  .split(/\s+/)
+                  .slice(0, 2)
+                  .map((p) => p[0])
+                  .join('')
+                  .toUpperCase()
+                const estaCambiando = cambiandoA === u.id
+                return (
+                  <button
+                    key={u.id}
+                    onClick={() => onSelect(u)}
+                    disabled={!!cambiandoA}
+                    className="w-full flex items-center gap-3 p-3 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 hover:border-white/20 transition-all text-left disabled:opacity-60 disabled:cursor-not-allowed"
+                  >
+                    <div
+                      className={`w-10 h-10 rounded-full bg-gradient-to-br ${color} flex items-center justify-center text-xs font-bold text-white shadow-md shrink-0`}
+                    >
+                      {initials}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold text-white truncate">{u.nombre}</p>
+                      <p className="text-[11px] text-white/50 truncate">
+                        @{u.username} · {ROLE_LABELS_M[u.rol] || u.rol}
+                      </p>
+                    </div>
+                    {estaCambiando ? (
+                      <Loader2 className="w-4 h-4 animate-spin text-fuchsia-300 shrink-0" />
+                    ) : (
+                      <ArrowLeftRight className="w-4 h-4 text-white/40 shrink-0" />
+                    )}
+                  </button>
+                )
+              })}
+            </div>
+          )}
+        </div>
+
+        <div className="mt-4 pt-3 border-t border-white/10">
+          <button
+            onClick={onClose}
+            disabled={!!cambiandoA}
+            className="w-full px-4 py-2 rounded-lg text-sm font-medium text-white/80 bg-white/5 hover:bg-white/10 transition-colors disabled:opacity-50"
+          >
+            Cancelar
+          </button>
+        </div>
+      </div>
+    </div>
+  )
 }
 
 function SidebarContent({ menuItems, view, expanded, toggleGroup, onChange, onClose, rol }: SidebarContentProps) {
@@ -451,6 +771,12 @@ function SidebarContent({ menuItems, view, expanded, toggleGroup, onChange, onCl
         <p className="mt-1">Interés fijo · Mora compuesta</p>
         <p className="mt-1">© {new Date().getFullYear()}</p>
       </div>
+
+      {/* === ACCIONES DE USUARIO (solo móvil/drawer) ===
+          Botones de "Cambiar de cuenta" y "Cerrar sesión" que se muestran
+          al final del drawer móvil. En desktop NO se muestran (el UserMenu
+          superior derecho ya los tiene). */}
+      {onClose && <DrawerFooterAcciones onClose={onClose} />}
     </>
   )
 }

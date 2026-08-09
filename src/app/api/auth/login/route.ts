@@ -177,6 +177,36 @@ export async function POST(req: NextRequest) {
     // Credenciales válidas - resetear intentos
     await resetFailedAttempts(usuario.id)
 
+    // === VERIFICAR MODO MANTENIMIENTO ===
+    // Si el modo mantenimiento está activo y el usuario NO es admin (y no tiene
+    // permitidoAdmin=true), rechazar el login con el mensaje configurado.
+    // Los admin pueden ingresar si permitirAdmin=true.
+    try {
+      const mant = await db.configMantenimiento.findFirst()
+      if (mant?.activo) {
+        const esAdmin = usuario.rol === 'ADMIN'
+        if (!esAdmin || !mant.permitirAdmin) {
+          await registrarAuditLog({
+            usuarioId: usuario.id, usuarioNombre: usuario.nombre,
+            accion: 'LOGIN', modulo: 'auth', exito: false,
+            errorMessage: `Login bloqueado por mantenimiento (rol: ${usuario.rol})`,
+            ipOrigen: clientInfo.ip, userAgent: clientInfo.userAgent,
+          })
+          return NextResponse.json(
+            {
+              success: false,
+              error: mant.mensaje || 'El sistema se encuentra en mantenimiento. Volveremos pronto.',
+              mantenimiento: true,
+            },
+            { status: 503 }
+          )
+        }
+      }
+    } catch {
+      // Si falla la verificación de mantenimiento, permitir el login
+      // (mejor permitir que bloquear por error de BD)
+    }
+
     // === SI MFA ESTÁ ACTIVO, REQUERIR OTP ===
     if (usuario.mfaEnabled && usuario.mfaSecret) {
       // Generar temp token (5 min) para el paso 2
