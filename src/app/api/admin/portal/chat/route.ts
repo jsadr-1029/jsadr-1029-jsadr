@@ -40,22 +40,37 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    // === RESPUESTA A CONFIRMACIÓN DE ÁMBITO (Negocio/Personal) ===
+    // === RESPUESTA A CONFIRMACIÓN DE ÁMBITO (Negocio/Personal) — OBLIGATORIA ===
     // FIX-CRÍTICO: este handler debe ejecutarse ANTES del branch `if (botTipo)`
     // para que las respuestas "negocio"/"personal" funcionen incluso cuando
     // el chat se envía con un botTipo específico (p.ej. ADMIN_SISTEMA).
-    // Antes estaba dentro del flujo legacy y no se ejecutaba si botTipo estaba presente.
+    //
+    // COMPORTAMIENTO (nuevo):
+    //   a) Admin responde "negocio"/"personal"/"1"/"2"/"n"/"p" → REGISTRA
+    //   b) Admin pide "menu"/"ayuda"/"hola"/"cancelar"/"salir" → CANCELA y continúa
+    //   c) Admin escribe cualquier otra cosa → RE-PREGUNTA (NO cancela, NO registra)
+    //      La confirmación es OBLIGATORIA para poder registrar el movimiento.
     const sessionIdPre = token || 'admin-session'
     const memoriaPre = obtenerMemoria(sessionIdPre)
     if (memoriaPre?.pendienteConfirmarAmbito) {
       const pendiente = memoriaPre.pendienteConfirmarAmbito
-      // Verificar que no haya expirado (5 minutos)
-      if (Date.now() - pendiente.timestamp > 5 * 60 * 1000) {
+      // Expiración: 10 minutos (tiempo amplio para que el admin responda)
+      if (Date.now() - pendiente.timestamp > 10 * 60 * 1000) {
         guardarMemoria(sessionIdPre, { pendienteConfirmarAmbito: undefined } as any)
       } else {
         const mensajeLowerPre = mensaje.toLowerCase().trim()
         const esNegocio = mensajeLowerPre === 'negocio' || mensajeLowerPre === '1' || mensajeLowerPre.includes('negocio') || mensajeLowerPre.includes('empresa') || mensajeLowerPre === 'n'
-        const esPersonal = mensajeLowerPre === 'personal' || mensajeLowerPre === '2' || mensajeLowerPre.includes('personal') || mensajeLowerPre === 'p'
+        const esPersonal = mensajeLowerPre === 'personal' || mensajeLowerPre === '2' || (mensajeLowerPre.includes('personal') && !mensajeLowerPre.includes('personalizar')) || mensajeLowerPre === 'p'
+
+        // Comandos que permiten SALIR del flujo de confirmación sin registrar
+        const esComandoNavegacion =
+          mensajeLowerPre === 'menu' ||
+          mensajeLowerPre === 'menú' ||
+          mensajeLowerPre === 'ayuda' ||
+          mensajeLowerPre === 'hola' ||
+          mensajeLowerPre === 'cancelar' ||
+          mensajeLowerPre === 'salir' ||
+          mensajeLowerPre === 'cancel'
 
         if (esNegocio || esPersonal) {
           const ambito = esNegocio ? 'NEGOCIO' : 'PERSONAL'
@@ -102,9 +117,23 @@ export async function POST(req: NextRequest) {
             })
           }
         }
-        // Si el usuario escribe algo distinto a "negocio"/"personal", cancelar el pendiente y continuar
-        if (mensajeLowerPre !== 'menu' && mensajeLowerPre !== 'menú' && mensajeLowerPre !== 'hola' && mensajeLowerPre !== 'ayuda') {
+
+        if (esComandoNavegacion) {
+          // El admin quiere salir del flujo de confirmación sin registrar
           guardarMemoria(sessionIdPre, { pendienteConfirmarAmbito: undefined } as any)
+          // Caer al flujo normal (no retornar aquí)
+        } else {
+          // === RE-PREGUNTAR: la confirmación es OBLIGATORIA ===
+          // No cancelamos el pendiente. El admin debe responder explícitamente.
+          return NextResponse.json({
+            success: true,
+            data: {
+              respuesta: `🔒 **Tienes un ${pendiente.tipo === 'GASTO' ? 'gasto' : 'ingreso'} pendiente de confirmar.**\n\n💰 Monto: ${formatearMoneda(pendiente.monto)}\n📝 ${pendiente.tipo === 'GASTO' ? 'Motivo' : 'Concepto'}: ${pendiente.concepto}\n\n━━━━━━━━━━━━━━━━━━\n⚠️ **DEBES confirmar el ámbito para continuar**\n━━━━━━━━━━━━━━━━━━\n\nResponde:\n  • **negocio** o **1** → ${pendiente.tipo === 'GASTO' ? 'Gasto' : 'Ingreso'} del negocio\n  • **personal** o **2** → ${pendiente.tipo === 'GASTO' ? 'Gasto' : 'Ingreso'} personal\n  • **cancelar** → abandona el registro (no se guarda nada)`,
+              tipo: 'CONFIRMACION' as const,
+              accionEjecutada: false,
+              detalleAccion: '',
+            },
+          })
         }
       }
     }
@@ -642,36 +671,28 @@ export async function POST(req: NextRequest) {
 
       if (monto > 0) {
         try {
-          // Verificar si el usuario ya especificó ámbito explícitamente
-          const esPersonalExplicito = mensajeLower.includes('personal') && !mensajeLower.includes('personalizar')
-          const esNegocioExplicito = mensajeLower.includes('negocio') || mensajeLower.includes('empresa')
-          
-          if (esPersonalExplicito || esNegocioExplicito) {
-            // Usuario especificó ámbito, registrar directamente
-            const ambito = esPersonalExplicito ? 'PERSONAL' : 'NEGOCIO'
-            const resultado = await registrarMovimiento({
-              tipo: 'EGRESO', monto, concepto: motivo, ambito: ambito as 'NEGOCIO' | 'PERSONAL', usuarioNombre: 'Admin',
-            })
-            accionEjecutada = resultado.success
-            tipo = 'ACCION'
-            detalleAccion = `Gasto ${ambito}: ${formatearMoneda(monto)} | Motivo: ${motivo} | Categoría: ${resultado.categoriaNombre}`
-            respuesta = resultado.success
-              ? `✅ Gasto registrado (${ambito})\n\n💰 Monto: ${formatearMoneda(monto)}\n📝 Motivo: ${motivo}\n🏷️ Categoría: ${resultado.categoriaNombre}\n📅 ${new Date().toLocaleString('es-CO')}`
-              : `❌ ${resultado.mensaje}`
-          } else {
-            // No especificó ámbito: guardar en memoria y preguntar
-            guardarMemoria(sessionId, {
-              pendienteConfirmarAmbito: {
-                tipo: 'GASTO',
-                monto,
-                concepto: motivo,
-                categoria,
-                timestamp: Date.now(),
-              },
-            } as any)
-            tipo = 'CONFIRMACION'
-            respuesta = `💰 Gasto detectado: ${formatearMoneda(monto)}\n📝 Motivo: ${motivo}\n🏷️ Categoría sugerida: ${categoria}\n\n━━━━━━━━━━━━━━━━━━\n¿Este gasto es para NEGOCIO o PERSONAL?\n━━━━━━━━━━━━━━━━━━\n\nResponde:\n  • "negocio" o "1" → Gasto del negocio\n  • "personal" o "2" → Gasto personal`
-          }
+          // === CONFIRMACIÓN OBLIGATORIA DE ÁMBITO ===
+          // Aunque el mensaje contenga "personal" o "negocio", SIEMPRE pedimos
+          // confirmación explícita antes de registrar. Es ineludible.
+          const esPersonalDetectado = mensajeLower.includes('personal') && !mensajeLower.includes('personalizar')
+          const esNegocioDetectado = mensajeLower.includes('negocio') || mensajeLower.includes('empresa')
+          const sugerenciaDetectada = esPersonalDetectado
+            ? 'Detecté "personal" en tu mensaje → responde **personal** para confirmar'
+            : esNegocioDetectado
+            ? 'Detecté "negocio" en tu mensaje → responde **negocio** para confirmar'
+            : ''
+
+          guardarMemoria(sessionId, {
+            pendienteConfirmarAmbito: {
+              tipo: 'GASTO',
+              monto,
+              concepto: motivo,
+              categoria,
+              timestamp: Date.now(),
+            },
+          } as any)
+          tipo = 'CONFIRMACION'
+          respuesta = `💰 **Gasto detectado**\n\n💰 Monto: ${formatearMoneda(monto)}\n📝 Motivo: ${motivo}\n🏷️ Categoría sugerida: ${categoria}${sugerenciaDetectada ? `\n\n💡 ${sugerenciaDetectada}` : ''}\n\n━━━━━━━━━━━━━━━━━━\n⚠️ **CONFIRMACIÓN OBLIGATORIA**\n━━━━━━━━━━━━━━━━━━\n\n¿Este gasto es para NEGOCIO o PERSONAL?\n\nResponde:\n  • "negocio" o "1" → Gasto del negocio\n  • "personal" o "2" → Gasto personal\n\n🔒 No puedo registrarlo hasta que confirmes el ámbito.`
         } catch (e) {
           respuesta = `❌ No pude registrar el gasto. Error: ${e instanceof Error ? e.message : 'desconocido'}`
         }
@@ -700,34 +721,25 @@ export async function POST(req: NextRequest) {
 
       if (monto > 0) {
         try {
-          // Verificar si el usuario ya especificó ámbito explícitamente
-          const esPersonalExplicito = mensajeLower.includes('personal') && !mensajeLower.includes('personalizar')
-          const esNegocioExplicito = mensajeLower.includes('negocio') || mensajeLower.includes('empresa')
-          
-          if (esPersonalExplicito || esNegocioExplicito) {
-            const ambito = esPersonalExplicito ? 'PERSONAL' : 'NEGOCIO'
-            const resultado = await registrarMovimiento({
-              tipo: 'INGRESO', monto, concepto: motivo, ambito: ambito as 'NEGOCIO' | 'PERSONAL', usuarioNombre: 'Admin',
-            })
-            accionEjecutada = resultado.success
-            tipo = 'ACCION'
-            detalleAccion = `Ingreso ${ambito}: ${formatearMoneda(monto)} | Motivo: ${motivo}`
-            respuesta = resultado.success
-              ? `✅ Ingreso registrado (${ambito})\n\n💰 Monto: ${formatearMoneda(monto)}\n📝 Motivo: ${motivo}\n🏷️ Categoría: ${resultado.categoriaNombre}\n📅 ${new Date().toLocaleString('es-CO')}`
-              : `❌ ${resultado.mensaje}`
-          } else {
-            // No especificó ámbito: guardar en memoria y preguntar
-            guardarMemoria(sessionId, {
-              pendienteConfirmarAmbito: {
-                tipo: 'INGRESO',
-                monto,
-                concepto: motivo,
-                timestamp: Date.now(),
-              },
-            } as any)
-            tipo = 'CONFIRMACION'
-            respuesta = `📈 Ingreso detectado: ${formatearMoneda(monto)}\n📝 Motivo: ${motivo}\n\n━━━━━━━━━━━━━━━━━━\n¿Este ingreso es para NEGOCIO o PERSONAL?\n━━━━━━━━━━━━━━━━━━\n\nResponde:\n  • "negocio" o "1" → Ingreso del negocio\n  • "personal" o "2" → Ingreso personal`
-          }
+          // === CONFIRMACIÓN OBLIGATORIA DE ÁMBITO ===
+          const esPersonalDetectado = mensajeLower.includes('personal') && !mensajeLower.includes('personalizar')
+          const esNegocioDetectado = mensajeLower.includes('negocio') || mensajeLower.includes('empresa')
+          const sugerenciaDetectada = esPersonalDetectado
+            ? 'Detecté "personal" en tu mensaje → responde **personal** para confirmar'
+            : esNegocioDetectado
+            ? 'Detecté "negocio" en tu mensaje → responde **negocio** para confirmar'
+            : ''
+
+          guardarMemoria(sessionId, {
+            pendienteConfirmarAmbito: {
+              tipo: 'INGRESO',
+              monto,
+              concepto: motivo,
+              timestamp: Date.now(),
+            },
+          } as any)
+          tipo = 'CONFIRMACION'
+          respuesta = `📈 **Ingreso detectado**\n\n💵 Monto: ${formatearMoneda(monto)}\n📝 Motivo: ${motivo}${sugerenciaDetectada ? `\n\n💡 ${sugerenciaDetectada}` : ''}\n\n━━━━━━━━━━━━━━━━━━\n⚠️ **CONFIRMACIÓN OBLIGATORIA**\n━━━━━━━━━━━━━━━━━━\n\n¿Este ingreso es para NEGOCIO o PERSONAL?\n\nResponde:\n  • "negocio" o "1" → Ingreso del negocio\n  • "personal" o "2" → Ingreso personal\n\n🔒 No puedo registrarlo hasta que confirmes el ámbito.`
         } catch (e) {
           respuesta = `❌ No pude registrar el ingreso. Error: ${e instanceof Error ? e.message : 'desconocido'}`
         }
@@ -3590,34 +3602,26 @@ ${categorias.map(c => `- ${c.icono || ''} ${c.nombre} (${c.tipo}/${c.ambito})`).
               respuesta = `❌ ${validacion.error}`
             } else {
               const concepto = extraerConcepto(mensaje, monto)
-              // === FIX: verificar si el usuario especificó ámbito explícitamente ===
-              // Si NO lo hizo, guardar en memoria y preguntar (mismo flujo que la rama legacy).
-              const esPersonalExplicito = /\bpersonal\b/i.test(mensaje) && !/personalizar/i.test(mensaje)
-              const esNegocioExplicito = /\b(?:negocio|empresa)\b/i.test(mensaje)
-              if (esPersonalExplicito || esNegocioExplicito) {
-                const ambitoResolve = esPersonalExplicito ? 'PERSONAL' : 'NEGOCIO'
-                const resultado = await registrarMovimiento({
-                  tipo: 'EGRESO', monto, concepto, ambito: ambitoResolve, usuarioNombre: 'Admin',
-                })
-                tipo = 'ACCION'
-                accionEjecutada = resultado.success
-                detalleAccion = `Gasto ${ambitoResolve}: ${formatearMoneda(monto)} (${resultado.categoriaNombre})`
-                respuesta = resultado.success
-                  ? `✅ Gasto registrado (${ambitoResolve})\n💰 Monto: ${formatearMoneda(monto)}\n📝 Concepto: ${concepto}\n🏷️ Categoría: ${resultado.categoriaNombre}\n\n💡 ${formatearMoneda(monto)} descontados del balance.`
-                  : `❌ ${resultado.mensaje}`
-              } else {
-                // No especificó ámbito: guardar en memoria y preguntar
-                guardarMemoria(sessionId, {
-                  pendienteConfirmarAmbito: {
-                    tipo: 'GASTO',
-                    monto,
-                    concepto,
-                    timestamp: Date.now(),
-                  },
-                } as any)
-                tipo = 'CONFIRMACION'
-                respuesta = `💰 Gasto detectado: ${formatearMoneda(monto)}\n📝 Concepto: ${concepto}\n\n━━━━━━━━━━━━━━━━━━\n¿Este gasto es para NEGOCIO o PERSONAL?\n━━━━━━━━━━━━━━━━━━\n\nResponde:\n  • "negocio" o "1" → Gasto del negocio\n  • "personal" o "2" → Gasto personal`
-              }
+              // === CONFIRMACIÓN OBLIGATORIA DE ÁMBITO ===
+              // Aunque el mensaje contenga "personal" o "negocio", SIEMPRE
+              // pedimos confirmación explícita antes de registrar.
+              const esPersonalDetectado = /\bpersonal\b/i.test(mensaje) && !/personalizar/i.test(mensaje)
+              const esNegocioDetectado = /\b(?:negocio|empresa)\b/i.test(mensaje)
+              const sugerenciaDetectada = esPersonalDetectado
+                ? 'Detecté "personal" en tu mensaje → responde **personal** para confirmar'
+                : esNegocioDetectado
+                ? 'Detecté "negocio" en tu mensaje → responde **negocio** para confirmar'
+                : ''
+              guardarMemoria(sessionId, {
+                pendienteConfirmarAmbito: {
+                  tipo: 'GASTO',
+                  monto,
+                  concepto,
+                  timestamp: Date.now(),
+                },
+              } as any)
+              tipo = 'CONFIRMACION'
+              respuesta = `💰 **Gasto detectado**\n\n💰 Monto: ${formatearMoneda(monto)}\n📝 Concepto: ${concepto}${sugerenciaDetectada ? `\n\n💡 ${sugerenciaDetectada}` : ''}\n\n━━━━━━━━━━━━━━━━━━\n⚠️ **CONFIRMACIÓN OBLIGATORIA**\n━━━━━━━━━━━━━━━━━━\n\n¿Este gasto es para NEGOCIO o PERSONAL?\n\nResponde:\n  • "negocio" o "1" → Gasto del negocio\n  • "personal" o "2" → Gasto personal\n\n🔒 No puedo registrarlo hasta que confirmes el ámbito.`
             }
           } else {
             tipo = 'TEXTO'
@@ -3635,32 +3639,24 @@ ${categorias.map(c => `- ${c.icono || ''} ${c.nombre} (${c.tipo}/${c.ambito})`).
               respuesta = `❌ ${validacion.error}`
             } else {
               const concepto = extraerConcepto(mensaje, monto)
-              // === FIX: verificar si el usuario especificó ámbito explícitamente ===
-              const esPersonalExplicito = /\bpersonal\b/i.test(mensaje) && !/personalizar/i.test(mensaje)
-              const esNegocioExplicito = /\b(?:negocio|empresa)\b/i.test(mensaje)
-              if (esPersonalExplicito || esNegocioExplicito) {
-                const ambitoResolve = esPersonalExplicito ? 'PERSONAL' : 'NEGOCIO'
-                const resultado = await registrarMovimiento({
-                  tipo: 'INGRESO', monto, concepto, ambito: ambitoResolve, usuarioNombre: 'Admin',
-                })
-                tipo = 'ACCION'
-                accionEjecutada = resultado.success
-                detalleAccion = `Ingreso ${ambitoResolve}: ${formatearMoneda(monto)} (${resultado.categoriaNombre})`
-                respuesta = resultado.success
-                  ? `✅ Ingreso registrado (${ambitoResolve})\n💰 Monto: ${formatearMoneda(monto)}\n📝 Concepto: ${concepto}\n🏷️ Categoría: ${resultado.categoriaNombre}`
-                  : `❌ ${resultado.mensaje}`
-              } else {
-                guardarMemoria(sessionId, {
-                  pendienteConfirmarAmbito: {
-                    tipo: 'INGRESO',
-                    monto,
-                    concepto,
-                    timestamp: Date.now(),
-                  },
-                } as any)
-                tipo = 'CONFIRMACION'
-                respuesta = `📈 Ingreso detectado: ${formatearMoneda(monto)}\n📝 Concepto: ${concepto}\n\n━━━━━━━━━━━━━━━━━━\n¿Este ingreso es para NEGOCIO o PERSONAL?\n━━━━━━━━━━━━━━━━━━\n\nResponde:\n  • "negocio" o "1" → Ingreso del negocio\n  • "personal" o "2" → Ingreso personal`
-              }
+              // === CONFIRMACIÓN OBLIGATORIA DE ÁMBITO ===
+              const esPersonalDetectado = /\bpersonal\b/i.test(mensaje) && !/personalizar/i.test(mensaje)
+              const esNegocioDetectado = /\b(?:negocio|empresa)\b/i.test(mensaje)
+              const sugerenciaDetectada = esPersonalDetectado
+                ? 'Detecté "personal" en tu mensaje → responde **personal** para confirmar'
+                : esNegocioDetectado
+                ? 'Detecté "negocio" en tu mensaje → responde **negocio** para confirmar'
+                : ''
+              guardarMemoria(sessionId, {
+                pendienteConfirmarAmbito: {
+                  tipo: 'INGRESO',
+                  monto,
+                  concepto,
+                  timestamp: Date.now(),
+                },
+              } as any)
+              tipo = 'CONFIRMACION'
+              respuesta = `📈 **Ingreso detectado**\n\n💵 Monto: ${formatearMoneda(monto)}\n📝 Concepto: ${concepto}${sugerenciaDetectada ? `\n\n💡 ${sugerenciaDetectada}` : ''}\n\n━━━━━━━━━━━━━━━━━━\n⚠️ **CONFIRMACIÓN OBLIGATORIA**\n━━━━━━━━━━━━━━━━━━\n\n¿Este ingreso es para NEGOCIO o PERSONAL?\n\nResponde:\n  • "negocio" o "1" → Ingreso del negocio\n  • "personal" o "2" → Ingreso personal\n\n🔒 No puedo registrarlo hasta que confirmes el ámbito.`
             }
           } else {
             tipo = 'TEXTO'

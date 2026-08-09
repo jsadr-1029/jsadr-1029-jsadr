@@ -33,6 +33,7 @@ import { obtenerEstadoModuloPrestamos, generarDashboardEjecutivo } from '@/lib/a
 import { generarResumenJuridico } from '@/lib/asesor-juridico'
 import { generarInformeSeguridad } from '@/lib/ciberseguridad'
 import { generarDashboardEjecutivoConsolidado } from '@/lib/asistente-ejecutivo'
+import { buscarConocimientoPlataforma } from '@/lib/bot-conocimiento-plataforma'
 
 // =====================================================
 // TIPOS
@@ -278,31 +279,42 @@ export const COMANDOS: ComandoBot[] = [
     id: 1,
     categoria: 'FINANZAS',
     nombre: 'Registrar gasto',
-    descripcion: 'Anota un gasto (monto + concepto + ámbito opcional)',
+    descripcion: 'Anota un gasto (monto + concepto) — siempre pregunta NEGOCIO o PERSONAL',
     ejemplo: '1   →   te pedirá monto y concepto',
     ejecutar: async (ctx) => {
       const monto = ctx.args.monto
       const concepto = ctx.args.concepto || 'Gasto'
       if (!monto) {
         return {
-          texto: '💰 Vamos a registrar tu gasto. Por favor dime:\n\n• ¿Cuál es el **monto**?\n• ¿Cuál es el **motivo/concepto**? (ej: comida, transporte, oficina)\n• ¿Es **negocio** o **personal**? (opcional, te lo preguntaré si no lo aclaras)\n\nEjemplo: *"Registra un gasto de 50.000 por comida"*',
+          texto: '💰 Vamos a registrar tu gasto. Por favor dime:\n\n• ¿Cuál es el **monto**?\n• ¿Cuál es el **motivo/concepto**? (ej: comida, transporte, oficina)\n\n⚠️ **Importante:** Te preguntaré si el gasto es de **NEGOCIO** o **PERSONAL** antes de registrarlo. Es obligatorio confirmarlo.\n\nEjemplo: *"Registra un gasto de 50.000 por comida"*',
           tipo: 'TEXTO',
         }
       }
-      const resultado = await registrarMovimiento({
-        tipo: 'EGRESO',
-        monto,
-        concepto,
-        ambito: (ctx.args.ambito as 'NEGOCIO' | 'PERSONAL') || ctx.memoria?.ambitoPreferido || 'NEGOCIO',
-        usuarioNombre: 'Admin',
-      })
+      // === CONFIRMACIÓN OBLIGATORIA DE ÁMBITO ===
+      // Aunque el mensaje original contenga "personal" o "negocio",
+      // SIEMPRE guardamos en memoria y pedimos confirmación explícita.
+      // El admin debe responder "negocio" o "personal" para que se registre.
+      guardarMemoria(ctx.sessionId, {
+        pendienteConfirmarAmbito: {
+          tipo: 'GASTO',
+          monto,
+          concepto,
+          timestamp: Date.now(),
+        },
+      } as any)
+      // Sugerencia visual: si el admin ya escribió "personal"/"negocio" en el mensaje,
+      // se lo marcamos como opción resaltada pero igual pedimos confirmación.
+      const mensajeNorm = ctx.mensajeNormalizado || ''
+      const detectoPersonal = /\bpersonal\b/i.test(mensajeNorm) && !/personalizar/i.test(mensajeNorm)
+      const detectoNegocio = /\b(?:negocio|empresa)\b/i.test(mensajeNorm)
+      const sugerencia = detectoPersonal
+        ? 'Detecté "personal" en tu mensaje → responde **personal** para confirmar'
+        : detectoNegocio
+        ? 'Detecté "negocio" en tu mensaje → responde **negocio** para confirmar'
+        : ''
       return {
-        texto: resultado.success
-          ? `✅ Gasto registrado\n\n💰 Monto: ${formatearMoneda(monto)}\n📝 Motivo: ${concepto}\n🏷️ Categoría: ${resultado.categoriaNombre}\n📅 ${fechaHoraTextoColombia()}`
-          : `❌ ${resultado.mensaje}`,
-        tipo: 'ACCION',
-        accionEjecutada: resultado.success,
-        detalleAccion: `Gasto: ${formatearMoneda(monto)} | ${concepto}`,
+        texto: `💰 **Gasto detectado**\n\n💰 Monto: ${formatearMoneda(monto)}\n📝 Motivo: ${concepto}\n${sugerencia ? `\n💡 ${sugerencia}\n` : ''}\n━━━━━━━━━━━━━━━━━━\n⚠️ **CONFIRMACIÓN OBLIGATORIA**\n━━━━━━━━━━━━━━━━━━\n\n¿Este gasto es para **NEGOCIO** o **PERSONAL**?\n\nResponde:\n  • **negocio** o **1** → Gasto del negocio\n  • **personal** o **2** → Gasto personal\n\n🔒 No puedo registrarlo hasta que confirmes el ámbito.`,
+        tipo: 'CONFIRMACION',
       }
     },
   },
@@ -310,31 +322,37 @@ export const COMANDOS: ComandoBot[] = [
     id: 2,
     categoria: 'FINANZAS',
     nombre: 'Registrar ingreso',
-    descripcion: 'Anota un ingreso (monto + concepto + ámbito opcional)',
+    descripcion: 'Anota un ingreso (monto + concepto) — siempre pregunta NEGOCIO o PERSONAL',
     ejemplo: '2   →   te pedirá monto y concepto',
     ejecutar: async (ctx) => {
       const monto = ctx.args.monto
       const concepto = ctx.args.concepto || 'Ingreso'
       if (!monto) {
         return {
-          texto: '💵 Vamos a registrar tu ingreso. Por favor dime:\n\n• ¿Cuál es el **monto**?\n• ¿Cuál es el **concepto**? (ej: venta, comisión, abono)\n• ¿Es **negocio** o **personal**? (opcional)\n\nEjemplo: *"Registra un ingreso de 200.000 por venta"*',
+          texto: '💵 Vamos a registrar tu ingreso. Por favor dime:\n\n• ¿Cuál es el **monto**?\n• ¿Cuál es el **concepto**? (ej: venta, comisión, abono)\n\n⚠️ **Importante:** Te preguntaré si el ingreso es de **NEGOCIO** o **PERSONAL** antes de registrarlo. Es obligatorio confirmarlo.\n\nEjemplo: *"Registra un ingreso de 200.000 por venta"*',
           tipo: 'TEXTO',
         }
       }
-      const resultado = await registrarMovimiento({
-        tipo: 'INGRESO',
-        monto,
-        concepto,
-        ambito: (ctx.args.ambito as 'NEGOCIO' | 'PERSONAL') || ctx.memoria?.ambitoPreferido || 'NEGOCIO',
-        usuarioNombre: 'Admin',
-      })
+      // === CONFIRMACIÓN OBLIGATORIA DE ÁMBITO ===
+      guardarMemoria(ctx.sessionId, {
+        pendienteConfirmarAmbito: {
+          tipo: 'INGRESO',
+          monto,
+          concepto,
+          timestamp: Date.now(),
+        },
+      } as any)
+      const mensajeNorm = ctx.mensajeNormalizado || ''
+      const detectoPersonal = /\bpersonal\b/i.test(mensajeNorm) && !/personalizar/i.test(mensajeNorm)
+      const detectoNegocio = /\b(?:negocio|empresa)\b/i.test(mensajeNorm)
+      const sugerencia = detectoPersonal
+        ? 'Detecté "personal" en tu mensaje → responde **personal** para confirmar'
+        : detectoNegocio
+        ? 'Detecté "negocio" en tu mensaje → responde **negocio** para confirmar'
+        : ''
       return {
-        texto: resultado.success
-          ? `✅ Ingreso registrado\n\n💵 Monto: ${formatearMoneda(monto)}\n📝 Motivo: ${concepto}\n🏷️ Categoría: ${resultado.categoriaNombre}\n📅 ${fechaHoraTextoColombia()}`
-          : `❌ ${resultado.mensaje}`,
-        tipo: 'ACCION',
-        accionEjecutada: resultado.success,
-        detalleAccion: `Ingreso: ${formatearMoneda(monto)} | ${concepto}`,
+        texto: `📈 **Ingreso detectado**\n\n💵 Monto: ${formatearMoneda(monto)}\n📝 Concepto: ${concepto}\n${sugerencia ? `\n💡 ${sugerencia}\n` : ''}\n━━━━━━━━━━━━━━━━━━\n⚠️ **CONFIRMACIÓN OBLIGATORIA**\n━━━━━━━━━━━━━━━━━━\n\n¿Este ingreso es para **NEGOCIO** o **PERSONAL**?\n\nResponde:\n  • **negocio** o **1** → Ingreso del negocio\n  • **personal** o **2** → Ingreso personal\n\n🔒 No puedo registrarlo hasta que confirmes el ámbito.`,
+        tipo: 'CONFIRMACION',
       }
     },
   },
@@ -862,6 +880,101 @@ export async function procesarMensajeAdmin(
 ): Promise<RespuestaBot> {
   const mensajeNorm = normalizar(mensaje)
 
+  // ===================================================================
+  // 0. CONFIRMACIÓN OBLIGATORIA DE ÁMBITO (personal / negocio)
+  // -------------------------------------------------------------------
+  // Si hay un gasto/ingreso pendiente de confirmar ámbito, este handler
+  // se ejecuta PRIMERO y es INELUDIBLE. El admin DEBE responder
+  // "negocio" o "personal" para poder continuar.
+  //
+  // Casos:
+  //  a) Admin responde "negocio"/"personal"/"1"/"2"/"n"/"p" → registra
+  //  b) Admin pide "menu"/"ayuda"/"hola" → permite salir (sin registrar)
+  //  c) Admin escribe cualquier otra cosa → RE-PREGUNTA (no cancela)
+  // ===================================================================
+  const memoriaPendiente = obtenerMemoria(sessionId)
+  if (memoriaPendiente?.pendienteConfirmarAmbito) {
+    const pendiente = memoriaPendiente.pendienteConfirmarAmbito
+    // Expiración: 10 minutos (tiempo amplio para que el admin responda)
+    if (Date.now() - pendiente.timestamp > 10 * 60 * 1000) {
+      guardarMemoria(sessionId, { pendienteConfirmarAmbito: undefined } as any)
+    } else {
+      const mensajeLower = mensaje.toLowerCase().trim()
+      // Detectar respuesta del admin
+      const esNegocio =
+        mensajeLower === 'negocio' ||
+        mensajeLower === '1' ||
+        mensajeLower === 'n' ||
+        mensajeLower.includes('negocio') ||
+        mensajeLower.includes('empresa')
+      const esPersonal =
+        mensajeLower === 'personal' ||
+        mensajeLower === '2' ||
+        mensajeLower === 'p' ||
+        (mensajeLower.includes('personal') && !mensajeLower.includes('personalizar'))
+
+      // Permitir SALIR del flujo de confirmación con comandos de navegación
+      const esComandoNavegacion =
+        mensajeLower === 'menu' ||
+        mensajeLower === 'menú' ||
+        mensajeLower === 'ayuda' ||
+        mensajeLower === 'hola' ||
+        mensajeLower === 'cancelar' ||
+        mensajeLower === 'salir' ||
+        mensajeLower === 'cancel'
+
+      if (esNegocio || esPersonal) {
+        const ambito = esNegocio ? 'NEGOCIO' : 'PERSONAL'
+        try {
+          const resultado = await registrarMovimiento({
+            tipo: pendiente.tipo === 'GASTO' ? 'EGRESO' : 'INGRESO',
+            monto: pendiente.monto,
+            concepto: pendiente.concepto,
+            ambito: ambito as 'NEGOCIO' | 'PERSONAL',
+            usuarioNombre: 'Admin',
+          })
+          // Limpiar pendiente
+          guardarMemoria(sessionId, {
+            pendienteConfirmarAmbito: undefined,
+            ultimoMovimientoId: resultado.movimientoId,
+            ultimoMovimientoTipo: pendiente.tipo,
+            ultimoMovimientoMonto: pendiente.monto,
+            ultimoMovimientoConcepto: pendiente.concepto,
+            ultimoMovimientoAmbito: ambito as any,
+            ultimoMovimientoCategoria: resultado.categoriaNombre,
+          } as any)
+          return {
+            texto: resultado.success
+              ? `✅ ${pendiente.tipo === 'GASTO' ? 'Gasto' : 'Ingreso'} registrado (${ambito})\n\n💰 Monto: ${formatearMoneda(pendiente.monto)}\n📝 Motivo: ${pendiente.concepto}\n🏷️ Categoría: ${resultado.categoriaNombre}\n📅 ${fechaHoraTextoColombia()}`
+              : `❌ ${resultado.mensaje}`,
+            tipo: 'ACCION',
+            accionEjecutada: resultado.success,
+            detalleAccion: `${pendiente.tipo === 'GASTO' ? 'Gasto' : 'Ingreso'} ${ambito}: ${formatearMoneda(pendiente.monto)} | Motivo: ${pendiente.concepto} | Categoría: ${resultado.categoriaNombre}`,
+          }
+        } catch (e: any) {
+          guardarMemoria(sessionId, { pendienteConfirmarAmbito: undefined } as any)
+          return {
+            texto: `❌ No pude registrar el movimiento. Error: ${e instanceof Error ? e.message : 'desconocido'}`,
+            tipo: 'TEXTO',
+          }
+        }
+      }
+
+      if (esComandoNavegacion) {
+        // El admin quiere salir del flujo de confirmación sin registrar
+        guardarMemoria(sessionId, { pendienteConfirmarAmbito: undefined } as any)
+        // Caer al flujo normal (no retornar aquí)
+      } else {
+        // === RE-PREGUNTAR: la confirmación es OBLIGATORIA ===
+        // No cancelamos el pendiente. El admin debe responder explícitamente.
+        return {
+          texto: `🔒 **Tienes un ${pendiente.tipo === 'GASTO' ? 'gasto' : 'ingreso'} pendiente de confirmar.**\n\n💰 Monto: ${formatearMoneda(pendiente.monto)}\n📝 ${pendiente.tipo === 'GASTO' ? 'Motivo' : 'Concepto'}: ${pendiente.concepto}\n\n━━━━━━━━━━━━━━━━━━\n⚠️ **DEBES confirmar el ámbito para continuar**\n━━━━━━━━━━━━━━━━━━\n\nResponde:\n  • **negocio** o **1** → ${pendiente.tipo === 'GASTO' ? 'Gasto' : 'Ingreso'} del negocio\n  • **personal** o **2** → ${pendiente.tipo === 'GASTO' ? 'Gasto' : 'Ingreso'} personal\n  • **cancelar** → abandona el registro (no se guarda nada)`,
+          tipo: 'CONFIRMACION',
+        }
+      }
+    }
+  }
+
   // 1. Si es solo un número, ejecutar comando directo
   const numMatch = mensajeNorm.match(/^(\d{1,2})$/)
   if (numMatch) {
@@ -964,10 +1077,20 @@ export async function procesarMensajeAdmin(
     return resp
   }
 
-  // 8. Fallback inteligente — sugerir comandos similares
+  // 8. Conocimiento de la plataforma — si el mensaje pregunta por
+  // módulos, seguridad, cajas, portales, etc., responder con info detallada.
+  const conocimiento = buscarConocimientoPlataforma(mensaje)
+  if (conocimiento) {
+    return {
+      texto: conocimiento,
+      tipo: 'TEXTO',
+    }
+  }
+
+  // 9. Fallback inteligente — sugerir comandos similares
   const sugerencias = sugerirComandos(mensaje)
   return {
-    texto: `🤔 No estoy seguro de qué necesitas. ${sugerencias ? `¿Quizás querías alguno de estos?\n\n${sugerencias}` : ''}\n\n💡 Escribe **menu** para ver todos los comandos disponibles, o pruébame con frases como:\n• *"balance del mes"*\n• *"préstamos en mora"*\n• *"registrar gasto de 50.000 por comida"*\n• *"auditoría reciente"`,
+    texto: `🤔 No estoy seguro de qué necesitas. ${sugerencias ? `¿Quizás querías alguno de estos?\n\n${sugerencias}` : ''}\n\n💡 Escribe **menu** para ver todos los comandos disponibles, o pruébame con frases como:\n• *"balance del mes"*\n• *"préstamos en mora"*\n• *"registrar gasto de 50.000 por comida"*\n• *"auditoría reciente"*\n• *"qué seguridad tiene la plataforma"*\n• *"qué cajas tiene el sistema"*\n• *"cómo entro al portal jurídico"`,
     tipo: 'TEXTO',
   }
 }
