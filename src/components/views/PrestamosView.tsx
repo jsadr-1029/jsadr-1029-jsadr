@@ -1494,8 +1494,8 @@ ${linkFirmaCodeudor}
                 usarán esta fecha como fecha base.
                 Ej: si el préstamo se hizo el 2/08/2026 y se carga el 5/08/2026,
                 todos los documentos empezarán desde el 2/08/2026. */}
-            <div className="space-y-2 p-3 rounded-md bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800">
-              <Label htmlFor="fechaPrestamo" className="text-sm font-medium flex items-center gap-1.5">
+            <div className="space-y-2 p-3 rounded-md bg-emerald-50 dark:bg-emerald-900/60 border-2 border-emerald-300 dark:border-emerald-500 shadow-sm">
+              <Label htmlFor="fechaPrestamo" className="text-sm font-semibold flex items-center gap-1.5 text-emerald-900 dark:text-emerald-100">
                 <Calendar className="w-3.5 h-3.5 text-emerald-700 dark:text-emerald-300" />
                 Fecha del préstamo *
               </Label>
@@ -1513,7 +1513,7 @@ ${linkFirmaCodeudor}
                   return `${yyyy}-${mm}-${dd}`
                 })()}
               />
-              <p className="text-xs text-emerald-800 dark:text-emerald-200">
+              <p className="text-xs text-emerald-900 dark:text-emerald-100 font-medium">
                 📅 Esta será la fecha base del préstamo. Todos los documentos generados (pagaré, carta, tabla de amortización) y el código del préstamo usarán esta fecha, no la fecha actual del sistema.
               </p>
               {fechaPrestamo !== (() => {
@@ -1523,7 +1523,7 @@ ${linkFirmaCodeudor}
                 const dd = String(hoy.getDate()).padStart(2, '0')
                 return `${yyyy}-${mm}-${dd}`
               })() && (
-                <p className="text-xs text-amber-700 dark:text-amber-300 font-medium">
+                <p className="text-xs text-amber-900 dark:text-amber-200 font-semibold bg-amber-100 dark:bg-amber-900/60 p-2 rounded border border-amber-300 dark:border-amber-700">
                   ⚠️ Estás registrando un préstamo con fecha retroactiva ({fechaPrestamo}). Verifica que sea correcto.
                 </p>
               )}
@@ -1538,9 +1538,9 @@ ${linkFirmaCodeudor}
                 Si no se selecciona periodo, el préstamo se comporta normalmente
                 (las cuotas se programan desde fechaPrestamo).
             */}
-            <div className="space-y-3 p-3 rounded-md bg-indigo-50 dark:bg-indigo-950/20 border border-indigo-200 dark:border-indigo-800">
+            <div className="space-y-3 p-3 rounded-md bg-indigo-50 dark:bg-indigo-900/60 border-2 border-indigo-300 dark:border-indigo-500 shadow-sm">
               <div className="flex items-center justify-between gap-2">
-                <Label className="text-sm font-medium flex items-center gap-1.5">
+                <Label className="text-sm font-semibold flex items-center gap-1.5 text-indigo-900 dark:text-indigo-100">
                   <Scissors className="w-3.5 h-3.5 text-indigo-700 dark:text-indigo-300" />
                   Periodo de corte (opcional)
                 </Label>
@@ -1554,7 +1554,7 @@ ${linkFirmaCodeudor}
                       setValorDiasCausados(0)
                       setEditarDiasCausadosManual(false)
                     }}
-                    className="text-xs text-indigo-700 dark:text-indigo-300 hover:underline"
+                    className="text-xs text-indigo-800 dark:text-indigo-200 hover:underline font-medium"
                   >
                     Quitar corte
                   </button>
@@ -1579,58 +1579,58 @@ ${linkFirmaCodeudor}
                   <SelectItem value="15-30">📅 Periodo 15-30 (cortes los días 15 y 30 de cada mes)</SelectItem>
                 </SelectContent>
               </Select>
-              <p className="text-xs text-indigo-800 dark:text-indigo-200">
-                💡 Para clientes que solicitan crédito <strong>antes</strong> de la fecha de corte.
+              <p className="text-xs text-indigo-900 dark:text-indigo-100 font-medium">
+                💡 Para clientes que solicitan crédito <strong className="text-indigo-950 dark:text-white">antes</strong> de la fecha de corte.
                 El sistema calcula automáticamente los días causados hasta el corte más cercano y
                 programa los pagos desde esa fecha de corte.
               </p>
 
               {/* === Bloque de cálculo automático === */}
               {periodoCorte && fechaPrestamo && (
-                <div className="space-y-3 p-3 rounded-md bg-white dark:bg-indigo-900/30 border border-indigo-300 dark:border-indigo-700">
+                <div className="space-y-3 p-4 rounded-md bg-white dark:bg-slate-900/90 border-2 border-indigo-400 dark:border-indigo-400 shadow-md">
                   {/* Resumen automático */}
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
-                    <div className="space-y-1">
-                      <div className="text-indigo-700 dark:text-indigo-300 font-medium">
+                    <div className="space-y-1 p-2 rounded bg-indigo-50 dark:bg-indigo-950/80 border border-indigo-200 dark:border-indigo-800">
+                      <div className="text-indigo-900 dark:text-indigo-200 font-semibold flex items-center gap-1">
                         📅 Fecha del préstamo
                       </div>
-                      <div className="font-bold text-foreground">
+                      <div className="font-bold text-slate-900 dark:text-white text-sm">
                         {formatearFecha(new Date(fechaPrestamo + 'T12:00:00'))}
                       </div>
                     </div>
-                    <div className="space-y-1">
-                      <div className="text-indigo-700 dark:text-indigo-300 font-medium">
+                    <div className="space-y-1 p-2 rounded bg-indigo-50 dark:bg-indigo-950/80 border border-indigo-200 dark:border-indigo-800">
+                      <div className="text-indigo-900 dark:text-indigo-200 font-semibold flex items-center gap-1">
                         🎯 Fecha del primer corte
                       </div>
-                      <div className="font-bold text-foreground">
+                      <div className="font-bold text-slate-900 dark:text-white text-sm">
                         {fechaPrimerCorte ? formatearFecha(fechaPrimerCorte) : '—'}
                       </div>
                     </div>
-                    <div className="space-y-1">
-                      <div className="text-indigo-700 dark:text-indigo-300 font-medium">
+                    <div className="space-y-1 p-2 rounded bg-amber-50 dark:bg-amber-950/80 border border-amber-200 dark:border-amber-800">
+                      <div className="text-amber-900 dark:text-amber-200 font-semibold flex items-center gap-1">
                         ⏳ Días causados antes del corte
                       </div>
-                      <div className="font-bold text-foreground">
+                      <div className="font-bold text-slate-900 dark:text-white text-sm">
                         {diasCausadosAntes} día{diasCausadosAntes === 1 ? '' : 's'}
                       </div>
                     </div>
                   </div>
 
                   {fechaPrimerCorte && (
-                    <div className="text-xs text-indigo-800 dark:text-indigo-200 bg-indigo-100 dark:bg-indigo-900/40 rounded p-2">
+                    <div className="text-xs text-indigo-950 dark:text-indigo-50 bg-indigo-100 dark:bg-indigo-800 rounded p-2.5 border border-indigo-300 dark:border-indigo-600 font-medium">
                       {diasCausadosAntes > 0 ? (
                         <>
                           📊 El préstamo se entrega el{' '}
-                          <strong>{formatearFecha(new Date(fechaPrestamo + 'T12:00:00'))}</strong>{' '}
+                          <strong className="text-indigo-950 dark:text-white">{formatearFecha(new Date(fechaPrestamo + 'T12:00:00'))}</strong>{' '}
                           pero el corte más cercano es el{' '}
-                          <strong>{formatearFecha(fechaPrimerCorte)}</strong>. El sistema cobrará{' '}
-                          <strong>{diasCausadosAntes} día{diasCausadosAntes === 1 ? '' : 's'}</strong>{' '}
+                          <strong className="text-indigo-950 dark:text-white">{formatearFecha(fechaPrimerCorte)}</strong>. El sistema cobrará{' '}
+                          <strong className="text-indigo-950 dark:text-white">{diasCausadosAntes} día{diasCausadosAntes === 1 ? '' : 's'}</strong>{' '}
                           de interés anticipado y las cuotas se programarán desde el{' '}
-                          <strong>{formatearFecha(fechaPrimerCorte)}</strong>.
+                          <strong className="text-indigo-950 dark:text-white">{formatearFecha(fechaPrimerCorte)}</strong>.
                         </>
                       ) : (
                         <>
-                          ✅ La fecha del préstamo cae <strong>justo en un día de corte</strong>{' '}
+                          ✅ La fecha del préstamo cae <strong className="text-indigo-950 dark:text-white">justo en un día de corte</strong>{' '}
                           ({formatearFecha(fechaPrimerCorte)}). No hay días causados adicionales y
                           las cuotas se programarán desde esta fecha.
                         </>
@@ -1640,12 +1640,12 @@ ${linkFirmaCodeudor}
 
                   {/* === Campos editables: días causados y valor a cobrar === */}
                   {diasCausadosAntes > 0 && (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-indigo-200 dark:border-indigo-700">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-3 border-t-2 border-indigo-200 dark:border-indigo-700">
                       <div className="space-y-1.5">
-                        <Label htmlFor="diasCausadosAntes" className="text-xs font-medium flex items-center gap-1.5">
+                        <Label htmlFor="diasCausadosAntes" className="text-xs font-semibold flex items-center gap-1.5 text-slate-800 dark:text-slate-100">
                           Días causados antes del corte
                           {editarDiasCausadosManual && (
-                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200">
+                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-200 text-amber-900 dark:bg-amber-500 dark:text-amber-950 font-bold">
                               ✏️ Manual
                             </span>
                           )}
@@ -1659,14 +1659,14 @@ ${linkFirmaCodeudor}
                             handleEditarDiasCausados()
                             setDiasCausadosAntes(parseInt(e.target.value) || 0)
                           }}
-                          className="bg-white dark:bg-indigo-900/40"
+                          className="bg-white dark:bg-slate-800 dark:text-white border-indigo-300 dark:border-indigo-600"
                         />
                       </div>
                       <div className="space-y-1.5">
-                        <Label htmlFor="valorDiasCausados" className="text-xs font-medium flex items-center gap-1.5">
+                        <Label htmlFor="valorDiasCausados" className="text-xs font-semibold flex items-center gap-1.5 text-slate-800 dark:text-slate-100">
                           Valor a cobrar por días causados (COP)
                           {editarDiasCausadosManual && (
-                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200">
+                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-200 text-amber-900 dark:bg-amber-500 dark:text-amber-950 font-bold">
                               ✏️ Manual
                             </span>
                           )}
@@ -1681,7 +1681,7 @@ ${linkFirmaCodeudor}
                             handleEditarDiasCausados()
                             setValorDiasCausados(parseFloat(e.target.value) || 0)
                           }}
-                          className="bg-white dark:bg-indigo-900/40"
+                          className="bg-white dark:bg-slate-800 dark:text-white border-indigo-300 dark:border-indigo-600"
                         />
                       </div>
                       {editarDiasCausadosManual && (
@@ -1689,12 +1689,12 @@ ${linkFirmaCodeudor}
                           <button
                             type="button"
                             onClick={handleRecalcularDiasCausados}
-                            className="text-xs px-3 py-1.5 rounded-md bg-indigo-100 text-indigo-700 hover:bg-indigo-200 dark:bg-indigo-800 dark:text-indigo-100 dark:hover:bg-indigo-700 transition flex items-center gap-1.5"
+                            className="text-xs px-3 py-1.5 rounded-md bg-indigo-200 text-indigo-900 hover:bg-indigo-300 dark:bg-indigo-600 dark:text-white dark:hover:bg-indigo-500 transition flex items-center gap-1.5 font-medium"
                           >
                             <RefreshCw className="w-3 h-3" />
                             Recalcular automáticamente
                           </button>
-                          <p className="text-[11px] text-amber-700 dark:text-amber-300 mt-1">
+                          <p className="text-[11px] text-amber-800 dark:text-amber-300 mt-1 font-medium">
                             ⚠️ Estás usando valores editados manualmente. Si cambian el monto o la tasa,
                             no se recalcularán hasta que presiones este botón.
                           </p>
@@ -1705,7 +1705,7 @@ ${linkFirmaCodeudor}
 
                   {/* === Aviso de cobro adicional === */}
                   {valorDiasCausados > 0 && (
-                    <div className="p-2 rounded-md bg-emerald-100 dark:bg-emerald-900/40 border border-emerald-300 dark:border-emerald-700 text-xs text-emerald-900 dark:text-emerald-100">
+                    <div className="p-2.5 rounded-md bg-emerald-100 dark:bg-emerald-700/80 border-2 border-emerald-400 dark:border-emerald-400 text-xs text-emerald-950 dark:text-emerald-50 font-medium">
                       💰 Se cobrarán <strong>{formatearMoneda(valorDiasCausados)}</strong> adicionales
                       por {diasCausadosAntes} día{diasCausadosAntes === 1 ? '' : 's'} de interés anticipado.
                       Este valor se suma al total a pagar del préstamo.
