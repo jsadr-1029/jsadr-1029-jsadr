@@ -44,6 +44,29 @@ import { login, isAuthenticated, setTokens, setUserData, getUserData } from '@/l
 import Link from 'next/link'
 
 // =====================================================
+// FIX-LINK-CLIENTE: Helper para preservar el redirect pendiente.
+// Cuando un cliente hace clic en un link enviado por WhatsApp
+// (https://jsadr.com.co/?tyc=token, ?pay=codigo, ?recibo=hash, /firma/[token]),
+// la guardia de auth en page.tsx detecta que no está logueado y guarda
+// la URL original en sessionStorage antes de redirigir a /login.
+// Este helper lee (y borra) esa URL pendiente para redirigir al cliente
+// de vuelta a ella tras el login exitoso.
+// =====================================================
+function consumirPendingRedirect(): string | null {
+  try {
+    const pending = sessionStorage.getItem('pending_redirect')
+    if (pending) {
+      sessionStorage.removeItem('pending_redirect')
+      // Solo permitir paths internos (evitar open redirect)
+      if (pending.startsWith('/') && !pending.startsWith('//')) {
+        return pending
+      }
+    }
+  } catch {}
+  return null
+}
+
+// =====================================================
 // Login Unificado v5.0 — Jsadr · Jo*** Se*** Al*** D** R**
 // -----------------------------------------------------
 // Un ÚNICO formulario para TODOS los usuarios del sistema
@@ -143,6 +166,11 @@ export default function LoginPage() {
     //   (loop)
     // Ahora solo redirigimos si hay un access_token real en localStorage.
     if (isAuthenticated()) {
+      const pending = consumirPendingRedirect()
+      if (pending) {
+        router.replace(pending)
+        return
+      }
       const u = getUserData()
       if (u?.rol === 'CLIENTE' || u?.esPortalCliente) {
         router.replace('/?portal=cliente')
@@ -230,7 +258,8 @@ export default function LoginPage() {
             })
             setSuccess({ nombre: data.nombre })
             setTimeout(() => {
-              router.replace('/?portal=cliente')
+              const pending = consumirPendingRedirect()
+              router.replace(pending || '/?portal=cliente')
               router.refresh()
             }, 1100)
             loginExitoso = true
@@ -253,7 +282,8 @@ export default function LoginPage() {
               } catch {}
               setSuccess({ nombre: data.data.usuario?.nombre || 'Abogado' })
               setTimeout(() => {
-                router.replace('/juridico')
+                const pending = consumirPendingRedirect()
+                router.replace(pending || '/juridico')
                 router.refresh()
               }, 1100)
               loginExitoso = true
@@ -280,7 +310,8 @@ export default function LoginPage() {
           else if (rol === 'CLIENTE' || user?.esPortalCliente) ruta = '/?portal=cliente'
           else if (username === 'p_jsadr') ruta = '/?view=portal-admin'
           setTimeout(() => {
-            router.replace(ruta)
+            const pending = consumirPendingRedirect()
+            router.replace(pending || ruta)
             router.refresh()
           }, 1100)
           loginExitoso = true

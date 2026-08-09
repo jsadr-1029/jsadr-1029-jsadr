@@ -95,11 +95,23 @@ export default function Home() {
   const { mode: responsiveMode } = useResponsiveView()
 
   // === GUARDIA DE AUTENTICACIÓN ===
-  // Si no está autenticado, redirigir a /login
+  // Si no está autenticado, redirigir a /login preservando el query string.
+  // FIX-LINK-CLIENTE: antes se hacía router.replace('/login') a secas, lo que
+  // perdía los parámetros ?tyc=token / ?pay=codigo / ?recibo=hash que vienen
+  // en los links enviados al cliente por WhatsApp. Tras el login, el cliente
+  // quedaba en el dashboard sin poder aceptar T&C ni pagar.
+  // Ahora guardamos el query string en sessionStorage para que /login pueda
+  // redirigir de vuelta a la URL original post-login.
   const [authChecked, setAuthChecked] = useState(false)
   const [esPortalCliente, setEsPortalCliente] = useState(false)
   useEffect(() => {
     if (!isAuthenticated()) {
+      try {
+        const qs = window.location.search || ''
+        if (qs && (qs.includes('tyc=') || qs.includes('pay=') || qs.includes('recibo=') || qs.includes('firma='))) {
+          sessionStorage.setItem('pending_redirect', `${window.location.pathname}${qs}`)
+        }
+      } catch {}
       router.replace('/login')
       return
     }
