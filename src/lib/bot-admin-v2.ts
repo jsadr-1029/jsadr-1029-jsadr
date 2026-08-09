@@ -1057,12 +1057,28 @@ export async function procesarMensajeAdmin(
     }
   }
 
-  // 7. Detección por conceptos (scoring)
+  // 7. Conocimiento de la plataforma — si el mensaje pregunta por
+  // módulos, seguridad, cajas, portales, etc., responder con info detallada.
+  // IMPORTANTE: este check va ANTES de la detección por conceptos para que
+  // preguntas como "qué cajas tiene el sistema" no sean interceptadas por
+  // el sinonimo "caja" → balance. Solo se aplica si NO hay monto en el mensaje
+  // (si hay monto, probablemente es un registro de gasto/ingreso).
+  const montoDetectado = extraerMonto(mensaje)
+  if (!montoDetectado) {
+    const conocimiento = buscarConocimientoPlataforma(mensaje)
+    if (conocimiento) {
+      return {
+        texto: conocimiento,
+        tipo: 'TEXTO',
+      }
+    }
+  }
+
+  // 8. Detección por conceptos (scoring)
   const conceptos = detectarConceptos(mensaje)
   const comandoElegido = elegirComandoPorConceptos(conceptos)
   if (comandoElegido) {
     const memoria = obtenerMemoria(sessionId) || {}
-    const monto = extraerMonto(mensaje)
     const concepto = extraerConcepto(mensaje)
     const ambito = conceptos.negocio ? 'NEGOCIO' : conceptos.personal ? 'PERSONAL' : undefined
     const ctx: ContextoBot = {
@@ -1070,21 +1086,11 @@ export async function procesarMensajeAdmin(
       mensajeNormalizado: mensajeNorm,
       sessionId,
       memoria,
-      args: { monto, concepto, ambito },
+      args: { monto: montoDetectado, concepto, ambito },
     }
     const resp = await comandoElegido.ejecutar(ctx)
     aprenderDeInteraccion(sessionId, mensaje, comandoElegido.id, resp.accionEjecutada !== false)
     return resp
-  }
-
-  // 8. Conocimiento de la plataforma — si el mensaje pregunta por
-  // módulos, seguridad, cajas, portales, etc., responder con info detallada.
-  const conocimiento = buscarConocimientoPlataforma(mensaje)
-  if (conocimiento) {
-    return {
-      texto: conocimiento,
-      tipo: 'TEXTO',
-    }
   }
 
   // 9. Fallback inteligente — sugerir comandos similares
