@@ -143,6 +143,11 @@ export async function POST(req: NextRequest) {
       // cuando el préstamo incluye generar pagare + carta de instrucciones.
       cobroPagareCarta,
       valorPagareCarta,
+      // === Tarifa de Uso de Plataforma (Tarea U) ===
+      // Cargo editable (por defecto $4.900 COP) cobrado UNA sola vez al cliente
+      // por el uso de la plataforma tecnológica asociada al crédito.
+      cobroTarifaPlataforma,
+      valorTarifaPlataforma,
       // === ID de la solicitud web origen (para auto-marcarla como CONVERTIDA) ===
       solicitudWebOrigenId,
     } = body
@@ -600,6 +605,12 @@ export async function POST(req: NextRequest) {
           valorPagareCarta: cobroPagareCarta
             ? (Number(valorPagareCarta) > 0 ? Number(valorPagareCarta) : 19900)
             : 0,
+          // === Tarifa de Uso de Plataforma (Tarea U) ===
+          cobroTarifaPlataforma: !!cobroTarifaPlataforma,
+          valorTarifaPlataforma: cobroTarifaPlataforma
+            ? (Number(valorTarifaPlataforma) > 0 ? Number(valorTarifaPlataforma) : 4900)
+            : 0,
+          tarifaPlataformaCargada: false,  // se marca true cuando se registre el ingreso en caja
           // === RENOVACIÓN DIFERIDA (Tarea T) ===
           // Si es renovación, marcamos el nuevo préstamo como pendiente de T&C y
           // guardamos la referencia al crédito anterior. El crédito anterior NO se

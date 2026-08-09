@@ -359,6 +359,16 @@ model Prestamo {
   cobroPagareCarta    Boolean @default(false)
   valorPagareCarta    Float   @default(19900)  // editable por gestor
 
+  // === Tarifa de Uso de Plataforma (Tarea U) ===
+  // Cargo fijo editable (por defecto $4.900 COP) que se cobra UNA sola vez
+  // al cliente por el uso de la plataforma tecnológica asociada al crédito.
+  // Se refleja en el estado de cuenta como concepto "Tarifa de Uso de Plataforma".
+  // El ingreso se registra automáticamente en la caja CAJA-USO-PLATAFORMA
+  // cuando se aplica el cobro (al activarse el préstamo o al pagarse la 1ra cuota).
+  cobroTarifaPlataforma Boolean @default(false)
+  valorTarifaPlataforma Float   @default(4900)  // editable por gestor
+  tarifaPlataformaCargada Boolean @default(false)  // true cuando ya se registró el ingreso en caja
+
   // === RENOVACIÓN DIFERIDA (Tarea T) ===
   // Cuando un préstamo se crea como renovación de otro, NO se cancela el crédito
   // anterior inmediatamente. Se guarda la referencia aquí y se cancela recién
@@ -712,7 +722,7 @@ model AlertaLegal {
 // -----------------------------------------------------
 model CajaMenor {
   id              String   @id @default(cuid())
-  codigo          String   @unique  // CAJA-MORA | CAJA-GARANTIA
+  codigo          String   @unique  // CAJA-MORA | CAJA-GARANTIA | CAJA-FLEXIBILIDAD | CAJA-INGRESOS-CAUSADOS | CAJA-PAGARE-CARTA | CAJA-USO-PLATAFORMA
   nombre          String
   descripcion     String?
   saldoActual     Float    @default(0)

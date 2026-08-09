@@ -1,11 +1,11 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { apiPost } from '@/hooks/use-fetch'
 import { Card, PageHeader, Badge, EmptyState, LoadingState } from '@/components/shared/ui'
 import { formatCOP, formatDate, formatPercent, getInitials, estadoPrestamoColor } from '@/lib/format'
 import { calcularPrestamo, generarCronograma } from '@/lib/finance'
-import { LogIn, ArrowLeft, Phone, Lock, Calculator, FileCheck, Send, KeyRound, ShieldCheck, Eye, EyeOff, QrCode, Copy, Check, Sparkles } from 'lucide-react'
+import { LogIn, ArrowLeft, Phone, Lock, Calculator, FileCheck, Send, KeyRound, ShieldCheck, Eye, EyeOff, QrCode, Copy, Check, Sparkles, PenTool, Eraser } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -408,10 +408,15 @@ function PrestamoCard({ prestamo, token, navigate }: any) {
 }
 
 function FirmarModal({ prestamo, token, onClose, navigate }: any) {
-  const [step, setStep] = useState<'resumen' | 'otp' | 'validar' | 'done'>('resumen')
+  const [step, setStep] = useState<'resumen' | 'otp' | 'validar' | 'firma' | 'done'>('resumen')
   const [firmaId, setFirmaId] = useState('')
   const [otpInput, setOtpInput] = useState('')
   const [loading, setLoading] = useState(false)
+  // === Tarea U: estado para la firma manuscrita ===
+  const canvasRef = useRef<HTMLCanvasElement | null>(null)
+  const [haFirmado, setHaFirmado] = useState(false)
+  const dibujandoRef = useRef(false)
+  const ultimaPosRef = useRef<{ x: number; y: number } | null>(null)
 
   const iniciarFirma = async () => {
     setLoading(true)
@@ -440,9 +445,116 @@ function FirmarModal({ prestamo, token, onClose, navigate }: any) {
     setLoading(true)
     try {
       await apiPost('/api/portal/validar-otp', { firmaId, otp: otpInput })
+      // === Tarea U: Avanzar al paso de firma manuscrita en vez de 'done' ===
+      setStep('firma')
+      toast.success('OTP validado. Ahora dibuja tu firma manuscrita.')
+      // Inicializar canvas después de que se renderice
+      setTimeout(() => inicializarCanvas(), 50)
+    } catch (e) { toast.error((e as Error).message) }
+    finally { setLoading(false) }
+  }
+
+  // === Funciones del canvas de firma manuscrita ===
+  const inicializarCanvas = () => {
+    const canvas = canvasRef.current
+    if (!canvas) return
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return
+    // Configurar tamaño real del canvas (alta resolución)
+    const rect = canvas.getBoundingClientRect()
+    canvas.width = rect.width * 2
+    canvas.height = rect.height * 2
+    ctx.scale(2, 2)
+    ctx.strokeStyle = '#0f172a'
+    ctx.lineWidth = 2.5
+    ctx.lineCap = 'round'
+    ctx.lineJoin = 'round'
+    ctx.fillStyle = '#ffffff'
+    ctx.fillRect(0, 0, rect.width, rect.height)
+    setHaFirmado(false)
+  }
+
+  const obtenerPos = (e: React.MouseEvent | React.TouchEvent) => {
+    const canvas = canvasRef.current
+    if (!canvas) return { x: 0, y: 0 }
+    const rect = canvas.getBoundingClientRect()
+    if ('touches' in e) {
+      const t = e.touches[0] || e.changedTouches[0]
+      return { x: t.clientX - rect.left, y: t.clientY - rect.top }
+    }
+    return { x: (e as React.MouseEvent).clientX - rect.left, y: (e as React.MouseEvent).clientY - rect.top }
+  }
+
+  const empezarTrazo = (e: React.MouseEvent | React.TouchEvent) => {
+    e.preventDefault()
+    dibujandoRef.current = true
+    ultimaPosRef.current = obtenerPos(e)
+  }
+
+  const moverTrazo = (e: React.MouseEvent | React.TouchEvent) => {
+    if (!dibujandoRef.current) return
+    e.preventDefault()
+    const canvas = canvasRef.current
+    if (!canvas) return
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return
+    const pos = obtenerPos(e)
+    const ultima = ultimaPosRef.current
+    if (ultima) {
+      ctx.beginPath()
+      ctx.moveTo(ultima.x, ultima.y)
+      ctx.lineTo(pos.x, pos.y)
+      ctx.stroke()
+    }
+    ultimaPosRef.current = pos
+    if (!haFirmado) setHaFirmado(true)
+  }
+
+  const terminarTrazo = () => {
+    dibujandoRef.current = false
+    ultimaPosRef.current = null
+  }
+
+  const limpiarCanvas = () => {
+    const canvas = canvasRef.current
+    if (!canvas) return
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return
+    const rect = canvas.getBoundingClientRect()
+    ctx.fillStyle = '#ffffff'
+    ctx.fillRect(0, 0, rect.width, rect.height)
+    setHaFirmado(false)
+  }
+
+  const guardarFirmaManuscrita = async () => {
+    if (!haFirmado) {
+      toast.error('Por favor dibuja tu firma antes de continuar.')
+      return
+    }
+    const canvas = canvasRef.current
+    if (!canvas) {
+      toast.error('No se pudo acceder al canvas de firma.')
+      return
+    }
+    const imagenFirmaBase64 = canvas.toDataURL('image/png')
+    if (imagenFirmaBase64.length < 1000) {
+      toast.error('La firma parece estar vacía. Dibuja tu firma.')
+      return
+    }
+    setLoading(true)
+    try {
+      // Guardar la firma manuscrita en la FirmaElectronica
+      await apiPost('/api/prestamos/' + prestamo.id + '/aceptar-tyc-otp', {
+        accion: 'guardar_firma_manuscrita',
+        imagenFirmaBase64,
+      })
       setStep('done')
       toast.success('TyC firmados correctamente')
-    } catch (e) { toast.error((e as Error).message) }
+    } catch (e) {
+      toast.error((e as Error).message)
+      // Aún así avanzamos a done porque el OTP ya fue validado
+      setStep('done')
+    }
     finally { setLoading(false) }
   }
 
@@ -470,7 +582,9 @@ function FirmarModal({ prestamo, token, onClose, navigate }: any) {
             </div>
             <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 mb-4">
               <p className="text-xs text-amber-800">
-                Al firmar, aceptas los términos y condiciones del préstamo. La firma se realizará mediante OTP enviado a tu correo electrónico.
+                Al firmar, aceptas los términos y condiciones del préstamo. El proceso de firma electrónica incluye:
+                verificación OTP por correo, captura de cédula y selfie, y tu firma manuscrita en la pantalla.
+                Tu firma se incluirá en el pagaré y la carta de instrucciones.
               </p>
             </div>
             <div className="flex gap-2">
@@ -516,12 +630,66 @@ function FirmarModal({ prestamo, token, onClose, navigate }: any) {
               pattern="\d{6}"
             />
             <Button type="submit" className="w-full mt-4" disabled={loading || otpInput.length !== 6}>
-              {loading ? 'Validando...' : 'Validar y Firmar'}
+              {loading ? 'Validando...' : 'Validar código'}
             </Button>
             <Button type="button" variant="ghost" className="w-full mt-2" onClick={solicitarOtp}>
               Reenviar OTP
             </Button>
           </form>
+        )}
+
+        {step === 'firma' && (
+          <div>
+            <div className="text-center mb-4">
+              <div className="w-16 h-16 rounded-2xl bg-violet-100 text-violet-700 flex items-center justify-center mx-auto mb-4">
+                <PenTool className="w-8 h-8" />
+              </div>
+              <h3 className="font-bold text-slate-900 mb-2">Firma manuscrita</h3>
+              <p className="text-sm text-slate-500">
+                Dibuja tu firma en el recuadro abajo con el dedo o el mouse. Esta firma se incluirá en el pagaré y la carta de instrucciones como evidencia de tu aceptación.
+              </p>
+            </div>
+            <div className="relative border-2 border-dashed border-violet-300 rounded-lg overflow-hidden bg-white" style={{ touchAction: 'none' }}>
+              <canvas
+                ref={canvasRef}
+                width={500}
+                height={220}
+                className="w-full block cursor-crosshair"
+                style={{ height: '220px' }}
+                onMouseDown={empezarTrazo}
+                onMouseMove={moverTrazo}
+                onMouseUp={terminarTrazo}
+                onMouseLeave={terminarTrazo}
+                onTouchStart={empezarTrazo}
+                onTouchMove={moverTrazo}
+                onTouchEnd={terminarTrazo}
+              />
+              {!haFirmado && (
+                <div className="absolute inset-0 flex items-end justify-center pointer-events-none" style={{ paddingBottom: '12px' }}>
+                  <span className="text-xs text-slate-400 italic">✍️ Firma aquí</span>
+                </div>
+              )}
+              <div className="absolute bottom-2 right-2">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 px-2 bg-white/90 hover:bg-white text-slate-600"
+                  onClick={limpiarCanvas}
+                  title="Borrar firma"
+                >
+                  <Eraser className="w-3.5 h-3.5 mr-1" /> Limpiar
+                </Button>
+              </div>
+            </div>
+            <Button
+              className="w-full mt-4"
+              onClick={guardarFirmaManuscrita}
+              disabled={loading || !haFirmado}
+            >
+              {loading ? 'Guardando firma...' : 'Guardar firma y finalizar'}
+            </Button>
+          </div>
         )}
 
         {step === 'done' && (
@@ -532,6 +700,7 @@ function FirmarModal({ prestamo, token, onClose, navigate }: any) {
             <h3 className="font-bold text-slate-900 text-lg mb-2">¡Firma completada!</h3>
             <p className="text-sm text-slate-500 mb-4">
               Has firmado correctamente los términos y condiciones del préstamo {prestamo.codigo}.
+              Tu firma manuscrita fue guardada y se incluirá en el pagaré y carta de instrucciones.
               El administrador será notificado para continuar con el proceso.
             </p>
             <Button className="w-full" onClick={onClose}>Cerrar</Button>

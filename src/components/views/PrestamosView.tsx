@@ -35,7 +35,7 @@ import { useToast } from '@/hooks/use-toast'
 import { formatearMoneda, formatearFecha, calcularPrestamo, calcularPrestamoTasaFijaMensual, Frecuencia } from '@/lib/finanzas'
 import { calcularBloqueCorte, calcularFechaPrimerCorte, calcularDiasCausadosAntes, calcularValorDiasCausados, PeriodoCorte } from '@/lib/corte-fechas'
 import { abrirHtmlImprimible } from '@/lib/auth-docs'
-import { FileText, Plus, Search, Eye, Check, X, ArrowRight, RefreshCw, PenTool, Shield, Trash2, Calendar, Scissors, Sparkles } from 'lucide-react'
+import { FileText, Plus, Search, Eye, Check, X, ArrowRight, RefreshCw, PenTool, Shield, Trash2, Calendar, Scissors, Sparkles, MonitorSmartphone } from 'lucide-react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { ClientesView } from '@/components/views/ClientesView'
 import { CajasView } from '@/components/views/CajasView'
@@ -239,6 +239,14 @@ function PrestamosPanel({
   // Se explica en el estado de cuenta como concepto "Pagaré + Carta de Instrucciones".
   const [cobroPagareCarta, setCobroPagareCarta] = useState(true)
   const [valorPagareCarta, setValorPagareCarta] = useState<number>(19900)
+
+  // === Tarifa de Uso de Plataforma (Tarea U) ===
+  // Cargo editable (por defecto $4.900 COP) que se cobra UNA sola vez al cliente
+  // por el uso de la plataforma tecnológica asociada al crédito.
+  // Se refleja en el estado de cuenta como concepto "Tarifa de Uso de Plataforma".
+  // El ingreso se registra automáticamente en la caja CAJA-USO-PLATAFORMA.
+  const [cobroTarifaPlataforma, setCobroTarifaPlataforma] = useState(true)
+  const [valorTarifaPlataforma, setValorTarifaPlataforma] = useState<number>(4900)
 
   // === ID de la solicitud web origen (para auto-marcarla como CONVERTIDA) ===
   // Cuando el admin convierte una solicitud web en préstamo, este ID se pasa
@@ -1025,6 +1033,14 @@ function PrestamosPanel({
       if (cobroPagareCarta && requiereDocumentos && (generarPagare || generarCarta)) {
         body.cobroPagareCarta = true
         body.valorPagareCarta = Number(valorPagareCarta) || 19900
+      }
+
+      // === Tarifa de Uso de Plataforma (Tarea U) ===
+      // Cargo editable (por defecto $4.900 COP) cobrado UNA sola vez al inicio.
+      // Se refleja en el estado de cuenta como concepto "Tarifa de Uso de Plataforma".
+      if (cobroTarifaPlataforma) {
+        body.cobroTarifaPlataforma = true
+        body.valorTarifaPlataforma = Number(valorTarifaPlataforma) || 4900
       }
 
       // === ID de la solicitud web origen (para auto-marcarla como CONVERTIDA) ===
@@ -3050,6 +3066,67 @@ ${linkFirmaCodeudor}
                 )}
               </div>
             )}
+
+            {/* === TARIFA DE USO DE PLATAFORMA (Tarea U) === */}
+            {/* Cargo editable $4.900 — se cobra UNA sola vez al inicio del crédito */}
+            <div className={`space-y-3 p-4 rounded-lg border-2 transition-colors ${
+              cobroTarifaPlataforma
+                ? 'bg-amber-100 dark:bg-amber-900/40 border-amber-500 dark:border-amber-500'
+                : 'bg-amber-50 dark:bg-amber-950/30 border-amber-300 dark:border-amber-800'
+            }`}>
+              <div className="flex items-center justify-between gap-2 flex-wrap">
+                <div className="flex items-center gap-2">
+                  <Switch
+                    checked={cobroTarifaPlataforma}
+                    onCheckedChange={setCobroTarifaPlataforma}
+                    id="cobroTarifaPlataforma"
+                  />
+                  <Label
+                    htmlFor="cobroTarifaPlataforma"
+                    className="text-sm cursor-pointer font-semibold text-amber-900 dark:text-amber-100 flex items-center gap-1.5"
+                  >
+                    <MonitorSmartphone className="w-4 h-4 text-amber-600 dark:text-amber-300" />
+                    Tarifa de Uso de Plataforma
+                  </Label>
+                </div>
+                <Badge
+                  variant="outline"
+                  className={
+                    cobroTarifaPlataforma
+                      ? 'text-amber-700 dark:text-amber-200 border-amber-400 dark:border-amber-500 bg-amber-200 dark:bg-amber-800'
+                      : 'text-muted-foreground border-muted-foreground/30'
+                  }
+                >
+                  {cobroTarifaPlataforma ? `Facturado: $${valorTarifaPlataforma.toLocaleString('es-CO')}` : 'Sin cobro'}
+                </Badge>
+              </div>
+              {cobroTarifaPlataforma && (
+                <>
+                  <p className="text-xs text-amber-700 dark:text-amber-300">
+                    ✅ Cargo único aplicado al cliente por el uso de la plataforma tecnológica asociada al crédito.
+                    {' '}Se refleja en el estado de cuenta como concepto "Tarifa de Uso de Plataforma".
+                    {' '}El valor es <strong>editable</strong> (puede variar según el cliente).
+                  </p>
+                  <div className="flex items-center gap-2 mt-1">
+                    <Label htmlFor="valorTarifaPlataforma" className="text-xs text-amber-800 dark:text-amber-200 whitespace-nowrap">
+                      Valor a cobrar (COP):
+                    </Label>
+                    <Input
+                      id="valorTarifaPlataforma"
+                      type="number"
+                      min={0}
+                      step={100}
+                      value={valorTarifaPlataforma}
+                      onChange={(e) => setValorTarifaPlataforma(Number(e.target.value) || 0)}
+                      className="w-40 h-9"
+                    />
+                    <span className="text-[11px] text-muted-foreground">
+                      ≈ ${valorTarifaPlataforma.toLocaleString('es-CO')}
+                    </span>
+                  </div>
+                </>
+              )}
+            </div>
 
             {/* Documentos */}
             <div className="space-y-3 border-t pt-4">

@@ -9,6 +9,144 @@ import { sanitizeError } from '@/lib/error-handler'
 import { requireRole } from '@/lib/auth-guard'
 
 // =====================================================
+// Helper: Registrar ingresos automáticos en cajas correspondientes
+// (Tarea U) — Se ejecuta cuando el préstamo pasa a ACTIVO tras la
+// aceptación de T&C. Registra los ingresos por:
+//   • Flexibilidad Financiera    → CAJA-FLEXIBILIDAD
+//   • Días causados (corte)      → CAJA-INGRESOS-CAUSADOS
+//   • Pagaré + Carta             → CAJA-PAGARE-CARTA
+//   • Tarifa de Uso de Plataforma → CAJA-USO-PLATAFORMA
+// Solo registra los ingresos que apliquen al préstamo y que no se hayan
+// registrado antes (idempotente vía tarifaPlataformaCargada / flag en
+// la descripción del movimiento).
+// =====================================================
+async function registrarIngresosCajasPorActivacion(prestamoId: string) {
+  const prestamo = await db.prestamo.findUnique({
+    where: { id: prestamoId },
+    select: {
+      id: true,
+      codigo: true,
+      flexibilidadFinanciera: true,
+      flexibilidadCosto: true,
+      flexibilidadModalidad: true,
+      flexibilidadActivada: true,
+      valorDiasCausados: true,
+      cobroPagareCarta: true,
+      valorPagareCarta: true,
+      cobroTarifaPlataforma: true,
+      valorTarifaPlataforma: true,
+      tarifaPlataformaCargada: true,
+      cliente: { select: { nombre: true } },
+    },
+  })
+  if (!prestamo) return null
+
+  // Buscar las 4 cajas (deben existir — creadas por scripts/_seed-cajas-tarea-u.cjs)
+  const codigosCajas = ['CAJA-FLEXIBILIDAD', 'CAJA-INGRESOS-CAUSADOS', 'CAJA-PAGARE-CARTA', 'CAJA-USO-PLATAFORMA']
+  const cajas = await db.cajaMenor.findMany({ where: { codigo: { in: codigosCajas } } })
+  const cajaPorCodigo: Record<string, string> = {}
+  for (const c of cajas) cajaPorCodigo[c.codigo] = c.id
+
+  const ingresos: Array<{ cajaCodigo: string; monto: number; concepto: string; referencia: string }> = []
+
+  // 1) Flexibilidad Financiera
+  if (prestamo.flexibilidadFinanciera && prestamo.flexibilidadActivada && (prestamo.flexibilidadCosto || 0) > 0) {
+    ingresos.push({
+      cajaCodigo: 'CAJA-FLEXIBILIDAD',
+      monto: prestamo.flexibilidadCosto,
+      concepto: `Flexibilidad Financiera (${prestamo.flexibilidadModalidad || 'BASICA'}) — Préstamo ${prestamo.codigo}`,
+      referencia: prestamo.codigo,
+    })
+  }
+
+  // 2) Días causados (valorDiasCausados)
+  if ((prestamo.valorDiasCausados || 0) > 0) {
+    ingresos.push({
+      cajaCodigo: 'CAJA-INGRESOS-CAUSADOS',
+      monto: prestamo.valorDiasCausados!,
+      concepto: `Ingresos por días causados (periodo de corte) — Préstamo ${prestamo.codigo}`,
+      referencia: prestamo.codigo,
+    })
+  }
+
+  // 3) Pagaré + Carta
+  if (prestamo.cobroPagareCarta && (prestamo.valorPagareCarta || 0) > 0) {
+    ingresos.push({
+      cajaCodigo: 'CAJA-PAGARE-CARTA',
+      monto: prestamo.valorPagareCarta,
+      concepto: `Pagaré + Carta de Instrucciones — Préstamo ${prestamo.codigo}`,
+      referencia: prestamo.codigo,
+    })
+  }
+
+  // 4) Tarifa de Uso de Plataforma (solo si no se ha cargado antes)
+  if (prestamo.cobroTarifaPlataforma && !prestamo.tarifaPlataformaCargada && (prestamo.valorTarifaPlataforma || 0) > 0) {
+    ingresos.push({
+      cajaCodigo: 'CAJA-USO-PLATAFORMA',
+      monto: prestamo.valorTarifaPlataforma,
+      concepto: `Tarifa de Uso de Plataforma — Préstamo ${prestamo.codigo}`,
+      referencia: prestamo.codigo,
+    })
+  }
+
+  if (ingresos.length === 0) return { registrados: 0 }
+
+  // Verificar duplicados: buscar movimientos previos con la misma referencia+concepto
+  const movsPrevios = await db.movimientoCaja.findMany({
+    where: {
+      referencia: prestamo.codigo,
+      tipo: 'INGRESO',
+      concepto: { in: ingresos.map((i) => i.concepto) },
+    },
+    select: { concepto: true },
+  })
+  const conceptosPrevios = new Set(movsPrevios.map((m) => m.concepto))
+
+  const ingresosANuevo = ingresos.filter((i) => !conceptosPrevios.has(i.concepto))
+  if (ingresosANuevo.length === 0) return { registrados: 0, yaRegistrados: ingresos.length }
+
+  // Transacción: crear movimientos + actualizar saldos + marcar tarifaPlataformaCargada
+  await db.$transaction(async (tx) => {
+    for (const ing of ingresosANuevo) {
+      const cajaId = cajaPorCodigo[ing.cajaCodigo]
+      if (!cajaId) {
+        console.warn(`[registrarIngresosCajasPorActivacion] Caja ${ing.cajaCodigo} no encontrada, saltando...`)
+        continue
+      }
+      await tx.movimientoCaja.create({
+        data: {
+          cajaId,
+          tipo: 'INGRESO',
+          monto: ing.monto,
+          concepto: ing.concepto,
+          referencia: ing.referencia,
+          prestamoId,
+          creadoPor: 'Sistema (auto-activación)',
+          ambito: 'NEGOCIO',
+        },
+      })
+      await tx.cajaMenor.update({
+        where: { id: cajaId },
+        data: {
+          saldoActual: { increment: ing.monto },
+          totalIngresos: { increment: ing.monto },
+        },
+      })
+    }
+
+    // Marcar tarifaPlataformaCargada=true si se registró
+    if (prestamo.cobroTarifaPlataforma && !prestamo.tarifaPlataformaCargada) {
+      await tx.prestamo.update({
+        where: { id: prestamoId },
+        data: { tarifaPlataformaCargada: true },
+      })
+    }
+  })
+
+  return { registrados: ingresosANuevo.length }
+}
+
+// =====================================================
 // Helper: cancelar crédito anterior si el préstamo actual es renovación
 // (Tarea T) — Se ejecuta únicamente cuando el cliente completa la aceptación
 // de T&C del nuevo préstamo. El crédito anterior se cancela en ese momento
@@ -504,6 +642,14 @@ Ambas fotos fueron guardadas en DocumentoGestor y se incluyen como respaldo de f
     console.error('[aceptar-tyc-otp/confirmarConFoto] Error cancelando crédito anterior:', e)
   }
 
+  // === Tarea U: Registrar ingresos automáticos en cajas correspondientes ===
+  // (Flexibilidad, Días causados, Pagaré+Carta, Tarifa Plataforma)
+  try {
+    await registrarIngresosCajasPorActivacion(prestamoId)
+  } catch (e) {
+    console.error('[aceptar-tyc-otp/confirmarConFoto] Error registrando ingresos en cajas:', e)
+  }
+
   // === Notificar al cliente por correo (canal obligatorio) ===
   const mensajeCorreo = `
 Hola ${prestamo.cliente.nombre},
@@ -813,6 +959,14 @@ async function confirmarActivacion(prestamoId: string) {
   } catch (e) {
     // No bloquear la activación del nuevo préstamo si falla la cancelación del anterior
     console.error('[aceptar-tyc-otp/confirmarActivacion] Error cancelando crédito anterior:', e)
+  }
+
+  // === Tarea U: Registrar ingresos automáticos en cajas correspondientes ===
+  // (Flexibilidad, Días causados, Pagaré+Carta, Tarifa Plataforma)
+  try {
+    await registrarIngresosCajasPorActivacion(prestamoId)
+  } catch (e) {
+    console.error('[aceptar-tyc-otp/confirmarActivacion] Error registrando ingresos en cajas:', e)
   }
 
   // Bitácora

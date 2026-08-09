@@ -119,7 +119,7 @@ export function CajasView({ onChanged }: { onChanged: () => void }) {
     <div className="space-y-6">
       <PageHeader
         title="Cajas Menores"
-        subtitle="Contabilidad de Caja de Mora y Fondo de Garantía"
+        subtitle="Contabilidad de Caja de Mora, Fondo de Garantía, Flexibilidad Financiera, Ingresos Causados, Pagaré + Carta y Uso Plataforma"
         icon={<Wallet className="w-5 h-5" />}
       />
 

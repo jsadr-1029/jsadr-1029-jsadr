@@ -631,6 +631,17 @@ function generarEstadoCuentaHTML({
       </div>
       ` : ''}
 
+      ${p.cobroTarifaPlataforma ? `
+      <div class="concepto-cobro" style="margin-top: 8px; border-left: 4px solid #d97706; background: #fffbeb; padding: 10px 14px; border-radius: 0 8px 8px 0;">
+        <div style="font-weight: bold; color: #b45309; font-size: 11px; margin-bottom: 4px;">💻 CONCEPTO: Tarifa de Uso de Plataforma</div>
+        <div style="font-size: 10px; color: #78350f; line-height: 1.5;">
+          Se cobra un valor único de <strong>${formatearMoneda(p.valorTarifaPlataforma || 4900)}</strong> por el uso de la plataforma tecnológica
+          asociada al crédito <strong>${p.codigo}</strong>. Este cargo se aplica una sola vez al inicio del crédito y está incluido en la primera cuota.
+          La tarifa cubre los costos de gestión digital, firma electrónica, verificación de identidad y disponibilidad del portal del cliente.
+        </div>
+      </div>
+      ` : ''}
+
       ${p.firmas && p.firmas.length > 0 ? `
       <div class="firma-aceptacion" style="margin-top: 20px; border: 2px solid #16a34a; border-radius: 10px; padding: 16px 20px; background: linear-gradient(135deg, #f0fdf4 0%, #ecfdf5 100%);">
         <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 12px; padding-bottom: 10px; border-bottom: 1px dashed #16a34a;">
