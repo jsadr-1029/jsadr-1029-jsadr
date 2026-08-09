@@ -227,13 +227,20 @@ export default function LoginPage() {
 
       if (esCedula) {
         // Intentar login como cliente (cédula + PIN/clave)
+        // FIX-LINK-CLIENTE: enviar `clave` (v4.13) en lugar de `pin` (legacy),
+        // porque los clientes creados/recuperados recientemente tienen
+        // `claveHash` (no `pinHash`). El backend /api/portal/login soporta ambos
+        // campos y elige según el que venga en el body. Enviar `clave` permite
+        // que funcione tanto para PIN solo-dígitos como para contraseñas
+        // alfanuméricas (ambas se almacenan en claveHash cuando el cliente
+        // hace el flujo de recuperación/cambio de clave).
         try {
           const r = await fetch('/api/portal/login', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               cedula: idTrim,
-              pin: password,
+              clave: password,
             }),
           })
           const data = await r.json()
