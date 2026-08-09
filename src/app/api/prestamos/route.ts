@@ -12,6 +12,7 @@ import { prestamoSchema, validateInput } from '@/lib/validators'
 import { enviarWhatsApp, mensajeSolicitudCreada, mensajeAprobacionTyC, guardarNotificacion } from '@/lib/whatsapp'
 import { sanitizeError } from '@/lib/error-handler'
 import { requireRole } from '@/lib/auth-guard'
+import { buildAbsoluteUrl } from '@/lib/url'
 
 // GET - listar préstamos
 export async function GET(req: NextRequest) {
@@ -806,8 +807,7 @@ export async function POST(req: NextRequest) {
 
     // Si se aprueba y envía T&C, enviar mensaje de aprobación con link
     if (aprobarYEnviarTyC) {
-      const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'
-      const linkAceptacion = `${baseUrl}/?tyc=${tycToken}`
+      const linkAceptacion = buildAbsoluteUrl(`/?tyc=${tycToken}`)
       const mensajeTyC = mensajeAprobacionTyC({
         nombreCliente: cliente.nombre,
         codigoPrestamo: codigo,

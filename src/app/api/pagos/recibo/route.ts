@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { sanitizeError } from '@/lib/error-handler'
 import { requireRole } from '@/lib/auth-guard'
+import { buildAbsoluteUrl } from '@/lib/url'
 import { registrarAuditLog, getClientInfo } from '@/lib/security'
 import {
   calcularPrestamo,
@@ -214,8 +215,7 @@ export async function POST(req: NextRequest) {
       ipOrigen: clientInfo.ip, userAgent: clientInfo.userAgent,
     })
 
-    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'
-    const urlVerificacion = `${baseUrl}/?recibo=${hash}`
+    const urlVerificacion = buildAbsoluteUrl(`/?recibo=${hash}`)
 
     const cuotasInfo = calcularCuotasPendientes(pago, pago.prestamo)
 

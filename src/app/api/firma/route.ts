@@ -5,6 +5,7 @@ import { calcularPrestamo } from '@/lib/finanzas'
 import { enviarWhatsApp, mensajeOTPFirma, guardarNotificacion } from '@/lib/whatsapp'
 import { enviarEmail } from '@/lib/email'
 import { sanitizeError } from '@/lib/error-handler'
+import { buildAbsoluteUrl } from '@/lib/url'
 import crypto from 'crypto'
 
 // POST - crear firma y enviar OTP / guardar fotos / validar OTP
@@ -108,8 +109,7 @@ async function iniciarFirma(body: any, req: NextRequest) {
       },
     })
 
-    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'
-    const linkFirmaCreado = `${baseUrl}/firma/${tokenCreado}`
+    const linkFirmaCreado = buildAbsoluteUrl(`/firma/${tokenCreado}`)
 
     return { firma: firmaCreada, tokenFirma: tokenFirmaCreado, token: tokenCreado, linkFirma: linkFirmaCreado, expiracion: fechaExp }
   }

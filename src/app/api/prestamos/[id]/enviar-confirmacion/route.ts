@@ -5,6 +5,7 @@ import { enviarWhatsApp, guardarNotificacion, mensajeAprobacionTyC } from '@/lib
 import { registrarAuditLog, getClientInfo } from '@/lib/security'
 import { sanitizeError } from '@/lib/error-handler'
 import { requireRole } from '@/lib/auth-guard'
+import { buildAbsoluteUrl } from '@/lib/url'
 import { enviarEmail } from '@/lib/email'
 import { generarYEnviarCodigosConfirmacion } from '@/lib/prestamo-codigo'
 import crypto from 'crypto'
@@ -71,8 +72,7 @@ export async function POST(
     // ============================================================
     if (metodo === 'LINK') {
       const tycToken = generarTokenTyC()
-      const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'
-      const linkAceptacion = `${baseUrl}/?tyc=${tycToken}`
+      const linkAceptacion = buildAbsoluteUrl(`/?tyc=${tycToken}`)
 
       await db.prestamo.update({
         where: { id },
@@ -147,8 +147,7 @@ export async function POST(
       }
 
       const tycToken = generarTokenTyC()
-      const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'
-      const linkAceptacion = `${baseUrl}/?tyc=${tycToken}`
+      const linkAceptacion = buildAbsoluteUrl(`/?tyc=${tycToken}`)
 
       await db.prestamo.update({
         where: { id },

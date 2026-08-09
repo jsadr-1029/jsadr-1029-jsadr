@@ -3,6 +3,7 @@ import { db } from '@/lib/db'
 import { calcularPrestamo, calcularMoraCompuesta, calcularDiasMora, getTasaMoraDiaria, debeIrAJuridico } from '@/lib/finanzas'
 import { sanitizeError } from '@/lib/error-handler'
 import { requireRole as requireRoleAuth } from '@/lib/auth-guard'
+import { buildAbsoluteUrl } from '@/lib/url'
 import { rateLimit, getClientInfo } from '@/lib/security'
 
 // GET - detalle de un préstamo
@@ -133,8 +134,7 @@ export async function PATCH(
         const { generarTokenTyC } = await import('@/lib/finanzas')
         const { enviarWhatsApp, mensajeAprobacionTyC } = await import('@/lib/whatsapp')
         const tycToken = generarTokenTyC()
-        const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'
-        const linkAceptacion = `${baseUrl}/?tyc=${tycToken}`
+        const linkAceptacion = buildAbsoluteUrl(`/?tyc=${tycToken}`)
 
         datosActualizacion = {
           estado: 'PENDIENTE_ACEPTACION',

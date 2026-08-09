@@ -13,6 +13,7 @@ import {
 import { enviarWhatsApp, mensajePagoAplicado, mensajePrestamoCancelado, mensajeLinkPago, guardarNotificacion } from '@/lib/whatsapp'
 import { sanitizeError } from '@/lib/error-handler'
 import { requireRole, getAuthUser } from '@/lib/auth-guard'
+import { buildAbsoluteUrl } from '@/lib/url'
 import { registrarAuditLog, getClientInfo } from '@/lib/security'
 
 // =====================================================
@@ -137,8 +138,7 @@ async function generarLinkPago(body: any, user: any) {
   }
 
   const codigo = generarCodigoPago()
-  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'
-  const linkPago = `${baseUrl}/?pay=${codigo}`
+  const linkPago = buildAbsoluteUrl(`/?pay=${codigo}`)
   const linkExpira = new Date()
   linkExpira.setDate(linkExpira.getDate() + 7)
 

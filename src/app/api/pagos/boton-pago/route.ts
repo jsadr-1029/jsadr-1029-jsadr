@@ -4,6 +4,7 @@ import { calcularPrestamo, formatearFecha, formatearMoneda, getTasaMoraAnual } f
 import { enviarWhatsApp, guardarNotificacion, mensajeLinkPago } from '@/lib/whatsapp'
 import { sanitizeError } from '@/lib/error-handler'
 import { requireRole } from '@/lib/auth-guard'
+import { buildAbsoluteUrl } from '@/lib/url'
 
 // POST - generar botón de pago de Bancolombia para una cuota específica
 // v4.0: auth
@@ -81,7 +82,7 @@ export async function POST(req: NextRequest) {
 
     const montoCuota = cuota.montoCuota
     const referencia = `${prestamo.codigo}-C${numeroCuota}`
-    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'
+    const baseUrl = buildAbsoluteUrl('')
 
     let linkPago = ''
     let botonGenerado = false
