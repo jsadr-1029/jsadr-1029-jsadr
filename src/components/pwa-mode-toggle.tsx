@@ -24,7 +24,7 @@ const NAV_ITEMS = [
   { label: 'Inicio', href: '/#inicio', icon: '🏠' },
   { label: 'Préstamos', href: '/#prestamos', icon: '💳' },
   { label: 'Pagos', href: '/#pagos', icon: '💰' },
-  { label: 'Clientes', href: '/#clientes', icon: '👥' },
+  { label: 'Jurídico', href: '/#juridico', icon: '⚖️' },
   { label: 'Reportes', href: '/#reportes', icon: '📊' },
 ]
 

@@ -296,11 +296,9 @@ export async function POST(
     // ============================================================
     // Post-transacción: notificar al cliente por WhatsApp (NO crítico,
     // se hace fuera de la tx para no bloquearla si WhatsApp falla).
-    // La tasa solo se muestra si la modalidad es sistema francés.
+    // La tasa anual NO se envía al cliente por WhatsApp (cambio solicitado).
     // ============================================================
-    const modalidadNuevo = (nuevoPrestamo.modalidadAmortizacion as string) || 'FRANCES'
-    const mostrarTasaRenovacion = modalidadNuevo === 'FRANCES'
-    const lineaTasaRenovacion = mostrarTasaRenovacion ? `• Tasa anual: ${tasaFinal}%\n` : ''
+    const lineaTasaRenovacion = ''
 
     const mensaje = `🔄 *PRÉSTAMO RENOVADO - PENDIENTE CONFIRMACIÓN*
 

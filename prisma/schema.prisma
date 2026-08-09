@@ -301,9 +301,10 @@ model Prestamo {
   montoMora           Float    @default(0)
   diasMora            Int      @default(0)
 
-  // Fondo de garantía (5% primer préstamo)
+  // Fondo de garantía (tasa configurable por gestor al crear el préstamo)
   fondoGarantiaCargado Boolean @default(false)
   fondoGarantiaMonto  Float    @default(0)
+  fondoGarantiaTasa   Float    @default(0)  // Tasa aplicada (ej: 0.05 = 5%). 0 si no se cargó.
 
   // === Periodo de corte + días causados antes del corte ===
   // Permite registrar créditos solicitados ANTES de la fecha de corte.

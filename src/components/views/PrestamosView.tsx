@@ -193,6 +193,12 @@ function PrestamosPanel({
   const [valorDiasCausados, setValorDiasCausados] = useState<number>(0)
   const [editarDiasCausadosManual, setEditarDiasCausadosManual] = useState(false)
 
+  // === Fondo de garantía (opcional, tasa configurable) ===
+  // El gestor decide si aplica y a qué tasa (default 5%).
+  // NO se activa automáticamente — el usuario debe marcarlo explícitamente.
+  const [incluirFondoGarantia, setIncluirFondoGarantia] = useState(false)
+  const [tasaFondoGarantia, setTasaFondoGarantia] = useState<number>(5) // porcentaje (5 = 5%)
+
   // === Renovación de crédito ===
   const [esRenovacion, setEsRenovacion] = useState(false)
   const [prestamoARenovar, setPrestamoARenovar] = useState('')
@@ -460,7 +466,7 @@ function PrestamosPanel({
         tasaAplicada: tasaMen / 100 / cuotasPorMes,
         tablaAmortizacion: tabla,
         fechaVencimiento: tabla[tabla.length - 1]?.fechaVencimiento,
-        fondoGarantia: Math.round(monto * 0.05 * 100) / 100,
+        fondoGarantia: incluirFondoGarantia ? Math.round(monto * (tasaFondoGarantia / 100) * 100) / 100 : 0,
         tipoCalculo: 'CUOTA_PERSONALIZADA',
         tasaMensual: tasaMen,
         tasaAnual,
@@ -501,6 +507,7 @@ function PrestamosPanel({
     tasaMensualPersonalizada, montoCuotaPersonalizada, numeroCuotasPersonalizada,
     tasaMensualFija, numeroCuotasFija, fechaPrestamo,
     periodoCorte, fechaPrimerCorte, valorDiasCausados, diasCausadosAntes,
+    incluirFondoGarantia, tasaFondoGarantia,
   ])
 
   const prestamosFiltrados = prestamos.filter((p) => {
@@ -789,6 +796,12 @@ function PrestamosPanel({
         body.flexibilidadFinanciera = true
         body.flexibilidadCosto = flexibilidadCosto
       }
+
+      // === Fondo de Garantía (opcional, tasa configurable) ===
+      // Solo se envía si el gestor activó el fondo. La tasa se envía como decimal (0.05 = 5%).
+      body.incluirFondoGarantia = incluirFondoGarantia
+      body.tasaFondoGarantia = tasaFondoGarantia / 100 // Convertir % a decimal
+
 
       // === Renovación ===
       if (esRenovacion && prestamoARenovar) {
@@ -1715,6 +1728,56 @@ ${linkFirmaCodeudor}
               )}
             </div>
 
+            {/* === FONDO DE GARANTÍA (opcional, tasa configurable) ===
+                El gestor decide si el crédito lleva o no fondo de garantía.
+                Ya NO se activa automáticamente. Si se activa, se pregunta la tasa.
+                El monto se calcula como: montoPrincipal * (tasa / 100). */}
+            <div className="space-y-3 p-3 rounded-md bg-blue-50 dark:bg-blue-900/60 border-2 border-blue-300 dark:border-blue-500 shadow-sm">
+              <Label className="text-sm font-semibold flex items-center gap-1.5 text-blue-900 dark:text-blue-100">
+                <Shield className="w-3.5 h-3.5 text-blue-700 dark:text-blue-300" />
+                Fondo de Garantía (opcional)
+              </Label>
+              <div className="flex items-center gap-3">
+                <input
+                  id="incluirFondoGarantia"
+                  type="checkbox"
+                  checked={incluirFondoGarantia}
+                  onChange={(e) => setIncluirFondoGarantia(e.target.checked)}
+                  className="w-4 h-4 rounded border-blue-400 text-blue-600 focus:ring-blue-500"
+                />
+                <Label htmlFor="incluirFondoGarantia" className="text-xs font-medium text-slate-800 dark:text-slate-100 cursor-pointer">
+                  Este crédito lleva fondo de garantía
+                </Label>
+              </div>
+              {incluirFondoGarantia && (
+                <div className="space-y-1.5 pl-7">
+                  <Label htmlFor="tasaFondoGarantia" className="text-xs font-semibold text-slate-800 dark:text-slate-100">
+                    Tasa del fondo de garantía (%)
+                  </Label>
+                  <Input
+                    id="tasaFondoGarantia"
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    max="100"
+                    value={tasaFondoGarantia}
+                    onChange={(e) => setTasaFondoGarantia(parseFloat(e.target.value) || 0)}
+                    className="bg-white dark:bg-slate-800 dark:text-white border-blue-300 dark:border-blue-600"
+                  />
+                  <p className="text-[11px] text-blue-900 dark:text-blue-200 font-medium bg-blue-100 dark:bg-blue-800/80 p-2 rounded border border-blue-300 dark:border-blue-600">
+                    💡 Se cobrarán <strong className="text-blue-950 dark:text-white">{formatearMoneda((parseFloat(montoPrincipal) || 0) * (tasaFondoGarantia / 100))}</strong> adicionales
+                    por concepto de fondo de garantía ({tasaFondoGarantia}% del monto principal).
+                    Este valor se suma al total a pagar del préstamo.
+                  </p>
+                </div>
+              )}
+              {!incluirFondoGarantia && (
+                <p className="text-[11px] text-slate-700 dark:text-slate-300 font-medium">
+                  No se cobrará fondo de garantía en este crédito.
+                </p>
+              )}
+            </div>
+
             {/* === Si es renovación, mostrar préstamos del cliente === */}
             {esRenovacion && clienteId && (
               <div className="space-y-3 p-3 rounded-md bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800">
@@ -2403,8 +2466,8 @@ ${linkFirmaCodeudor}
                   </div>
                 </div>
                 {calculo.fondoGarantia > 0 && (
-                  <p className="text-xs text-blue-700 font-medium">
-                    🛡️ Fondo de Garantía (5% primer préstamo): {formatearMoneda(calculo.fondoGarantia)}
+                  <p className="text-xs text-blue-800 dark:text-blue-200 font-semibold bg-blue-50 dark:bg-blue-900/60 p-2 rounded border border-blue-200 dark:border-blue-700">
+                    🛡️ Fondo de Garantía ({tasaFondoGarantia}%): {formatearMoneda(calculo.fondoGarantia)}
                   </p>
                 )}
 

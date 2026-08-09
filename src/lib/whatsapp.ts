@@ -135,9 +135,8 @@ export function mensajeAprobacionTyC(d: {
   linkAceptacion: string
   modalidad?: string  // 'FRANCES' para mostrar la tasa, cualquier otro valor la oculta
 }): string {
-  // La tasa solo se muestra si la modalidad es sistema francés
-  const mostrarTasa = d.modalidad === 'FRANCES' || d.modalidad === undefined
-  const lineaTasa = mostrarTasa ? `• Tasa anual: ${d.tasaAnual}%\n` : ''
+  // La tasa anual NO se envía al cliente por WhatsApp (cambio solicitado).
+  const lineaTasa = ''
   return `✅ *PRÉSTAMO APROBADO - REQUIERE ACEPTACIÓN*
 
 Hola *${d.nombreCliente}*, tu préstamo ${d.codigoPrestamo} fue aprobado.

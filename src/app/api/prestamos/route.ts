@@ -129,6 +129,12 @@ export async function POST(req: NextRequest) {
       //   2. Solicitar cambio de fecha de pago (genera documento "Otro Sí")
       flexibilidadFinanciera,
       flexibilidadCosto,
+      // === Fondo de Garantía (opcional, tasa configurable) ===
+      // El gestor decide si el crédito lleva o no fondo de garantía.
+      // Si lleva, se especifica la tasa como decimal (0.05 = 5%).
+      // Ya NO se activa automáticamente en el primer préstamo.
+      incluirFondoGarantia,
+      tasaFondoGarantia,
     } = body
 
     // === Resolver la fecha del préstamo ===
@@ -357,7 +363,9 @@ export async function POST(req: NextRequest) {
         tasaAplicada: tasaMen / 100 / cuotasPorMes,
         tablaAmortizacion: tabla,
         fechaVencimiento: tabla[tabla.length - 1]?.fechaVencimiento,
-        fondoGarantia: Math.round(monto * 0.05 * 100) / 100,
+        fondoGarantia: incluirFondoGarantia
+          ? Math.round(monto * (Number(tasaFondoGarantia) || 0) * 100) / 100
+          : 0,
         // === Campos del bloque de corte (solo si hay valorDiasCausados) ===
         ...(valorDiasCausadosNum > 0 ? {
           valorDiasCausados: valorDiasCausadosNum,
@@ -491,9 +499,15 @@ export async function POST(req: NextRequest) {
     }
     const tycToken = aprobarYEnviarTyC ? generarTokenTyC() : null
 
-    // Verificar si es primer préstamo del cliente (para fondo de garantía)
-    const esPrimerPrestamo = prestamosPreviosCliente === 0
-    const fondoGarantiaMonto = esPrimerPrestamo ? calculo.fondoGarantia : 0
+    // === Fondo de Garantía (opcional, tasa configurable) ===
+    // El gestor decide si el crédito lleva fondo. Ya NO se activa automáticamente.
+    // Si el gestor lo activó, se usa el monto calculado con la tasa elegida.
+    // Si no, se omite (monto = 0).
+    const esPrimerPrestamo = prestamosPreviosCliente === 0 // se mantiene para fines informativos
+    const fondoGarantiaTasaDecimal = incluirFondoGarantia ? (Number(tasaFondoGarantia) || 0) : 0
+    const fondoGarantiaMonto = incluirFondoGarantia
+      ? Math.round(parseFloat(montoPrincipal) * fondoGarantiaTasaDecimal * 100) / 100
+      : 0
 
     // === Crear préstamo + (si aplica) cerrar préstamo anterior en $transaction ===
     // Si la renovación falla, NO se crea el préstamo nuevo (rollback atómico).
@@ -541,6 +555,7 @@ export async function POST(req: NextRequest) {
           saldoTotal: calculo.totalPagar,
           fondoGarantiaCargado: false,
           fondoGarantiaMonto: fondoGarantiaMonto,
+          fondoGarantiaTasa: fondoGarantiaTasaDecimal,
           // === Campos del bloque de corte (null si no hay periodo activo) ===
           periodoCorte: periodoCorte || null,
           diasCausadosAntes: diasCausadosAntesNum > 0 ? diasCausadosAntesNum : null,

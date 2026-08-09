@@ -109,6 +109,36 @@ function formatearTamano(bytes: number): string {
 export function DocumentosPrestamosView() {
   const [tab, setTab] = useState('gestor')
   const { toast } = useToast()
+  const [exportando, setExportando] = useState(false)
+
+  async function exportarExcelConsolidado() {
+    try {
+      setExportando(true)
+      toast({ title: 'Generando Excel...', description: 'Esto puede tardar 30-60 segundos si hay muchas fotos.' })
+      const res = await fetch('/api/documentos/exportar-excel', {
+        headers: { Authorization: `Bearer ${localStorage.getItem('access_token') || ''}` },
+      })
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({ error: 'Error desconocido' }))
+        throw new Error(j.error || `HTTP ${res.status}`)
+      }
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      const today = new Date().toISOString().split('T')[0]
+      a.download = `documentos-prestamos-${today}.xlsx`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+      toast({ title: '✅ Excel descargado', description: 'Consolidado de documentos generado correctamente.' })
+    } catch (e: any) {
+      toast({ title: '❌ Error al exportar', description: e.message, variant: 'destructive' })
+    } finally {
+      setExportando(false)
+    }
+  }
 
   return (
     <div className="space-y-4">
@@ -122,6 +152,17 @@ export function DocumentosPrestamosView() {
             Pagarés, cartas, fotos selfie, firmas electrónicas y documentos vinculados a préstamos
           </p>
         </div>
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={exportarExcelConsolidado}
+          disabled={exportando}
+          className="bg-emerald-50 dark:bg-emerald-900/40 border-emerald-300 dark:border-emerald-600 text-emerald-800 dark:text-emerald-100 hover:bg-emerald-100 dark:hover:bg-emerald-800/60"
+          title="Descargar Excel consolidado con todas las fotos y metadatos"
+        >
+          <Download className={`w-4 h-4 mr-1.5 ${exportando ? 'animate-pulse' : ''}`} />
+          {exportando ? 'Generando...' : 'Exportar Excel consolidado'}
+        </Button>
       </div>
 
       <Tabs value={tab} onValueChange={setTab}>

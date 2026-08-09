@@ -104,6 +104,7 @@ const prestamosGroup: NavItem = {
   label: 'Préstamos (más)',
   icon: FileText,
   children: [
+    { key: 'clientes', label: 'Clientes', icon: Users },
     { key: 'cajas', label: 'Cajas', icon: CajasIcon },
     { key: 'campanas', label: 'Campañas', icon: Megaphone },
     { key: 'simulador', label: 'Simulador', icon: Calculator },

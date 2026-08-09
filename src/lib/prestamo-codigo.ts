@@ -274,10 +274,9 @@ export async function generarYEnviarCodigosConfirmacion(opts: {
   })
 
   // WhatsApp al deudor
-  // La tasa solo se muestra si la modalidad es sistema francés
-  const modalidad = (prestamo.modalidadAmortizacion as string) || 'FRANCES'
-  const mostrarTasa = modalidad === 'FRANCES'
-  const lineaTasa = mostrarTasa ? `• Tasa anual: ${prestamo.tasaInteresAnual}%\n` : ''
+  // La tasa anual NO se envía al cliente por WhatsApp (cambio solicitado).
+  // Solo se mantiene en el email HTML para registro documental.
+  const lineaTasa = ''
 
   const mensajeWhatsApp = requiereCodeudor
     ? `✅ *PRÉSTAMO APROBADO - CÓDIGOS DE CONFIRMACIÓN*
