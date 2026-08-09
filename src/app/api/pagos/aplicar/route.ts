@@ -196,6 +196,32 @@ export async function GET(req: NextRequest) {
         instruccionCuentaNota: instruccionActiva ? p.cliente.instruccionCuentaNota : null,
         instruccionCuentaExpira: instruccionActiva ? p.cliente.instruccionCuentaExpira : null,
         frecuencia: p.frecuencia,
+        // === Tarea Q: Flexibilidad Financiera — info para habilitar el botón de uso ===
+        flexibilidadFinanciera: p.flexibilidadFinanciera,
+        flexibilidadActivada: p.flexibilidadActivada,
+        flexibilidadModalidad: p.flexibilidadModalidad,
+        flexibilidadUsosDisponibles: p.flexibilidadUsosDisponibles,
+        flexibilidadUsosEjercidos: p.flexibilidadUsosEjercidos,
+        flexibilidadCosto: p.flexibilidadCosto,
+        // ¿El préstamo califica para usar flexibilidad en esta cuota?
+        // Reglas: >=4 cuotas, 1ra cuota pagada, próxima cuota >= 2 (no desde prima), usos disponibles
+        flexibilidadElegible:
+          p.flexibilidadActivada === true &&
+          p.flexibilidadUsosDisponibles > 0 &&
+          p.numeroCuotas >= 4 &&
+          cuotasPagadasCompletamente >= 1 &&
+          proximaCuota >= 2,
+        flexibilidadRazonInelegible: !(p.flexibilidadActivada === true)
+          ? 'El beneficio no está activado para este crédito'
+          : p.flexibilidadUsosDisponibles <= 0
+          ? 'Ya no quedan usos disponibles (se consumieron todos)'
+          : p.numeroCuotas < 4
+          ? `El crédito tiene ${p.numeroCuotas} cuotas; flexibilidad requiere mínimo 4`
+          : cuotasPagadasCompletamente < 1
+          ? 'La primera cuota (prima) debe estar paga para usar el beneficio'
+          : proximaCuota < 2
+          ? 'No se puede usar flexibilidad desde la prima (primera cuota)'
+          : null,
       }
     })
 

@@ -16,14 +16,24 @@ import { requireRole, getAuthUser } from '@/lib/auth-guard'
 import { registrarAuditLog, getClientInfo } from '@/lib/security'
 
 // =====================================================
-// /api/pagos v4.0 — OLA 1 + Solo Intereses
+// /api/pagos v4.0 — OLA 1 + Solo Intereses + Flexibilidad Financiera
 // -----------------------------------------------------
 // GET  - listar pagos (con filtros prestamoId, fecha)
 // POST - acciones:
 //   accion=aplicar           → aplica pago normal (mora→interés→capital)
 //   accion=generar_link      → crea link PENDIENTE + WhatsApp
-//   accion=solo_intereses    → NUEVO: paga solo intereses, difiere capital
+//   accion=solo_intereses    → paga solo intereses, difiere capital
 //                              (corre la cuota a la siguiente fecha)
+//   accion=usar_flexibilidad → NUEVO (Tarea Q): usa el beneficio de
+//                              Flexibilidad Financiera para trasladar
+//                              la cuota pendiente actual al FINAL del
+//                              crédito, junto con los intereses ya
+//                              causados, evitando generación de mora.
+//                              NO recibe dinero (montoTotal=0) — es
+//                              un asiento contable que documenta el uso.
+//                              Valida: préstamo con flexibilidad activa,
+//                              >=4 cuotas, 1ra cuota paga, cuota actual >=2,
+//                              usos disponibles > 0.
 // =====================================================
 
 // GET - listar pagos
@@ -85,6 +95,7 @@ export async function POST(req: NextRequest) {
 
     if (accion === 'generar_link') return await generarLinkPago(body, user)
     if (accion === 'solo_intereses') return await aplicarSoloIntereses(body, user)
+    if (accion === 'usar_flexibilidad') return await usarFlexibilidadFinanciera(body, user)
     return await aplicarPago(body, user)
   } catch (error: any) {
     return NextResponse.json({ success: false, error: sanitizeError(error).message }, { status: 500 })
@@ -835,5 +846,382 @@ async function aplicarSoloIntereses(body: any, user: any) {
     fechaOriginalVencimiento: resultado.fechaOriginal,
     nuevaFechaVencimiento: resultado.fechaNueva,
     mensaje: `Pago de solo intereses aplicado. Cuota ${proximaCuotaNum} aplazada al ${formatearFecha(resultado.fechaNueva)}.`,
+  })
+}
+
+// =====================================================
+// ACCIÓN: USAR FLEXIBILIDAD FINANCIERA (Tarea Q)
+// -----------------------------------------------------
+// El cliente ejerce el beneficio de Flexibilidad Financiera que pagó
+// al inicio del crédito ($15.000 = 1 uso, $34.900 = 2 usos).
+//
+// Efecto:
+//   1. La cuota pendiente actual (con su capital + interés) se TRASLADA
+//      al FINAL del crédito (después de la última cuota programada).
+//   2. Los intereses moratorios ya causados (mora acumulada al momento
+//      del traslado) también se añaden al monto de la cuota trasladada.
+//   3. NO se genera mora futura sobre esta cuota (porque está aplazada).
+//   4. NO se interpreta como pago de intereses solo (esSoloIntereses=false).
+//   5. Se decrementa flexibilidadUsosDisponibles y se incrementa
+//      flexibilidadUsosEjercidos. Se agrega entrada a flexibilidadMovimientos.
+//   6. Se crea un OtroSiCambioFecha tipo TRASLADO_CUOTA para documento legal.
+//
+// Validaciones (reglas de negocio del usuario):
+//   - Préstamo tiene flexibilidadActivada = true
+//   - numeroCuotas >= 4 (flexibilidad solo para créditos >= 4 cuotas)
+//   - cuotasPagadasCompletamente >= 1 (la prima debe estar paga)
+//   - proximaCuota >= 2 (no se puede usar desde la prima)
+//   - flexibilidadUsosDisponibles > 0
+// =====================================================
+async function usarFlexibilidadFinanciera(body: any, user: any) {
+  const { prestamoId, observacion } = body
+
+  if (!prestamoId) {
+    return NextResponse.json(
+      { success: false, error: 'prestamoId es obligatorio' },
+      { status: 400 }
+    )
+  }
+
+  const prestamo = await db.prestamo.findUnique({
+    where: { id: prestamoId },
+    include: {
+      cliente: true,
+      pagos: { where: { estado: { in: ['APLICADO', 'PAGO_PARCIAL'] } } },
+      pagosProgramados: true,
+    },
+  })
+  if (!prestamo) {
+    return NextResponse.json({ success: false, error: 'Préstamo no encontrado' }, { status: 404 })
+  }
+
+  // === VALIDACIONES DE NEGOCIO ===
+  if (!prestamo.flexibilidadActivada) {
+    return NextResponse.json(
+      {
+        success: false,
+        error: 'Este crédito no tiene activado el beneficio de Flexibilidad Financiera.',
+        codigo: 'FLEX_NO_ACTIVADA',
+      },
+      { status: 409 }
+    )
+  }
+
+  if (prestamo.numeroCuotas < 4) {
+    return NextResponse.json(
+      {
+        success: false,
+        error: `La Flexibilidad Financiera solo aplica para créditos con 4 o más cuotas. Este crédito tiene ${prestamo.numeroCuotas}.`,
+        codigo: 'FLEX_PLAZO_INSUFICIENTE',
+      },
+      { status: 409 }
+    )
+  }
+
+  if (prestamo.flexibilidadUsosDisponibles <= 0) {
+    return NextResponse.json(
+      {
+        success: false,
+        error: `Ya no quedan usos disponibles de Flexibilidad Financiera. Usos ejercidos: ${prestamo.flexibilidadUsosEjercidos}.`,
+        codigo: 'FLEX_SIN_USOS',
+      },
+      { status: 409 }
+    )
+  }
+
+  // === Calcular tabla de amortización ===
+  const calculo = calcularPrestamo({
+    montoPrincipal: prestamo.montoPrincipal,
+    tasaInteresAnual: prestamo.tasaInteresAnual,
+    tasaMoraAnual: getTasaMoraDiaria(prestamo),
+    plazoMeses: prestamo.plazoMeses,
+    frecuencia: prestamo.frecuencia as any,
+    fechaDesembolso: prestamo.fechaDesembolso || undefined,
+  })
+
+  // === Identificar la cuota pendiente actual ===
+  const cuotasPagadasCompletamenteSet = new Set(
+    prestamo.pagos
+      .filter((p) => p.estado === 'APLICADO' && !p.esSoloIntereses && !p.esFlexibilidadFinanciera)
+      .map((p) => p.numeroCuota)
+  )
+  const cuotasPagadasCompletamente = cuotasPagadasCompletamenteSet.size
+
+  if (cuotasPagadasCompletamente < 1) {
+    return NextResponse.json(
+      {
+        success: false,
+        error: 'La primera cuota (prima) debe estar completamente pagada antes de usar Flexibilidad Financiera. Esta condición garantiza que el cliente tiene capacidad de pago demostrada.',
+        codigo: 'FLEX_PRIMA_NO_PAGA',
+      },
+      { status: 409 }
+    )
+  }
+
+  const proximaCuotaNum = cuotasPagadasCompletamente + 1
+  if (proximaCuotaNum < 2) {
+    return NextResponse.json(
+      {
+        success: false,
+        error: 'No se puede usar Flexibilidad Financiera desde la prima (primera cuota). El beneficio se activa desde la segunda cuota en adelante.',
+        codigo: 'FLEX_DESDE_PRIMA',
+      },
+      { status: 409 }
+    )
+  }
+
+  const cuota = calculo.tablaAmortizacion.find((c) => c.numero === proximaCuotaNum)
+  if (!cuota) {
+    return NextResponse.json(
+      { success: false, error: 'No hay cuota pendiente para trasladar.' },
+      { status: 400 }
+    )
+  }
+
+  // === Calcular intereses moratorios ya causados (si la cuota está vencida) ===
+  const tasaMoraEfectiva = getTasaMoraDiaria(prestamo)
+  const diasMora = calcularDiasMora(cuota.fechaVencimiento)
+  let interesesCausados = 0
+  if (diasMora > 0) {
+    interesesCausados = calcularMoraCompuesta(prestamo.montoPrincipal, tasaMoraEfectiva, diasMora)
+  }
+
+  // === Calcular la nueva fecha de vencimiento al FINAL del crédito ===
+  // Tomamos la última cuota de la tabla de amortización y le sumamos 1 periodo
+  const ultimaCuota = calculo.tablaAmortizacion[calculo.tablaAmortizacion.length - 1]
+  if (!ultimaCuota || !ultimaCuota.fechaVencimiento) {
+    return NextResponse.json(
+      { success: false, error: 'No se pudo calcular la última cuota del crédito.' },
+      { status: 500 }
+    )
+  }
+
+  // Nueva fecha = última cuota + 1 periodo (según frecuencia)
+  const fechaVencimientoOriginal = cuota.fechaVencimiento
+  const fechaVencimientoNueva = calcularFechaVencimiento(ultimaCuota.fechaVencimiento, 1, prestamo.frecuencia as any)
+
+  // === TRANSACCIÓN ATÓMICA ===
+  const resultado = await db.$transaction(async (tx) => {
+    // 1. Crear el registro de "pago" documentando el uso del beneficio
+    //    (montoTotal=0 porque no se recibe dinero — el cliente ya pagó el costo al inicio)
+    const pago = await tx.pago.create({
+      data: {
+        prestamoId,
+        numeroCuota: proximaCuotaNum,
+        montoCapital: 0,
+        montoInteres: 0,
+        montoMora: 0,
+        montoTotal: 0,
+        fechaPago: new Date(),
+        fechaVencimiento: cuota.fechaVencimiento,
+        metodoPago: 'FLEXIBILIDAD_FINANCIERA',
+        referencia: `Uso de Flexibilidad Financiera - Cuota ${proximaCuotaNum} trasladada al final`,
+        estado: 'APLICADO',
+        esFlexibilidadFinanciera: true,
+        cuotaMovidaAlFinal: true,
+        cuotaTrasladadaNumero: proximaCuotaNum,
+        fechaVencimientoOriginalTraslado: fechaVencimientoOriginal,
+        fechaVencimientoNuevoTraslado: fechaVencimientoNueva,
+        interesesCausadosAlTraslado: interesesCausados,
+        flexibilidadModalidadUso: prestamo.flexibilidadModalidad || 'BASICA',
+        notas:
+          `USO DE FLEXIBILIDAD FINANCIERA (${prestamo.flexibilidadModalidad || 'BASICA'}). ` +
+          `Cuota ${proximaCuotaNum} trasladada al FINAL del crédito. ` +
+          `Vencimiento original: ${formatearFecha(fechaVencimientoOriginal)} → nuevo vencimiento: ${formatearFecha(fechaVencimientoNueva)}. ` +
+          `Intereses moratorios causados al momento del traslado: ${formatearMoneda(interesesCausados)} (incluidos en la cuota trasladada, NO se cobran aparte). ` +
+          `Capital de la cuota trasladada: ${formatearMoneda(cuota.capital)}. Interés original: ${formatearMoneda(cuota.interes)}. ` +
+          `Total a pagar en la cuota trasladada (al final del crédito): ${formatearMoneda(cuota.capital + cuota.interes + interesesCausados)}. ` +
+          `Usos restantes después de este: ${prestamo.flexibilidadUsosDisponibles - 1} de ${prestamo.flexibilidadModalidad === 'PREMIUM' ? 2 : 1}.` +
+          (observacion ? ` Observación del gestor: ${observacion}` : ''),
+      },
+    })
+
+    // 2. Crear/actualizar PagoProgramado de la cuota trasladada
+    //    - Si ya existía un PagoProgramado para esta cuota, lo marcamos como TRASLADADA_FLEXIBILIDAD
+    //    - Creamos un NUEVO PagoProgramado con numeroCuota aumentado (ej: cuota 3 → cuota 3 + 100 = 103 para que aparezca al final)
+    //    Mantener el número original de cuota en PagoProgramado no funcionaría porque
+    //    el índice único (prestamoId, numeroCuota) chocaría. Por eso usamos el esquema:
+    //    la cuota original se marca TRASLADADA_FLEXIBILIDAD con fechaOriginalVencimiento guardada,
+    //    y se crea un NUEVO PagoProgramado con numeroCuota = 1000 + proximaCuotaNum para
+    //    indicar que es una cuota "extraíña" (trasladada por flexibilidad).
+    const ppExistente = await tx.pagoProgramado.findUnique({
+      where: { prestamoId_numeroCuota: { prestamoId, numeroCuota: proximaCuotaNum } },
+    })
+    if (ppExistente) {
+      await tx.pagoProgramado.update({
+        where: { id: ppExistente.id },
+        data: {
+          estado: 'TRASLADADA_FLEXIBILIDAD',
+          aplazado: true,
+          fechaOriginalVencimiento: fechaVencimientoOriginal,
+          fechaUltimaActualizacion: new Date(),
+        },
+      })
+    }
+
+    // Crear el NUEVO PagoProgramado para la cuota trasladada
+    // Usamos un numeroCuota alto (9000+proximaCuotaNum) para que aparezca al final
+    // en consultas ORDER BY numeroCuota y no choque con cuotas regulares.
+    const numeroCuotaNueva = 9000 + proximaCuotaNum
+    const montoCapitalTraslado = cuota.capital
+    const montoInteresTraslado = cuota.interes + interesesCausados // interés original + mora causada
+    const montoCuotaTraslado = montoCapitalTraslado + montoInteresTraslado
+
+    // Borrar si ya existía (idempotencia)
+    await tx.pagoProgramado.deleteMany({
+      where: { prestamoId, numeroCuota: numeroCuotaNueva }
+    })
+
+    await tx.pagoProgramado.create({
+      data: {
+        prestamoId,
+        numeroCuota: numeroCuotaNueva,
+        fechaVencimiento: fechaVencimientoNueva,
+        montoCapital: montoCapitalTraslado,
+        montoInteres: montoInteresTraslado,
+        montoCuota: montoCuotaTraslado,
+        saldoCapitalDespues: cuota.saldoCapital,
+        estado: 'TRASLADADA_FLEXIBILIDAD',
+        montoPagado: 0,
+        moraCalculada: 0,
+        diasMora: 0,
+        fechaOriginalVencimiento: fechaVencimientoOriginal,
+        aplazado: true,
+        fechaUltimaActualizacion: new Date(),
+      },
+    })
+
+    // 3. Actualizar el préstamo: decrementar usos disponibles, incrementar ejercidos,
+    //    agregar movimiento al JSON de bitácora
+    const movimientosPrevios: any[] = prestamo.flexibilidadMovimientos
+      ? JSON.parse(prestamo.flexibilidadMovimientos)
+      : []
+
+    const nuevoMovimiento = {
+      fechaUso: new Date().toISOString(),
+      cuotaTrasladada: proximaCuotaNum,
+      vencimientoOriginal: fechaVencimientoOriginal.toISOString(),
+      vencimientoNuevo: fechaVencimientoNueva.toISOString(),
+      interesesCausados,
+      modalidadUso: prestamo.flexibilidadModalidad || 'BASICA',
+      pagoId: pago.id,
+      usuarioNombre: user?.nombre || 'Sistema',
+      observacion: observacion || null,
+    }
+
+    await tx.prestamo.update({
+      where: { id: prestamoId },
+      data: {
+        flexibilidadUsosDisponibles: { decrement: 1 },
+        flexibilidadUsosEjercidos: { increment: 1 },
+        flexibilidadMovimientos: JSON.stringify([...movimientosPrevios, nuevoMovimiento]),
+      },
+    })
+
+    // 4. Crear Otro Sí de traslado de cuota (documento legal)
+    const codigoOtroSi = `OS-${String(Date.now()).slice(-6)}`
+    const fechasArray = [{
+      cuota: proximaCuotaNum,
+      fechaAnterior: fechaVencimientoOriginal.toISOString().split('T')[0],
+      fechaNueva: fechaVencimientoNueva.toISOString().split('T')[0],
+    }]
+    await tx.otroSiCambioFecha.create({
+      data: {
+        prestamoId,
+        codigo: codigoOtroSi,
+        tipoModificacion: 'TRASLADO_CUOTA',
+        fechasAnteriores: JSON.stringify(fechasArray),
+        fechasNuevas: JSON.stringify(fechasArray),
+        descripcion:
+          `Mediante el uso del beneficio de Flexibilidad Financiera (${prestamo.flexibilidadModalidad || 'BASICA'}), ` +
+          `la cuota ${proximaCuotaNum} con vencimiento original el ${formatearFecha(fechaVencimientoOriginal)} ` +
+          `se traslada al final del crédito con nuevo vencimiento el ${formatearFecha(fechaVencimientoNueva)}. ` +
+          `Intereses moratorios causados al momento del traslado: ${formatearMoneda(interesesCausados)} (incluidos en la cuota trasladada). ` +
+          `Usos disponibles restantes: ${prestamo.flexibilidadUsosDisponibles - 1}.` +
+          (observacion ? ` Observación: ${observacion}` : ''),
+        estado: 'FIRMADO',
+        solicitadoPor: user?.nombre || 'Sistema',
+        fechaFirma: new Date(),
+      },
+    })
+
+    return { pago, fechaVencimientoNueva, fechaVencimientoOriginal, interesesCausados, nuevoMovimiento }
+  })
+
+  // Recalcular saldos del préstamo
+  const { prestamo: prestamoActualizado } = await recalcularSaldosPrestamo(prestamoId)
+
+  // WhatsApp al cliente
+  const mensaje =
+    `Hola ${prestamo.cliente.nombre}, registramos el uso de tu beneficio de Flexibilidad Financiera ` +
+    `(${prestamo.flexibilidadModalidad || 'BASICA'}) en el préstamo ${prestamo.codigo}. ` +
+    `La cuota ${proximaCuotaNum} (vencía el ${formatearFecha(resultado.fechaVencimientoOriginal)}) ` +
+    `se trasladó al FINAL de tu crédito con nuevo vencimiento el ${formatearFecha(resultado.fechaVencimientoNueva)}. ` +
+    `Los intereses moratorios causados (${formatearMoneda(resultado.interesesCausados)}) se incluyen en esa cuota, ` +
+    `NO se te cobran aparte y NO se genera mora adicional por esta cuota. ` +
+    `Usos disponibles restantes: ${prestamo.flexibilidadUsosDisponibles - 1}.`
+  const envio = await enviarWhatsApp(prestamo.cliente.telefono, mensaje)
+  await guardarNotificacion({
+    db, prestamoId,
+    telefono: prestamo.cliente.telefono,
+    tipo: 'PAGO', mensaje, envio,
+  })
+
+  // Auditoría
+  await registrarAuditLog({
+    usuarioId: user.id, usuarioNombre: user.nombre,
+    accion: 'FLEXIBILIDAD_FINANCIERA_USO', modulo: 'pagos',
+    entidadId: resultado.pago.id,
+    entidadNombre: `Uso Flexibilidad - Cuota ${proximaCuotaNum} - Préstamo ${prestamo.codigo}`,
+    detalles: JSON.stringify({
+      prestamoId, numeroCuota: proximaCuotaNum,
+      fechaVencimientoOriginal: resultado.fechaVencimientoOriginal,
+      fechaVencimientoNueva: resultado.fechaVencimientoNueva,
+      interesesCausados: resultado.interesesCausados,
+      modalidad: prestamo.flexibilidadModalidad,
+      usosDisponiblesTrasUso: prestamo.flexibilidadUsosDisponibles - 1,
+      observacion: observacion || null,
+    }),
+    ipOrigen: '', userAgent: '',
+  })
+
+  // Bitácora del préstamo
+  try {
+    await db.bitacoraPrestamo.create({
+      data: {
+        prestamoId,
+        prestamoCodigo: prestamo.codigo,
+        usuarioNombre: user?.nombre || 'Sistema',
+        tipo: 'PAGO',
+        titulo: `Uso de Flexibilidad Financiera — cuota ${proximaCuotaNum} trasladada al final`,
+        descripcion:
+          `Beneficio ejercido (${prestamo.flexibilidadModalidad || 'BASICA'}). ` +
+          `Cuota ${proximaCuotaNum} trasladada del ${formatearFecha(resultado.fechaVencimientoOriginal)} ` +
+          `al ${formatearFecha(resultado.fechaVencimientoNueva)}. ` +
+          `Intereses moratorios causados al traslado: ${formatearMoneda(resultado.interesesCausados)} (incluidos en la cuota, no se cobran aparte). ` +
+          `Usos disponibles restantes: ${prestamo.flexibilidadUsosDisponibles - 1}.`,
+        resultado: `Préstamo sigue activo. Cuota ${proximaCuotaNum} reprogramada al final del crédito.`,
+      },
+    })
+  } catch (e) {
+    console.error('[pagos] bitácora flexibilidad falló:', e)
+  }
+
+  return NextResponse.json({
+    success: true,
+    data: resultado.pago,
+    prestamo: prestamoActualizado,
+    whatsapp: envio,
+    esFlexibilidadFinanciera: true,
+    cuotaTrasladada: proximaCuotaNum,
+    fechaVencimientoOriginal: resultado.fechaVencimientoOriginal,
+    nuevaFechaVencimiento: resultado.fechaVencimientoNueva,
+    interesesCausadosTrasladados: resultado.interesesCausados,
+    usosDisponiblesRestantes: prestamo.flexibilidadUsosDisponibles - 1,
+    mensaje:
+      `✅ Flexibilidad Financiera aplicada. Cuota ${proximaCuotaNum} trasladada al final del crédito ` +
+      `(nuevo vencimiento: ${formatearFecha(resultado.fechaVencimientoNueva)}). ` +
+      `Intereses moratorios de ${formatearMoneda(resultado.interesesCausados)} incluidos en la cuota trasladada (no se cobran aparte). ` +
+      `Usos restantes: ${prestamo.flexibilidadUsosDisponibles - 1}.`,
   })
 }

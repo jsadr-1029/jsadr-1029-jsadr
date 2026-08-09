@@ -566,9 +566,60 @@ function generarEstadoCuentaHTML({
           El beneficio permite al cliente <strong>trasladar una cuota al final del crédito</strong> o <strong>solicitar cambio de fecha de pago</strong>
           (genera documento "Otro Sí" firmado electrónicamente con OTP), evitando la generación de intereses moratorios por impago puntual.
           Usos disponibles restantes: <strong>${p.flexibilidadUsosDisponibles ?? (p.flexibilidadModalidad === 'PREMIUM' ? 2 : 1)}</strong> de ${p.flexibilidadModalidad === 'PREMIUM' ? '2' : '1'}.
+          Usos ejercidos: <strong>${p.flexibilidadUsosEjercidos ?? 0}</strong>.
         </div>
       </div>
       ` : ''}
+
+      ${(() => {
+        // === Tarea Q: Historial de cuotas trasladadas por Flexibilidad Financiera ===
+        // Si el préstamo tiene movimientos de flexibilidad registrados (JSON en flexibilidadMovimientos),
+        // mostrar el detalle de cada uso con su cuota, fecha original, fecha nueva, intereses causados.
+        try {
+          if (!p.flexibilidadMovimientos) return ''
+          const movimientos = JSON.parse(p.flexibilidadMovimientos)
+          if (!Array.isArray(movimientos) || movimientos.length === 0) return ''
+          return `
+      <div class="concepto-cobro" style="margin-top: 8px; border-left: 4px solid #0d9488; background: #f0fdfa; padding: 10px 14px; border-radius: 0 8px 8px 0;">
+        <div style="font-weight: bold; color: #0f766e; font-size: 11px; margin-bottom: 6px;">🔄 CONCEPTO: Cuotas trasladadas al final del crédito (uso de Flexibilidad Financiera)</div>
+        <div style="font-size: 10px; color: #134e4a; line-height: 1.5; margin-bottom: 6px;">
+          Las siguientes cuotas fueron trasladadas al final del crédito mediante el ejercicio del beneficio de Flexibilidad Financiera.
+          Los intereses moratorios causados al momento del traslado se incluyen en el monto de la cuota trasladada (NO se cobran aparte),
+          y no se genera mora adicional sobre estas cuotas mientras estén aplazadas.
+        </div>
+        <table style="width: 100%; font-size: 10px; border-collapse: collapse; margin-top: 4px;">
+          <thead>
+            <tr style="background: #ccfbf1; color: #134e4a;">
+              <th style="padding: 4px 6px; text-align: left; border: 1px solid #99f6e4;">#</th>
+              <th style="padding: 4px 6px; text-align: left; border: 1px solid #99f6e4;">Cuota</th>
+              <th style="padding: 4px 6px; text-align: left; border: 1px solid #99f6e4;">Vencimiento original</th>
+              <th style="padding: 4px 6px; text-align: left; border: 1px solid #99f6e4;">Nuevo vencimiento</th>
+              <th style="padding: 4px 6px; text-align: right; border: 1px solid #99f6e4;">Intereses causados</th>
+              <th style="padding: 4px 6px; text-align: left; border: 1px solid #99f6e4;">Fecha uso</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${movimientos.map((m: any, idx: number) => `
+              <tr style="background: ${idx % 2 === 0 ? '#ffffff' : '#f0fdfa'};">
+                <td style="padding: 4px 6px; border: 1px solid #99f6e4;">${idx + 1}</td>
+                <td style="padding: 4px 6px; border: 1px solid #99f6e4; font-weight: bold;">#${m.cuotaTrasladada}</td>
+                <td style="padding: 4px 6px; border: 1px solid #99f6e4;">${formatearFecha(new Date(m.vencimientoOriginal))}</td>
+                <td style="padding: 4px 6px; border: 1px solid #99f6e4; font-weight: bold; color: #0f766e;">${formatearFecha(new Date(m.vencimientoNuevo))}</td>
+                <td style="padding: 4px 6px; border: 1px solid #99f6e4; text-align: right; color: #b91c1c;">+${formatearMoneda(m.interesesCausados || 0)}</td>
+                <td style="padding: 4px 6px; border: 1px solid #99f6e4;">${formatearFecha(new Date(m.fechaUso))}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+        <div style="font-size: 9px; color: #134e4a; margin-top: 6px; font-style: italic;">
+          Cada cuota trasladada se reprograma al final del crédito (después de la última cuota programada), conservando su capital e interés original más los intereses moratorios causados al momento del traslado.
+        </div>
+      </div>
+          `
+        } catch (e) {
+          return ''
+        }
+      })()}
 
       ${p.fondoGarantiaCargado && p.fondoGarantiaMonto > 0 ? `
       <div class="concepto-cobro" style="margin-top: 8px; border-left: 4px solid #0891b2; background: #ecfeff; padding: 10px 14px; border-radius: 0 8px 8px 0;">

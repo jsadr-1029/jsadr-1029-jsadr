@@ -340,6 +340,12 @@ model Prestamo {
   flexibilidadActivada       Boolean   @default(false)
   flexibilidadFechaActivacion DateTime?
   flexibilidadCobroAplicado  Boolean   @default(false)
+  // === Bitácora de usos de Flexibilidad Financiera (Tarea Q) ===
+  // JSON array con el historial de usos. Cada entrada:
+  //   { fechaUso, cuotaTrasladada, vencimientoOriginal, vencimientoNuevo,
+  //     interesesCausados, modalidadUso, pagoId, usuarioNombre }
+  // Sirve para auditoría y para mostrar el detalle en el estado de cuenta.
+  flexibilidadMovimientos    String?   // JSON serializado
 
   // === Cobro de Pagaré + Carta de Instrucciones ===
   // Cargo fijo editable (por defecto $19.900 COP) que se cobra UNA sola vez
@@ -450,6 +456,24 @@ model Pago {
   cuotaAplazadaDe Int?     // si este pago aplazó una cuota, indica cuál (snapshot)
   fechaOriginalVencimiento DateTime? // vencimiento original antes del aplazamiento
 
+  // === Uso de Flexibilidad Financiera (v4.0 — Tarea Q) ===
+  // Cuando el cliente ejerce el beneficio de Flexibilidad Financiera
+  // (que pagó al inicio del crédito: 15.000 = 1 uso o 34.900 = 2 usos),
+  // la cuota pendiente actual se TRASLADA al final del crédito junto
+  // con los intereses ya causados, evitando generación de mora.
+  // Este registro NO es un pago en dinero (montoTotal=0), es un asiento
+  // contable que documenta el uso del beneficio.
+  // Diferencia con "Solo Intereses":
+  //   - Solo Intereses: cliente paga los intereses, capital se difiere 1 periodo
+  //   - Flexibilidad Financiera: NO hay pago, la cuota completa se va al final
+  esFlexibilidadFinanciera Boolean @default(false)
+  cuotaMovidaAlFinal      Boolean @default(false)  // true si este "pago" trasladó una cuota al final
+  cuotaTrasladadaNumero   Int?     // número de la cuota que se trasladó
+  fechaVencimientoOriginalTraslado DateTime? // vencimiento original antes del traslado
+  fechaVencimientoNuevoTraslado    DateTime? // nuevo vencimiento al final del crédito
+  interesesCausadosAlTraslado      Float    @default(0) // intereses moratorios ya causados al momento del traslado
+  flexibilidadModalidadUso String? // BASICA | PREMIUM (snapshot de la modalidad del préstamo al momento del uso)
+
   // === Anulación (soft-delete v4.0) ===
   // El hard-delete quedó deprecado. Anular marca estado='ANULADO' y conserva el registro.
   motivoAnulacion String?
@@ -488,6 +512,7 @@ model Pago {
   @@index([estado, fechaPago])
   @@index([prestamoId, numeroCuota])
   @@index([esSoloIntereses])
+  @@index([esFlexibilidadFinanciera])
   @@index([fechaVencimiento, estado])
 }
 

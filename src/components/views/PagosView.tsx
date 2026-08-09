@@ -44,6 +44,7 @@ import {
   TrendingUp, TrendingDown, Calendar, Users, AlertTriangle, Clock,
   Search, CheckCircle, Banknote, Wallet, FileText, Download,
   Handshake, Save, Sparkles, Brain, FileSpreadsheet, CalendarDays, Receipt,
+  Info,
 } from 'lucide-react'
 import { BotIcons } from '@/components/views/BotIcons'
 import { PagosCharts } from '@/components/views/pagos/PagosCharts'
@@ -110,6 +111,15 @@ interface PrestamoAplicar {
   cuentaRecaudo: any
   estado: string
   frecuencia: string
+  // === Tarea Q: Flexibilidad Financiera ===
+  flexibilidadFinanciera?: boolean
+  flexibilidadActivada?: boolean
+  flexibilidadModalidad?: string | null
+  flexibilidadUsosDisponibles?: number
+  flexibilidadUsosEjercidos?: number
+  flexibilidadCosto?: number
+  flexibilidadElegible?: boolean
+  flexibilidadRazonInelegible?: string | null
 }
 
 interface ProximoPago {
@@ -231,6 +241,12 @@ export function PagosView({ onChanged }: { onChanged: () => void }) {
   const [nuevaMoraValor, setNuevaMoraValor] = useState('')
   const [observacionMora, setObservacionMora] = useState('')
   const [renegociandoMora, setRenegociandoMora] = useState(false)
+
+  // === Tarea Q: Modal Flexibilidad Financiera ===
+  const [modalFlexibilidad, setModalFlexibilidad] = useState(false)
+  const [observacionFlexibilidad, setObservacionFlexibilidad] = useState('')
+  const [usandoFlexibilidad, setUsandoFlexibilidad] = useState(false)
+  const [confirmacionFlexibilidad, setConfirmacionFlexibilidad] = useState(false)
   
   // Próximos pagos
   const [proximos, setProximos] = useState<ProximoPago[]>([])
@@ -499,6 +515,70 @@ export function PagosView({ onChanged }: { onChanged: () => void }) {
   const abrirModalReversar = (pago: Pago) => {
     setPagoAReversar(pago)
     setMotivoReversion('')
+  }
+
+  // === Tarea Q: USAR FLEXIBILIDAD FINANCIERA ===
+  // Abre el modal de confirmación para trasladar la cuota pendiente al final del crédito.
+  const abrirModalFlexibilidad = () => {
+    if (!prestamoSeleccionadoAplicar) return
+    if (!prestamoSeleccionadoAplicar.flexibilidadElegible) {
+      toast({
+        title: 'No disponible',
+        description: prestamoSeleccionadoAplicar.flexibilidadRazonInelegible || 'No se puede usar Flexibilidad Financiera en este momento.',
+        variant: 'destructive',
+      })
+      return
+    }
+    setObservacionFlexibilidad('')
+    setConfirmacionFlexibilidad(false)
+    setModalFlexibilidad(true)
+  }
+
+  const confirmarUsarFlexibilidad = async () => {
+    if (!prestamoSeleccionadoAplicar) return
+    if (!confirmacionFlexibilidad) {
+      toast({
+        title: 'Confirmación requerida',
+        description: 'Debes marcar la casilla de confirmación para usar el beneficio.',
+        variant: 'destructive',
+      })
+      return
+    }
+    setUsandoFlexibilidad(true)
+    try {
+      const body: any = {
+        accion: 'usar_flexibilidad',
+        prestamoId: prestamoSeleccionadoAplicar.id,
+        observacion: observacionFlexibilidad.trim() || null,
+      }
+      const res = await fetch('/api/pagos', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      })
+      const json = await res.json()
+      if (json.success) {
+        toast({
+          title: '✅ Flexibilidad aplicada',
+          description: json.mensaje,
+        })
+        setModalFlexibilidad(false)
+        setModalAplicar(false)
+        setPrestamoSeleccionadoAplicar(null)
+        setMontoRecibido('')
+        setReferencia('')
+        setObservacionFlexibilidad('')
+        setConfirmacionFlexibilidad(false)
+        cargarPagos()
+        onChanged()
+      } else {
+        toast({ title: 'Error', description: json.error, variant: 'destructive' })
+      }
+    } catch (e: any) {
+      toast({ title: 'Error', description: e.message, variant: 'destructive' })
+    } finally {
+      setUsandoFlexibilidad(false)
+    }
   }
 
   // === RENEGOCIAR / ANULAR MORA ===
@@ -1975,6 +2055,65 @@ Si ya realizaste el pago, ignora este mensaje.`
                     </Button>
                   </div>
                 )}
+
+                {/* === TAREA Q: Banner de Flexibilidad Financiera === */}
+                {/* Si el préstamo tiene el beneficio activado, mostrar banner con estado */}
+                {prestamoSeleccionadoAplicar.flexibilidadFinanciera && (
+                  <div className={`mt-3 p-3 rounded-md border-2 ${
+                    prestamoSeleccionadoAplicar.flexibilidadElegible
+                      ? 'bg-emerald-50/60 border-emerald-300'
+                      : 'bg-amber-50/40 border-amber-200'
+                    }`}>
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex-1">
+                        <div className={`text-xs font-bold uppercase tracking-wide flex items-center gap-1 ${
+                          prestamoSeleccionadoAplicar.flexibilidadElegible ? 'text-emerald-800' : 'text-amber-800'
+                        }`}>
+                          <Sparkles className="w-3.5 h-3.5" />
+                          Flexibilidad Financiera {prestamoSeleccionadoAplicar.flexibilidadModalidad || 'BASICA'}
+                        </div>
+                        <div className="text-xs text-muted-foreground mt-1 space-y-0.5">
+                          <div>
+                            • Usos disponibles: <strong>{prestamoSeleccionadoAplicar.flexibilidadUsosDisponibles ?? 0}</strong> de{' '}
+                            {prestamoSeleccionadoAplicar.flexibilidadModalidad === 'PREMIUM' ? '2' : '1'}
+                          </div>
+                          <div>
+                            • Usos ejercidos: <strong>{prestamoSeleccionadoAplicar.flexibilidadUsosEjercidos ?? 0}</strong>
+                          </div>
+                          <div>
+                            • Costo pagado al inicio: <strong>{formatearMoneda(prestamoSeleccionadoAplicar.flexibilidadCosto ?? 0)}</strong>
+                          </div>
+                          {prestamoSeleccionadoAplicar.flexibilidadElegible ? (
+                            <div className="mt-1 text-emerald-700 italic">
+                              ✓ Cuota {prestamoSeleccionadoAplicar.proximaCuota} es elegible para traslado al final del crédito
+                            </div>
+                          ) : (
+                            <div className="mt-1 text-amber-700 italic">
+                              ⚠ {prestamoSeleccionadoAplicar.flexibilidadRazonInelegible}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    {prestamoSeleccionadoAplicar.flexibilidadElegible && (
+                      <>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          className="mt-2 w-full bg-emerald-600 hover:bg-emerald-700 text-white border-emerald-700"
+                          onClick={abrirModalFlexibilidad}
+                        >
+                          <Sparkles className="w-4 h-4 mr-2" />
+                          Usar Flexibilidad Financiera para esta cuota
+                        </Button>
+                        <p className="text-[10px] text-muted-foreground mt-1 text-center italic">
+                          La cuota se trasladará al final del crédito junto con los intereses ya causados, evitando mora. No recibe dinero en este momento (el costo ya fue pagado al inicio).
+                        </p>
+                      </>
+                    )}
+                  </div>
+                )}
               </div>
 
               {/* Formulario */}
@@ -2488,6 +2627,170 @@ Si ya realizaste el pago, ignora este mensaje.`
         pagoId={reciboPagoId}
         onCerrar={() => setReciboPagoId(null)}
       />
+
+      {/* ============== TAREA Q: MODAL USAR FLEXIBILIDAD FINANCIERA ============== */}
+      <Dialog open={modalFlexibilidad} onOpenChange={setModalFlexibilidad}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-emerald-700">
+              <Sparkles className="w-5 h-5" />
+              Usar Flexibilidad Financiera
+            </DialogTitle>
+          </DialogHeader>
+          {prestamoSeleccionadoAplicar && (
+            <div className="space-y-4">
+              {/* Info del préstamo */}
+              <div className="p-3 rounded-md bg-emerald-50/60 border-2 border-emerald-200 space-y-2">
+                <div className="flex items-start justify-between">
+                  <div>
+                    <div className="font-semibold">{prestamoSeleccionadoAplicar.cliente.nombre}</div>
+                    <div className="text-xs text-muted-foreground">
+                      CC {prestamoSeleccionadoAplicar.cliente.cedula} · {prestamoSeleccionadoAplicar.cliente.telefono}
+                    </div>
+                    <div className="text-xs font-mono mt-1">
+                      {prestamoSeleccionadoAplicar.codigo} · Cuota {prestamoSeleccionadoAplicar.proximaCuota}/{prestamoSeleccionadoAplicar.numeroCuotas}
+                    </div>
+                  </div>
+                  <Badge className="bg-emerald-100 text-emerald-800 hover:bg-emerald-100">
+                    {prestamoSeleccionadoAplicar.flexibilidadModalidad || 'BASICA'}
+                  </Badge>
+                </div>
+                <div className="grid grid-cols-3 gap-2 text-xs pt-2 border-t border-emerald-200">
+                  <div>
+                    <div className="text-muted-foreground">Usos disponibles</div>
+                    <div className="font-bold text-emerald-700">
+                      {prestamoSeleccionadoAplicar.flexibilidadUsosDisponibles ?? 0} / {prestamoSeleccionadoAplicar.flexibilidadModalidad === 'PREMIUM' ? '2' : '1'}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-muted-foreground">Cuota a trasladar</div>
+                    <div className="font-bold">#{prestamoSeleccionadoAplicar.proximaCuota}</div>
+                  </div>
+                  <div>
+                    <div className="text-muted-foreground">Vencimiento actual</div>
+                    <div className="font-bold text-xs">
+                      {formatearFecha(prestamoSeleccionadoAplicar.fechaVencimiento)}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Explicación del beneficio */}
+              <div className="p-3 rounded-md bg-blue-50/50 border border-blue-200 text-sm space-y-2">
+                <div className="font-semibold text-blue-900 flex items-center gap-1.5">
+                  <Info className="w-4 h-4" />
+                  ¿Cómo funciona este beneficio?
+                </div>
+                <ul className="list-disc list-inside space-y-1 text-xs text-blue-900">
+                  <li>
+                    La cuota <strong>{prestamoSeleccionadoAplicar.proximaCuota}</strong> se{' '}
+                    <strong>trasladará al FINAL del crédito</strong> (después de la última cuota programada).
+                  </li>
+                  <li>
+                    Los intereses moratorios ya causados ({' '}
+                    <strong>{formatearMoneda(prestamoSeleccionadoAplicar.moraActual)}</strong>
+                    {' '}por {prestamoSeleccionadoAplicar.diasMora} días de mora) se{' '}
+                    <strong>incluyen en la cuota trasladada</strong>, NO se cobran aparte.
+                  </li>
+                  <li>
+                    NO se genera mora futura sobre esta cuota (queda aplazada oficialmente).
+                  </li>
+                  <li>
+                    NO se interpreta como pago de solo intereses (es un traslado de cuota).
+                  </li>
+                  <li>
+                    NO recibes dinero en este momento — el costo del beneficio ya fue pagado al inicio del crédito.
+                  </li>
+                  <li>
+                    Quedarán <strong>{(prestamoSeleccionadoAplicar.flexibilidadUsosDisponibles ?? 0) - 1} uso(s)</strong> disponibles después de este.
+                  </li>
+                </ul>
+              </div>
+
+              {/* Ejemplo de cálculo */}
+              <div className="p-3 rounded-md bg-muted/30 border text-xs space-y-1">
+                <div className="font-semibold text-muted-foreground uppercase tracking-wide mb-1">
+                  Resumen del traslado
+                </div>
+                <div className="grid grid-cols-2 gap-x-4 gap-y-1">
+                  <div className="text-muted-foreground">Capital de la cuota:</div>
+                  <div className="text-right font-mono">
+                    {formatearMoneda(prestamoSeleccionadoAplicar.cuotaBase - (prestamoSeleccionadoAplicar.interesPagadoCuota || 0))}
+                  </div>
+                  <div className="text-muted-foreground">Interés original:</div>
+                  <div className="text-right font-mono">
+                    {formatearMoneda(prestamoSeleccionadoAplicar.interesPagadoCuota || 0)}
+                  </div>
+                  <div className="text-muted-foreground">Intereses moratorios ya causados:</div>
+                  <div className="text-right font-mono text-red-700">
+                    +{formatearMoneda(prestamoSeleccionadoAplicar.moraActual)}
+                  </div>
+                  <div className="col-span-2 border-t my-1"></div>
+                  <div className="font-semibold">Total a pagar al final del crédito:</div>
+                  <div className="text-right font-mono font-bold text-emerald-700">
+                    {formatearMoneda(
+                      prestamoSeleccionadoAplicar.cuotaBase +
+                      (prestamoSeleccionadoAplicar.moraActual || 0)
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Observación opcional */}
+              <div className="space-y-2">
+                <Label>Observación del gestor (opcional)</Label>
+                <Textarea
+                  value={observacionFlexibilidad}
+                  onChange={(e) => setObservacionFlexibilidad(e.target.value)}
+                  rows={2}
+                  placeholder="Ej: Cliente solicita traslado por dificultades temporales..."
+                />
+              </div>
+
+              {/* Confirmación obligatoria */}
+              <div className="p-3 rounded-md bg-amber-50 border-2 border-amber-300">
+                <label className="flex items-start gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={confirmacionFlexibilidad}
+                    onChange={(e) => setConfirmacionFlexibilidad(e.target.checked)}
+                    className="mt-0.5 w-4 h-4"
+                  />
+                  <span className="text-xs text-amber-900">
+                    <strong>Confirmo</strong> que el cliente ha solicitado ejercer el beneficio de Flexibilidad Financiera
+                    para la cuota {prestamoSeleccionadoAplicar.proximaCuota}. Entiendo que esta cuota se trasladará al
+                    final del crédito con los intereses ya causados incluidos, y que NO se recibirá dinero en este momento
+                    (el costo del beneficio fue pagado al inicio del crédito).
+                  </span>
+                </label>
+              </div>
+
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setModalFlexibilidad(false)}>
+                  Cancelar
+                </Button>
+                <Button
+                  className="bg-emerald-600 hover:bg-emerald-700"
+                  onClick={confirmarUsarFlexibilidad}
+                  disabled={!confirmacionFlexibilidad || usandoFlexibilidad}
+                >
+                  {usandoFlexibilidad ? (
+                    <>
+                      <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                      Aplicando...
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="w-4 h-4 mr-2" />
+                      Aplicar Flexibilidad Financiera
+                    </>
+                  )}
+                </Button>
+              </DialogFooter>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
