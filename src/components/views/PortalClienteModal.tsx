@@ -87,6 +87,7 @@ import {
   BellRing,
 } from 'lucide-react'
 import { CentroComunicacionesPortal } from '@/components/views/CentroComunicacionesPortal'
+import { useInactivityAutoLogout } from '@/hooks/use-inactivity-auto-logout'
 
 // =====================================================
 // Tipos (sin cambios — preserva contrato de API)
@@ -309,6 +310,42 @@ export function PortalClienteModal({
     if (token) h['x-portal-token'] = token
     return h
   }
+
+  // === Auto-logout por inactividad (10 minutos continuos) ===
+  // Por seguridad del cliente: si no hay actividad (mouse, teclado, scroll,
+  // touch) durante 10 minutos, la sesión se cierra automáticamente y se
+  // muestra una advertencia 1 minuto antes para que el usuario pueda
+  // extenderla con un clic.
+  const cerrarSesionPorInactividad = () => {
+    try {
+      // Toast rápido antes de cerrar (best-effort)
+      toast({
+        title: 'Sesión cerrada por inactividad',
+        description: 'Por seguridad, tu sesión se cerró tras 10 minutos sin actividad.',
+        variant: 'destructive',
+      })
+    } catch {}
+    // Marcar como logout explícito para que onClose se procese
+    confirmLogoutRef.current = true
+    // Limpiar el historial interno del portal para no afectar al navegador
+    if (typeof window !== 'undefined' && vistaHistoryRef.current.length > 1) {
+      try {
+        window.history.go(-(vistaHistoryRef.current.length - 1))
+      } catch {}
+    }
+    onClose()
+  }
+
+  const {
+    warning: inactivityWarning,
+    secondsLeft: inactivitySecondsLeft,
+    extend: extenderSesion,
+  } = useInactivityAutoLogout({
+    timeoutMs: 10 * 60 * 1000,    // 10 minutos
+    warningAtMs: 9 * 60 * 1000,   // advertir a los 9 minutos (1 min antes)
+    onTimeout: cerrarSesionPorInactividad,
+    enabled: true,
+  })
 
   useEffect(() => {
     cargar()
@@ -1328,6 +1365,63 @@ export function PortalClienteModal({
               </DialogFooter>
             </DialogContent>
           </Dialog>
+        )}
+
+        {/* === MODAL DE ADVERTENCIA DE INACTIVIDAD === */}
+        {inactivityWarning && (
+          <div className="absolute inset-0 z-[60] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
+            <div className="bg-slate-900 border border-amber-500/40 rounded-2xl shadow-2xl max-w-sm w-full overflow-hidden">
+              <div className="bg-gradient-to-r from-amber-500 to-orange-600 p-4 text-white">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center">
+                    <Clock3 className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-bold">¿Sigues ahí?</h3>
+                    <p className="text-xs opacity-90">Tu sesión está por expirar</p>
+                  </div>
+                </div>
+              </div>
+              <div className="p-5 space-y-3 text-center">
+                <p className="text-sm text-slate-300 leading-relaxed">
+                  Por seguridad, cerraremos tu sesión en{' '}
+                  <strong className="text-amber-300 text-lg">
+                    {inactivitySecondsLeft}
+                  </strong>{' '}
+                  segundo{inactivitySecondsLeft === 1 ? '' : 's'} por inactividad.
+                </p>
+                <p className="text-xs text-slate-400">
+                  Si deseas continuar, haz clic en el botón para extender tu sesión.
+                </p>
+                <div className="flex gap-2 pt-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => {
+                      confirmLogoutRef.current = true
+                      if (typeof window !== 'undefined' && vistaHistoryRef.current.length > 1) {
+                        try {
+                          window.history.go(-(vistaHistoryRef.current.length - 1))
+                        } catch {}
+                      }
+                      onClose()
+                    }}
+                    className="flex-1 border-slate-700 text-slate-300 hover:bg-slate-800"
+                  >
+                    Cerrar ahora
+                  </Button>
+                  <Button
+                    type="button"
+                    onClick={extenderSesion}
+                    className="flex-1 bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700 text-white"
+                  >
+                    <Clock3 className="w-4 h-4 mr-1.5" />
+                    Seguir conectado
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </div>
         )}
       </DialogContent>
     </Dialog>

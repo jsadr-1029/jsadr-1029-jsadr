@@ -48,6 +48,11 @@ model Usuario {
   mfaSecret        String?  // TOTP secret (base32)
   sessionToken     String?  // JWT refresh token hash
   mustChangePassword Boolean @default(false)
+  // === Recuperación de clave por magic link (v4.14) ===
+  // Reemplaza el envío de contraseña temporal: ahora se envía un enlace
+  // firmado al correo del usuario con un token de un solo uso.
+  claveResetToken  String?
+  claveResetExpira DateTime?
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 

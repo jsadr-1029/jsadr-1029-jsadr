@@ -188,6 +188,7 @@ export default function LoginPage() {
         localStorage.removeItem('portal_cliente_token')
         localStorage.removeItem('portal_cliente_id')
         localStorage.removeItem('portal_cliente_nombre')
+        localStorage.removeItem('portal_cliente_cedula')
       }
     } catch {}
   }, [router])
@@ -366,7 +367,7 @@ export default function LoginPage() {
           tipo: 'exito',
           texto:
             json.mensaje ||
-            'Si el usuario existe, se ha enviado un correo de recuperación al email registrado en el sistema.',
+            'Si la cuenta existe, se ha enviado un enlace de restablecimiento al correo registrado. Revisa tu bandeja de entrada y la carpeta de spam. El enlace es válido por 60 minutos.',
         })
         setRecuperarIdentificador('')
       } else if (json.code === 'RATE_LIMIT') {
@@ -836,7 +837,7 @@ export default function LoginPage() {
                     <KeyRound className="w-3 h-3" />
                     ¿Olvidaste tu contraseña?
                   </button>
-                  <span className="text-[10px] text-slate-500">Recuperación por correo</span>
+                  <span className="text-[10px] text-slate-500">Enlace seguro por correo</span>
                 </div>
               </form>
 
@@ -908,7 +909,7 @@ export default function LoginPage() {
                   </div>
                   <div>
                     <h3 className="text-base font-bold">Recuperar contraseña</h3>
-                    <p className="text-xs opacity-90">Envío por correo electrónico</p>
+                    <p className="text-xs opacity-90">Enlace seguro por correo electrónico</p>
                   </div>
                 </div>
                 <button
@@ -930,16 +931,19 @@ export default function LoginPage() {
                     <strong>correo</strong>.
                   </li>
                   <li>
-                    El sistema busca tu cuenta y genera una contraseña temporal.
+                    El sistema busca tu cuenta y genera un <strong>enlace de restablecimiento</strong>.
                   </li>
                   <li>
                     Se envía al <strong>correo electrónico registrado</strong> en el sistema.
                   </li>
-                  <li>La contraseña temporal es válida por 24 horas.</li>
+                  <li>
+                    Al hacer clic en el enlace, podrás <strong>crear una nueva contraseña</strong> inmediatamente.
+                  </li>
+                  <li>El enlace es <strong>válido por 60 minutos</strong> y se puede usar una sola vez.</li>
                 </ol>
                 <p className="mt-2 text-blue-300/80">
-                  Por seguridad, no revelamos si la cuenta existe. Si no recibes el correo,
-                  verifica con el administrador que tu correo registrado sea correcto.
+                  Por seguridad, no enviamos contraseñas por correo y no revelamos si la cuenta existe.
+                  Si no recibes el correo, verifica con el administrador que tu correo registrado sea correcto.
                 </p>
               </div>
 
@@ -1004,12 +1008,12 @@ export default function LoginPage() {
                     {recuperarLoading ? (
                       <>
                         <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                        Enviando...
+                        Enviando enlace...
                       </>
                     ) : (
                       <>
                         <Mail className="w-4 h-4 mr-2" />
-                        Enviar recuperación
+                        Enviar enlace
                       </>
                     )}
                   </Button>

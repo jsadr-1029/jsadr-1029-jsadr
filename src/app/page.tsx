@@ -447,6 +447,7 @@ export default function Home() {
                 localStorage.removeItem('portal_cliente_token')
                 localStorage.removeItem('portal_cliente_id')
                 localStorage.removeItem('portal_cliente_nombre')
+                localStorage.removeItem('portal_cliente_cedula')
               } catch {}
               logout()
             } else {
