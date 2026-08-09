@@ -1114,6 +1114,8 @@ import {
 
 // === Refuerzo normativo colombiano para el bot jurídico ===
 import { DATASET_JURIDICO_COLOMBIA } from './bot-dataset-juridico-colombia'
+// === Refuerzo avanzado: perfil profesional (25 años exp), jurisprudencia, doctrina ===
+import { DATASET_JURIDICO_AVANZADO } from './bot-dataset-juridico-avanzado'
 // === Nuevos conocimientos para todos los bots ===
 import { DATASETS_NUEVOS_POR_BOT } from './bot-datasets-nuevos'
 
@@ -1123,10 +1125,15 @@ const DATASETS_EXTRA_POR_BOT: Record<string, ItemEntrenamiento[]> = {
   CONTABILIDAD: [...(DATASETS_NUEVOS_POR_BOT.CONTABILIDAD || [])],
   PAGOS: [...DATASET_ADMIN_BOTS_EXTRA.filter(d => d.id.startsWith('CO-')), ...(DATASETS_NUEVOS_POR_BOT.PAGOS || [])],
   PRESTAMOS: [...DATASET_ADMIN_BOTS_EXTRA.filter(d => d.id.startsWith('PR-')), ...(DATASETS_NUEVOS_POR_BOT.PRESTAMOS || [])],
-  // Bot jurídico reforzado con normativa colombiana exhaustiva (45+ nuevas Q&A)
+  // Bot jurídico reforzado con:
+  //   (1) variantes extra conversacionales
+  //   (2) normativa colombiana exhaustiva (Leyes, CGP, C.C., C.Co, jurisprudencia básica)
+  //   (3) dataset AVANZADO: perfil profesional 25 años, especialización, maestría,
+  //       jurisprudencia de leading cases, doctrina, estrategia, casos prácticos
   JURIDICO: [
     ...DATASET_ADMIN_BOTS_EXTRA.filter(d => d.id.startsWith('JU-')),
     ...DATASET_JURIDICO_COLOMBIA,
+    ...DATASET_JURIDICO_AVANZADO,
     ...(DATASETS_NUEVOS_POR_BOT.JURIDICO || []),
   ],
   SEGURIDAD: [...DATASET_ADMIN_BOTS_EXTRA.filter(d => d.id.startsWith('CB-')), ...(DATASETS_NUEVOS_POR_BOT.SEGURIDAD || [])],
@@ -1159,7 +1166,7 @@ export function getNombreEspecialidad(tipoBot: string): string {
     CONTABILIDAD: 'Asesor Financiero Experto (CFO + Asesor Patrimonial)',
     PAGOS: 'Gerente de Cobranza Inteligente',
     PRESTAMOS: 'Director del Módulo de Préstamos',
-    JURIDICO: 'Asesor Jurídico Inteligente (Derecho Colombiano)',
+    JURIDICO: 'Asesor Jurídico Senior (25 años de experiencia · Especialista en Derecho Comercial · Magíster en Derecho Financiero y de los Negocios)',
     SEGURIDAD: 'CISO Inteligente (SOC AI)',
     CONFIGURACION: 'SRE + DevOps IA (Sentinel Always-On)',
     ADMIN_GENERAL: 'Asistente Ejecutivo IA (CEO/COO Digital)',

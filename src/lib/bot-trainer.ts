@@ -495,6 +495,27 @@ const PRUEBAS_VALIDACION: Record<string, Array<{ pregunta: string; categoriaEspe
     { pregunta: 'ley de usura', categoriaEsperada: 'NORMATIVIDAD' },
     { pregunta: 'estatuto del consumidor', categoriaEsperada: 'NORMATIVIDAD' },
     { pregunta: 'habeas data', categoriaEsperada: 'NORMATIVIDAD' },
+    // Pruebas del perfil profesional senior (25 años de experiencia)
+    { pregunta: 'cuantos anos de experiencia tienes como abogado', categoriaEsperada: 'PERFIL_PROFESIONAL' },
+    { pregunta: 'cual es tu formacion academica', categoriaEsperada: 'PERFIL_PROFESIONAL' },
+    { pregunta: 'tienes maestria en derecho', categoriaEsperada: 'PERFIL_PROFESIONAL' },
+    { pregunta: 'cual es tu especializacion', categoriaEsperada: 'PERFIL_PROFESIONAL' },
+    { pregunta: 'eres abogado litigante', categoriaEsperada: 'PERFIL_PROFESIONAL' },
+    // Pruebas de jurisprudencia avanzada
+    { pregunta: 'jurisprudencia Corte Suprema sobre intereses moratorios', categoriaEsperada: 'JURISPRUDENCIA' },
+    { pregunta: 'jurisprudencia reporte a centrales de riesgo', categoriaEsperada: 'JURISPRUDENCIA' },
+    { pregunta: 'accion pauliana ocultamiento de bienes', categoriaEsperada: 'JURISPRUDENCIA_AVANZADA' },
+    { pregunta: 'diferencia entre proceso ejecutivo y monitorio', categoriaEsperada: 'DOCTRINA_MODERNA' },
+    // Pruebas de doctrina avanzada
+    { pregunta: 'que es el anatocismo', categoriaEsperada: 'DOCTRINA' },
+    { pregunta: 'mora ex re en obligaciones a plazo', categoriaEsperada: 'DOCTRINA' },
+    { pregunta: 'prescripcion extintiva de un pagare', categoriaEsperada: 'DOCTRINA' },
+    // Pruebas de SARLAFT/SAGRILAFT
+    { pregunta: 'que es el sagrilaft', categoriaEsperada: 'DOCTRINA_MODERNA' },
+    { pregunta: 'que es el sarlaft', categoriaEsperada: 'SARLAFT' },
+    // Pruebas de estrategia
+    { pregunta: 'cuando conviene demandar', categoriaEsperada: 'ESTRATEGIA' },
+    { pregunta: 'como negociar acuerdo de pago', categoriaEsperada: 'ESTRATEGIA' },
   ],
   SEGURIDAD: [
     { pregunta: 'estado de seguridad', categoriaEsperada: 'AUDITORIA' },
