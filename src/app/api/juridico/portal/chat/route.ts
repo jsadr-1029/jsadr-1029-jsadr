@@ -20,6 +20,19 @@ import {
   obtenerDetalleCaso,
   generarAnalisisCaso,
 } from '@/lib/asesor-juridico'
+// === Memoria persistente + dataset jurídico reforzado ===
+import {
+  guardarMensajeMemoria,
+  cargarContextoMemoria,
+  construirTextoContexto,
+  detectarYRecordarHechos,
+  registrarAprendizaje,
+} from '@/lib/bot-memoria'
+import { buscarMejorMatch } from '@/lib/bot-fuzzy-matcher'
+import { getDatasetPorTipo } from '@/lib/bot-datasets'
+
+const BOT_TIPO = 'JURIDICO'
+const DATASET_JURIDICO_FULL = getDatasetPorTipo(BOT_TIPO)
 
 const CATEGORIA = 'JURIDICO_INTERNO'
 
@@ -79,6 +92,19 @@ async function responderAsesorJuridico(
 ): Promise<{ respuesta: string; tipo: string }> {
   const mensaje = (mensajeRaw || '').trim()
   const lower = mensaje.toLowerCase()
+
+  // === 0. Antes de los comandos numéricos: buscar en dataset jurídico reforzado ===
+  // Esto permite responder a "¿qué dice el artículo 1551 del Código Civil?"
+  // o "¿cuándo prescribe una deuda?" usando el dataset expandido con normativa colombiana.
+  if (mensaje.length >= 5 && !/^\d+$/.test(mensaje.trim())) {
+    const match = buscarMejorMatch(mensaje, DATASET_JURIDICO_FULL)
+    if (match && match.item && (match.confianza === 'ALTA' || match.confianza === 'MEDIA')) {
+      return {
+        tipo: 'CONOCIMIENTO_NORMATIVO',
+        respuesta: match.item.respuesta,
+      }
+    }
+  }
 
   // === Saludo / menú ===
   if (
@@ -460,13 +486,38 @@ export async function POST(req: NextRequest) {
       },
     })
 
+    // === 1b. MEMORIA PERSISTENTE: guardar mensaje + detectar hechos ===
+    // (paralelo, no bloquea la respuesta)
+    const memoriaPromises = [
+      guardarMensajeMemoria({
+        botTipo: BOT_TIPO,
+        usuarioId: usuario.id,
+        usuarioNombre: usuario.nombre,
+        conversacionId: conversacion.id,
+        rol: 'usuario',
+        texto: String(mensaje),
+        categoria: casoId ? 'CASO_ESPECIFICO' : undefined,
+      }),
+      detectarYRecordarHechos({
+        botTipo: BOT_TIPO,
+        usuarioId: usuario.id,
+        usuarioNombre: usuario.nombre,
+        conversacionId: conversacion.id,
+        mensaje: String(mensaje),
+      }),
+    ]
+
     // 2. Generar la respuesta del bot Asesor Jurídico
+    //    (la búsqueda en dataset y la lógica de comandos ocurren dentro)
     const { respuesta, tipo } = await responderAsesorJuridico(
       String(mensaje),
       usuario.id,
       usuario.nombre,
       casoId
     )
+
+    // Esperar las promesas de memoria antes de continuar
+    await Promise.all(memoriaPromises)
 
     // 3. Persistir la respuesta del bot
     const mensajeBot = await db.mensajeChat.create({
@@ -482,6 +533,28 @@ export async function POST(req: NextRequest) {
         metadata: JSON.stringify({ tipo, casoId }),
       },
     })
+
+    // === 3b. MEMORIA PERSISTENTE: guardar respuesta del bot ===
+    guardarMensajeMemoria({
+      botTipo: BOT_TIPO,
+      usuarioId: usuario.id,
+      usuarioNombre: usuario.nombre,
+      conversacionId: conversacion.id,
+      rol: 'bot',
+      texto: respuesta,
+    }).catch(() => {}) // fire-and-forget: no bloquea
+
+    // === 3c. APRENDIZAJE: si la respuesta es el default (no encontró en dataset),
+    //       registrar como aprendizaje pendiente para revisión ===
+    if (tipo === 'DEFAULT' || tipo === 'TEXTO') {
+      registrarAprendizaje({
+        botTipo: BOT_TIPO,
+        pregunta: String(mensaje),
+        respuestaDada: respuesta.slice(0, 500),
+        categoria: 'NO_CLASIFICADO',
+        fuente: 'PORTAL_JURIDICO',
+      }).catch(() => {})
+    }
 
     // 4. Actualizar última actividad
     await db.conversacionChat.update({

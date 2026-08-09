@@ -15,6 +15,14 @@ import { getPortalClientInfo, registrarAccesoPortal } from '@/lib/acceso-portal'
 import { sanitizeError } from '@/lib/error-handler'
 import { responderMensajeBot } from '@/lib/bot-cliente-nlu'
 import { generarRespuestaLLM } from '@/lib/llm-bot'
+// === Memoria persistente para el bot de clientes ===
+import {
+  guardarMensajeMemoria,
+  detectarYRecordarHechos,
+  registrarAprendizaje,
+} from '@/lib/bot-memoria'
+
+const BOT_TIPO_CLIENTES = 'CHAT_CLIENTES'
 
 // =====================================================
 // Generar respuesta automática del bot Clientes
@@ -25,10 +33,50 @@ import { generarRespuestaLLM } from '@/lib/llm-bot'
 //   • 45+ intents con sinónimos
 //   • Matching por similitud (Levenshtein + Jaccard)
 //   • Fallback a LLM cuando no hay match >= 0.55
+//   • MEMORIA PERSISTENTE: guarda cada mensaje y detecta hechos clave
 // =====================================================
 async function generarRespuestaBotClientes(mensaje: string, clienteId: string): Promise<string | null> {
   try {
+    // === Persistir mensaje del cliente en memoria (async, no bloquea) ===
+    const memPromise = Promise.all([
+      guardarMensajeMemoria({
+        botTipo: BOT_TIPO_CLIENTES,
+        usuarioId: clienteId,
+        conversacionId: undefined, // se asociará al conversacionId externamente si hace falta
+        rol: 'usuario',
+        texto: mensaje,
+      }),
+      detectarYRecordarHechos({
+        botTipo: BOT_TIPO_CLIENTES,
+        usuarioId: clienteId,
+        mensaje,
+      }),
+    ])
+
     const resultado = await responderMensajeBot(mensaje, clienteId, generarRespuestaLLM as any)
+
+    // Esperar memoria antes de devolver respuesta
+    await memPromise
+
+    // Guardar respuesta del bot
+    guardarMensajeMemoria({
+      botTipo: BOT_TIPO_CLIENTES,
+      usuarioId: clienteId,
+      rol: 'bot',
+      texto: resultado.respuesta,
+    }).catch(() => {})
+
+    // Si la confianza es baja, registrar como aprendizaje pendiente
+    if (resultado.confianza !== undefined && resultado.confianza < 0.55) {
+      registrarAprendizaje({
+        botTipo: BOT_TIPO_CLIENTES,
+        pregunta: mensaje,
+        respuestaDada: resultado.respuesta.slice(0, 500),
+        categoria: 'NO_CLASIFICADO',
+        fuente: 'CLIENTE',
+      }).catch(() => {})
+    }
+
     return resultado.respuesta
   } catch (error) {
     console.error('[Chat] Error en bot NLU:', error)

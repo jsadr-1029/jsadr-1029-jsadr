@@ -1112,16 +1112,26 @@ import {
   DATASET_ADMIN_BOTS_EXTRA,
 } from './bot-datasets-extra'
 
+// === Refuerzo normativo colombiano para el bot jurídico ===
+import { DATASET_JURIDICO_COLOMBIA } from './bot-dataset-juridico-colombia'
+// === Nuevos conocimientos para todos los bots ===
+import { DATASETS_NUEVOS_POR_BOT } from './bot-datasets-nuevos'
+
 const DATASETS_EXTRA_POR_BOT: Record<string, ItemEntrenamiento[]> = {
-  CHAT_CLIENTES: DATASET_CHAT_CLIENTES_EXTRA,
-  ADMIN_SISTEMA: DATASET_ADMIN_BOTS_EXTRA.filter(d => d.id.startsWith('AP-')),
-  CONTABILIDAD: [],
-  PAGOS: DATASET_ADMIN_BOTS_EXTRA.filter(d => d.id.startsWith('CO-')),
-  PRESTAMOS: DATASET_ADMIN_BOTS_EXTRA.filter(d => d.id.startsWith('PR-')),
-  JURIDICO: DATASET_ADMIN_BOTS_EXTRA.filter(d => d.id.startsWith('JU-')),
-  SEGURIDAD: DATASET_ADMIN_BOTS_EXTRA.filter(d => d.id.startsWith('CB-')),
-  CONFIGURACION: DATASET_ADMIN_BOTS_EXTRA.filter(d => d.id.startsWith('DO-')),
-  ADMIN_GENERAL: DATASET_ADMIN_BOTS_EXTRA.filter(d => d.id.startsWith('AE-')),
+  CHAT_CLIENTES: [...DATASET_CHAT_CLIENTES_EXTRA, ...(DATASETS_NUEVOS_POR_BOT.CHAT_CLIENTES || [])],
+  ADMIN_SISTEMA: [...DATASET_ADMIN_BOTS_EXTRA.filter(d => d.id.startsWith('AP-')), ...(DATASETS_NUEVOS_POR_BOT.ADMIN_SISTEMA || [])],
+  CONTABILIDAD: [...(DATASETS_NUEVOS_POR_BOT.CONTABILIDAD || [])],
+  PAGOS: [...DATASET_ADMIN_BOTS_EXTRA.filter(d => d.id.startsWith('CO-')), ...(DATASETS_NUEVOS_POR_BOT.PAGOS || [])],
+  PRESTAMOS: [...DATASET_ADMIN_BOTS_EXTRA.filter(d => d.id.startsWith('PR-')), ...(DATASETS_NUEVOS_POR_BOT.PRESTAMOS || [])],
+  // Bot jurídico reforzado con normativa colombiana exhaustiva (45+ nuevas Q&A)
+  JURIDICO: [
+    ...DATASET_ADMIN_BOTS_EXTRA.filter(d => d.id.startsWith('JU-')),
+    ...DATASET_JURIDICO_COLOMBIA,
+    ...(DATASETS_NUEVOS_POR_BOT.JURIDICO || []),
+  ],
+  SEGURIDAD: [...DATASET_ADMIN_BOTS_EXTRA.filter(d => d.id.startsWith('CB-')), ...(DATASETS_NUEVOS_POR_BOT.SEGURIDAD || [])],
+  CONFIGURACION: [...DATASET_ADMIN_BOTS_EXTRA.filter(d => d.id.startsWith('DO-')), ...(DATASETS_NUEVOS_POR_BOT.CONFIGURACION || [])],
+  ADMIN_GENERAL: [...DATASET_ADMIN_BOTS_EXTRA.filter(d => d.id.startsWith('AE-')), ...(DATASETS_NUEVOS_POR_BOT.ADMIN_GENERAL || [])],
 }
 
 // Combinar dataset base + extra por bot

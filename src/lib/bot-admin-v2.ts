@@ -34,6 +34,14 @@ import { generarResumenJuridico } from '@/lib/asesor-juridico'
 import { generarInformeSeguridad } from '@/lib/ciberseguridad'
 import { generarDashboardEjecutivoConsolidado } from '@/lib/asistente-ejecutivo'
 import { buscarConocimientoPlataforma } from '@/lib/bot-conocimiento-plataforma'
+// === Memoria persistente (Neon PostgreSQL) ===
+import {
+  guardarMensajeMemoria as guardarMensajeMemoriaPersistente,
+  detectarYRecordarHechos,
+  registrarAprendizaje,
+} from '@/lib/bot-memoria'
+
+const BOT_TIPO_ADMIN = 'ADMIN_SISTEMA'
 
 // =====================================================
 // TIPOS
@@ -871,10 +879,82 @@ export function generarMenuCompleto(): string {
 }
 
 // =====================================================
-// DESPACHADOR PRINCIPAL
+// DESPACHADOR PRINCIPAL — Wrapper con memoria persistente
+// =====================================================
+// El flujo es:
+//   1. Guardar el mensaje del admin en memoria persistente (MemoriaBot)
+//   2. Detectar y recordar hechos/preferencias implícitas
+//   3. Llamar al despachador interno (lógica original)
+//   4. Guardar la respuesta del bot en memoria persistente
+//   5. Si el despachador no identificó comando (fallback), registrar aprendizaje
+//
+// La memoria persistente permite que el bot recuerde el contexto incluso
+// después de reinicios del servidor o cambios de sesión (a diferencia de
+// la memoria en memoria volátil que solo dura mientras el proceso vive).
 // =====================================================
 
 export async function procesarMensajeAdmin(
+  mensaje: string,
+  sessionId: string
+): Promise<RespuestaBot> {
+  // === 1. MEMORIA PERSISTENTE: guardar mensaje + detectar hechos ===
+  // (en paralelo, no bloquea la respuesta)
+  const memoriaPromises = [
+    guardarMensajeMemoriaPersistente({
+      botTipo: BOT_TIPO_ADMIN,
+      usuarioId: sessionId,
+      usuarioNombre: 'Admin',
+      conversacionId: sessionId, // el sessionId del portal admin funciona como conversación
+      rol: 'usuario',
+      texto: mensaje,
+    }),
+    detectarYRecordarHechos({
+      botTipo: BOT_TIPO_ADMIN,
+      usuarioId: sessionId,
+      usuarioNombre: 'Admin',
+      conversacionId: sessionId,
+      mensaje,
+    }),
+  ]
+
+  // === 2. Llamar al despachador interno (lógica original) ===
+  const respuesta = await _procesarMensajeAdminInternal(mensaje, sessionId)
+
+  // Esperar a que la memoria se haya guardado antes de continuar
+  await Promise.all(memoriaPromises)
+
+  // === 3. MEMORIA PERSISTENTE: guardar respuesta del bot ===
+  guardarMensajeMemoriaPersistente({
+    botTipo: BOT_TIPO_ADMIN,
+    usuarioId: sessionId,
+    usuarioNombre: 'Admin',
+    conversacionId: sessionId,
+    rol: 'bot',
+    texto: respuesta.texto,
+  }).catch(() => {}) // fire-and-forget
+
+  // === 4. APRENDIZAJE: si la respuesta es fallback, registrar ===
+  if (respuesta.tipo === 'TEXTO' && !respuesta.accionEjecutada) {
+    // Verificar si es el fallback (mensaje que sugiere "menu")
+    if (respuesta.texto.includes('No estoy seguro') || respuesta.texto.includes('menu')) {
+      registrarAprendizaje({
+        botTipo: BOT_TIPO_ADMIN,
+        pregunta: mensaje,
+        respuestaDada: respuesta.texto.slice(0, 500),
+        categoria: 'NO_CLASIFICADO',
+        fuente: 'ADMIN',
+      }).catch(() => {})
+    }
+  }
+
+  return respuesta
+}
+
+// =====================================================
+// DESPACHADOR INTERNO (lógica original)
+// =====================================================
+
+async function _procesarMensajeAdminInternal(
   mensaje: string,
   sessionId: string
 ): Promise<RespuestaBot> {

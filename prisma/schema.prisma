@@ -2139,3 +2139,63 @@ model HubIAUso {
   @@index([provider, createdAt])
   @@index([createdAt])
 }
+
+// =====================================================
+// MemoriaBot — Memoria persistente de conversaciones por bot + usuario
+// Permite que cada bot recuerde el contexto, hechos clave y preferencias
+// del usuario a lo largo de múltiples sesiones.
+// =====================================================
+model MemoriaBot {
+  id              String   @id @default(cuid())
+  botTipo         String   // CHAT_CLIENTES | ADMIN_SISTEMA | JURIDICO | PAGOS | etc.
+  usuarioId       String?  // ID del usuario/cliente/abogado (null si es anónimo)
+  usuarioNombre   String?  // nombre legible del usuario
+  conversacionId  String?  // ID de la conversación (ConversacionChat.id / HubIAConversation.id)
+  // === Tipo de memoria ===
+  tipoMemoria     String   // CONTEXTO | HECHO | PREFERENCIA | RESUMEN
+  //  CONTEXTO     = últimos N mensajes del diálogo (rol + texto)
+  //  HECHO        = dato específico que el bot debe recordar (ej: "cliente tiene 2 préstamos")
+  //  PREFERENCIA  = configuración del usuario (ej: "prefiere ser llamado por nombre")
+  //  RESUMEN      = síntesis periódica de la conversación (cuando se excede el límite)
+  categoria       String?  // ej: "SALDOS", "PAGOS", "MORA", "DATOS_PERSONALES"
+  contenido       String   // texto de la memoria
+  // === Metadatos ===
+  peso            Float    @default(1.0)  // peso de relevancia (decae con el tiempo)
+  vecesRecordada  Int      @default(0)    // cuántas veces se ha usado esta memoria
+  ultimaRecuperada DateTime?
+  expiresAt       DateTime? // null = no expira; fecha = memoria temporal
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([botTipo, usuarioId])
+  @@index([botTipo, conversacionId])
+  @@index([tipoMemoria])
+  @@index([createdAt])
+}
+
+// =====================================================
+// AprendizajeBot — Aprendizajes persistentes generados por uso real
+// Cuando el bot detecta que una nueva pregunta no está en el dataset,
+// la registra aquí para que el equipo la revise y apruebe.
+// =====================================================
+model AprendizajeBot {
+  id              String   @id @default(cuid())
+  botTipo         String   // CHAT_CLIENTES | JURIDICO | PAGOS | etc.
+  pregunta        String   // pregunta original del usuario
+  respuestaDada   String?  // respuesta que el bot dio (puede ser "no encontrada")
+  respuestaSugerida String? // respuesta propuesta para futuras consultas
+  categoria       String?  // categoría tentativa
+  frecuencia      Int      @default(1)  // cuántas veces se ha visto esta pregunta
+  fuente          String   @default("USUARIO")  // USUARIO | ADMIN | SISTEMA | ENTRENAMIENTO
+  estado          String   @default("PENDIENTE")  // PENDIENTE | APROBADO | RECHAZADO | INTEGRADO
+  aprobadoPor     String?
+  aprobadoAt      DateTime?
+  observaciones   String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([botTipo, estado])
+  @@index([botTipo, categoria])
+  @@index([estado])
+  @@index([createdAt])
+}
