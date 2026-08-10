@@ -106,33 +106,34 @@ async function responderAsesorJuridico(
     }
   }
 
-  // === Saludo / menú ===
+  // === Saludo conversacional fluido (NO menú) ===
+  // El bot juridico conversa como un abogado senior, no muestra menú numerado.
   if (
     lower === '' ||
-    lower === 'menu' ||
-    lower === 'menú' ||
-    lower === 'ayuda' ||
-    lower === 'help' ||
     lower === 'hola' ||
     lower === 'buenas' ||
     lower === 'buenos días' ||
-    lower === 'buenas tardes'
+    lower === 'buenas tardes' ||
+    lower === 'buenas noches' ||
+    lower === 'saludos' ||
+    lower === 'qué tal' ||
+    lower === 'que tal' ||
+    lower === 'holaa' ||
+    lower === 'holas'
   ) {
     return {
       tipo: 'TEXTO',
       respuesta:
-        `⚖️ Hola ${usuarioNombre}, soy Asesor Jurídico, tu asistente del portal jurídico.\n\n` +
-        `═══ MÓDULO JURÍDICO ═══\n` +
-        `1️⃣ Casos activos / resumen\n` +
-        `2️⃣ Candidatos a jurídico (60+ días mora)\n` +
-        `3️⃣ Alertas legales pendientes\n` +
-        `4️⃣ Análisis de un caso\n` +
-        `═══ ASESORÍA JURÍDICA ═══\n` +
-        `5️⃣ Cobranza (persuasiva/prejurídica/judicial)\n` +
-        `6️⃣ Procesos judiciales\n` +
-        `7️⃣ Pagaré / títulos valores\n` +
-        `8️⃣ Habeas Data / Lavado de Activos\n\n` +
-        `💡 Escribe el número o la consulta. Ej: "casos activos", "¿cómo cobrar un pagaré?"`,
+        `Hola, ${usuarioNombre}. Soy tu asesor jurídico. Cuéntame en qué te puedo ayudar hoy: ¿tienes una consulta sobre normativa colombiana, un caso de cobro, un pagaré, un proceso judicial, o algo relacionado con la cartera? Soy todo oídos.`,
+    }
+  }
+
+  // === "Ayuda" / "menú" → respuesta conversacional, no menú numerado ===
+  if (lower === 'ayuda' || lower === 'help' || lower === 'menu' || lower === 'menú') {
+    return {
+      tipo: 'TEXTO',
+      respuesta:
+        `Claro, te explico cómo te puedo acompañar. Puedo ayudarte con: consultas de normativa colombiana (Código Civil, Comercio, CGP, Habeas Data, Ley 1581 de 2012, etc.), análisis de casos de cobro jurídico, estrategia para demandar o defender un proceso ejecutivo, redacción de requerimientos prejurídicos, revisión de pagarés y títulos valores, gestión de centrales de datos, y seguimiento de la cartera en mora. Si quieres, dime qué tema te trae hoy y lo abordamos paso a paso.`,
     }
   }
 
@@ -353,17 +354,14 @@ async function responderAsesorJuridico(
     }
   }
 
-  // === Default ===
+  // === Default conversacional fluido (NO menú) ===
+  // Si el mensaje no coincide con ningún comando ni con el dataset, el bot responde
+  // como un abogado senior: pide contexto, ofrece explorar el tema y registra la
+  // pregunta como aprendizaje pendiente para revisión posterior.
   return {
     tipo: 'TEXTO',
     respuesta:
-      `⚖️ Soy Asesor Jurídico, tu asistente del portal jurídico.\n\n` +
-      `Escribe "menú" para ver opciones o pregúntame:\n` +
-      `• "casos activos"\n` +
-      `• "candidatos a jurídico"\n` +
-      `• "¿cómo cobrar un pagaré vencido?"\n` +
-      `• "proceso ejecutivo en Colombia"\n` +
-      `• "¿qué dice la ley sobre habeas data?"`,
+      `Mira, ${usuarioNombre}, para responder esa con precisión necesito un poco más de contexto. Cuéntame: ¿es sobre un caso específico de la cartera, una consulta de fondo sobre normativa colombiana, o algo operativo del módulo jurídico? Si me das el detalle del préstamo, del cliente o del documento, te doy una respuesta mucho más útil. También puedo revisar casos activos, candidatos a jurídico o alertas pendientes si me dices qué necesitas ver.`,
   }
 }
 
