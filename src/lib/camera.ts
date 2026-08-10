@@ -3,18 +3,30 @@
 /**
  * Utilidades robustas para captura de fotos desde la cámara del dispositivo.
  *
- * Maneja los principales escenarios de fallo:
+ * FILOSOFÍA DE ESTE MÓDULO (v3 — botón siempre manual):
+ * ----------------------------------------------------------------
+ * El botón "Capturar foto" debe estar SIEMPRE habilitado en cuanto la
+ * cámara entrega video. Es el usuario quien decide, mirando la pantalla,
+ * cuándo la imagen se ve lo suficientemente bien para tomar la foto.
+ *
+ * Razón: las condiciones automáticas de nitidez / iluminación varían
+ * enormemente entre dispositivos (webcams baratas, móviles con poca luz,
+ * laptops con cámaras HD de baja calidad). Cualquier umbral automático
+ * termina bloqueando a usuarios legítimos. Por eso:
+ *
+ *   1. El botón se habilita en el evento `onplaying` del <video>.
+ *   2. La detección de nitidez sigue corriendo, pero SOLO como guía
+ *      visual informativa (un pequeño badge con tips). Nunca bloquea.
+ *   3. No existen botones "forzar captura" ni estados de error por
+ *      baja calidad. Si la cámara entrega video, se puede capturar.
+ *
+ * Maneja los principales escenarios de fallo de HARDWARE (no de calidad):
  *  - `OverconstrainedError`: facingMode 'environment' no existe en desktop.
  *    Se reintenta con `video: true` (cualquier cámara disponible).
  *  - `NotAllowedError`: el usuario bloqueó el permiso. Mensaje claro.
  *  - `NotFoundError`: no hay cámara conectada.
  *  - `NotReadableError`: la cámara está en uso por otra app (Zoom, Teams, etc.).
  *  - `SecurityError`: la página no está servida sobre HTTPS.
- *
- * Estrategia:
- *  1. Intentar con el facingMode preferido (environment para documentos, user para selfie).
- *  2. Si falla con OverconstrainedError, reintentar con `video: true` (cualquier cámara).
- *  3. Si vuelve a fallar, propagar el error con un mensaje útil en español.
  */
 
 export interface CameraError {
@@ -184,7 +196,7 @@ function traducirErrorCamara(e: any): CameraError {
 
 /**
  * ====================================================================
- * DETECCIÓN DE NITIDEZ (Sharpness Detection)
+ * DETECCIÓN DE NITIDEZ (Sharpness Detection) — SOLO INFORMATIVA
  * ====================================================================
  *
  * Usa la técnica estándar de visión por computadora: varianza del filtro
@@ -192,23 +204,15 @@ function traducirErrorCamara(e: any): CameraError {
  * intensidad); una imagen nítida tiene bordes fuertes → varianza alta;
  * una imagen borrosa tiene bordes suaves → varianza baja.
  *
+ * IMPORTANTE (v3): La medición se sigue ejecutando, pero el resultado
+ * SOLO se usa para mostrar un badge informativo al usuario. NUNCA
+ * deshabilita el botón de captura. El usuario decide cuándo capturar.
+ *
  * Implementación optimizada para tiempo real:
  *  1. Muestrear el video a un canvas pequeño (128x96) — rápido.
  *  2. Obtener los pixels en escala de grises.
  *  3. Aplicar convolución Laplaciana 3x3 ([0,1,0; 1,-4,1; 0,1,0]).
  *  4. Calcular la varianza de los valores resultantes.
- *
- * Umbrales calibrados empíricamente para fotos de documentos y selfies
- * tomadas con webcam (640x480 a 1280x720):
- *  - varianza >= 60   → NÍTIDA  (verde)
- *  - varianza 20-59   → ACEPTABLE (amarillo)
- *  - varianza < 20    → BORROSA  (rojo, pero permite capturar con advertencia)
- *
- * Nota: Los umbrales anteriores (120/50) eran demasiado estrictos y hacían
- * que en muchas webcams/móviles con poca luz el botón de captura se
- * deshabilitara, impidiendo al usuario tomar la foto incluso cuando la
- * imagen era razonablemente legible. Los nuevos umbrales son más
- * tolerantes y siempre permiten capturar (con advertencia visual).
  */
 
 interface MedicionNitidez {
@@ -216,10 +220,10 @@ interface MedicionNitidez {
   varianza: number
   /** Clasificación legible. */
   nivel: 'NITIDA' | 'ACEPTABLE' | 'BORROSA' | 'SIN_SENAL'
-  /** Mensaje de recomendación para el usuario. */
+  /** Mensaje corto para el badge. */
   mensaje: string
-  /** Recomendación accionable (corta). */
-  recomendacion: string
+  /** Recomendación accionable (corta), opcional. */
+  recomendacion?: string
 }
 
 /**
@@ -232,8 +236,7 @@ function medirNitidez(video: HTMLVideoElement): MedicionNitidez {
     return {
       varianza: 0,
       nivel: 'SIN_SENAL',
-      mensaje: 'Esperando señal de cámara...',
-      recomendacion: '',
+      mensaje: 'Iniciando cámara...',
     }
   }
 
@@ -249,8 +252,7 @@ function medirNitidez(video: HTMLVideoElement): MedicionNitidez {
     return {
       varianza: 0,
       nivel: 'SIN_SENAL',
-      mensaje: 'No se pudo analizar la imagen.',
-      recomendacion: '',
+      mensaje: 'Iniciando cámara...',
     }
   }
   ctx.drawImage(video, 0, 0, W, H)
@@ -290,28 +292,27 @@ function medirNitidez(video: HTMLVideoElement): MedicionNitidez {
   const mean = sum / count
   const variance = sumSq / count - mean * mean
 
-  // Clasificar según umbrales calibrados (umbrales relajados para evitar
-  // bloquear al usuario cuando la webcam tiene poca luz o es de baja calidad).
+  // Clasificar según umbrales calibrados.
+  // Estos umbrales son SOLO informativos — nunca bloquean la captura.
   if (variance >= 60) {
     return {
       varianza: variance,
       nivel: 'NITIDA',
-      mensaje: '✅ Imagen nítida — lista para capturar.',
-      recomendacion: '',
+      mensaje: 'Imagen nítida',
     }
   } else if (variance >= 20) {
     return {
       varianza: variance,
       nivel: 'ACEPTABLE',
-      mensaje: '⚠️ Imagen aceptable — podría ser más nítida.',
-      recomendacion: 'Si puedes, acércate un poco o mejora la iluminación.',
+      mensaje: 'Imagen aceptable',
+      recomendacion: 'Si puedes, acércate un poco o mejora la luz para una foto aún más clara.',
     }
   } else {
     return {
       varianza: variance,
       nivel: 'BORROSA',
-      mensaje: '❌ Imagen borrosa — se recomienda mejorar.',
-      recomendacion: 'Acércate al documento, mejora la luz, sujeta firme la cámara, o limpia el lente. Puedes capturar de todas formas si se ve bien.',
+      mensaje: 'Imagen algo borrosa',
+      recomendacion: 'Si la foto se ve bien en pantalla, puedes capturarla. Si no, acércate, mejora la luz o sujeta firme la cámara.',
     }
   }
 }
@@ -321,10 +322,10 @@ function medirNitidez(video: HTMLVideoElement): MedicionNitidez {
  * o cancelar. Retorna un dataUrl JPEG de la foto capturada, o null si el
  * usuario cancela.
  *
- * Incluye detección de nitidez en tiempo real: mide cada 500ms y muestra un
- * indicador visual (verde/amarillo/rojo) con recomendaciones. Si la imagen
- * está borrosa, el botón "Capturar" se deshabilita y aparece un botón
- * "Capturar de todas formas" que permite forzar la captura.
+ * FILOSOFÍA (v3): El botón "Capturar foto" está SIEMPRE habilitado en cuanto
+ * el video comienza a reproducirse. El usuario decide cuándo tomar la foto
+ * mirando la pantalla. La detección de nitidez es puramente informativa
+ * (un pequeño badge con tips), nunca bloqueante.
  *
  * @param stream MediaStream ya abierto (de abrirCamara()).
  * @param opts Opciones: título, espejar (para selfie), texto del botón.
@@ -352,8 +353,12 @@ export function mostrarModalCamara(
     overlay.appendChild(tituloEl)
 
     const hintEl = document.createElement('p')
-    hintEl.textContent = 'Coloca el documento dentro del cuadro. Puedes capturar la foto en cualquier momento — si está borrosa, verás una advertencia pero podrás capturarla.'
-    hintEl.style.cssText = 'color:#cbd5e1;font-size:12px;text-align:center;max-width:480px;margin:0 0 12px 0;'
+    hintEl.innerHTML =
+      '📷 Mira la cámara en la pantalla.<br/>' +
+      '<strong>Cuando veas que el documento se ve bien claro, presiona el botón para tomar la foto.</strong><br/>' +
+      '<span style="opacity:0.7;font-size:11px;">El botón siempre está habilitado — tú decides cuándo capturar.</span>'
+    hintEl.style.cssText =
+      'color:#cbd5e1;font-size:13px;text-align:center;max-width:520px;margin:0 0 12px 0;line-height:1.5;'
     overlay.appendChild(hintEl)
 
     const videoContainer = document.createElement('div')
@@ -369,110 +374,45 @@ export function mostrarModalCamara(
     videoContainer.appendChild(video)
     overlay.appendChild(videoContainer)
 
-    // === Indicador de nitidez ===
-    // Badge superior izquierdo del video con el nivel actual.
+    // === Indicador de nitidez (SOLO informativo) ===
+    // Pequeño badge discreto en la esquina superior izquierda.
+    // Nunca bloquea el botón de captura.
     const nitidezBadge = document.createElement('div')
     nitidezBadge.style.cssText =
       'position:absolute;top:10px;left:10px;padding:6px 12px;border-radius:20px;font-size:11px;font-weight:600;color:white;backdrop-filter:blur(6px);background:rgba(0,0,0,0.55);transition:background 0.3s;display:flex;align-items:center;gap:6px;'
-    nitidezBadge.textContent = '⚪ Analizando...'
+    nitidezBadge.textContent = '⚪ Iniciando cámara...'
     videoContainer.appendChild(nitidezBadge)
 
-    // Banner inferior con mensaje de recomendación (visible solo si hay aviso).
+    // Banner inferior con tips de mejora (solo informativo, nunca bloqueante).
     const recomendacionBanner = document.createElement('div')
     recomendacionBanner.style.cssText =
       'position:absolute;bottom:0;left:0;right:0;padding:10px 14px;background:linear-gradient(0deg, rgba(0,0,0,0.85), rgba(0,0,0,0));color:white;font-size:12px;line-height:1.4;display:none;'
     videoContainer.appendChild(recomendacionBanner)
 
-    // Estado actual de nitidez (compartido entre el loop de medición y el botón capturar)
-    let nivelActual: MedicionNitidez['nivel'] = 'SIN_SENAL'
-    let recomendacionActual = ''
-
-    const actualizarIndicador = (m: MedicionNitidez) => {
-      nivelActual = m.nivel
-      recomendacionActual = m.recomendacion
-
-      // Badge de nivel
-      const colores: Record<MedicionNitidez['nivel'], string> = {
-        NITIDA: '#10b981',
-        ACEPTABLE: '#f59e0b',
-        BORROSA: '#ef4444',
-        SIN_SENAL: '#6b7280',
-      }
-      const iconos: Record<MedicionNitidez['nivel'], string> = {
-        NITIDA: '✅',
-        ACEPTABLE: '⚠️',
-        BORROSA: '❌',
-        SIN_SENAL: '⚪',
-      }
-      nitidezBadge.textContent = `${iconos[m.nivel]} ${m.nivel === 'SIN_SENAL' ? 'Esperando...' : m.nivel.replace('_', ' ')}`
-      nitidezBadge.style.background = `rgba(0,0,0,0.65)`
-      nitidezBadge.style.borderLeft = `4px solid ${colores[m.nivel]}`
-
-      // Banner de recomendación (solo si no es NÍTIDA y hay mensaje)
-      if (m.nivel === 'NITIDA' || m.nivel === 'SIN_SENAL' || !m.recomendacion) {
-        recomendacionBanner.style.display = 'none'
-      } else {
-        recomendacionBanner.style.display = 'block'
-        recomendacionBanner.innerHTML =
-          `<div style="font-weight:600;margin-bottom:2px;">${m.mensaje}</div>` +
-          `<div style="opacity:0.9;font-size:11px;">💡 ${m.recomendacion}</div>`
-      }
-
-      // Habilitar/deshabilitar botón capturar
-      // CAMBIO: Siempre se permite capturar (aún si está borrosa).
-      // Solo se deshabilita cuando no hay señal de cámara.
-      // El badge visual sigue mostrando el nivel (verde/amarillo/rojo)
-      // pero el usuario puede capturar la foto en cualquier momento.
-      if (m.nivel === 'SIN_SENAL') {
-        btnCapturar.disabled = true
-        btnCapturar.style.opacity = '0.45'
-        btnCapturar.style.cursor = 'not-allowed'
-        btnCapturar.textContent = '📸 Esperando cámara...'
-        btnForzar.style.display = 'none'
-      } else {
-        // Cualquier otro nivel (NITIDA, ACEPTABLE, BORROSA) → botón habilitado
-        btnCapturar.disabled = false
-        btnCapturar.style.opacity = '1'
-        btnCapturar.style.cursor = 'pointer'
-        btnCapturar.textContent = '📸 ' + textoBoton
-        // El botón "forzar" ya no es necesario porque el botón principal
-        // siempre está habilitado. Lo ocultamos.
-        btnForzar.style.display = 'none'
-      }
-    }
-
+    // === Botones ===
     const btnContainer = document.createElement('div')
     btnContainer.style.cssText = 'margin-top:12px;display:flex;gap:12px;flex-wrap:wrap;justify-content:center;'
 
     const btnCapturar = document.createElement('button')
     btnCapturar.textContent = '📸 ' + textoBoton
+    // Estado inicial: deshabilitado SOLO hasta que el video comience a reproducirse.
+    // Una vez que el video esté reproduciéndose (evento onplaying), se habilita
+    // permanentemente, sin importar la nitidez.
+    btnCapturar.disabled = true
     btnCapturar.style.cssText =
-      'padding:12px 28px;background:linear-gradient(135deg,#6366f1,#a855f7);color:white;border:none;border-radius:12px;font-size:15px;font-weight:600;cursor:pointer;box-shadow:0 8px 24px -6px rgba(99,102,241,0.5);transition:transform 0.15s,opacity 0.2s;'
+      'padding:14px 32px;background:linear-gradient(135deg,#6366f1,#a855f7);color:white;border:none;border-radius:12px;font-size:16px;font-weight:600;cursor:not-allowed;opacity:0.55;box-shadow:0 8px 24px -6px rgba(99,102,241,0.5);transition:transform 0.15s,opacity 0.2s;'
     btnCapturar.onmouseover = () => {
       if (!btnCapturar.disabled) btnCapturar.style.transform = 'scale(1.05)'
     }
     btnCapturar.onmouseout = () => (btnCapturar.style.transform = 'scale(1)')
 
-    // Botón secundario "Forzar captura" — OCULTO permanentemente.
-    // Ya no es necesario porque el botón principal siempre está habilitado.
-    // Se mantiene el elemento por compatibilidad con el código existente,
-    // pero display:none fijo y sin listener activo.
-    const btnForzar = document.createElement('button')
-    btnForzar.textContent = '🔓 Capturar de todas formas'
-    btnForzar.style.cssText =
-      'padding:10px 18px;background:transparent;color:#fbbf24;border:1px solid #fbbf24;border-radius:12px;font-size:12px;font-weight:500;cursor:pointer;display:none;'
-    btnForzar.onclick = () => {
-      capturar()
-    }
-
     const btnCancelar = document.createElement('button')
     btnCancelar.textContent = '✕ Cancelar'
     btnCancelar.style.cssText =
-      'padding:12px 28px;background:rgba(255,255,255,0.1);color:white;border:1px solid rgba(255,255,255,0.2);border-radius:12px;font-size:15px;cursor:pointer;'
+      'padding:14px 32px;background:rgba(255,255,255,0.1);color:white;border:1px solid rgba(255,255,255,0.2);border-radius:12px;font-size:16px;cursor:pointer;'
 
     btnContainer.appendChild(btnCancelar)
     btnContainer.appendChild(btnCapturar)
-    btnContainer.appendChild(btnForzar)
     overlay.appendChild(btnContainer)
 
     document.body.appendChild(overlay)
@@ -480,25 +420,111 @@ export function mostrarModalCamara(
     // Reproducir video (algunos navegadores requieren play() explícito)
     video.play().catch(() => {})
 
-    // === Loop de medición de nitidez en tiempo real ===
+    // ====================================================================
+    // HABILITAR BOTÓN EN CUANTO EL VIDEO COMIENZA A REPRODUCIRSE
+    // ====================================================================
+    // Este es el punto clave: el botón se habilita UNA sola vez, en el evento
+    // `onplaying` del <video>. A partir de ahí, permanece habilitado sin
+    // importar la medición de nitidez. El usuario decide cuándo capturar.
+    let botonHabilitado = false
+    const habilitarBoton = () => {
+      if (botonHabilitado) return
+      botonHabilitado = true
+      btnCapturar.disabled = false
+      btnCapturar.style.opacity = '1'
+      btnCapturar.style.cursor = 'pointer'
+      btnCapturar.textContent = '📸 ' + textoBoton
+      console.log('[camera] video reproduciéndose — botón capturar habilitado')
+    }
+
+    // `loadeddata` se dispara cuando el primer frame está disponible.
+    // `playing` se dispara cuando la reproducción ha comenzado realmente.
+    // Usamos ambos para cubrir todos los navegadores (el primero que llegue habilita).
+    video.addEventListener('loadeddata', habilitarBoton, { once: true })
+    video.addEventListener('playing', habilitarBoton, { once: true })
+
+    // Fallback de seguridad: si por algún motivo los eventos no se disparan
+    // en 3 segundos, habilitar el botón de todas formas (mejor dejar capturar
+    // que dejar al usuario esperando indefinidamente).
+    const fallbackTimer = setTimeout(() => {
+      if (!botonHabilitado) {
+        console.warn('[camera] fallback de seguridad — habilitando botón tras 3s')
+        habilitarBoton()
+      }
+    }, 3000)
+
+    // ====================================================================
+    // LOOP DE MEDICIÓN DE NITIDEZ — SOLO INFORMATIVO
+    // ====================================================================
+    // El loop corre cada 600ms y actualiza el badge visual, pero NUNCA
+    // toca el estado del botón de captura. Es puramente orientativo.
     let medicionInterval: ReturnType<typeof setInterval> | null = null
     let medicionTimeout: ReturnType<typeof setTimeout> | null = null
+    let medicionActual: MedicionNitidez = {
+      varianza: 0,
+      nivel: 'SIN_SENAL',
+      mensaje: 'Iniciando cámara...',
+    }
+
+    const actualizarBadge = (m: MedicionNitidez) => {
+      medicionActual = m
+
+      // Colores del badge: usamos tonos informativos, no rojos alarmantes.
+      // Verde para nítida, amarillo para aceptable, gris neutro para borrosa
+      // (no rojo, para no asustar al usuario ni sugerir que está bloqueado).
+      const colores: Record<MedicionNitidez['nivel'], string> = {
+        NITIDA: '#10b981',
+        ACEPTABLE: '#f59e0b',
+        BORROSA: '#94a3b8', // gris neutro — no rojo
+        SIN_SENAL: '#6b7280',
+      }
+      const iconos: Record<MedicionNitidez['nivel'], string> = {
+        NITIDA: '✓',
+        ACEPTABLE: '◐',
+        BORROSA: '◑',
+        SIN_SENAL: '○',
+      }
+
+      const nivelTexto: Record<MedicionNitidez['nivel'], string> = {
+        NITIDA: 'Imagen nítida',
+        ACEPTABLE: 'Imagen aceptable',
+        BORROSA: 'Imagen algo borrosa',
+        SIN_SENAL: 'Iniciando cámara...',
+      }
+
+      nitidezBadge.textContent = `${iconos[m.nivel]} ${nivelTexto[m.nivel]}`
+      nitidezBadge.style.background = `rgba(0,0,0,0.65)`
+      nitidezBadge.style.borderLeft = `4px solid ${colores[m.nivel]}`
+
+      // Banner de recomendación: solo informativo, nunca bloqueante.
+      // Se muestra solo si hay una recomendación útil.
+      if (m.nivel === 'NITIDA' || m.nivel === 'SIN_SENAL' || !m.recomendacion) {
+        recomendacionBanner.style.display = 'none'
+      } else {
+        recomendacionBanner.style.display = 'block'
+        recomendacionBanner.innerHTML =
+          `<div style="font-weight:600;margin-bottom:2px;">💡 Tip: ${m.mensaje}</div>` +
+          `<div style="opacity:0.9;font-size:11px;">${m.recomendacion}</div>`
+      }
+    }
+
     const iniciarMedicionLoop = () => {
       // Pequeño delay inicial para que el video se estabilice
       medicionTimeout = setTimeout(() => {
         // Medición inmediata
-        actualizarIndicador(medirNitidez(video))
-        // Y luego cada 500ms
+        actualizarBadge(medirNitidez(video))
+        // Y luego cada 600ms
         medicionInterval = setInterval(() => {
-          actualizarIndicador(medirNitidez(video))
-        }, 500)
-      }, 400)
+          actualizarBadge(medirNitidez(video))
+        }, 600)
+      }, 300)
     }
     iniciarMedicionLoop()
 
     const cleanup = () => {
       if (medicionInterval) clearInterval(medicionInterval)
       if (medicionTimeout) clearTimeout(medicionTimeout)
+      clearTimeout(fallbackTimer)
       stream.getTracks().forEach((t) => t.stop())
       if (overlay.parentNode) overlay.parentNode.removeChild(overlay)
     }
@@ -508,12 +534,14 @@ export function mostrarModalCamara(
       resolve(null)
     }
 
-    // Función común para capturar la foto (usada por btnCapturar y btnForzar)
+    // Función para capturar la foto. Siempre disponible una vez que el video
+    // está reproduciéndose. No valida nitidez.
     const capturar = () => {
-      // Esperar a que el video tenga dimensiones válidas
+      // Esperar a que el video tenga dimensiones válidas (debería estar listo
+      // porque el botón solo se habilita tras onplaying, pero por seguridad).
       if (!video.videoWidth || !video.videoHeight) {
-        // Reintentar en 200ms si el video aún no está listo
-        setTimeout(() => capturar(), 200)
+        // Reintentar en 150ms si el video aún no está listo
+        setTimeout(() => capturar(), 150)
         return
       }
       const canvas = document.createElement('canvas')
@@ -538,13 +566,6 @@ export function mostrarModalCamara(
 
     btnCapturar.onclick = () => {
       if (btnCapturar.disabled) return
-      capturar()
-    }
-
-    btnForzar.onclick = () => {
-      // Confirmar antes de forzar
-      // (Esta rama ya no se ejecuta porque el botón está oculto, pero
-      // mantengo la lógica por si se re-habilita en el futuro.)
       capturar()
     }
 
