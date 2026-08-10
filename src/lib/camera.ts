@@ -200,9 +200,15 @@ function traducirErrorCamara(e: any): CameraError {
  *
  * Umbrales calibrados empíricamente para fotos de documentos y selfies
  * tomadas con webcam (640x480 a 1280x720):
- *  - varianza >= 120  → NÍTIDA  (verde)
- *  - varianza 50-119  → ACEPTABLE (amarillo)
- *  - varianza < 50    → BORROSA  (rojo)
+ *  - varianza >= 60   → NÍTIDA  (verde)
+ *  - varianza 20-59   → ACEPTABLE (amarillo)
+ *  - varianza < 20    → BORROSA  (rojo, pero permite capturar con advertencia)
+ *
+ * Nota: Los umbrales anteriores (120/50) eran demasiado estrictos y hacían
+ * que en muchas webcams/móviles con poca luz el botón de captura se
+ * deshabilitara, impidiendo al usuario tomar la foto incluso cuando la
+ * imagen era razonablemente legible. Los nuevos umbrales son más
+ * tolerantes y siempre permiten capturar (con advertencia visual).
  */
 
 interface MedicionNitidez {
@@ -284,27 +290,28 @@ function medirNitidez(video: HTMLVideoElement): MedicionNitidez {
   const mean = sum / count
   const variance = sumSq / count - mean * mean
 
-  // Clasificar según umbrales calibrados
-  if (variance >= 120) {
+  // Clasificar según umbrales calibrados (umbrales relajados para evitar
+  // bloquear al usuario cuando la webcam tiene poca luz o es de baja calidad).
+  if (variance >= 60) {
     return {
       varianza: variance,
       nivel: 'NITIDA',
       mensaje: '✅ Imagen nítida — lista para capturar.',
       recomendacion: '',
     }
-  } else if (variance >= 50) {
+  } else if (variance >= 20) {
     return {
       varianza: variance,
       nivel: 'ACEPTABLE',
       mensaje: '⚠️ Imagen aceptable — podría ser más nítida.',
-      recomendacion: 'Acércate un poco más o mejora la iluminación.',
+      recomendacion: 'Si puedes, acércate un poco o mejora la iluminación.',
     }
   } else {
     return {
       varianza: variance,
       nivel: 'BORROSA',
-      mensaje: '❌ Imagen borrosa — no se puede capturar.',
-      recomendacion: 'Acércate al documento, mejora la luz, sujeta firme la cámara, o limpia el lente.',
+      mensaje: '❌ Imagen borrosa — se recomienda mejorar.',
+      recomendacion: 'Acércate al documento, mejora la luz, sujeta firme la cámara, o limpia el lente. Puedes capturar de todas formas si se ve bien.',
     }
   }
 }
@@ -345,7 +352,7 @@ export function mostrarModalCamara(
     overlay.appendChild(tituloEl)
 
     const hintEl = document.createElement('p')
-    hintEl.textContent = 'Coloca el documento dentro del cuadro y asegúrate de que se vea nítido.'
+    hintEl.textContent = 'Coloca el documento dentro del cuadro. Puedes capturar la foto en cualquier momento — si está borrosa, verás una advertencia pero podrás capturarla.'
     hintEl.style.cssText = 'color:#cbd5e1;font-size:12px;text-align:center;max-width:480px;margin:0 0 12px 0;'
     overlay.appendChild(hintEl)
 
@@ -412,24 +419,24 @@ export function mostrarModalCamara(
       }
 
       // Habilitar/deshabilitar botón capturar
-      if (m.nivel === 'BORROSA') {
-        btnCapturar.disabled = true
-        btnCapturar.style.opacity = '0.45'
-        btnCapturar.style.cursor = 'not-allowed'
-        btnCapturar.textContent = '📸 Imagen borrosa'
-        // Mostrar botón "forzar captura"
-        btnForzar.style.display = 'inline-block'
-      } else if (m.nivel === 'SIN_SENAL') {
+      // CAMBIO: Siempre se permite capturar (aún si está borrosa).
+      // Solo se deshabilita cuando no hay señal de cámara.
+      // El badge visual sigue mostrando el nivel (verde/amarillo/rojo)
+      // pero el usuario puede capturar la foto en cualquier momento.
+      if (m.nivel === 'SIN_SENAL') {
         btnCapturar.disabled = true
         btnCapturar.style.opacity = '0.45'
         btnCapturar.style.cursor = 'not-allowed'
         btnCapturar.textContent = '📸 Esperando cámara...'
         btnForzar.style.display = 'none'
       } else {
+        // Cualquier otro nivel (NITIDA, ACEPTABLE, BORROSA) → botón habilitado
         btnCapturar.disabled = false
         btnCapturar.style.opacity = '1'
         btnCapturar.style.cursor = 'pointer'
         btnCapturar.textContent = '📸 ' + textoBoton
+        // El botón "forzar" ya no es necesario porque el botón principal
+        // siempre está habilitado. Lo ocultamos.
         btnForzar.style.display = 'none'
       }
     }
@@ -446,14 +453,17 @@ export function mostrarModalCamara(
     }
     btnCapturar.onmouseout = () => (btnCapturar.style.transform = 'scale(1)')
 
-    // Botón secundario "Forzar captura" (visible solo cuando la imagen está borrosa).
-    // Permite al usuario saltarse la advertencia si sabe que la imagen sí sirve.
+    // Botón secundario "Forzar captura" — OCULTO permanentemente.
+    // Ya no es necesario porque el botón principal siempre está habilitado.
+    // Se mantiene el elemento por compatibilidad con el código existente,
+    // pero display:none fijo y sin listener activo.
     const btnForzar = document.createElement('button')
     btnForzar.textContent = '🔓 Capturar de todas formas'
     btnForzar.style.cssText =
       'padding:10px 18px;background:transparent;color:#fbbf24;border:1px solid #fbbf24;border-radius:12px;font-size:12px;font-weight:500;cursor:pointer;display:none;'
-    btnForzar.onmouseover = () => (btnForzar.style.background = 'rgba(251,191,36,0.12)')
-    btnForzar.onmouseout = () => (btnForzar.style.background = 'transparent')
+    btnForzar.onclick = () => {
+      capturar()
+    }
 
     const btnCancelar = document.createElement('button')
     btnCancelar.textContent = '✕ Cancelar'
@@ -533,9 +543,9 @@ export function mostrarModalCamara(
 
     btnForzar.onclick = () => {
       // Confirmar antes de forzar
-      if (confirm('La imagen está borrosa. ¿Capturar de todas formas?\n\nUna foto borrosa puede hacer que el documento sea ilegible y retrasar tu trámite.')) {
-        capturar()
-      }
+      // (Esta rama ya no se ejecuta porque el botón está oculto, pero
+      // mantengo la lógica por si se re-habilita en el futuro.)
+      capturar()
     }
 
     // ESC para cancelar

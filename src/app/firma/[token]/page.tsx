@@ -195,9 +195,19 @@ export default function PaginaFirma({ params }: { params: Promise<{ token: strin
     const canvas = canvasRef.current
     if (!canvas) return
     const ctx = canvas.getContext('2d')!
+    // Prevenir scroll en mobile
+    if ('touches' in e) e.preventDefault()
     ctx.beginPath()
     setDibujando(true)
-    moverDibujo(e)
+    // Dibujar punto inicial
+    const rect = canvas.getBoundingClientRect()
+    const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX
+    const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY
+    const x = ((clientX - rect.left) * canvas.width) / rect.width
+    const y = ((clientY - rect.top) * canvas.height) / rect.height
+    ctx.moveTo(x, y)
+    ctx.lineTo(x + 0.1, y + 0.1)
+    ctx.stroke()
   }
 
   const moverDibujo = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
@@ -205,6 +215,8 @@ export default function PaginaFirma({ params }: { params: Promise<{ token: strin
     const canvas = canvasRef.current
     if (!canvas) return
     const ctx = canvas.getContext('2d')!
+    // Prevenir scroll en mobile mientras dibuja
+    if ('touches' in e) e.preventDefault()
     const rect = canvas.getBoundingClientRect()
     let x, y
     if ('touches' in e) {
@@ -219,6 +231,8 @@ export default function PaginaFirma({ params }: { params: Promise<{ token: strin
     y = (y * canvas.height) / rect.height
     ctx.lineTo(x, y)
     ctx.stroke()
+    // Actualizar preview en tiempo real
+    setFirmaDibujada(canvas.toDataURL('image/png'))
   }
 
   const terminarDibujo = () => {

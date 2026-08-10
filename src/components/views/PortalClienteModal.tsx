@@ -3415,18 +3415,60 @@ function FlujoFirmaClient({
     if (estadoFlujoFirma === 'FIRMA_COMPLETADA') setPaso(4)
   }, [estadoFlujoFirma])
 
+  // === Inicializar canvas con fondo blanco cuando se entra al paso 2 ===
+  // Sin esto, el canvas arranca transparente y al exportar el PNG puede
+  // quedar ilegible. También reinicia el fondo al limpiar.
+  useEffect(() => {
+    if (paso !== 2) return
+    const canvas = canvasRef.current
+    if (!canvas) return
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return
+    // Pintar fondo blanco
+    ctx.fillStyle = '#ffffff'
+    ctx.fillRect(0, 0, canvas.width, canvas.height)
+    // Configurar estilo de trazo
+    ctx.lineWidth = 2.5
+    ctx.lineCap = 'round'
+    ctx.lineJoin = 'round'
+    ctx.strokeStyle = '#0f172a'
+  }, [paso])
+
+  // === Helper: convertir coordenadas de evento a coordenadas reales del canvas ===
+  // El canvas puede estar escalado por CSS, por lo que necesitamos mapear
+  // las coordenadas de pantalla a las dimensiones internas (400x140).
+  const getCanvasCoords = (
+    e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>
+  ): { x: number; y: number } => {
+    const canvas = canvasRef.current
+    if (!canvas) return { x: 0, y: 0 }
+    const rect = canvas.getBoundingClientRect()
+    const clientX = 'touches' in e
+      ? (e.touches[0]?.clientX ?? (e as React.TouchEvent).changedTouches[0]?.clientX ?? 0)
+      : (e as React.MouseEvent).clientX
+    const clientY = 'touches' in e
+      ? (e.touches[0]?.clientY ?? (e as React.TouchEvent).changedTouches[0]?.clientY ?? 0)
+      : (e as React.MouseEvent).clientY
+    const x = ((clientX - rect.left) * canvas.width) / rect.width
+    const y = ((clientY - rect.top) * canvas.height) / rect.height
+    return { x, y }
+  }
+
   // === Manejo del canvas para firma manuscrita ===
   const empezarDibujo = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
     const canvas = canvasRef.current
     if (!canvas) return
     const ctx = canvas.getContext('2d')
     if (!ctx) return
+    // Prevenir scroll en mobile
+    if ('touches' in e) e.preventDefault()
     isDrawing.current = true
+    const { x, y } = getCanvasCoords(e)
     ctx.beginPath()
-    const rect = canvas.getBoundingClientRect()
-    const x = 'touches' in e ? e.touches[0].clientX - rect.left : (e as React.MouseEvent).clientX - rect.left
-    const y = 'touches' in e ? e.touches[0].clientY - rect.top : (e as React.MouseEvent).clientY - rect.top
     ctx.moveTo(x, y)
+    // Dibujar un punto inicial para clicks simples
+    ctx.lineTo(x + 0.1, y + 0.1)
+    ctx.stroke()
   }
   const moverDibujo = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
     if (!isDrawing.current) return
@@ -3434,16 +3476,16 @@ function FlujoFirmaClient({
     if (!canvas) return
     const ctx = canvas.getContext('2d')
     if (!ctx) return
-    const rect = canvas.getBoundingClientRect()
-    const x = 'touches' in e ? e.touches[0].clientX - rect.left : (e as React.MouseEvent).clientX - rect.left
-    const y = 'touches' in e ? e.touches[0].clientY - rect.top : (e as React.MouseEvent).clientY - rect.top
-    ctx.lineWidth = 2.5
-    ctx.lineCap = 'round'
-    ctx.strokeStyle = '#0f172a'
+    // Prevenir scroll en mobile mientras dibuja
+    if ('touches' in e) e.preventDefault()
+    const { x, y } = getCanvasCoords(e)
     ctx.lineTo(x, y)
     ctx.stroke()
+    // Actualizar preview en tiempo real para que el usuario vea que se está dibujando
+    setFirmaDibujada(canvas.toDataURL('image/png'))
   }
   const terminarDibujo = () => {
+    if (!isDrawing.current) return
     isDrawing.current = false
     const canvas = canvasRef.current
     if (canvas) setFirmaDibujada(canvas.toDataURL('image/png'))
@@ -3453,7 +3495,9 @@ function FlujoFirmaClient({
     if (!canvas) return
     const ctx = canvas.getContext('2d')
     if (!ctx) return
-    ctx.clearRect(0, 0, canvas.width, canvas.height)
+    // Repintar fondo blanco
+    ctx.fillStyle = '#ffffff'
+    ctx.fillRect(0, 0, canvas.width, canvas.height)
     setFirmaDibujada(null)
   }
 
@@ -3732,6 +3776,9 @@ function FlujoFirmaClient({
         {paso === 2 && (
           <div className="space-y-2 fade-scale">
             <Label className="text-[10px] font-semibold">Dibuja tu firma manuscrita</Label>
+            <p className="text-[9px] text-muted-foreground">
+              Usa el dedo (en móvil) o el mouse para dibujar tu firma en el recuadro blanco.
+            </p>
             <canvas
               ref={canvasRef}
               width={400}
@@ -3745,13 +3792,18 @@ function FlujoFirmaClient({
               onTouchEnd={terminarDibujo}
               className="w-full h-28 bg-white rounded-md border-2 border-violet-500/30 touch-none cursor-crosshair"
             />
-            <div className="flex gap-2">
-              <Button variant="outline" onClick={limpiarFirma} className="flex-1 h-8 text-[11px]" size="sm">
-                Limpiar
-              </Button>
-              <Button onClick={guardarFirma} disabled={!firmaDibujada || guardandoFirma} className="flex-1 h-8 text-[11px]" size="sm">
-                {guardandoFirma ? <><Loader2 className="w-3 h-3 mr-1 animate-spin" /> Guardando…</> : 'Continuar a OTP →'}
-              </Button>
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-[9px] text-muted-foreground">
+                {firmaDibujada ? '✓ Firma capturada' : 'Dibuja tu firma arriba'}
+              </span>
+              <div className="flex gap-2">
+                <Button variant="outline" onClick={limpiarFirma} className="h-8 text-[11px]" size="sm">
+                  Limpiar
+                </Button>
+                <Button onClick={guardarFirma} disabled={!firmaDibujada || guardandoFirma} className="h-8 text-[11px]" size="sm">
+                  {guardandoFirma ? <><Loader2 className="w-3 h-3 mr-1 animate-spin" /> Guardando…</> : 'Continuar a OTP →'}
+                </Button>
+              </div>
             </div>
           </div>
         )}
