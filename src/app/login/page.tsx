@@ -99,6 +99,13 @@ export default function LoginPage() {
   const [shake, setShake] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
 
+  // === RECORDAR USUARIO (no la clave) ===
+  // Persistimos únicamente el identificador en localStorage para que el usuario
+  // no tenga que tipearlo cada vez. La contraseña NUNCA se guarda: el navegador
+  // tampoco debe autocompletarla (autocomplete="off" + readOnly hasta interacción).
+  const RECORDAR_USUARIO_KEY = 'login_recordar_usuario'
+  const [recordarUsuario, setRecordarUsuario] = useState(false)
+
   // Estado de recuperación de clave por correo
   const [showRecuperar, setShowRecuperar] = useState(false)
   const [recuperarIdentificador, setRecuperarIdentificador] = useState('')
@@ -154,6 +161,24 @@ export default function LoginPage() {
 
   useEffect(() => {
     setTimeout(() => inputRef.current?.focus(), 200)
+  }, [])
+
+  // === Cargar identificador recordado al montar ===
+  // Si el usuario activó "Recordar mi usuario" en una sesión anterior, precargar
+  // el campo identificador y activar el checkbox. La contraseña NO se precarga.
+  useEffect(() => {
+    try {
+      const guardado = localStorage.getItem(RECORDAR_USUARIO_KEY)
+      if (guardado) {
+        setIdentificador(guardado)
+        setRecordarUsuario(true)
+        // Enfocar el campo de contraseña en lugar del de usuario (ya está lleno)
+        setTimeout(() => {
+          const pwEl = document.getElementById('password') as HTMLInputElement | null
+          if (pwEl) pwEl.focus()
+        }, 250)
+      }
+    } catch {}
   }, [])
 
   useEffect(() => {
@@ -218,6 +243,15 @@ export default function LoginPage() {
       // El backend /api/auth/login detecta el tipo automáticamente.
       // Si falla con "usuario no encontrado", intentar login de cliente por cédula.
       const idTrim = identificador.trim()
+
+      // === Persistir/borrar identificador recordado (SOLO usuario, NUNCA clave) ===
+      try {
+        if (recordarUsuario) {
+          localStorage.setItem(RECORDAR_USUARIO_KEY, idTrim)
+        } else {
+          localStorage.removeItem(RECORDAR_USUARIO_KEY)
+        }
+      } catch {}
 
       // Detectar si parece cédula (solo dígitos, 6-12 caracteres)
       const esCedula = /^\d{6,12}$/.test(idTrim)
@@ -792,7 +826,9 @@ export default function LoginPage() {
                       placeholder="••••••••••"
                       className="pl-10 pr-10 h-11 bg-slate-800/50 border-slate-700 text-white placeholder:text-slate-500 focus:border-indigo-500 focus:bg-slate-800/80 transition-all"
                       disabled={loading}
-                      autoComplete="current-password"
+                      autoComplete="off"
+                      name="password-off"
+                      data-lpignore="true"
                     />
                     <button
                       type="button"
@@ -804,6 +840,19 @@ export default function LoginPage() {
                     </button>
                   </div>
                 </div>
+
+                {/* === Recordar usuario (no la clave) === */}
+                <label className="flex items-center gap-2 cursor-pointer select-none group">
+                  <input
+                    type="checkbox"
+                    checked={recordarUsuario}
+                    onChange={(e) => setRecordarUsuario(e.target.checked)}
+                    className="w-4 h-4 rounded border-slate-600 bg-slate-800 text-indigo-500 focus:ring-indigo-500 focus:ring-offset-0 cursor-pointer"
+                  />
+                  <span className="text-xs text-slate-400 group-hover:text-slate-300 transition-colors">
+                    Recordar mi usuario en este dispositivo (la contraseña nunca se guarda)
+                  </span>
+                </label>
 
                 <Button
                   type="submit"

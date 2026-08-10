@@ -105,51 +105,88 @@ export default function Home() {
   const [authChecked, setAuthChecked] = useState(false)
   const [esPortalCliente, setEsPortalCliente] = useState(false)
   useEffect(() => {
-    if (!isAuthenticated()) {
-      try {
-        const qs = window.location.search || ''
-        if (qs && (qs.includes('tyc=') || qs.includes('pay=') || qs.includes('recibo=') || qs.includes('firma='))) {
-          sessionStorage.setItem('pending_redirect', `${window.location.pathname}${qs}`)
-        }
-      } catch {}
-      router.replace('/login')
-      return
-    }
-    // Si el usuario inició sesión como CLIENTE, abrir su portal directamente
-    const u = getUserData()
-    if (u?.rol === 'CLIENTE' || u?.esPortalCliente) {
-      setEsPortalCliente(true)
-      // Precargar cédula/token del localStorage (seteados por el login de cliente).
-      // FIX-LOGIN-LOOP: antes se usaba `portal_cliente_id` como cédula, pero
-      // ese valor contiene el ID interno del cliente (p.ej. "cmrskum2..."),
-      // no la cédula. El endpoint /api/portal/[cedula] espera una cédula, así
-      // que devolvía 404 y el portal quedaba cargando indefinidamente.
-      // Usamos u.username (que en el login de cliente se setea a la cédula)
-      // o u.cedula si está disponible.
-      try {
-        const tk = localStorage.getItem('portal_cliente_token')
-        const cedula = u.cedula || u.username || localStorage.getItem('portal_cliente_cedula')
-        if (cedula) setPortalCedula(cedula)
-        if (tk) setPortalToken(tk)
-      } catch {}
-      setView('portal')
-    } else {
-      // Si es usuario interno (ADMIN/GESTOR/CONSULTOR), validar que la
-      // vista inicial esté permitida para su rol/usuario. Si no, ir a la vista
-      // por defecto.
-      // Considera el bloqueo por usuario (P_jsadr → solo 'portal-admin').
-      const permitidas = vistasPermitidasUsuario(u?.username, u?.rol || reactiveRol)
-      if (permitidas.length > 0 && !permitidas.includes('prestamos' as ViewKey)) {
-        // Si el usuario está bloqueado a un portal específico, ir a ese portal
-        const vistaBloqueada = permitidas.length === 1 ? permitidas[0] : null
-        if (vistaBloqueada) {
-          setView(vistaBloqueada)
-        } else {
-          setView(vistaPorDefecto(u?.rol || reactiveRol))
+    // === Timeout de seguridad ===
+    // Si por cualquier motivo el flujo de auth queda bloqueado (token corrupto,
+    // localStorage inaccesible, excepción silenciosa, etc.), forzamos el
+    // redireccionamiento a /login después de 5 segundos. Evita el bug
+    // "Verificando sesión..." colgado indefinidamente.
+    const safetyTimeout = setTimeout(() => {
+      setAuthChecked(true)
+      if (!isAuthenticated()) {
+        try {
+          const qs = window.location.search || ''
+          if (qs && (qs.includes('tyc=') || qs.includes('pay=') || qs.includes('recibo=') || qs.includes('firma='))) {
+            sessionStorage.setItem('pending_redirect', `${window.location.pathname}${qs}`)
+          }
+        } catch {}
+        if (window.location.pathname !== '/login') {
+          window.location.href = '/login'
         }
       }
+    }, 5000)
+
+    try {
+      if (!isAuthenticated()) {
+        try {
+          const qs = window.location.search || ''
+          if (qs && (qs.includes('tyc=') || qs.includes('pay=') || qs.includes('recibo=') || qs.includes('firma='))) {
+            sessionStorage.setItem('pending_redirect', `${window.location.pathname}${qs}`)
+          }
+        } catch {}
+        router.replace('/login')
+        clearTimeout(safetyTimeout)
+        return
+      }
+      // Si el usuario inició sesión como CLIENTE, abrir su portal directamente
+      const u = getUserData()
+      if (u?.rol === 'CLIENTE' || u?.esPortalCliente) {
+        setEsPortalCliente(true)
+        // Precargar cédula/token del localStorage (seteados por el login de cliente).
+        // FIX-LOGIN-LOOP: antes se usaba `portal_cliente_id` como cédula, pero
+        // ese valor contiene el ID interno del cliente (p.ej. "cmrskum2..."),
+        // no la cédula. El endpoint /api/portal/[cedula] espera una cédula, así
+        // que devolvía 404 y el portal quedaba cargando indefinidamente.
+        // Usamos u.username (que en el login de cliente se setea a la cédula)
+        // o u.cedula si está disponible.
+        try {
+          const tk = localStorage.getItem('portal_cliente_token')
+          const cedula = u.cedula || u.username || localStorage.getItem('portal_cliente_cedula')
+          if (cedula) setPortalCedula(cedula)
+          if (tk) setPortalToken(tk)
+        } catch {}
+        setView('portal')
+      } else {
+        // Si es usuario interno (ADMIN/GESTOR/CONSULTOR), validar que la
+        // vista inicial esté permitida para su rol/usuario. Si no, ir a la vista
+        // por defecto.
+        // Considera el bloqueo por usuario (P_jsadr → solo 'portal-admin').
+        const permitidas = vistasPermitidasUsuario(u?.username, u?.rol || reactiveRol)
+        if (permitidas.length > 0 && !permitidas.includes('prestamos' as ViewKey)) {
+          // Si el usuario está bloqueado a un portal específico, ir a ese portal
+          const vistaBloqueada = permitidas.length === 1 ? permitidas[0] : null
+          if (vistaBloqueada) {
+            setView(vistaBloqueada)
+          } else {
+            setView(vistaPorDefecto(u?.rol || reactiveRol))
+          }
+        }
+      }
+      setAuthChecked(true)
+      clearTimeout(safetyTimeout)
+    } catch (err) {
+      // Si ocurre cualquier excepción durante el check, limpiar auth y
+      // redirigir a login para evitar pantalla en blanco.
+      clearTimeout(safetyTimeout)
+      try {
+        localStorage.removeItem('access_token')
+        localStorage.removeItem('refresh_token')
+        localStorage.removeItem('user_data')
+      } catch {}
+      setAuthChecked(true)
+      if (window.location.pathname !== '/login') {
+        window.location.href = '/login'
+      }
     }
-    setAuthChecked(true)
   }, [router, reactiveRol])
 
   // === GUARDIA DE PERMISOS POR VISTA ===
