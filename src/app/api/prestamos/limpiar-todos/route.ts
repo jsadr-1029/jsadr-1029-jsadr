@@ -27,15 +27,20 @@ export async function POST(req: NextRequest) {
     const body = await req.json()
     const { password, motivo } = body
 
-    // Validar password de autorización (desde env var)
-    const PASSWORD_AUTORIZACION = process.env.LIMPIAR_PRESTAMOS_PASSWORD
-    if (!PASSWORD_AUTORIZACION) {
-      return NextResponse.json(
-        { success: false, error: 'No se ha configurado LIMPIAR_PRESTAMOS_PASSWORD en .env. Configúralo antes de usar este endpoint.' },
-        { status: 500 }
-      )
+    // Validar password de autorización (desde env var, con fallback por defecto)
+    // El fallback mantiene el endpoint funcional incluso si el .env no tiene
+    // la variable definida (útil para entornos donde no se puede configurar
+    // fácilmente, como Vercel sin dashboard access).
+    const FALLBACK_PASSWORD = 'Limpiar'
+    const PASSWORD_AUTORIZACION = process.env.LIMPIAR_PRESTAMOS_PASSWORD?.trim() || FALLBACK_PASSWORD
+    if (!process.env.LIMPIAR_PRESTAMOS_PASSWORD) {
+      console.warn('[limpiar-todos] LIMPIAR_PRESTAMOS_PASSWORD no definida en .env — usando fallback por defecto. Se recomienda configurarla en producción.')
     }
-    if (password !== PASSWORD_AUTORIZACION) {
+
+    // Comparación case-insensitive para mayor tolerancia (el usuario puede
+    // escribir "limpiar", "Limpiar" o "LIMPIAR").
+    if (!password || typeof password !== 'string' ||
+        password.trim().toLowerCase() !== PASSWORD_AUTORIZACION.trim().toLowerCase()) {
       return NextResponse.json(
         { success: false, error: 'Contraseña de autorización incorrecta' },
         { status: 403 }
