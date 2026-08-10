@@ -275,85 +275,44 @@ async function verificarCedula(
 }
 
 // === CREAR PIN ===
+// POLÍTICA DE SEGURIDAD (bloqueo de creación automática):
+// Esta función está DESHABILITADA. La creación de PIN sin autorización
+// permite a任何人 "crear" credenciales para una cédula sin verificación.
+// Las credenciales SOLO las puede crear:
+//   1. Un ADMIN/GESTOR autenticado desde el módulo de Seguridad
+//   2. El propio cliente vía enlace de recuperación enviado al correo
+// (magic link /api/auth/recuperar-clave → /api/auth/restablecer-clave)
 async function crearPin(
   req: NextRequest,
   body: any,
   clientInfo: { ip: string; userAgent: string }
 ) {
-  const { cedula, pin, confirmarPin } = body
-
-  if (!cedula || !pin || !confirmarPin) {
-    return NextResponse.json(
-      { success: false, error: 'Cédula, PIN y confirmación son requeridos', code: 'MISSING_FIELDS' },
-      { status: 400 }
-    )
-  }
-
-  if (pin !== confirmarPin) {
-    return NextResponse.json(
-      { success: false, error: 'Los PINs no coinciden', code: 'PIN_MISMATCH' },
-      { status: 400 }
-    )
-  }
-
-  // Validar PIN: 4-6 dígitos numéricos + política de fortaleza
-  const fortaleza = validarFortalezaPin(pin)
-  if (!fortaleza.valido) {
-    return NextResponse.json(
-      { success: false, error: fortaleza.motivo, code: 'WEAK_PIN' },
-      { status: 400 }
-    )
-  }
-
-  const cliente = await getClienteByCedula(cedula)
-  if (!cliente) {
-    return NextResponse.json(
-      { success: false, error: 'Cliente no encontrado', code: 'NOT_FOUND' },
-      { status: 404 }
-    )
-  }
-
-  // Verificar si ya tiene PIN
-  const existente = await getOrCreateClientePin(cedula)
-  if (existente) {
-    return NextResponse.json(
-      { success: false, error: 'Ya tiene un PIN configurado. Use cambiar_pin.', code: 'PIN_EXISTS' },
-      { status: 400 }
-    )
-  }
-
-  const pinHash = await bcrypt.hash(pin, BCRYPT_ROUNDS)
-
-  // Reforzado: registrar fecha de creación para expiración a 90 días
-  await db.configuracion.create({
-    data: {
-      clave: `PORTAL_PIN_${cedula}`,
-      valor: JSON.stringify({
-        pinHash,
+  const { cedula } = body
+  // Registrar intento en bitácora
+  try {
+    const cliente = await getClienteByCedula(cedula)
+    if (cliente) {
+      await registrarAccesoPortal({
         clienteId: cliente.id,
-        intentosFallidos: 0,
-        bloqueadoHasta: null,
-        createdAt: new Date().toISOString(),
-        pinUpdatedAt: new Date().toISOString(), // Reforzado: para expiración
-      }),
-      descripcion: 'PIN del portal del cliente',
+        clienteCedula: cliente.cedula,
+        clienteNombre: cliente.nombre,
+        ipOrigen: clientInfo.ip,
+        userAgent: clientInfo.userAgent,
+        accion: 'CREAR_PIN',
+        exito: false,
+        detalle: 'Bloqueado: la creación automática de PIN está deshabilitada. Debe ser creada por un administrador o vía enlace de recuperación.',
+      })
+    }
+  } catch {}
+  return NextResponse.json(
+    {
+      success: false,
+      error:
+        'La creación automática de PIN está deshabilitada por seguridad. Contacta al administrador para que cree tus credenciales, o usa la opción "Olvidé mi clave" para recibirla por correo.',
+      code: 'CREAR_PIN_BLOQUEADO',
     },
-  })
-
-  await registrarAccesoPortal({
-    clienteId: cliente.id,
-    clienteCedula: cliente.cedula,
-    clienteNombre: cliente.nombre,
-    ipOrigen: clientInfo.ip,
-    userAgent: clientInfo.userAgent,
-    accion: 'CREAR_PIN',
-    exito: true,
-  })
-
-  return NextResponse.json({
-    success: true,
-    message: 'PIN creado exitosamente. Ahora puede iniciar sesión.',
-  })
+    { status: 403 }
+  )
 }
 
 // === LOGIN ===

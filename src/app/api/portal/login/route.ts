@@ -227,30 +227,17 @@ export async function POST(req: NextRequest) {
     // =====================================================
     // === Legacy: Login con PIN ===
     // =====================================================
-
-    // Si no tiene PIN, crearlo (primer acceso)
+    // POLÍTICA DE SEGURIDAD (bloqueo de creación automática):
+    // Antes, si el cliente no tenía pinHash, el sistema lo creaba
+    // automáticamente con cualquier PIN que el usuario escribiera.
+    // Esto permitía a cualquiera "crear" credenciales para una cédula
+    // sin autorización. Ahora se rechaza: las credenciales SOLO las
+    // puede crear/modificar:
+    //   1. Un ADMIN/GESTOR autenticado desde el módulo de Seguridad
+    //   2. El propio cliente vía enlace de recuperación enviado al correo
+    // El login con PIN legacy se mantiene solo para clientes que ya
+    // tienen pinHash (creado por un admin anteriormente).
     if (!cliente.pinHash) {
-      const pinHash = bcrypt.hashSync(pin, 10)
-      await db.cliente.update({
-        where: { id: cliente.id },
-        data: { pinHash, pinCreatedAt: new Date(), pinIntentos: 0 },
-      })
-      // Login exitoso
-      const token = generateToken(32)
-      // Sesión extendida a 8 horas (antes 2h) — evita cierre de sesión inesperado
-      // durante simulación/firma. Solo se cierra por logout explícito o inactividad
-      // prolongada. Ver también /api/portal/auth (SESSION_EXPIRY_HOURS).
-      const tokenExpira = new Date(Date.now() + 8 * 60 * 60 * 1000) // 8h
-      await db.cliente.update({
-        where: { id: cliente.id },
-        data: {
-          tokenSesion: token,
-          tokenExpira,
-          ultimoAccesoPortal: new Date(),
-          pinIntentos: 0,
-        },
-      })
-
       await db.accesoPortal.create({
         data: {
           clienteId: cliente.id,
@@ -259,18 +246,20 @@ export async function POST(req: NextRequest) {
           ipOrigen: clientInfo.ip,
           userAgent: clientInfo.userAgent,
           accion: 'LOGIN_PIN',
-          exito: true,
-          detalle: 'PIN creado y sesión iniciada',
+          exito: false,
+          detalle: 'Rechazado: el cliente no tiene PIN registrado. Debe ser creado por un administrador.',
         },
       })
 
-      return NextResponse.json({
-        success: true,
-        token,
-        clienteId: cliente.id,
-        nombre: cliente.nombre,
-        nuevoPin: true,
-      })
+      return NextResponse.json(
+        {
+          success: false,
+          codigo: 'SIN_PIN_REGISTRADO',
+          error:
+            'Tu cuenta no tiene PIN registrado. Contacta al administrador para que cree tus credenciales, o usa la opción "Olvidé mi clave" para recibirla por correo.',
+        },
+        { status: 403 }
+      )
     }
 
     // === v4.10 (QA M07 TC-PORT-003): bloqueo a los 5 intentos (estándar) ===
