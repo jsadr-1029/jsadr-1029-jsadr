@@ -2199,3 +2199,54 @@ model AprendizajeBot {
   @@index([estado])
   @@index([createdAt])
 }
+
+// =====================================================
+// PLANTILLAS — Mensajes editables para Email y WhatsApp
+// =====================================================
+// Plantillas centralizadas de todos los mensajes que el sistema
+// envía a los clientes (correo electrónico y WhatsApp).
+//
+// El administrador puede editar, crear, activar/desactivar y
+// eliminar plantillas desde el módulo Administración → Plantillas.
+//
+// Las plantillas con `sistema=true` son plantillas base que no
+// pueden eliminarse (solo editarse), para garantizar que el
+// sistema siempre tenga un mensaje por defecto para cada evento.
+//
+// Variables: se usan marcadores {{variable}} que son reemplazados
+// al momento de enviar. La lista de variables disponibles está en
+// el campo `variables` (JSON array de strings).
+// =====================================================
+model Plantilla {
+  id              String   @id @default(cuid())
+  // Código único de la plantilla (ej: SOLICITUD_PRESTAMO, RECORDATORIO_PAGO)
+  codigo          String   @unique
+  // Nombre legible para mostrar en la UI
+  nombre          String
+  // Tipo de canal: EMAIL | WHATSAPP
+  tipo            String
+  // Categoría agrupadora (ej: PRÉSTAMOS, PAGOS, FIRMA, SEGURIDAD, GENERAL)
+  categoria       String   @default("GENERAL")
+  // Descripción helper para el admin
+  descripcion     String?
+  // Asunto del correo (solo para EMAIL, null para WHATSAPP)
+  asunto          String?
+  // Contenido en texto plano (con marcadores {{variable}})
+  contenido       String
+  // Contenido HTML opcional (solo para EMAIL)
+  contenidoHtml   String?
+  // Lista de variables disponibles (JSON array de strings, ej: ["clienteNombre","codigo","monto"])
+  variables       String   @default("[]")
+  // ¿Es plantilla del sistema? (no se puede eliminar, solo editar)
+  sistema         Boolean  @default(false)
+  // ¿Está activa? Si false, no se usa al enviar (se cae al fallback)
+  activa          Boolean  @default(true)
+  // Evento que dispara esta plantilla (ej: prestamo.solicitud, pago.recordatorio, firma.solicitada)
+  evento          String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([tipo, activa])
+  @@index([categoria])
+  @@index([evento])
+}

@@ -419,7 +419,18 @@ async function enviarOTP(prestamoId: string, body: any) {
 
   let envioEmail: any = null
   if ((canalFinal === 'EMAIL' || canalFinal === 'AMBOS') && prestamo.cliente.email) {
-    envioEmail = await enviarEmail({ to: prestamo.cliente.email, subject: `Código de Verificación - Préstamo ${prestamo.codigo}`, text: `Tu código es: ${otp}`, html: `<div style="font-size:36px;font-weight:bold;color:#1e40af;text-align:center;padding:20px;">${otp}</div><p>Expira en 5 minutos.</p>` })
+    // Intentar primero con plantilla editable de BD; fallback a inline
+    const { enviarEmailPlantilla } = await import('@/lib/plantillas')
+    const tplResult = await enviarEmailPlantilla('OTP_EMAIL', prestamo.cliente.email, {
+      clienteNombre: prestamo.cliente.nombre,
+      otp,
+      prestamoCodigo: prestamo.codigo,
+    })
+    if (tplResult.success && tplResult.usadaPlantilla) {
+      envioEmail = tplResult
+    } else {
+      envioEmail = await enviarEmail({ to: prestamo.cliente.email, subject: `Código de Verificación - Préstamo ${prestamo.codigo}`, text: `Tu código es: ${otp}`, html: `<div style="font-size:36px;font-weight:bold;color:#1e40af;text-align:center;padding:20px;">${otp}</div><p>Expira en 5 minutos.</p>` })
+    }
   }
 
   return NextResponse.json({ success: true, data: { firmaId: firma.id, otpEnviado: true, canal: canalFinal, segundosRestantes: 300, emailDestino: prestamo.cliente.email || null, telefonoDestino: prestamo.cliente.telefono, whatsapp: envioWhatsApp, email: envioEmail }, mensaje: `Código enviado por ${canalFinal === 'WHATSAPP' ? 'WhatsApp' : canalFinal === 'EMAIL' ? 'correo' : 'WhatsApp y correo'}.` })

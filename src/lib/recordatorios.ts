@@ -25,6 +25,7 @@ import { db } from '@/lib/db'
 import { enviarEmail } from '@/lib/email'
 import { enviarWhatsApp, mensajeRecordatorioPago, guardarNotificacion } from '@/lib/whatsapp'
 import { formatearMoneda, formatearFecha } from '@/lib/finanzas'
+import { enviarEmailPlantilla, enviarWhatsappPlantilla } from '@/lib/plantillas'
 
 export interface ResultadoRecordatorio {
   totalCuotasProcesadas: number
@@ -137,23 +138,45 @@ export async function enviarRecordatoriosPago(): Promise<ResultadoRecordatorio> 
 
       // === Enviar WhatsApp si la preferencia es WHATSAPP o AMBOS ===
       if (pref === 'WHATSAPP' || pref === 'AMBOS') {
-        const mensaje = mensajeRecordatorioPago({
-          nombreCliente: cliente.nombre,
-          codigoPrestamo: prestamo.codigo || '',
-          montoCuota: pago.montoTotal,
-          fechaVencimiento: formatearFecha(pago.fechaVencimiento),
-          diasRestantes: Math.max(0, diasRestantes),
-        })
+        // Intentar primero con plantilla editable de BD; fallback a mensajeRecordatorioPago()
+        const tplResult = await enviarWhatsappPlantilla(
+          'RECORDATORIO_PAGO_WA',
+          cliente.telefono,
+          {
+            clienteNombre: cliente.nombre,
+            prestamoCodigo: prestamo.codigo || '',
+            montoCuota: pago.montoTotal,
+            numeroCuota: pago.numeroCuota,
+            totalCuotas: prestamo.numeroCuotas,
+            fechaVencimiento: pago.fechaVencimiento,
+            diasRestantes,
+          },
+          { prestamoId: prestamo.id, guardarLog: true }
+        )
 
-        const envioWa = await enviarWhatsApp(cliente.telefono, mensaje)
-        await guardarNotificacion({
-          db,
-          prestamoId: prestamo.id,
-          telefono: cliente.telefono,
-          tipo: 'RECORDATORIO',
-          mensaje,
-          envio: envioWa,
-        })
+        let mensaje = ''
+        if (tplResult.success && tplResult.usadaPlantilla) {
+          // Plantilla de BD usada — el log ya se guardó dentro de enviarWhatsappPlantilla
+          mensaje = '(plantilla BD)'
+        } else {
+          // Fallback: usar función legacy
+          mensaje = mensajeRecordatorioPago({
+            nombreCliente: cliente.nombre,
+            codigoPrestamo: prestamo.codigo || '',
+            montoCuota: pago.montoTotal,
+            fechaVencimiento: formatearFecha(pago.fechaVencimiento),
+            diasRestantes: Math.max(0, diasRestantes),
+          })
+          const envioWa = await enviarWhatsApp(cliente.telefono, mensaje)
+          await guardarNotificacion({
+            db,
+            prestamoId: prestamo.id,
+            telefono: cliente.telefono,
+            tipo: 'RECORDATORIO',
+            mensaje,
+            envio: envioWa,
+          })
+        }
         mediosEnviados.push('WhatsApp')
         resultado.whatsappGenerados++
       }
@@ -161,27 +184,50 @@ export async function enviarRecordatoriosPago(): Promise<ResultadoRecordatorio> 
       // === Enviar Email si la preferencia es EMAIL o AMBOS ===
       if (pref === 'EMAIL' || pref === 'AMBOS') {
         if (cliente.email) {
-          const asunto = `⏰ Recordatorio: tu cuota vence ${diasRestantes === 0 ? 'hoy' : 'mañana'}`
-          const html = generarHtmlRecordatorioEmail({
-            nombreCliente: cliente.nombre,
-            codigoPrestamo: prestamo.codigo || '',
-            montoCuota: pago.montoTotal,
-            fechaVencimiento: pago.fechaVencimiento,
-            diasRestantes,
-          })
+          const diasRestantesTexto = diasRestantes === 0 ? 'hoy' : 'mañana'
+          // Intentar primero con plantilla editable de BD; fallback a HTML local
+          const tplResult = await enviarEmailPlantilla(
+            'RECORDATORIO_PAGO_EMAIL',
+            cliente.email,
+            {
+              clienteNombre: cliente.nombre,
+              prestamoCodigo: prestamo.codigo || '',
+              montoCuota: pago.montoTotal,
+              numeroCuota: pago.numeroCuota,
+              totalCuotas: prestamo.numeroCuotas,
+              fechaVencimiento: pago.fechaVencimiento,
+              diasRestantesTexto,
+              diasRestantes,
+            }
+          )
 
-          const envioEmail = await enviarEmail({
-            to: cliente.email,
-            subject: asunto,
-            text: `Hola ${cliente.nombre}, te recordamos que tu cuota ${pago.numeroCuota} del préstamo ${prestamo.codigo} por ${formatearMoneda(pago.montoTotal)} vence el ${formatearFecha(pago.fechaVencimiento)}. Evita moratorios pagando a tiempo.`,
-            html,
-          })
-
-          if (envioEmail.success) {
+          if (tplResult.success && tplResult.usadaPlantilla) {
             mediosEnviados.push('Email')
             resultado.emailsEnviados++
           } else {
-            resultado.errores.push(`Email fallido a ${cliente.email} (${cliente.nombre}): ${envioEmail.error || 'desconocido'}`)
+            // Fallback: usar HTML local
+            const asunto = `⏰ Recordatorio: tu cuota vence ${diasRestantesTexto}`
+            const html = generarHtmlRecordatorioEmail({
+              nombreCliente: cliente.nombre,
+              codigoPrestamo: prestamo.codigo || '',
+              montoCuota: pago.montoTotal,
+              fechaVencimiento: pago.fechaVencimiento,
+              diasRestantes,
+            })
+
+            const envioEmail = await enviarEmail({
+              to: cliente.email,
+              subject: asunto,
+              text: `Hola ${cliente.nombre}, te recordamos que tu cuota ${pago.numeroCuota} del préstamo ${prestamo.codigo} por ${formatearMoneda(pago.montoTotal)} vence el ${formatearFecha(pago.fechaVencimiento)}. Evita moratorios pagando a tiempo.`,
+              html,
+            })
+
+            if (envioEmail.success) {
+              mediosEnviados.push('Email')
+              resultado.emailsEnviados++
+            } else {
+              resultado.errores.push(`Email fallido a ${cliente.email} (${cliente.nombre}): ${envioEmail.error || 'desconocido'}`)
+            }
           }
         } else {
           resultado.errores.push(`Cliente ${cliente.nombre} (${cliente.cedula}) sin email, no se pudo enviar recordatorio por correo.`)

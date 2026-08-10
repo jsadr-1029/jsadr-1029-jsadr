@@ -47,11 +47,13 @@ import {
   QrCode,
   Upload,
   Trash2,
+  FileText,
 } from 'lucide-react'
 import { BotIcons } from '@/components/views/BotIcons'
 import { ReportesUnificadoView } from '@/components/views/ReportesUnificadoView'
 import { ExportarView } from '@/components/views/ExportarView'
 import { ContabilidadUnificadaView } from '@/components/views/ContabilidadUnificadaView'
+import { PlantillasPanel } from '@/components/views/PlantillasPanel'
 
 export function AdminView({ onChanged }: { onChanged: () => void }) {
   const [tab, setTab] = useState('reportes')
@@ -81,7 +83,7 @@ export function AdminView({ onChanged }: { onChanged: () => void }) {
 
       <Tabs value={tab} onValueChange={setTab}>
         {/* FIX MOBILE (2026-08-05): TabsList horizontal con scroll en móvil, grid en desktop */}
-        <TabsList className="flex overflow-x-auto whitespace-nowrap md:grid md:grid-cols-6 w-full no-scrollbar">
+        <TabsList className="flex overflow-x-auto whitespace-nowrap md:grid md:grid-cols-7 w-full no-scrollbar">
           <TabsTrigger value="reportes">
             <BarChart3 className="w-4 h-4 mr-1.5" />
             <span className="hidden sm:inline">Reportes</span>
@@ -101,6 +103,10 @@ export function AdminView({ onChanged }: { onChanged: () => void }) {
           <TabsTrigger value="contabilidad">
             <Calculator className="w-4 h-4 mr-1.5" />
             <span className="hidden sm:inline">Contabilidad y Plan</span>
+          </TabsTrigger>
+          <TabsTrigger value="plantillas">
+            <FileText className="w-4 h-4 mr-1.5" />
+            <span className="hidden sm:inline">Plantillas</span>
           </TabsTrigger>
           <TabsTrigger value="exportar">
             <Download className="w-4 h-4 mr-1.5" />
@@ -122,6 +128,9 @@ export function AdminView({ onChanged }: { onChanged: () => void }) {
         </TabsContent>
         <TabsContent value="contabilidad">
           <ContabilidadUnificadaView />
+        </TabsContent>
+        <TabsContent value="plantillas">
+          <PlantillasPanel />
         </TabsContent>
         <TabsContent value="exportar">
           <ExportarView />
