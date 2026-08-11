@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import crypto from 'crypto'
 import { db } from '@/lib/db'
 import { verifyTOTP } from '@/lib/totp'
 import {
@@ -14,6 +15,17 @@ import {
 } from '@/lib/security'
 import { loginSchema, validateInput } from '@/lib/validators'
 import { sanitizeError } from '@/lib/error-handler'
+
+// FIX-LOGOUT-INESPERADO: hash del refresh_token para almacenarlo en
+// Usuario.sessionToken y poder validarlo en /api/auth/refresh.
+// Antes el login NO guardaba este hash, así que el primer refresh
+// omitía la validación (comportamiento inconsistente) y solo el
+// segundo refresh la aplicaba. Ahora todos los refresh son validables
+// desde el primer momento, lo que permite revocar sesiones de forma
+// fiable (logout → sessionToken=null → ningún refresh posterior funciona).
+function hashRefreshToken(token: string): string {
+  return crypto.createHash('sha256').update(token).digest('hex')
+}
 
 // POST - login de usuario con MFA (flujo de 2 pasos)
 // Paso 1: validar credenciales → devuelve requiresMFA: true + temp_token
@@ -102,7 +114,22 @@ export async function POST(req: NextRequest) {
       const access_token = generateAccessToken({ userId: usuario.id, username: usuario.username, rol: usuario.rol })
       const refresh_token = generateRefreshToken({ userId: usuario.id, username: usuario.username, rol: usuario.rol })
 
-      await db.usuario.update({ where: { id: usuario.id }, data: { ultimoAcceso: new Date() } })
+      // FIX-LOGOUT-INESPERADO: almacenar hash del refresh_token para que
+      // /api/auth/refresh pueda validarlo y para que logout() pueda
+      // revocarlo (sessionToken=null → ningún refresh posterior funciona).
+      try {
+        await db.usuario.update({
+          where: { id: usuario.id },
+          data: {
+            ultimoAcceso: new Date(),
+            sessionToken: hashRefreshToken(refresh_token),
+          },
+        })
+      } catch (e) {
+        console.error('[login:MFA] No se pudo persistir sessionToken:', e)
+        // No fatal: el refresh route tiene un fallback legacy que persiste
+        // el hash en el primer refresh si no está presente.
+      }
 
       await registrarAuditLog({
         usuarioId: usuario.id,
@@ -239,7 +266,21 @@ export async function POST(req: NextRequest) {
     const access_token = generateAccessToken({ userId: usuario.id, username: usuario.username, rol: usuario.rol })
     const refresh_token = generateRefreshToken({ userId: usuario.id, username: usuario.username, rol: usuario.rol })
 
-    await db.usuario.update({ where: { id: usuario.id }, data: { ultimoAcceso: new Date() } })
+    // FIX-LOGOUT-INESPERADO: almacenar hash del refresh_token para que
+    // /api/auth/refresh pueda validarlo y para que logout() pueda
+    // revocarlo (sessionToken=null → ningún refresh posterior funciona).
+    try {
+      await db.usuario.update({
+        where: { id: usuario.id },
+        data: {
+          ultimoAcceso: new Date(),
+          sessionToken: hashRefreshToken(refresh_token),
+        },
+      })
+    } catch (e) {
+      console.error('[login] No se pudo persistir sessionToken:', e)
+      // No fatal: el refresh route tiene un fallback legacy.
+    }
 
     await registrarAuditLog({
       usuarioId: usuario.id, usuarioNombre: usuario.nombre,

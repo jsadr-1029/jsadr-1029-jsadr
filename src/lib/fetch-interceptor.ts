@@ -3,25 +3,35 @@
 // a todas las peticiones fetch hacia /api/*
 // Maneja expiración de token con refresh automático
 // =====================================================
+//
+// FIX-LOGOUT-INESPERADO: este interceptor ahora delega el refresh en
+// el coordinador central `src/lib/token-refresh.ts`, que tiene:
+//   - Single-flight local (una sola llamada HTTP a la vez por pestaña)
+//   - Coordinación cross-tab vía BroadcastChannel
+//   - Backoff tras fallo (no reintenta en 5 s)
+// Esto elimina los race conditions que provocaban cierres de sesión
+// inesperados cuando múltiples llamadas API recibían 401 a la vez.
+// =====================================================
+
+import {
+  refreshTokens,
+  clearAuthLocal,
+  isAccessTokenExpired,
+  installCrossTabRefreshListener,
+} from '@/lib/token-refresh'
 
 const TOKEN_KEY = 'access_token'
-const REFRESH_KEY = 'refresh_token'
-const USER_KEY = 'user_data'
-
-// FIX-LOGIN-LOOP: prefijo que se usa cuando el "access_token" en realidad
-// es un token de portal de cliente (no es un JWT). Lo setea /api/portal/login
-// en login/page.tsx con: setTokens('portal_cliente_' + token, ...).
-// Estos tokens NO son JWT, no se pueden parsear, no se pueden refrescar con
-// /api/auth/refresh, y NO deben ser añadidos como Authorization: Bearer.
 const PORTAL_TOKEN_PREFIX = 'portal_cliente_'
 
 let interceptorInstalled = false
-let isRefreshing = false
-let refreshPromise: Promise<string | null> | null = null
 
 export function installFetchInterceptor() {
   if (interceptorInstalled) return
   if (typeof window === 'undefined') return
+
+  // FIX-LOGOUT-INESPERADO: instalar el listener de coordinación cross-tab
+  // para que esta pestaña se sincronice con otras al refrescar tokens.
+  installCrossTabRefreshListener()
 
   const originalFetch = window.fetch
 
@@ -34,8 +44,12 @@ export function installFetchInterceptor() {
       return originalFetch.call(window, input, init)
     }
 
-    // No interceptar login o refresh
-    if (url.includes('/api/auth/login') || url.includes('/api/auth/refresh')) {
+    // No interceptar login, refresh ni logout
+    if (
+      url.includes('/api/auth/login') ||
+      url.includes('/api/auth/refresh') ||
+      url.includes('/api/auth/logout')
+    ) {
       return originalFetch.call(window, input, init)
     }
 
@@ -75,15 +89,17 @@ export function installFetchInterceptor() {
       return originalFetch.call(window, input, newInit)
     }
 
-    // Verificar si el token está expirado antes de usarlo
-    if (token && isTokenExpired(token)) {
-      // Intentar refresh
-      const newToken = await tryRefreshToken()
-      if (newToken) {
-        token = newToken
+    // Verificar si el token está expirado antes de usarlo.
+    // FIX-LOGOUT-INESPERADO: usar el helper del coordinador central para
+    // mantener consistencia con apiFetch.
+    if (token && isAccessTokenExpired(token)) {
+      // Intentar refresh (con single-flight + coordinación cross-tab)
+      const refreshed = await refreshTokens()
+      if (refreshed) {
+        token = localStorage.getItem(TOKEN_KEY)
       } else {
         // No se pudo refrescar, limpiar y redirigir a login
-        clearAuth()
+        clearAuthLocal()
         if (window.location.pathname !== '/login') {
           window.location.href = '/login'
         }
@@ -114,15 +130,20 @@ export function installFetchInterceptor() {
 
     // Si el token expiró (401), intentar refresh y reintentar
     if (response.status === 401 && token) {
-      const newToken = await tryRefreshToken()
-      if (newToken) {
-        // Reintentar con nuevo token
-        headers.set('Authorization', `Bearer ${newToken}`)
-        newInit.headers = headers
-        return originalFetch.call(window, input, newInit)
+      // FIX-LOGOUT-INESPERADO: usar el coordinador central (single-flight +
+      // cross-tab) en vez del tryRefreshToken local que estaba aquí antes.
+      const refreshed = await refreshTokens()
+      if (refreshed) {
+        const newToken = localStorage.getItem(TOKEN_KEY)
+        if (newToken) {
+          // Reintentar con nuevo token
+          headers.set('Authorization', `Bearer ${newToken}`)
+          newInit.headers = headers
+          return originalFetch.call(window, input, newInit)
+        }
       }
       // Si no se pudo refrescar, limpiar auth y redirigir
-      clearAuth()
+      clearAuthLocal()
       if (window.location.pathname !== '/login') {
         window.location.href = '/login'
       }
@@ -132,78 +153,4 @@ export function installFetchInterceptor() {
   }
 
   interceptorInstalled = true
-}
-
-// Verificar si un token JWT está expirado
-function isTokenExpired(token: string): boolean {
-  try {
-    const parts = token.split('.')
-    if (parts.length !== 3) return true
-    const payload = JSON.parse(atob(parts[1]))
-    if (!payload.exp) return false
-    const now = Math.floor(Date.now() / 1000)
-    // Considerar expirado si faltan menos de 30 segundos
-    return now >= (payload.exp - 30)
-  } catch {
-    return true
-  }
-}
-
-// Intentar refrescar el token
-async function tryRefreshToken(): Promise<string | null> {
-  // Si ya estamos refrescando, esperar a que termine
-  if (isRefreshing && refreshPromise) {
-    return refreshPromise
-  }
-
-  const refreshToken = localStorage.getItem(REFRESH_KEY)
-  if (!refreshToken) return null
-
-  isRefreshing = true
-  refreshPromise = (async () => {
-    try {
-      const res = await fetch('/api/auth/refresh', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ refresh_token: refreshToken }),
-      })
-      if (!res.ok) return null
-      const data = await res.json()
-      if (data.success && data.data?.access_token) {
-        localStorage.setItem(TOKEN_KEY, data.data.access_token)
-        if (data.data.refresh_token) {
-          localStorage.setItem(REFRESH_KEY, data.data.refresh_token)
-        }
-        return data.data.access_token
-      }
-      return null
-    } catch {
-      return null
-    } finally {
-      isRefreshing = false
-      refreshPromise = null
-    }
-  })()
-
-  return refreshPromise
-}
-
-function clearAuth() {
-  localStorage.removeItem(TOKEN_KEY)
-  localStorage.removeItem(REFRESH_KEY)
-  localStorage.removeItem(USER_KEY)
-  // FIX-LOGIN-LOOP: limpiar también tokens de portal cliente y jurídico.
-  localStorage.removeItem('portal_cliente_token')
-  localStorage.removeItem('portal_cliente_id')
-  localStorage.removeItem('portal_cliente_nombre')
-  localStorage.removeItem('portal_cliente_cedula')
-  localStorage.removeItem('juridico_token')
-  localStorage.removeItem('juridico_user')
-  // Notificar a la UI que el estado de auth cambió, para que
-  // UserMenu/Sidebar actualicen el rol mostrado inmediatamente
-  // (en lugar de seguir mostrando "Administrador" cuando la sesión
-  // ya se borró).
-  try {
-    window.dispatchEvent(new CustomEvent('auth:changed'))
-  } catch {}
 }

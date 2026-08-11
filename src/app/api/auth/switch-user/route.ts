@@ -22,6 +22,7 @@
 // =====================================================
 
 import { NextRequest, NextResponse } from 'next/server'
+import crypto from 'crypto'
 import { db } from '@/lib/db'
 import {
   generateAccessToken,
@@ -31,6 +32,12 @@ import {
 } from '@/lib/security'
 import { getAuthUser } from '@/lib/auth-guard'
 import { sanitizeError } from '@/lib/error-handler'
+
+// FIX-LOGOUT-INESPERADO: hash del refresh_token para almacenarlo en
+// Usuario.sessionToken y que /api/auth/refresh pueda validarlo.
+function hashRefreshToken(token: string): string {
+  return crypto.createHash('sha256').update(token).digest('hex')
+}
 
 const ROLES_IMPONIBLES = ['GESTOR', 'CONSULTOR', 'ADMIN']
 
@@ -128,11 +135,22 @@ export async function POST(req: NextRequest) {
     const access_token = generateAccessToken(tokenPayload)
     const refresh_token = generateRefreshToken(tokenPayload)
 
-    // 5. Actualizar último acceso del usuario destino
-    await db.usuario.update({
-      where: { id: objetivo.id },
-      data: { ultimoAcceso: new Date() },
-    })
+    // 5. Actualizar último acceso del usuario destino y almacenar hash del
+    //    refresh_token para validación posterior en /api/auth/refresh.
+    //    FIX-LOGOUT-INESPERADO: sin esto, el refresh route no puede validar
+    //    que el token presentado coincida con la sesión activa, lo que
+    //    hace imposible revocar sesiones impersonadas.
+    try {
+      await db.usuario.update({
+        where: { id: objetivo.id },
+        data: {
+          ultimoAcceso: new Date(),
+          sessionToken: hashRefreshToken(refresh_token),
+        },
+      })
+    } catch (e) {
+      console.error('[switch-user] No se pudo persistir sessionToken:', e)
+    }
 
     // 5.1 Buscar el nombre real del admin (el JWT legacy no incluye `nombre`)
     const adminDB = await db.usuario.findUnique({

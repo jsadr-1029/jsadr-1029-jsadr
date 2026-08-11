@@ -23,6 +23,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import jwt from 'jsonwebtoken'
+import crypto from 'crypto'
 import { db } from '@/lib/db'
 import {
   generateAccessToken,
@@ -31,6 +32,12 @@ import {
   getClientInfo,
 } from '@/lib/security'
 import { sanitizeError } from '@/lib/error-handler'
+
+// FIX-LOGOUT-INESPERADO: hash del refresh_token para almacenarlo en
+// Usuario.sessionToken y que /api/auth/refresh pueda validarlo.
+function hashRefreshToken(token: string): string {
+  return crypto.createHash('sha256').update(token).digest('hex')
+}
 
 function getJwtSecret(): string {
   const secret = process.env.JWT_SECRET
@@ -151,11 +158,19 @@ export async function POST(req: NextRequest) {
     const access_token = generateAccessToken(tokenPayload)
     const refresh_token = generateRefreshToken(tokenPayload)
 
-    // 7. Actualizar último acceso
-    await db.usuario.update({
-      where: { id: adminOriginal.id },
-      data: { ultimoAcceso: new Date() },
-    })
+    // 7. Actualizar último acceso y almacenar hash del refresh_token.
+    //    FIX-LOGOUT-INESPERADO: consistencia con login y switch-user.
+    try {
+      await db.usuario.update({
+        where: { id: adminOriginal.id },
+        data: {
+          ultimoAcceso: new Date(),
+          sessionToken: hashRefreshToken(refresh_token),
+        },
+      })
+    } catch (e) {
+      console.error('[switch-back] No se pudo persistir sessionToken:', e)
+    }
 
     // 8. Auditar
     await registrarAuditLog({

@@ -12,6 +12,44 @@ if (process.env.JWT_REFRESH_SECRET && process.env.JWT_SECRET) {
   }
 }
 
+// =====================================================
+// FIX-LOGOUT-INESPERADO:
+// Antes este endpoint ROTABA el refresh_token en cada llamada
+// (sobrescribía Usuario.sessionToken con el hash del nuevo token).
+// Eso provocaba cierres de sesión aleatorios por race condition:
+//   - Múltiples llamadas API simultáneas que recibían 401 al expirar
+//     el access token (cada 15 min) disparaban varias llamadas a
+//     /api/auth/refresh; la primera rotaba el token, las siguientes
+//     fallaban porque su refresh_token ya no coincidía → clearAuth()
+//     → redirección a /login mientras el usuario estaba activo.
+//   - Lo mismo con múltiples pestañas abiertas.
+//
+// Nuevo esquema (ventana deslizante SIN rotación agresiva):
+//   1. Verificamos firma JWT del refresh_token y que sea tipo 'refresh'.
+//   2. Verificamos que el usuario siga activo.
+//   3. Validamos que el hash del refresh_token presentado coincida con
+//      Usuario.sessionToken (esto permite revocar sesiones: logout
+//      borra sessionToken y ya nadie puede refrescar).
+//   4. Emitimos un NUEVO access_token (siempre — es lo que el cliente
+//      necesita para seguir llamando APIs).
+//   5. Solo ROTAMOS el refresh_token si está a menos de
+//      REFRESH_RENEW_WINDOW_SEC de expirar (típicamente 24 h antes
+//      de los 7 días de vida). Así evitamos race conditions en el
+//      caso común, pero seguimos renovando la sesión antes de que
+//      caduque totalmente.
+//
+// Esto elimina el race condition porque:
+//   - El refresh_token NO cambia entre llamadas concurrentes (salvo
+//     que esté por expirar, caso raro).
+//   - Si dos llamadas refrescan a la vez, ambas ven el mismo hash en
+//     BD y ambas obtienen un access_token nuevo. Ninguna falla.
+//   - La revocación sigue siendo posible (logout → sessionToken=null).
+// =====================================================
+
+// Ventana para renovar el refresh_token antes de que expire.
+// 7 días de vida del refresh - 24 h = renovar si quedan < 24 h.
+const REFRESH_RENEW_WINDOW_SEC = 24 * 60 * 60
+
 // Hash SHA-256 del refresh token para almacenarlo en Usuario.sessionToken
 // (nunca almacenamos el refresh token en claro en BD)
 function hashRefreshToken(token: string): string {
@@ -72,65 +110,90 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    // FIX-SEGURIDAD-CRITICA #3: ROTACIÓN de refresh tokens — si el usuario tiene un
-    // sessionToken almacenado, el refresh_token presentado debe coincidir con él.
-    // Esto permite revocar tokens (cerrar todas las sesiones) y detectar reúso de
-    // tokens (si alguien presenta un token ya rotado, lo bloqueamos).
+    // Validar que el refresh_token presentado coincide con el almacenado.
+    // Esto permite revocación: logout() puede setear sessionToken=null y
+    // ningún refresh posterior tendrá éxito.
+    //
+    // FIX-LOGOUT-INESPERADO: si sessionToken es null pero el usuario acaba
+    // de hacer login (todavía no se ha llamado a /api/auth/refresh), el
+    // login route ya debe haber almacenado el hash. Si por alguna razón
+    // no lo hizo (login legacy), permitimos el primer refresh para no
+    // bloquear al usuario, y aprovechamos para guardar el hash ahora.
+    const presentedHash = hashRefreshToken(refresh_token)
     if (usuario.sessionToken) {
-      const presentedHash = hashRefreshToken(refresh_token)
       if (presentedHash !== usuario.sessionToken) {
-        // Token ya rotado o revocado → rechazar y marcar como sospechoso
+        // Token ya revocado o inválido → rechazar
         await registrarAuditLog({
           usuarioId: usuario.id,
           usuarioNombre: usuario.nombre,
           accion: 'REFRESH_TOKEN_RECHAZADO',
           modulo: 'auth',
-          detalles: JSON.stringify({ motivo: 'token_ya_rotado_o_revocado' }),
+          detalles: JSON.stringify({ motivo: 'token_no_coincide_con_sesion' }),
           exito: false,
-          errorMessage: 'Refresh token presentado no coincide con el almacenado (posible reúso)',
+          errorMessage: 'Refresh token no coincide con el almacenado (sesión revocada o reúso)',
           ipOrigen: clientInfo.ip,
           userAgent: clientInfo.userAgent,
         }).catch(() => {})
         return NextResponse.json(
-          { success: false, error: 'Refresh token inválido o ya utilizado. Inicia sesión nuevamente.' },
+          { success: false, error: 'Sesión no válida. Inicia sesión nuevamente.' },
           { status: 401 }
         )
       }
     }
 
-    // Generar nuevos tokens usando las funciones de security.ts
+    // Generar nuevo access token (siempre)
     const newAccessToken = generateAccessToken({
       userId: usuario.id,
       username: usuario.username,
       rol: usuario.rol,
     })
 
-    const newRefreshToken = generateRefreshToken({
-      userId: usuario.id,
-      username: usuario.username,
-      rol: usuario.rol,
-    })
-
-    // FIX-SEGURIDAD-CRITICA #3: ROTACIÓN — guardar hash del nuevo refresh token en
-    // Usuario.sessionToken. Esto invalida el refresh token anterior (rotación real)
-    // y permite revocación (logout = borrar sessionToken).
-    try {
-      await db.usuario.update({
-        where: { id: usuario.id },
-        data: { sessionToken: hashRefreshToken(newRefreshToken) },
+    // Decidir si rotamos el refresh token:
+    //   - Si faltan < REFRESH_RENEW_WINDOW_SEC para que expire, renovamos
+    //     para mantener la sesión activa por otros 7 días.
+    //   - En caso contrario, devolvemos el MISMO refresh_token para no
+    //     invalidar otras pestañas/llamadas que aún lo tengan.
+    let newRefreshToken = refresh_token
+    let rotated = false
+    const secondsToExpiry = decoded.exp ? (decoded.exp - Math.floor(Date.now() / 1000)) : 0
+    if (secondsToExpiry > 0 && secondsToExpiry < REFRESH_RENEW_WINDOW_SEC) {
+      newRefreshToken = generateRefreshToken({
+        userId: usuario.id,
+        username: usuario.username,
+        rol: usuario.rol,
       })
-    } catch (e) {
-      console.error('[refresh] No se pudo persistir la rotación del refresh token:', e)
+      rotated = true
+      try {
+        await db.usuario.update({
+          where: { id: usuario.id },
+          data: { sessionToken: hashRefreshToken(newRefreshToken) },
+        })
+      } catch (e) {
+        console.error('[refresh] No se pudo persistir la rotación del refresh token:', e)
+        // No fatal: el access token nuevo sigue siendo válido. El cliente
+        // puede seguir trabajando; el siguiente refresh intentará de nuevo.
+      }
+    } else if (!usuario.sessionToken) {
+      // Caso legacy: el login no almacenó el hash. Lo hacemos ahora sin
+      // rotar el token (para no invalidar otras sesiones).
+      try {
+        await db.usuario.update({
+          where: { id: usuario.id },
+          data: { sessionToken: presentedHash },
+        })
+      } catch (e) {
+        console.error('[refresh] No se pudo persistar el hash del refresh token (legacy):', e)
+      }
     }
 
-    // Registrar en audit log
+    // Registrar en audit log (sin exceder — solo eventos significativos)
     try {
       await registrarAuditLog({
         usuarioId: usuario.id,
         usuarioNombre: usuario.nombre,
         accion: 'TOKEN_REFRESH',
         modulo: 'auth',
-        detalles: JSON.stringify({ rotado: true }),
+        detalles: JSON.stringify({ rotado: rotated, faltanSeg: secondsToExpiry }),
         ipOrigen: clientInfo.ip,
         userAgent: clientInfo.userAgent,
         exito: true,

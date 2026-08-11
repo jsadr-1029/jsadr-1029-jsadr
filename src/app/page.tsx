@@ -7,6 +7,7 @@ import { Sidebar } from '@/components/Sidebar'
 import { RelojColombia } from '@/components/RelojColombia'
 import { ResponsiveViewToggle } from '@/components/ResponsiveViewToggle'
 import { MobileNav } from '@/components/mobile-nav'
+import { InactivityAutoLogout } from '@/components/InactivityAutoLogout'
 import { useToast } from '@/hooks/use-toast'
 import { isAuthenticated, getUserData, logout } from '@/lib/api-client'
 import { puedeAcceder, vistasPermitidas, vistaPorDefecto, puedeAccederUsuario, vistasPermitidasUsuario } from '@/lib/permisos'
@@ -333,6 +334,20 @@ export default function Home() {
         style={forzarMobileLayout && contenidoMaxWidth ? { maxWidth: `${contenidoMaxWidth}px` } : undefined}
       >
         <main className="flex-1 overflow-x-hidden bg-background">
+          {/* Auto-logout por inactividad (10 min) con aviso previo (9 min).
+              FIX-LOGOUT-INESPERADO: el usuario reportó que la sesión se cerraba
+              aleatoriamente. Este componente implementa la política esperada:
+              10 min de inactividad → aviso → cierre de sesión. Solo se monta
+              para usuarios internos (no para portal cliente, que tiene su
+              propio manejo en PortalClienteModal). */}
+          {!esPortalCliente && (
+            <InactivityAutoLogout
+              timeoutMs={10 * 60 * 1000}   // 10 minutos
+              warningAtMs={9 * 60 * 1000}  // avisar a los 9 min
+              enabled={true}
+            />
+          )}
+
           {/* Reloj digital Colombia — visible en todos los módulos (zona America/Bogota = Medellín/Bogotá)
               Ubicado al centro horizontal de la ventana, manteniendo la altura (top-3).
               pointer-events-none para no bloquear clics; el contenido tiene pt-16 para evitar superposición. */}

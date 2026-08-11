@@ -71,6 +71,10 @@ function isPublicEndpoint(pathname: string): boolean {
     pathname.startsWith('/api/auth/login') ||
     pathname.startsWith('/api/auth/mfa') ||
     pathname.startsWith('/api/auth/refresh') ||
+    // FIX-LOGOUT-INESPERADO: /api/auth/logout debe ser público porque puede
+    // llamarse cuando el access_token ya expiró (el endpoint usa el
+    // refresh_token del body como fallback para identificar al usuario).
+    pathname.startsWith('/api/auth/logout') ||
     pathname.startsWith('/api/auth/recuperar-clave') ||
     pathname.startsWith('/api/auth/restablecer-clave') || // magic link password reset (v4.14)
     pathname.startsWith('/api/portal/auth') ||

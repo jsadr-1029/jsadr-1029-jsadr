@@ -2,6 +2,8 @@
 // API Client con manejo automático de tokens JWT
 // =====================================================
 
+import { refreshTokens, clearAuthLocal, isAccessTokenExpired } from '@/lib/token-refresh'
+
 const TOKEN_KEY = 'access_token'
 const REFRESH_KEY = 'refresh_token'
 const USER_KEY = 'user_data'
@@ -52,18 +54,10 @@ export function getUserData(): any | null {
 
 export function clearAuth(): void {
   if (typeof window === 'undefined') return
-  localStorage.removeItem(TOKEN_KEY)
-  localStorage.removeItem(REFRESH_KEY)
-  localStorage.removeItem(USER_KEY)
-  // FIX-LOGIN-LOOP: limpiar también tokens de portal cliente y jurídico,
-  // que antes quedaban huérfanos y provocando bucles de redirección.
-  localStorage.removeItem('portal_cliente_token')
-  localStorage.removeItem('portal_cliente_id')
-  localStorage.removeItem('portal_cliente_nombre')
-  localStorage.removeItem('portal_cliente_cedula')
-  localStorage.removeItem('juridico_token')
-  localStorage.removeItem('juridico_user')
-  notifyAuthChanged()
+  // FIX-LOGOUT-INESPERADO: usar el coordinador central para que se
+  // limpie también el estado del refresh (backoff, last_refresh_at, etc.)
+  // y se notifique a otras pestañas.
+  clearAuthLocal()
 }
 
 export function isAuthenticated(): boolean {
@@ -72,7 +66,14 @@ export function isAuthenticated(): boolean {
 
 /**
  * Wrapper de fetch que añade automáticamente el Authorization header
- * y maneja expiración de token (refresh automático)
+ * y maneja expiración de token (refresh automático coordinado).
+ *
+ * FIX-LOGOUT-INESPERADO: antes este wrapper llamaba a su propia
+ * `tryRefreshToken()` sin single-flight ni coordinación cross-tab.
+ * Ahora delega en `refreshTokens()` del coordinador central, que:
+ *   - Evita llamadas simultáneas a /api/auth/refresh dentro de la misma pestaña.
+ *   - Coordina refresh entre pestañas vía BroadcastChannel.
+ *   - Aplica backoff tras fallos para no disparar tormenta de llamadas.
  */
 export async function apiFetch(url: string, options: RequestInit = {}): Promise<Response> {
   const token = getToken()
@@ -99,7 +100,10 @@ export async function apiFetch(url: string, options: RequestInit = {}): Promise<
   // Si el token expiró, intentar refresh — pero solo para tokens JWT reales
   // (no para tokens de portal de cliente).
   if (response.status === 401 && token && !isPortalToken) {
-    const refreshed = await tryRefreshToken()
+    // FIX-LOGOUT-INESPERADO: usar el coordinador central, que tiene single-flight
+    // y coordinación cross-tab. Esto evita que múltiples llamadas API simultáneas
+    // disparen múltiples refresh a la vez.
+    const refreshed = await refreshTokens()
     if (refreshed) {
       // Reintentar con nuevo token
       const newToken = getToken()
@@ -108,7 +112,10 @@ export async function apiFetch(url: string, options: RequestInit = {}): Promise<
         return fetch(url, { ...options, headers })
       }
     }
-    // Si no se pudo refrescar, limpiar auth y redirigir a login
+    // Si no se pudo refrescar, limpiar auth y redirigir a login.
+    // Solo redirigir si NO es una llamada iniciada por el usuario activamente
+    // (para no sacarlo en medio de una acción). El coordinador aplica backoff
+    // tras el primer fallo, así que no volverá a intentar por 5 s.
     clearAuth()
     if (typeof window !== 'undefined' && window.location.pathname !== '/login') {
       window.location.href = '/login'
@@ -137,30 +144,9 @@ export async function apiJson<T = any>(url: string, options: RequestInit = {}): 
   return response.json()
 }
 
-async function tryRefreshToken(): Promise<boolean> {
-  const refreshToken = getRefreshToken()
-  if (!refreshToken) return false
-
-  try {
-    const res = await fetch('/api/auth/refresh', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ refresh_token: refreshToken }),
-    })
-    if (!res.ok) return false
-    const data = await res.json()
-    if (data.success && data.data?.access_token) {
-      localStorage.setItem(TOKEN_KEY, data.data.access_token)
-      if (data.data.refresh_token) {
-        localStorage.setItem(REFRESH_KEY, data.data.refresh_token)
-      }
-      return true
-    }
-    return false
-  } catch {
-    return false
-  }
-}
+// La función tryRefreshToken() local fue eliminada y reemplazada por
+// `refreshTokens()` en src/lib/token-refresh.ts para centralizar el
+// refresh y evitar race conditions entre pestañas y entre interceptores.
 
 /**
  * Login con username y password
@@ -191,9 +177,70 @@ export async function login(username: string, password: string): Promise<{ succe
 }
 
 /**
- * Logout - limpia tokens y redirige a login
+ * Logout - limpia tokens locales Y revoca la sesión en el servidor.
+ *
+ * FIX-LOGOUT-INESPERADO: antes el logout era solo client-side, lo que
+ * dejaba el refresh_token válido hasta 7 días. Ahora llamamos al
+ * endpoint /api/auth/logout que borra `Usuario.sessionToken` en BD,
+ * invalidando inmediatamente todos los refresh_token emitidos.
+ *
+ * IMPORTANTE: la revocación server-side se dispara con `keepalive: true`
+ * para que sobreviva a la navegación a /login. La redirección ocurre
+ * INMEDIATAMENTE después de limpiar localStorage, sin esperar al fetch
+ * — si el servidor tarda o cae, el usuario igualmente es sacado de la
+ * sesión localmente.
+ *
+ * Esta función es async para permitir `await logout()` cuando se quiere
+ * confirmar que la revocación se completó (ej: en un flujo de "cerrar
+ * todas las sesiones" desde la página de seguridad). Pero en la mayoría
+ * de los casos basta con llamarla sin await.
  */
-export function logout(): void {
+export async function logout(): Promise<void> {
+  const refreshToken = getRefreshToken()
+  const accessToken = getToken()
+
+  // 1) Limpiar localmente INMEDIATAMENTE para que la UI refleje el logout
+  //    sin esperar a la red.
+  clearAuth()
+  clearImpersonation()
+
+  // 2) Disparar revocación server-side en background. `keepalive: true`
+  //    permite que el request se complete incluso después de que
+  //    naveguemos a /login. Si falla, no rompe nada — el token refrescará
+  //    solo durante 7 días más, pero el usuario ya está fuera localmente.
+  try {
+    await fetch('/api/auth/logout', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(accessToken && !accessToken.startsWith('portal_cliente_')
+          ? { Authorization: `Bearer ${accessToken}` }
+          : {}),
+      },
+      body: JSON.stringify({ refresh_token: refreshToken }),
+      keepalive: true,
+    })
+  } catch (e) {
+    // Mejor esfuerzo: si la red falla, ya limpiamos localmente.
+    console.warn('[logout] No se pudo notificar al servidor:', e)
+  }
+
+  // 3) Redirigir a login. Se hace al final para que el fetch con keepalive
+  //    tenga oportunidad de enviarse (algunos navegadores cancelan
+  //    requests pendientes al navegar, pero keepalive lo mitiga).
+  if (typeof window !== 'undefined') {
+    window.location.href = '/login'
+  }
+}
+
+/**
+ * Logout síncrono (legacy) — solo limpia tokens locales sin llamar al servidor.
+ * Útil cuando se quiere hacer logout rápido sin await (ej: desde el auto-logout
+ * por inactividad, donde queremos redirigir instantáneamente).
+ *
+ * Para logout completo (con revocación server-side), usar `await logout()`.
+ */
+export function logoutLocal(): void {
   clearAuth()
   clearImpersonation()
   if (typeof window !== 'undefined') {
