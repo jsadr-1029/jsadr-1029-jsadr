@@ -14,7 +14,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { useToast } from '@/hooks/use-toast'
-import { capturarFoto } from '@/lib/camera'
+import FotoCaptureFirma from '@/components/firma/FotoCaptureFirma'
 import { formatearMoneda, formatearFecha } from '@/lib/finanzas'
 import {
   Upload,
@@ -58,8 +58,9 @@ export default function PaginaFirma({ params }: { params: Promise<{ token: strin
   // 6: rechazado
   const [paso, setPaso] = useState(1)
 
-  // Paso 1: foto documento
+  // Paso 1: foto documento (frente + reverso)
   const [fotoDocumento, setFotoDocumento] = useState<string | null>(null)
+  const [fotoDocumentoReverso, setFotoDocumentoReverso] = useState<string | null>(null)
   const [subiendoFotoDoc, setSubiendoFotoDoc] = useState(false)
 
   // Paso 2: firma manuscrita
@@ -75,6 +76,7 @@ export default function PaginaFirma({ params }: { params: Promise<{ token: strin
 
   // Paso 4: selfie
   const [fotoSelfie, setFotoSelfie] = useState<string | null>(null)
+  const [fotoSelfieNombre, setFotoSelfieNombre] = useState<string | null>(null)
   const [finalizando, setFinalizando] = useState(false)
 
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -115,6 +117,9 @@ export default function PaginaFirma({ params }: { params: Promise<{ token: strin
         } else if (json.data.firma?.fotoDocumento) {
           // Reanudar en paso 2 si la foto del documento ya está subida
           setFotoDocumento(json.data.firma.fotoDocumento)
+          if (json.data.firma?.fotoDocumentoReverso) {
+            setFotoDocumentoReverso(json.data.firma.fotoDocumentoReverso)
+          }
           setPaso(2)
         }
       } else {
@@ -127,54 +132,14 @@ export default function PaginaFirma({ params }: { params: Promise<{ token: strin
     }
   }
 
-  // === Manejo de archivos de fotos ===
-  const manejarArchivo = (e: React.ChangeEvent<HTMLInputElement>, tipo: 'documento' | 'selfie') => {
-    const file = e.target.files?.[0]
-    if (!file) return
-    if (!file.type.startsWith('image/')) {
-      toast({ title: 'Error', description: 'El archivo debe ser una imagen', variant: 'destructive' })
-      return
-    }
-    if (file.size > 10 * 1024 * 1024) {
-      toast({ title: 'Error', description: 'La imagen no puede superar 10MB', variant: 'destructive' })
-      return
-    }
-    const reader = new FileReader()
-    reader.onload = () => {
-      const result = reader.result as string
-      if (tipo === 'documento') setFotoDocumento(result)
-      else setFotoSelfie(result)
-    }
-    reader.readAsDataURL(file)
-  }
+  // === Manejo de archivos de fotos y captura con cámara ===
+  // NOTA: La captura de fotos (cámara + subir archivo) ahora se maneja
+  // internamente en el componente FotoCaptureFirma. Las funciones auxiliares
+  // manejarArchivo() y tomarFoto() ya no son necesarias aquí.
 
-  const tomarFoto = async (tipo: 'documento' | 'selfie') => {
-    try {
-      const dataUrl = await capturarFoto(
-        tipo === 'selfie' ? 'user' : 'environment',
-        {
-          titulo: tipo === 'selfie' ? 'Tomar selfie con cédula' : 'Tomar foto del documento',
-          textoBoton: tipo === 'selfie' ? 'Capturar selfie' : 'Capturar foto',
-          espejar: tipo === 'selfie',
-        }
-      )
-      if (dataUrl) {
-        if (tipo === 'documento') setFotoDocumento(dataUrl)
-        else setFotoSelfie(dataUrl)
-        toast({ title: 'Foto capturada', description: 'Revisa la imagen antes de continuar.' })
-      }
-    } catch (e: any) {
-      toast({
-        title: e?.userMessage || 'Error al acceder a la cámara',
-        description: e?.hint || 'Usa la opción de subir archivo.',
-        variant: 'destructive',
-      })
-    }
-  }
-
-  // === PASO 1: Guardar foto del documento ===
+  // === PASO 1: Guardar foto del documento (frente + reverso) ===
   const guardarFotoDocumento = async () => {
-    if (!fotoDocumento || !datos?.firma) return
+    if (!fotoDocumento || !fotoDocumentoReverso || !datos?.firma) return
     setSubiendoFotoDoc(true)
     try {
       const res = await fetch('/api/firma', {
@@ -184,12 +149,13 @@ export default function PaginaFirma({ params }: { params: Promise<{ token: strin
           accion: 'guardar_foto_documento',
           firmaId: datos.firma.id,
           fotoDocumento,
+          fotoDocumentoReverso,
         }),
       })
       const json = await res.json()
       if (json.success) {
         toast({
-          title: 'Foto del documento guardada',
+          title: 'Fotos del documento guardadas',
           description: 'Ahora puedes dibujar tu firma electrónica.',
         })
         setPaso(2)
@@ -584,56 +550,46 @@ export default function PaginaFirma({ params }: { params: Promise<{ token: strin
               })}
             </div>
 
-            {/* PASO 1: Foto del documento */}
+            {/* PASO 1: Foto del documento (frente + reverso) */}
             {paso === 1 && (
               <div className="space-y-4">
                 <div className="bg-blue-50 p-3 rounded-md border border-blue-200">
                   <p className="text-sm text-blue-900">
-                    📷 <strong>Paso 1 de 4:</strong> Sube una foto clara de tu documento de identidad (cédula, pasaporte o licencia) por el lado frontal.
+                    📷 <strong>Paso 1 de 4:</strong> Toma o sube una foto clara de tu cédula por ambos lados (frente y reverso). Puedes usar la cámara o subir un archivo. Si necesitas cambiar de cámara, usa el botón "Girar cámara".
                   </p>
                 </div>
 
-                <div className="space-y-2">
-                  <Label className="font-semibold">Foto del documento de identidad</Label>
-                  <p className="text-xs text-muted-foreground">Cédula, pasaporte o licencia (frente)</p>
-                  {fotoDocumento ? (
-                    <div className="relative">
-                      <img src={fotoDocumento} alt="Documento" className="w-full h-64 object-cover rounded-md border-2 border-green-300" />
-                      <Button
-                        size="sm"
-                        variant="destructive"
-                        className="absolute top-2 right-2"
-                        onClick={() => setFotoDocumento(null)}
-                      >
-                        <Trash2 className="w-3 h-3" />
-                      </Button>
-                    </div>
-                  ) : (
-                    <div className="border-2 border-dashed border-gray-300 rounded-md p-8 text-center space-y-3">
-                      <FileText className="w-12 h-12 mx-auto text-gray-400" />
-                      <Button variant="outline" asChild className="w-full sm:w-auto">
-                        <label className="cursor-pointer">
-                          <Upload className="w-4 h-4 mr-2" /> Subir archivo
-                          <input type="file" accept="image/*" className="hidden" onChange={(e) => manejarArchivo(e, 'documento')} />
-                        </label>
-                      </Button>
-                    </div>
-                  )}
-                </div>
+                <FotoCaptureFirma
+                  label="Foto de la cédula (frente)"
+                  descripcion="Asegúrate de que se lean todos los datos: nombre, cédula, fecha de nacimiento."
+                  valor={fotoDocumento}
+                  onChange={(v) => setFotoDocumento(v)}
+                  initialFacing="environment"
+                  mirror={false}
+                />
+
+                <FotoCaptureFirma
+                  label="Foto de la cédula (reverso)"
+                  descripcion="La cara donde aparece la firma y la huella dactilar."
+                  valor={fotoDocumentoReverso}
+                  onChange={(v) => setFotoDocumentoReverso(v)}
+                  initialFacing="environment"
+                  mirror={false}
+                />
 
                 <div className="bg-amber-50 p-2 rounded-md border border-amber-200 text-xs text-amber-900">
-                  ⚠️ La foto será almacenada como evidencia de identidad con hash SHA-256 para verificar su integridad.
+                  ⚠️ Las fotos serán almacenadas como evidencia de identidad con hash SHA-256 para verificar su integridad.
                 </div>
 
                 <Button
                   className="w-full"
-                  disabled={!fotoDocumento || subiendoFotoDoc}
+                  disabled={!fotoDocumento || !fotoDocumentoReverso || subiendoFotoDoc}
                   onClick={guardarFotoDocumento}
                 >
                   {subiendoFotoDoc ? (
                     <>
                       <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                      Guardando foto...
+                      Guardando fotos...
                     </>
                   ) : (
                     <>
@@ -811,42 +767,19 @@ export default function PaginaFirma({ params }: { params: Promise<{ token: strin
               <div className="space-y-4">
                 <div className="bg-blue-50 p-3 rounded-md border border-blue-200">
                   <p className="text-sm text-blue-900">
-                    🤳 <strong>Paso 4 de 4:</strong> Toma una selfie sosteniendo tu cédula. Tu cara y el documento deben verse claramente en la foto.
+                    🤳 <strong>Paso 4 de 4:</strong> Toma una selfie sosteniendo tu cédula. Tu cara y el documento deben verse claramente en la foto. Puedes girar la cámara si necesitas usar la cámara frontal.
                   </p>
                 </div>
 
-                <div className="space-y-2">
-                  <Label className="font-semibold">Selfie sosteniendo la cédula</Label>
-                  <p className="text-xs text-muted-foreground">Tu cara y el documento deben verse claramente</p>
-                  {fotoSelfie ? (
-                    <div className="relative">
-                      <img src={fotoSelfie} alt="Selfie" className="w-full h-64 object-cover rounded-md border-2 border-green-300" />
-                      <Button
-                        size="sm"
-                        variant="destructive"
-                        className="absolute top-2 right-2"
-                        onClick={() => setFotoSelfie(null)}
-                      >
-                        <Trash2 className="w-3 h-3" />
-                      </Button>
-                    </div>
-                  ) : (
-                    <div className="border-2 border-dashed border-gray-300 rounded-md p-8 text-center space-y-3">
-                      <User className="w-12 h-12 mx-auto text-gray-400" />
-                      <div className="flex flex-col sm:flex-row gap-2 justify-center">
-                        <Button onClick={() => tomarFoto('selfie')}>
-                          <Camera className="w-4 h-4 mr-2" /> Tomar selfie
-                        </Button>
-                        <Button variant="outline" asChild>
-                          <label className="cursor-pointer">
-                            <Upload className="w-4 h-4 mr-2" /> Subir archivo
-                            <input type="file" accept="image/*" className="hidden" onChange={(e) => manejarArchivo(e, 'selfie')} />
-                          </label>
-                        </Button>
-                      </div>
-                    </div>
-                  )}
-                </div>
+                <FotoCaptureFirma
+                  label="Selfie sosteniendo la cédula"
+                  descripcion="Tu rostro completo y la cédula deben verse nítidos. Usa la cámara frontal para mayor comodidad."
+                  valor={fotoSelfie}
+                  nombreArchivo={fotoSelfieNombre}
+                  onChange={(v, n) => { setFotoSelfie(v); setFotoSelfieNombre(n) }}
+                  initialFacing="user"
+                  mirror
+                />
 
                 <div className="bg-amber-50 p-2 rounded-md border border-amber-200 text-xs text-amber-900">
                   ⚠️ Esta foto es la verificación final de identidad. Se almacenará con hash SHA-256.

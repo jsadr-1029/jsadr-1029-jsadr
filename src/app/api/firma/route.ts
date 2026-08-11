@@ -514,16 +514,22 @@ async function guardarFotos(body: any, req: NextRequest) {
   })
 }
 
-// === NUEVO PASO 1: Guardar SOLO foto del documento (sin selfie) ===
+// === NUEVO PASO 1: Guardar fotos del documento (frente + reverso, sin selfie) ===
 async function guardarFotoDocumento(body: any, req: NextRequest) {
-  const { firmaId, fotoDocumento, geoUbicacion } = body
+  const { firmaId, fotoDocumento, fotoDocumentoReverso, geoUbicacion } = body
   if (!firmaId) {
     return NextResponse.json({ success: false, error: 'firmaId requerido' }, { status: 400 })
   }
   if (!fotoDocumento) {
     return NextResponse.json({
       success: false,
-      error: 'fotoDocumento es obligatorio (en formato base64)',
+      error: 'fotoDocumento (frente) es obligatorio (en formato base64)',
+    }, { status: 400 })
+  }
+  if (!fotoDocumentoReverso) {
+    return NextResponse.json({
+      success: false,
+      error: 'fotoDocumentoReverso (reverso de la cédula) es obligatorio (en formato base64)',
     }, { status: 400 })
   }
 
@@ -537,11 +543,18 @@ async function guardarFotoDocumento(body: any, req: NextRequest) {
   if (!fotoDocumento.startsWith('data:image/')) {
     return NextResponse.json({ success: false, error: 'fotoDocumento debe ser una imagen en base64 (data:image/...)' }, { status: 400 })
   }
+  if (!fotoDocumentoReverso.startsWith('data:image/')) {
+    return NextResponse.json({ success: false, error: 'fotoDocumentoReverso debe ser una imagen en base64 (data:image/...)' }, { status: 400 })
+  }
   if (Buffer.byteLength(fotoDocumento, 'utf8') > 14 * 1024 * 1024) {
-    return NextResponse.json({ success: false, error: 'La foto no puede superar 10MB' }, { status: 400 })
+    return NextResponse.json({ success: false, error: 'La foto del frente no puede superar 10MB' }, { status: 400 })
+  }
+  if (Buffer.byteLength(fotoDocumentoReverso, 'utf8') > 14 * 1024 * 1024) {
+    return NextResponse.json({ success: false, error: 'La foto del reverso no puede superar 10MB' }, { status: 400 })
   }
 
   const hashDoc = crypto.createHash('sha256').update(fotoDocumento).digest('hex')
+  const hashDocReverso = crypto.createHash('sha256').update(fotoDocumentoReverso).digest('hex')
 
   const forwarded = req.headers.get('x-forwarded-for')
   const ip = forwarded ? forwarded.split(',')[0] : req.headers.get('x-real-ip') || 'desconocida'
@@ -552,6 +565,8 @@ async function guardarFotoDocumento(body: any, req: NextRequest) {
     data: {
       fotoDocumento,
       fotoDocumentoHash: hashDoc,
+      fotoDocumentoReverso,
+      fotoDocumentoReversoHash: hashDocReverso,
       ipFirma: ip,
       userAgent,
       geoUbicacion: geoUbicacion || null,
@@ -562,8 +577,15 @@ async function guardarFotoDocumento(body: any, req: NextRequest) {
 
   return NextResponse.json({
     success: true,
-    data: { firmaId, estado: 'FOTOS_SUBIDAS', hashDocumento: hashDoc, ip, userAgent },
-    mensaje: 'Foto del documento guardada. Ahora puedes dibujar tu firma.',
+    data: {
+      firmaId,
+      estado: 'FOTOS_SUBIDAS',
+      hashDocumento: hashDoc,
+      hashDocumentoReverso: hashDocReverso,
+      ip,
+      userAgent,
+    },
+    mensaje: 'Fotos del documento (frente y reverso) guardadas. Ahora puedes dibujar tu firma.',
   })
 }
 
@@ -624,7 +646,10 @@ async function finalizarConSelfie(body: any, req: NextRequest) {
     return NextResponse.json({ success: false, error: 'Esta firma ya fue completada' }, { status: 400 })
   }
   if (!firma.fotoDocumento) {
-    return NextResponse.json({ success: false, error: 'Falta la foto del documento (paso 1)' }, { status: 400 })
+    return NextResponse.json({ success: false, error: 'Falta la foto del documento frente (paso 1)' }, { status: 400 })
+  }
+  if (!firma.fotoDocumentoReverso) {
+    return NextResponse.json({ success: false, error: 'Falta la foto del documento reverso (paso 1)' }, { status: 400 })
   }
   if (!firma.imagenFirma) {
     return NextResponse.json({ success: false, error: 'Falta la firma manuscrita (paso 2)' }, { status: 400 })

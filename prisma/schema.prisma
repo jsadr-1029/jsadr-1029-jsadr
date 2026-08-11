@@ -781,8 +781,10 @@ model FirmaElectronica {
 
   // === Verificación de identidad con fotos ===
   fotoDocumento   String?  // base64 foto del documento de identidad (frente)
+  fotoDocumentoReverso String? // base64 foto del reverso de la cédula
   fotoSelfie      String?  // base64 foto selfie sosteniendo la cédula
-  fotoDocumentoHash String? // hash SHA-256 de la foto del documento
+  fotoDocumentoHash String? // hash SHA-256 de la foto del documento (frente)
+  fotoDocumentoReversoHash String? // hash SHA-256 del reverso
   fotoSelfieHash  String?  // hash SHA-256 del selfie
   ipFirma         String?  // IP desde donde se firmó
   userAgent       String?  // navegador/dispositivo usado

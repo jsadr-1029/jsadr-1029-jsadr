@@ -30,7 +30,7 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { useToast } from '@/hooks/use-toast'
-import { capturarFoto } from '@/lib/camera'
+import FotoCaptureFirma from '@/components/firma/FotoCaptureFirma'
 import {
   calcularPrestamo,
   calcularPrestamoTasaFijaMensual,
@@ -473,96 +473,11 @@ export function PortalClienteModal({
     }
   }
 
-  const tomarFotoSelfie = async () => {
-    try {
-      const dataUrl = await capturarFoto('user', {
-        titulo: 'Tomar selfie con cédula',
-        textoBoton: 'Capturar selfie',
-        espejar: true,
-      })
-      if (dataUrl) {
-        setTycFotoSelfie(dataUrl)
-        toast({ title: 'Selfie capturada', description: 'Revisa la imagen antes de continuar.' })
-      }
-    } catch (e: any) {
-      // Incluir el error técnico (name) en el toast para diagnóstico.
-      // El userMessage es lo amigable para el usuario; el name es para soporte.
-      const tecnico = e?.name ? ` [${e.name}]` : ''
-      toast({
-        title: (e?.userMessage || 'Cámara no disponible') + tecnico,
-        description: e?.hint || 'Usa la opción de subir archivo.',
-        variant: 'destructive',
-      })
-      console.error('[PortalClienteModal] Error tomarFotoSelfie:', e)
-    }
-  }
-
-  const subirFotoSelfieArchivo = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file) return
-    if (!file.type.startsWith('image/')) {
-      toast({ title: 'Archivo inválido', description: 'Debe ser una imagen.', variant: 'destructive' })
-      return
-    }
-    if (file.type === 'image/svg+xml') {
-      toast({ title: 'Formato no permitido', description: 'Usa JPG, PNG o WebP.', variant: 'destructive' })
-      return
-    }
-    if (file.size > 10 * 1024 * 1024) {
-      toast({ title: 'Archivo muy grande', description: 'Máximo 10MB.', variant: 'destructive' })
-      return
-    }
-    const reader = new FileReader()
-    reader.onload = (ev) => {
-      setTycFotoSelfie(ev.target?.result as string)
-    }
-    reader.readAsDataURL(file)
-  }
-
-  // === Tomar/subir foto de la cédula (paso 3) ===
-  const tomarFotoDocumento = async () => {
-    try {
-      const dataUrl = await capturarFoto('environment', {
-        titulo: 'Tomar foto de la cédula',
-        textoBoton: 'Capturar foto de la cédula',
-        espejar: false,
-      })
-      if (dataUrl) {
-        setTycFotoDocumento(dataUrl)
-        toast({ title: 'Foto capturada', description: 'Revisa la imagen antes de continuar.' })
-      }
-    } catch (e: any) {
-      const tecnico = e?.name ? ` [${e.name}]` : ''
-      toast({
-        title: (e?.userMessage || 'Cámara no disponible') + tecnico,
-        description: e?.hint || 'Usa la opción de subir archivo.',
-        variant: 'destructive',
-      })
-      console.error('[PortalClienteModal] Error tomarFotoDocumento:', e)
-    }
-  }
-
-  const subirFotoDocumentoArchivo = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file) return
-    if (!file.type.startsWith('image/')) {
-      toast({ title: 'Archivo inválido', description: 'Debe ser una imagen.', variant: 'destructive' })
-      return
-    }
-    if (file.type === 'image/svg+xml') {
-      toast({ title: 'Formato no permitido', description: 'Usa JPG, PNG o WebP.', variant: 'destructive' })
-      return
-    }
-    if (file.size > 10 * 1024 * 1024) {
-      toast({ title: 'Archivo muy grande', description: 'Máximo 10MB.', variant: 'destructive' })
-      return
-    }
-    const reader = new FileReader()
-    reader.onload = (ev) => {
-      setTycFotoDocumento(ev.target?.result as string)
-    }
-    reader.readAsDataURL(file)
-  }
+  // === Captura de fotos (TyC) ===
+  // NOTA: La captura de fotos (cámara + subir archivo) ahora se maneja
+  // internamente en el componente FotoCaptureFirma. Las funciones auxiliares
+  // tomarFotoSelfie(), tomarFotoDocumento(), subirFotoSelfieArchivo() y
+  // subirFotoDocumentoArchivo() ya no son necesarias aquí.
 
   const confirmarAceptacionTyC = async () => {
     if (!tycPrestamoId || !tycFotoDocumento || !tycFotoSelfie) return
@@ -1182,54 +1097,18 @@ export function PortalClienteModal({
                       Identidad verificada
                     </p>
                     <p className="text-xs text-emerald-100/80">
-                      Ahora sube una foto clara de tu cédula de ciudadanía. Asegúrate
-                      de que se vean todos los datos (frente completo).
+                      Ahora toma o sube una foto clara de tu cédula de ciudadanía. Puedes usar la cámara o subir un archivo. Si necesitas cambiar de cámara, usa el botón "Girar cámara".
                     </p>
                   </div>
 
-                  {tycFotoDocumento ? (
-                    <div className="space-y-2">
-                      <div className="relative rounded-xl overflow-hidden border-2 border-emerald-400/50">
-                        <img
-                          src={tycFotoDocumento}
-                          alt="Foto de la cédula"
-                          className="w-full h-48 object-cover"
-                        />
-                        <Button
-                          size="sm"
-                          variant="secondary"
-                          className="absolute top-2 right-2"
-                          onClick={() => setTycFotoDocumento(null)}
-                        >
-                          Cambiar
-                        </Button>
-                      </div>
-                      <p className="text-xs text-emerald-300 flex items-center gap-1">
-                        <CheckCircle className="w-3 h-3" />
-                        Foto de cédula lista
-                      </p>
-                    </div>
-                  ) : (
-                    <label className="flex flex-col items-center gap-2 h-24 justify-center rounded-xl border border-dashed border-white/15 hover:border-primary cursor-pointer transition-colors">
-                      <Upload className="w-6 h-6" />
-                      <span className="text-xs">Subir archivo</span>
-                      <input
-                        type="file"
-                        accept="image/jpeg,image/png,image/webp"
-                        className="hidden"
-                        onChange={subirFotoDocumentoArchivo}
-                      />
-                    </label>
-                  )}
-
-                  <div className="p-2.5 rounded-lg bg-white/5 text-xs text-muted-foreground">
-                    <p className="font-semibold mb-1 text-foreground/80">Requisitos de la foto:</p>
-                    <ul className="space-y-0.5 ml-3 list-disc">
-                      <li>Cédula completa y legible (frente)</li>
-                      <li>Sin reflejos ni sombras</li>
-                      <li>Buena iluminación · Máximo 10MB</li>
-                    </ul>
-                  </div>
+                  <FotoCaptureFirma
+                    label="Foto de la cédula (frente)"
+                    descripcion="Asegúrate de que se vean todos los datos (frente completo)."
+                    valor={tycFotoDocumento}
+                    onChange={(v) => setTycFotoDocumento(v)}
+                    initialFacing="environment"
+                    mirror={false}
+                  />
 
                   <Button
                     className="w-full gradient-premium gradient-premium-hover btn-press"
@@ -1278,59 +1157,14 @@ export function PortalClienteModal({
                     </div>
                   </div>
 
-                  {tycFotoSelfie ? (
-                    <div className="space-y-2">
-                      <div className="relative rounded-xl overflow-hidden border-2 border-emerald-400/50">
-                        <img
-                          src={tycFotoSelfie}
-                          alt="Selfie con cédula"
-                          className="w-full h-48 object-cover"
-                        />
-                        <Button
-                          size="sm"
-                          variant="secondary"
-                          className="absolute top-2 right-2"
-                          onClick={() => setTycFotoSelfie(null)}
-                        >
-                          Cambiar
-                        </Button>
-                      </div>
-                      <p className="text-xs text-emerald-300 flex items-center gap-1">
-                        <CheckCircle className="w-3 h-3" />
-                        Selfie lista para enviar
-                      </p>
-                    </div>
-                  ) : (
-                    <div className="grid grid-cols-2 gap-2">
-                      <Button
-                        variant="outline"
-                        onClick={tomarFotoSelfie}
-                        className="flex flex-col items-center gap-2 h-24 rounded-xl border-dashed input-premium"
-                      >
-                        <Camera className="w-6 h-6" />
-                        <span className="text-xs">Tomar foto</span>
-                      </Button>
-                      <label className="flex flex-col items-center gap-2 h-24 justify-center rounded-xl border border-dashed border-white/15 hover:border-primary cursor-pointer transition-colors">
-                        <Upload className="w-6 h-6" />
-                        <span className="text-xs">Subir archivo</span>
-                        <input
-                          type="file"
-                          accept="image/jpeg,image/png,image/webp"
-                          className="hidden"
-                          onChange={subirFotoSelfieArchivo}
-                        />
-                      </label>
-                    </div>
-                  )}
-
-                  <div className="p-2.5 rounded-lg bg-white/5 text-xs text-muted-foreground">
-                    <p className="font-semibold mb-1 text-foreground/80">Requisitos del selfie:</p>
-                    <ul className="space-y-0.5 ml-3 list-disc">
-                      <li>Rostro completo sin lentes/gorra</li>
-                      <li>Cédula visible junto al rostro</li>
-                      <li>Buena iluminación · Máximo 10MB</li>
-                    </ul>
-                  </div>
+                  <FotoCaptureFirma
+                    label="Selfie sosteniendo la cédula"
+                    descripcion="Tu rostro completo y la cédula deben verse nítidos. Usa la cámara frontal para mayor comodidad."
+                    valor={tycFotoSelfie}
+                    onChange={(v) => setTycFotoSelfie(v)}
+                    initialFacing="user"
+                    mirror
+                  />
 
                   <Button
                     className="w-full gradient-premium gradient-premium-hover btn-press"
@@ -3754,38 +3588,9 @@ function FlujoFirmaClient({
     }
   }
 
-  // === Manejar carga de archivos (fotos) ===
-  const manejarArchivo = (e: React.ChangeEvent<HTMLInputElement>, tipo: 'documento' | 'selfie') => {
-    const file = e.target.files?.[0]
-    if (!file) return
-    if (file.size > 10 * 1024 * 1024) {
-      toast({ title: 'Archivo demasiado grande', description: 'Máximo 10MB.', variant: 'destructive' })
-      return
-    }
-    if (!file.type.startsWith('image/')) {
-      toast({ title: 'Formato inválido', description: 'Solo se permiten imágenes.', variant: 'destructive' })
-      return
-    }
-    const reader = new FileReader()
-    reader.onload = () => {
-      const result = reader.result as string
-      if (tipo === 'documento') setFotoDocumento(result)
-      else setFotoSelfie(result)
-    }
-    reader.readAsDataURL(file)
-  }
-
-  // === Tomar foto con cámara ===
-  const tomarFoto = async (tipo: 'documento' | 'selfie') => {
-    try {
-      const facingMode = tipo === 'selfie' ? 'user' : 'environment'
-      const dataUrl = await capturarFoto(facingMode)
-      if (tipo === 'documento') setFotoDocumento(dataUrl)
-      else setFotoSelfie(dataUrl)
-    } catch (e: any) {
-      toast({ title: 'Error cámara', description: e.message, variant: 'destructive' })
-    }
-  }
+  // === Captura de fotos (FlujoFirmaClient) ===
+  // NOTA: La captura de fotos (cámara + subir archivo + girar cámara) ahora
+  // se maneja internamente en el componente FotoCaptureFirma.
 
   const pasos = [
     { n: 1, label: 'Fotos', icon: Camera },
@@ -3841,48 +3646,24 @@ function FlujoFirmaClient({
         {paso === 1 && (
           <div className="space-y-2 fade-scale">
             <p className="text-[11px] text-muted-foreground">
-              Sube una foto nítida de tu cédula (frente) y un selfie sosteniéndola.
+              Toma o sube una foto nítida de tu cédula (frente) y un selfie sosteniéndola. Puedes usar la cámara o subir un archivo. Si necesitas cambiar de cámara, usa el botón "Girar cámara".
             </p>
-            <div className="grid grid-cols-2 gap-2">
-              <div className="space-y-1.5">
-                <Label className="text-[10px] font-semibold">Foto cédula</Label>
-                {fotoDocumento ? (
-                  <div className="relative">
-                    <img src={fotoDocumento} alt="Cédula" className="w-full h-24 object-cover rounded-md border border-white/10" />
-                    <button type="button" onClick={() => setFotoDocumento(null)} className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-red-500 text-white text-[10px]">×</button>
-                  </div>
-                ) : (
-                  <div className="space-y-1">
-                    <label className="w-full p-2 rounded-md border-2 border-dashed border-violet-500/30 hover:border-violet-500/50 text-violet-300 text-[10px] flex flex-col items-center gap-0.5 cursor-pointer">
-                      <Upload className="w-3.5 h-3.5" />
-                      Subir archivo
-                      <input type="file" accept="image/*" className="hidden" onChange={(e) => manejarArchivo(e, 'documento')} />
-                    </label>
-                  </div>
-                )}
-              </div>
-              <div className="space-y-1.5">
-                <Label className="text-[10px] font-semibold">Selfie con cédula</Label>
-                {fotoSelfie ? (
-                  <div className="relative">
-                    <img src={fotoSelfie} alt="Selfie" className="w-full h-24 object-cover rounded-md border border-white/10" />
-                    <button type="button" onClick={() => setFotoSelfie(null)} className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-red-500 text-white text-[10px]">×</button>
-                  </div>
-                ) : (
-                  <div className="space-y-1">
-                    <button type="button" onClick={() => tomarFoto('selfie')} className="w-full p-2 rounded-md border-2 border-dashed border-violet-500/30 hover:border-violet-500/50 text-violet-300 text-[10px] flex flex-col items-center gap-0.5">
-                      <Camera className="w-3.5 h-3.5" />
-                      Tomar selfie
-                    </button>
-                    <label className="w-full p-2 rounded-md border-2 border-dashed border-white/15 hover:border-white/30 text-muted-foreground text-[10px] flex flex-col items-center gap-0.5 cursor-pointer">
-                      <Upload className="w-3.5 h-3.5" />
-                      Subir archivo
-                      <input type="file" accept="image/*" className="hidden" onChange={(e) => manejarArchivo(e, 'selfie')} />
-                    </label>
-                  </div>
-                )}
-              </div>
-            </div>
+            <FotoCaptureFirma
+              label="Foto cédula (frente)"
+              descripcion="Asegúrate de que se lean todos los datos."
+              valor={fotoDocumento}
+              onChange={(v) => setFotoDocumento(v)}
+              initialFacing="environment"
+              mirror={false}
+            />
+            <FotoCaptureFirma
+              label="Selfie con cédula"
+              descripcion="Tu rostro completo y la cédula deben verse nítidos."
+              valor={fotoSelfie}
+              onChange={(v) => setFotoSelfie(v)}
+              initialFacing="user"
+              mirror
+            />
             <Button onClick={guardarFotos} disabled={!fotoDocumento || !fotoSelfie || guardandoFotos} className="w-full h-8 text-[11px]" size="sm">
               {guardandoFotos ? <><Loader2 className="w-3 h-3 mr-1 animate-spin" /> Guardando…</> : 'Continuar a firma →'}
             </Button>
