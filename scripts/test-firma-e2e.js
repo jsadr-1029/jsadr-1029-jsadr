@@ -31,7 +31,6 @@ function hashOtp(codigo) {
   return crypto.createHash('sha256').update(codigo).digest('hex')
 }
 
-// Imágenes base64 de prueba (1x1 pixel PNG)
 const PNG_DOC_BASE64 = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=='
 const PNG_SELFIN_BASE64 = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR42mP8z8BQz0AEYBxVSF+FAAAAABJRU5ErkJggg=='
 // Una firma PNG más grande para que valide el formato
@@ -40,6 +39,14 @@ const PNG_FIRMA_BASE64 = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAAB
 async function main() {
   const target = process.argv[2] || 'prod'
   const baseUrl = target === 'local' ? 'http://localhost:3000' : 'https://jsadr.com.co'
+
+  // Headers comunes para todas las peticiones (simulan un navegador real)
+  const COMMON_HEADERS = {
+    'Content-Type': 'application/json',
+    'Origin': baseUrl,
+    'Referer': baseUrl + '/',
+    'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+  }
 
   console.log('='.repeat(70))
   console.log(`PRUEBAS E2E DEL FLUJO DE FIRMA ELECTRÓNICA — ${target.toUpperCase()}`)
@@ -97,7 +104,7 @@ async function main() {
         console.log('  [2/7] POST guardar_foto_documento')
         const fotoDocRes = await fetch(`${baseUrl}/api/firma`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: COMMON_HEADERS,
           body: JSON.stringify({ accion: 'guardar_foto_documento', firmaId, fotoDocumento: PNG_DOC_BASE64 }),
         })
         const fotoDocJson = await fotoDocRes.json()
@@ -109,7 +116,7 @@ async function main() {
         console.log('  [3/7] POST guardar_firma_dibujo')
         const firmaRes = await fetch(`${baseUrl}/api/firma`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: COMMON_HEADERS,
           body: JSON.stringify({ accion: 'guardar_firma_dibujo', firmaId, imagenFirma: PNG_FIRMA_BASE64 }),
         })
         const firmaJson = await firmaRes.json()
@@ -121,7 +128,7 @@ async function main() {
         console.log('  [4/7] POST enviar_otp (canal WHATSAPP)')
         const otpEnvRes = await fetch(`${baseUrl}/api/firma`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: COMMON_HEADERS,
           body: JSON.stringify({ accion: 'enviar_otp', firmaId, canal: 'WHATSAPP' }),
         })
         const otpEnvJson = await otpEnvRes.json()
@@ -150,7 +157,7 @@ async function main() {
 
         const otpValRes = await fetch(`${baseUrl}/api/firma`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: COMMON_HEADERS,
           body: JSON.stringify({ accion: 'validar_otp', firmaId, otpIngresado: codigoPrueba }),
         })
         const otpValJson = await otpValRes.json()
@@ -162,7 +169,7 @@ async function main() {
         console.log('  [6/7] POST finalizar_con_selfie')
         const selfieRes = await fetch(`${baseUrl}/api/firma`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: COMMON_HEADERS,
           body: JSON.stringify({ accion: 'finalizar_con_selfie', firmaId, fotoSelfie: PNG_SELFIN_BASE64 }),
         })
         const selfieJson = await selfieRes.json()
