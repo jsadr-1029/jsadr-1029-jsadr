@@ -19,6 +19,7 @@ import { db } from '@/lib/db'
 import { encryptSensitive, decryptSensitive, encryptBackup, decryptBackup, getClientInfo } from '@/lib/security'
 import { requireAuth } from '@/lib/auth-guard'
 import { errorResponse, logError, AppError, AppErrors } from '@/lib/error-handler'
+import { assertEmailConfigNotLocked, EmailConfigLockError } from '@/lib/email-config-lock'
 
 // === SECCIONES VÁLIDAS ===
 const SECCIONES = [
@@ -458,6 +459,19 @@ export async function PATCH(req: NextRequest) {
       case 'correos':
       case 'smtp': {
         if (!data.id) throw AppErrors.badRequest('Se requiere id del correo')
+        // BLOQUEO DE PROTECCIÓN DE CORREO: si el lock está activo, no se puede
+        // modificar ningún CorreoInstitucional (SMTP host/port/user/pass, estado, etc.).
+        try {
+          await assertEmailConfigNotLocked('modificar correo institucional (SMTP)')
+        } catch (e: any) {
+          if (e instanceof EmailConfigLockError) {
+            return NextResponse.json(
+              { success: false, error: e.message, code: e.code },
+              { status: e.statusCode },
+            )
+          }
+          throw e
+        }
         // Si llega smtpPass nuevo (no '********'), guardarlo cifrado con BOTH:
         //   smtpPass       -> encryptSensitive (llave .env, lo que lee la app)
         //   smtpPassBackup -> encryptBackup     (llave hardcoded, sobrevive a pérdida de .env)
@@ -660,6 +674,19 @@ export async function POST(req: NextRequest) {
       }
 
       case 'crear_correo': {
+        // BLOQUEO DE PROTECCIÓN DE CORREO: si el lock está activo, no se pueden
+        // crear nuevos correos institucionales (podrían tener SMTP y desplazar al principal).
+        try {
+          await assertEmailConfigNotLocked('crear nuevo correo institucional')
+        } catch (e: any) {
+          if (e instanceof EmailConfigLockError) {
+            return NextResponse.json(
+              { success: false, error: e.message, code: e.code },
+              { status: e.statusCode },
+            )
+          }
+          throw e
+        }
         const c = await db.correoInstitucional.create({
           data: {
             nombre: String(payload?.nombre || ''),
@@ -693,6 +720,19 @@ export async function POST(req: NextRequest) {
 
       case 'eliminar_correo': {
         const recursoId = String(payload?.id)
+        // BLOQUEO DE PROTECCIÓN DE CORREO: si el lock está activo, no se puede
+        // eliminar ningún correo institucional (no importa si es principal o no).
+        try {
+          await assertEmailConfigNotLocked('eliminar correo institucional')
+        } catch (e: any) {
+          if (e instanceof EmailConfigLockError) {
+            return NextResponse.json(
+              { success: false, error: e.message, code: e.code },
+              { status: e.statusCode },
+            )
+          }
+          throw e
+        }
         // Refuerzo: exigir clave maestra "Eliminar" — protege jsa@jsadr.com.co y Brevo
         const prohibido = validarClaveEliminacion(payload, `el correo institucional ${recursoId}`)
         if (prohibido) {
@@ -1220,6 +1260,28 @@ export async function POST(req: NextRequest) {
       // Este endpoint toma el smtpPassBackup (cifrado con llave hardcoded) y lo re-encripta
       // con la API_ENCRYPTION_KEY actual, sincronizando también conexionAPI.
       case 'restaurar_smtp_backup': {
+        // BLOQUEO DE PROTECCIÓN DE CORREO: si el lock está activo, no se puede
+        // restaurar desde backup porque re-encriptaría smtpPass y sincronizaría
+        // conexionAPI (modificación de credenciales). El snapshot del lock ya es
+        // la fuente de verdad; usar /api/email-lock/restore en su lugar.
+        try {
+          await assertEmailConfigNotLocked('restaurar SMTP desde backup')
+        } catch (e: any) {
+          if (e instanceof EmailConfigLockError) {
+            return NextResponse.json(
+              {
+                success: false,
+                error:
+                  e.message +
+                  ' Sugerencia: usa POST /api/email-lock {accion:"restore"} para restaurar ' +
+                  'desde el snapshot del bloqueo (que preserva la configuración protegida).',
+                code: e.code,
+              },
+              { status: e.statusCode },
+            )
+          }
+          throw e
+        }
         // 1. Determinar el correo a restaurar (por id o el principal activo)
         let correo = payload?.id
           ? await db.correoInstitucional.findUnique({ where: { id: String(payload.id) } })

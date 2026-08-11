@@ -107,6 +107,10 @@ function isPublicEndpoint(pathname: string): boolean {
     // de mantenimiento a los clientes. NO requiere autenticación porque
     // el cliente aún no ha iniciado sesión.
     pathname === '/api/estado-mantenimiento' ||
+    // === Health check del bloqueo de correo (público) ===
+    // Monitoreo uptime (Better Stack / Uptime Robot / Vercel Cron).
+    // NO expone credenciales — solo estado aggregated: ok | degraded.
+    pathname === '/api/email-lock/health' ||
     // === Cron endpoints (v4.4) — autenticados por X-Cron-Secret ===
     pathname.startsWith('/api/recordatorios/cron') ||
     pathname.startsWith('/api/pagos/cron')

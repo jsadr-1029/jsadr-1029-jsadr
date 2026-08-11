@@ -1,6 +1,7 @@
 import nodemailer from 'nodemailer'
 import { db } from './db'
 import { decryptSensitive } from './security'
+import { autoVerifyAndRestoreIfNeeded } from './email-config-lock'
 
 // === TRANSPORTES EN MEMORIA (cache) ===
 // Para no recrear el transporter en cada envío
@@ -481,6 +482,26 @@ export async function enviarEmail({
   text?: string
   html?: string
 }): Promise<ResultadoEnvioEmail> {
+  // === BLOQUEO DE PROTECCIÓN DE CORREO ===
+  // Si el lock está activo, verificar integridad antes de enviar.
+  // Si se detecta drift (alguien modificó la config a pesar del lock),
+  // restaurar automáticamente desde el snapshot antes de enviar.
+  // Caché de 60s para no verificar en cada envío (performance).
+  // Esto garantiza "siempre conectado" aunque alguien intente alterar la config.
+  try {
+    const autoResult = await autoVerifyAndRestoreIfNeeded()
+    if (autoResult.restored) {
+      console.warn(
+        '[email][LOCK] Drift detectado y AUTO-RESTAURADO antes de enviar. ' +
+          'Detalles:',
+        autoResult.driftDetails,
+      )
+    }
+  } catch (e: any) {
+    // No bloquear el envío si la auto-verificación falla — solo log.
+    console.warn('[email][LOCK] Auto-verify falló (no bloquea envío):', e.message)
+  }
+
   // Sanitizar headers (defensa contra CRLF injection)
   const sanitizeHeader = (value: string): string => value.replace(/[\r\n]/g, '').trim()
   const safeTo = sanitizeHeader(to)

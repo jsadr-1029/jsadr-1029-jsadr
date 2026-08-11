@@ -4,6 +4,7 @@ import { encryptSensitive, registrarAuditLog, getClientInfo } from '@/lib/securi
 import { conexionApiSchema, validateInput } from '@/lib/validators'
 import { requireRole } from '@/lib/auth-guard'
 import { sanitizeError } from '@/lib/error-handler'
+import { assertEmailConfigNotLocked, EmailConfigLockError } from '@/lib/email-config-lock'
 
 // GET - listar todas las conexiones API (Reforzado: requiere GESTOR+)
 export async function GET(req: NextRequest) {
@@ -69,6 +70,22 @@ export async function POST(req: NextRequest) {
         { success: false, error: 'Nombre y tipo son obligatorios' },
         { status: 400 }
       )
+    }
+
+    // BLOQUEO DE PROTECCIÓN DE CORREO: si el lock está activo, no se puede crear
+    // una nueva conexión EMAIL_SMTP (podría desplazar la activa actual al activarse).
+    if (tipo === 'EMAIL_SMTP') {
+      try {
+        await assertEmailConfigNotLocked('crear nueva conexión EMAIL_SMTP')
+      } catch (e: any) {
+        if (e instanceof EmailConfigLockError) {
+          return NextResponse.json(
+            { success: false, error: e.message, code: e.code },
+            { status: e.statusCode },
+          )
+        }
+        throw e
+      }
     }
 
     // Si se está activando, desactivar otras del mismo tipo (solo una activa por tipo)
