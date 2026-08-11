@@ -111,6 +111,11 @@ function isPublicEndpoint(pathname: string): boolean {
     // Monitoreo uptime (Better Stack / Uptime Robot / Vercel Cron).
     // NO expone credenciales — solo estado aggregated: ok | degraded.
     pathname === '/api/email-lock/health' ||
+    // === Firma electrónica con token público ===
+    // El cliente accede vía /firma/[token] sin login (token único en URL).
+    // El handler valida el token internamente contra TokenFirma en BD.
+    // Si el token no existe o ya fue usado, retorna 404.
+    pathname === '/api/firma' ||
     // === Cron endpoints (v4.4) — autenticados por X-Cron-Secret ===
     pathname.startsWith('/api/recordatorios/cron') ||
     pathname.startsWith('/api/pagos/cron')
