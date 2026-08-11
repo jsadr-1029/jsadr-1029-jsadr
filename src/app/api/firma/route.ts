@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { generarCodigoOtp, hashOtp, verificarOtp, registrarOtp, obtenerIp, obtenerUserAgent } from '@/lib/otp'
+import { generarCodigoOtp, hashOtp, verificarOtp, registrarOtp, obtenerIp, obtenerUserAgent, validarEmailEntregable } from '@/lib/otp'
 import { calcularPrestamo } from '@/lib/finanzas'
 import { enviarWhatsApp, mensajeOTPFirma, guardarNotificacion } from '@/lib/whatsapp'
 import { enviarEmail } from '@/lib/email'
@@ -333,8 +333,24 @@ async function enviarOTP(body: any) {
 
   // Enviar OTP por Email
   if ((canalFinal === 'EMAIL' || canalFinal === 'AMBOS') && firma.cliente.email) {
-    const subject = `Código de Verificación - Firma Electrónica ${firma.prestamo?.codigo || ''}`
-    const textContent = `Estimado/a ${firma.cliente.nombre},
+    // Validar que el email sea entregable (no @test.com, @example.com, etc.)
+    // Estos dominios no tienen servidor MX y siempre soft-bouncean.
+    const validacion = validarEmailEntregable(firma.cliente.email)
+    if (!validacion.esValido) {
+      console.error('[firma/enviar_otp] Email no entregable:', firma.cliente.email, '—', validacion.motivo)
+      // Si el canal es AMBOS, ya se intentó WhatsApp; si es solo EMAIL, devolver error claro
+      if (canalFinal === 'EMAIL') {
+        return NextResponse.json({
+          success: false,
+          error: validacion.motivo,
+          codigo: 'EMAIL_NO_ENTREGABLE',
+        }, { status: 400 })
+      }
+      // Si es AMBOS, registrar el fallo pero no abortar (ya se envió por WhatsApp)
+      envioEmail = { success: false, error: validacion.motivo }
+    } else {
+      const subject = `Código de Verificación - Firma Electrónica ${firma.prestamo?.codigo || ''}`
+      const textContent = `Estimado/a ${firma.cliente.nombre},
 
 Tu código de verificación para completar la firma electrónica es:
 
@@ -358,13 +374,14 @@ Sistema de Gestión de Préstamos`
   ⚠️ No compartas este código con nadie.</p>
 </div>`
 
-    envioEmail = await enviarEmail({
-      to: firma.cliente.email,
-      subject,
-      text: textContent,
-      html: htmlContent,
-    })
-  }
+      envioEmail = await enviarEmail({
+        to: firma.cliente.email,
+        subject,
+        text: textContent,
+        html: htmlContent,
+      })
+    } // cierra else (email entregable)
+  } // cierra if (canal EMAIL/AMBOS)
 
   // Registrar OTP centralizado en OtpRegistro (trazabilidad)
   const otpRegistro = await registrarOtp({

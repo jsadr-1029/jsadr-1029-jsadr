@@ -186,3 +186,52 @@ export function obtenerIp(req: { headers: Headers }): string | null {
 export function obtenerUserAgent(req: { headers: Headers }): string | null {
   return req.headers.get('user-agent') || null
 }
+
+// --- Validación de email entregable ---
+// Evita que se generen OTPs para dominios reservados/no entregables
+// (ej: @test.com, @example.com). Estos dominios no tienen servidor MX
+// y los correos siempre soft-bounce con "connection timeout", dando la
+// impresión falsa de que el sistema de correo está roto.
+//
+// Lista basada en RFC 2606 (Reserved Top Level DNS Names) + dominios
+// comúnmente usados para testing que NO reciben correos.
+const DOMINIOS_NO_ENTREGABLES = [
+  '@test.com',
+  '@example.com',
+  '@example.org',
+  '@example.net',
+  '@invalid.com',
+  '@fake.com',
+  '@demo.com',
+  '@no-reply.invalid',
+  '@localhost',
+  '@sub.test',
+  '@test.local',
+]
+
+export interface ValidacionEmail {
+  esValido: boolean
+  motivo?: string
+}
+
+export function validarEmailEntregable(email: string): ValidacionEmail {
+  if (!email || typeof email !== 'string') {
+    return { esValido: false, motivo: 'Email vacío o inválido' }
+  }
+  const emailLower = email.trim().toLowerCase()
+  // Validar formato básico
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+  if (!emailRegex.test(emailLower)) {
+    return { esValido: false, motivo: 'Formato de email inválido' }
+  }
+  // Validar que el dominio no esté en la lista de no-entregables
+  for (const dominio of DOMINIOS_NO_ENTREGABLES) {
+    if (emailLower.endsWith(dominio)) {
+      return {
+        esValido: false,
+        motivo: `El dominio "${dominio}" es un dominio reservado para pruebas (RFC 2606) y NO recibe correos. Los OTP enviados a este email nunca llegarán. Actualiza el email del cliente a una dirección real.`,
+      }
+    }
+  }
+  return { esValido: true }
+}

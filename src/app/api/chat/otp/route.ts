@@ -11,7 +11,7 @@ import { db } from '@/lib/db'
 import { hashPassword, verifyPassword } from '@/lib/security'
 import { getPortalClientInfo, registrarAccesoPortal } from '@/lib/acceso-portal'
 import { enviarEmail } from '@/lib/email'
-import { generarCodigoOtp, registrarOtp } from '@/lib/otp'
+import { generarCodigoOtp, registrarOtp, validarEmailEntregable } from '@/lib/otp'
 import { sanitizeError } from '@/lib/error-handler'
 
 // === CONFIGURACIÓN ===
@@ -78,6 +78,24 @@ async function solicitarOtp(req: NextRequest, body: any) {
         error:
           'Tu cuenta no tiene un correo electrónico registrado. Contacta al administrador para actualizar tu correo antes de continuar.',
         code: 'NO_EMAIL',
+      },
+      { status: 400 }
+    )
+  }
+
+  // Validar que el email sea entregable (no @test.com, @example.com, etc.)
+  // Estos dominios no tienen servidor MX y siempre soft-bouncean con
+  // "connection timeout", dando la impresión falsa de que el sistema
+  // de correo está roto.
+  const validacionEmail = validarEmailEntregable(cliente.email)
+  if (!validacionEmail.esValido) {
+    return NextResponse.json(
+      {
+        success: false,
+        error:
+          'El correo electrónico registrado en tu cuenta pertenece a un dominio de prueba que no puede recibir correos. Contacta al administrador para actualizar tu correo a una dirección real.',
+        code: 'EMAIL_NO_ENTREGABLE',
+        motivo: validacionEmail.motivo,
       },
       { status: 400 }
     )

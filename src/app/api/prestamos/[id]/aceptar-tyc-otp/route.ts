@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { calcularPrestamo, getTasaMoraAnual, formatearMoneda } from '@/lib/finanzas'
-import { generarCodigoOtp, hashOtp, verificarOtp, registrarOtp } from '@/lib/otp'
+import { generarCodigoOtp, hashOtp, verificarOtp, registrarOtp, validarEmailEntregable } from '@/lib/otp'
 import { enviarWhatsApp, guardarNotificacion } from '@/lib/whatsapp'
 import { enviarEmail } from '@/lib/email'
 import crypto from 'crypto'
@@ -346,6 +346,24 @@ async function enviarOTP(prestamoId: string, body: any) {
   }
   if (!prestamo.cliente) return NextResponse.json({ success: false, error: 'Cliente no encontrado' }, { status: 404 })
   if (canalFinal === 'EMAIL' && !prestamo.cliente.email) return NextResponse.json({ success: false, error: 'El cliente no tiene correo electrónico' }, { status: 400 })
+
+  // === Validar que el email sea entregable (no @test.com, @example.com, etc.) ===
+  // Estos dominios no tienen servidor MX y siempre soft-bouncean con
+  // "connection timeout", dando la impresión falsa de que el correo no funciona.
+  if ((canalFinal === 'EMAIL' || canalFinal === 'AMBOS') && prestamo.cliente.email) {
+    const validacionEmail = validarEmailEntregable(prestamo.cliente.email)
+    if (!validacionEmail.esValido) {
+      // Si el canal es AMBOS, todavía podemos intentar WhatsApp
+      if (canalFinal === 'EMAIL') {
+        return NextResponse.json({
+          success: false,
+          error: 'El correo del cliente ("' + prestamo.cliente.email + '") pertenece a un dominio de prueba que no recibe correos. Actualiza el email del cliente a una dirección real.',
+          codigo: 'EMAIL_NO_ENTREGABLE',
+          motivo: validacionEmail.motivo,
+        }, { status: 400 })
+      }
+    }
+  }
 
   // === PROTECCIÓN: NO generar OTP nuevo si hay uno ACTIVO y no validado ===
   // Si el cliente vuelve a entrar al portal o vuelve a pedir OTP, pero ya tiene

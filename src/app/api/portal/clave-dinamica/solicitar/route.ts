@@ -33,6 +33,7 @@ import {
   registrarOtp,
   obtenerIp,
   obtenerUserAgent,
+  validarEmailEntregable,
 } from '@/lib/otp'
 import { enviarEmail } from '@/lib/email'
 
@@ -86,6 +87,21 @@ export async function POST(req: NextRequest) {
           error:
             'Tu cuenta no tiene un correo electrónico registrado. Contacta al administrador para actualizar tu correo antes de continuar.',
           code: 'NO_EMAIL',
+        },
+        { status: 400 }
+      )
+    }
+
+    // === Validar que el email sea entregable (no @test.com, @example.com, etc.) ===
+    const validacionEmail = validarEmailEntregable(cliente.email)
+    if (!validacionEmail.esValido) {
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            'El correo electrónico registrado en tu cuenta pertenece a un dominio de prueba que no puede recibir correos. Contacta al administrador para actualizar tu correo a una dirección real.',
+          code: 'EMAIL_NO_ENTREGABLE',
+          motivo: validacionEmail.motivo,
         },
         { status: 400 }
       )

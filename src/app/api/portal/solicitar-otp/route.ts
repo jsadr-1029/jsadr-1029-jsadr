@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { generarCodigoOtp, registrarOtp, obtenerIp, obtenerUserAgent } from '@/lib/otp'
+import { generarCodigoOtp, registrarOtp, obtenerIp, obtenerUserAgent, validarEmailEntregable } from '@/lib/otp'
 import { enviarEmail } from '@/lib/email'
 
 // POST /api/portal/solicitar-otp
@@ -59,6 +59,26 @@ export async function POST(req: NextRequest) {
           error:
             'Tu cuenta no tiene un correo electrónico registrado. Contacta al administrador para actualizar tu correo antes de continuar.',
           codigo: 'CLIENTE_SIN_EMAIL',
+        },
+        { status: 400 }
+      )
+    }
+
+    // Validar que el email sea entregable (no @test.com, @example.com, etc.)
+    // Estos dominios no tienen servidor MX y siempre soft-bouncean con
+    // "connection timeout", dando la impresión falsa de que el sistema
+    // de correo está roto.
+    const validacionEmail = validarEmailEntregable(email)
+    if (!validacionEmail.esValido) {
+      return NextResponse.json(
+        {
+          error:
+            'El correo electrónico registrado en tu cuenta ("' +
+            email +
+            '") pertenece a un dominio de prueba que no puede recibir correos. ' +
+            'Contacta al administrador para actualizar tu correo a una dirección real.',
+          codigo: 'EMAIL_NO_ENTREGABLE',
+          motivo: validacionEmail.motivo,
         },
         { status: 400 }
       )
