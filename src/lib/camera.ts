@@ -1,32 +1,38 @@
 'use client'
 
 /**
- * Utilidades robustas para captura de fotos desde la cámara del dispositivo.
+ * Utilidades para captura MANUAL de fotos desde la cámara del dispositivo.
  *
- * FILOSOFÍA DE ESTE MÓDULO (v3 — botón siempre manual):
+ * FILOSOFÍA DE ESTE MÓDULO (v4 — manual puro, sin automáticas):
  * ----------------------------------------------------------------
- * El botón "Capturar foto" debe estar SIEMPRE habilitado en cuanto la
- * cámara entrega video. Es el usuario quien decide, mirando la pantalla,
- * cuándo la imagen se ve lo suficientemente bien para tomar la foto.
+ * El usuario es quien decide, mirando la pantalla, cuándo la imagen se ve
+ * bien. NO existen:
+ *   - Detección automática de nitidez que actualice badges cada X ms.
+ *   - Banners que aparecen/desaparecen solos según condiciones de la imagen.
+ *   - Auto-captura por condiciones de calidad.
+ *   - "Forzar captura" ni estados de error por baja calidad.
  *
- * Razón: las condiciones automáticas de nitidez / iluminación varían
- * enormemente entre dispositivos (webcams baratas, móviles con poca luz,
- * laptops con cámaras HD de baja calidad). Cualquier umbral automático
- * termina bloqueando a usuarios legítimos. Por eso:
+ * El flujo es:
+ *   1. Se abre la cámara con las mejores constraints posibles (1920×1080).
+ *   2. Se muestra el video en vivo, con un botón GRANDE de "Capturar foto".
+ *   3. El botón se habilita solo cuando el video tiene frames reales
+ *      (evento `playing`). A partir de ahí permanece SIEMPRE habilitado.
+ *   4. El usuario presiona el botón cuando lo decide.
+ *   5. Se muestra la foto capturada en un panel de confirmación con
+ *      "Usar esta foto" o "Tomar otra". El usuario confirma explícitamente.
+ *   6. Solo entonces se retorna el dataUrl.
  *
- *   1. El botón se habilita en el evento `onplaying` del <video>.
- *   2. La detección de nitidez sigue corriendo, pero SOLO como guía
- *      visual informativa (un pequeño badge con tips). Nunca bloquea.
- *   3. No existen botones "forzar captura" ni estados de error por
- *      baja calidad. Si la cámara entrega video, se puede capturar.
+ * Calidad:
+ *   - Constraints: 1920×1080 ideal → 1280×720 → video:true (fallback).
+ *   - focusMode/exposureMode continuos cuando el dispositivo lo soporta.
+ *   - JPEG quality 0.92, imageSmoothingQuality 'high'.
  *
  * Maneja los principales escenarios de fallo de HARDWARE (no de calidad):
- *  - `OverconstrainedError`: facingMode 'environment' no existe en desktop.
- *    Se reintenta con `video: true` (cualquier cámara disponible).
- *  - `NotAllowedError`: el usuario bloqueó el permiso. Mensaje claro.
- *  - `NotFoundError`: no hay cámara conectada.
- *  - `NotReadableError`: la cámara está en uso por otra app (Zoom, Teams, etc.).
- *  - `SecurityError`: la página no está servida sobre HTTPS.
+ *  - OverconstrainedError → reintenta con constraints más permisivas.
+ *  - NotAllowedError → mensaje claro de permiso bloqueado.
+ *  - NotFoundError → no hay cámara conectada.
+ *  - NotReadableError → cámara en uso por otra app.
+ *  - SecurityError → la página no está en HTTPS.
  */
 
 export interface CameraError {
@@ -37,8 +43,30 @@ export interface CameraError {
 }
 
 /**
+ * Extiende MediaTrackConstraints con las propiedades avanzadas del ImageCapture API
+ * (focusMode, exposureMode, whiteBalanceMode) que NO están en el tipo estándar de
+ * TypeScript DOM lib pero SÍ son soportadas por Chrome/Edge/Safari móviles.
+ */
+interface ExtendedMediaTrackConstraints extends MediaTrackConstraints {
+  focusMode?: ConstrainDOMString
+  exposureMode?: ConstrainDOMString
+  whiteBalanceMode?: ConstrainDOMString
+}
+
+interface ExtendedMediaTrackCapabilities {
+  focusMode?: string[]
+  exposureMode?: string[]
+  whiteBalanceMode?: string[]
+}
+
+interface ExtendedMediaStreamTrack {
+  getCapabilities?: () => ExtendedMediaTrackCapabilities & MediaTrackCapabilities
+  applyConstraints?: (constraints: MediaTrackConstraints) => Promise<void>
+}
+
+/**
  * Abre la cámara con el facingMode preferido. Si no está disponible
- * (común en desktop), reintenta con `video: true`.
+ * (común en desktop), reintenta con constraints más permisivas.
  *
  * @param preferredFacing 'environment' para fotos de documentos, 'user' para selfies.
  * @returns MediaStream si tuvo éxito.
@@ -72,27 +100,43 @@ export async function abrirCamara(
     }
   }
 
-  // 3. Estrategia de fallback en cascada:
-  //    Intento A: facingMode preferido + dimensiones ideales
-  //    Intento B: solo dimensiones ideales (sin facingMode)
-  //    Intento C: video: true (cualquier cámara, cualquier configuración)
-  //    Esto cubre desktops, laptops, teléfonos, webcams USB, y casos Edge donde
-  //    cualquier constraint específica falla con OverconstrainedError.
-
+  // 3. Estrategia de fallback en cascada para maximizar la calidad:
+  //    Intento A: facingMode preferido + 1920×1080 + focus/exposure continuos.
+  //    Intento B: facingMode preferido + 1920×1080 (sin advanced constraints).
+  //    Intento C: 1280×720 sin facingMode (algunos desktops).
+  //    Intento D: video: true (cualquier cámara, cualquier configuración).
   const intentos: Array<{ nombre: string; constraints: MediaStreamConstraints }> = [
     {
-      nombre: `facingMode=${preferredFacing} + dimensiones`,
+      nombre: `facingMode=${preferredFacing} + 1920x1080 + focus/exposure continuos`,
       constraints: {
         video: {
           facingMode: { ideal: preferredFacing },
-          width: { ideal: 1280 },
-          height: { ideal: 720 },
+          width: { ideal: 1920 },
+          height: { ideal: 1080 },
+          // advanced se ignora si el dispositivo no soporta estos campos,
+          // pero NO hace fallar el getUserMedia.
+          advanced: [
+            { focusMode: 'continuous' },
+            { exposureMode: 'continuous' },
+            { whiteBalanceMode: 'continuous' },
+          ] as unknown as MediaTrackConstraintSet[],
+        },
+        audio: false,
+      } as MediaStreamConstraints,
+    },
+    {
+      nombre: `facingMode=${preferredFacing} + 1920x1080`,
+      constraints: {
+        video: {
+          facingMode: { ideal: preferredFacing },
+          width: { ideal: 1920 },
+          height: { ideal: 1080 },
         },
         audio: false,
       },
     },
     {
-      nombre: 'solo dimensiones (sin facingMode)',
+      nombre: '1280x720 (sin facingMode)',
       constraints: {
         video: { width: { ideal: 1280 }, height: { ideal: 720 } },
         audio: false,
@@ -109,6 +153,29 @@ export async function abrirCamara(
     try {
       console.log(`[camera] intento: ${intento.nombre}`)
       const stream = await navigator.mediaDevices.getUserMedia(intento.constraints)
+      // Aplicar constraints avanzadas post-stream si el track lo permite
+      // (focus continuo, exposición continua). Esto mejora nitidez en móviles.
+      stream.getVideoTracks().forEach((track) => {
+        try {
+          const extTrack = track as ExtendedMediaStreamTrack
+          const capabilities = extTrack.getCapabilities?.() || {}
+          const constraints: ExtendedMediaTrackConstraints = {}
+          if (capabilities.focusMode?.includes('continuous')) {
+            constraints.focusMode = 'continuous'
+          }
+          if (capabilities.exposureMode?.includes('continuous')) {
+            constraints.exposureMode = 'continuous'
+          }
+          if (capabilities.whiteBalanceMode?.includes('continuous')) {
+            constraints.whiteBalanceMode = 'continuous'
+          }
+          if (Object.keys(constraints).length > 0) {
+            track.applyConstraints(constraints as MediaTrackConstraints).catch(() => {})
+          }
+        } catch {
+          // Silencioso: estas capabilities son opcionales.
+        }
+      })
       console.log(`[camera] éxito con: ${intento.nombre}`)
       return stream
     } catch (e: any) {
@@ -125,10 +192,7 @@ export async function abrirCamara(
     }
   }
 
-  // Si llegamos aquí, todos los intentos fallaron. Si el último error fue
-  // NotAllowedError, significa que el usuario SÍ bloqueó el permiso. Si fue
-  // NotFoundError, no hay cámara. Si fue OverconstrainedError, ninguna
-  // configuración funcionó. En todos los casos, traducir y propagar.
+  // Si llegamos aquí, todos los intentos fallaron. Traducir y propagar.
   throw traducirErrorCamara(ultimoError)
 }
 
@@ -195,141 +259,16 @@ function traducirErrorCamara(e: any): CameraError {
 }
 
 /**
- * ====================================================================
- * DETECCIÓN DE NITIDEZ (Sharpness Detection) — SOLO INFORMATIVA
- * ====================================================================
+ * Muestra un modal overlay con el stream de la cámara y un botón GRANDE
+ * para capturar la foto MANUALMENTE. Tras capturar, muestra un panel de
+ * confirmación donde el usuario decide si usar la foto o tomar otra.
  *
- * Usa la técnica estándar de visión por computadora: varianza del filtro
- * Laplaciano. El Laplaciano resalta los bordes (cambios bruscos de
- * intensidad); una imagen nítida tiene bordes fuertes → varianza alta;
- * una imagen borrosa tiene bordes suaves → varianza baja.
- *
- * IMPORTANTE (v3): La medición se sigue ejecutando, pero el resultado
- * SOLO se usa para mostrar un badge informativo al usuario. NUNCA
- * deshabilita el botón de captura. El usuario decide cuándo capturar.
- *
- * Implementación optimizada para tiempo real:
- *  1. Muestrear el video a un canvas pequeño (128x96) — rápido.
- *  2. Obtener los pixels en escala de grises.
- *  3. Aplicar convolución Laplaciana 3x3 ([0,1,0; 1,-4,1; 0,1,0]).
- *  4. Calcular la varianza de los valores resultantes.
- */
-
-interface MedicionNitidez {
-  /** Varianza del Laplaciano (mayor = más nítida). */
-  varianza: number
-  /** Clasificación legible. */
-  nivel: 'NITIDA' | 'ACEPTABLE' | 'BORROSA' | 'SIN_SENAL'
-  /** Mensaje corto para el badge. */
-  mensaje: string
-  /** Recomendación accionable (corta), opcional. */
-  recomendacion?: string
-}
-
-/**
- * Mide la nitidez de un frame de video.
- * @returns MedicionNitidez con la varianza y clasificación.
- */
-function medirNitidez(video: HTMLVideoElement): MedicionNitidez {
-  // Si el video no tiene dimensiones aún, retornar SIN_SENAL
-  if (!video.videoWidth || !video.videoHeight) {
-    return {
-      varianza: 0,
-      nivel: 'SIN_SENAL',
-      mensaje: 'Iniciando cámara...',
-    }
-  }
-
-  // Canvas pequeño para análisis rápido (downscale no afecta la detección
-  // de borrosidad significativamente y reduce el cómputo ~50x).
-  const W = 128
-  const H = 96
-  const canvas = document.createElement('canvas')
-  canvas.width = W
-  canvas.height = H
-  const ctx = canvas.getContext('2d', { willReadFrequently: true })
-  if (!ctx) {
-    return {
-      varianza: 0,
-      nivel: 'SIN_SENAL',
-      mensaje: 'Iniciando cámara...',
-    }
-  }
-  ctx.drawImage(video, 0, 0, W, H)
-  const imageData = ctx.getImageData(0, 0, W, H)
-  const pixels = imageData.data
-
-  // Convertir a escala de grises (luminancia perceptual)
-  const gray = new Float32Array(W * H)
-  for (let i = 0, j = 0; i < pixels.length; i += 4, j++) {
-    gray[j] = 0.299 * pixels[i] + 0.587 * pixels[i + 1] + 0.114 * pixels[i + 2]
-  }
-
-  // Aplicar Laplaciano 3x3: [0,1,0; 1,-4,1; 0,1,0]
-  // y acumular suma y suma de cuadrados para varianza.
-  const laplacian = new Float32Array(W * H)
-  for (let y = 1; y < H - 1; y++) {
-    for (let x = 1; x < W - 1; x++) {
-      const idx = y * W + x
-      const val = gray[idx - W] + gray[idx + W] + gray[idx - 1] + gray[idx + 1] - 4 * gray[idx]
-      laplacian[idx] = val
-    }
-  }
-
-  // Varianza = E[X²] - (E[X])²
-  let sum = 0
-  let sumSq = 0
-  let count = 0
-  for (let y = 1; y < H - 1; y++) {
-    for (let x = 1; x < W - 1; x++) {
-      const idx = y * W + x
-      const v = laplacian[idx]
-      sum += v
-      sumSq += v * v
-      count++
-    }
-  }
-  const mean = sum / count
-  const variance = sumSq / count - mean * mean
-
-  // Clasificar según umbrales calibrados.
-  // Estos umbrales son SOLO informativos — nunca bloquean la captura.
-  if (variance >= 60) {
-    return {
-      varianza: variance,
-      nivel: 'NITIDA',
-      mensaje: 'Imagen nítida',
-    }
-  } else if (variance >= 20) {
-    return {
-      varianza: variance,
-      nivel: 'ACEPTABLE',
-      mensaje: 'Imagen aceptable',
-      recomendacion: 'Si puedes, acércate un poco o mejora la luz para una foto aún más clara.',
-    }
-  } else {
-    return {
-      varianza: variance,
-      nivel: 'BORROSA',
-      mensaje: 'Imagen algo borrosa',
-      recomendacion: 'Si la foto se ve bien en pantalla, puedes capturarla. Si no, acércate, mejora la luz o sujeta firme la cámara.',
-    }
-  }
-}
-
-/**
- * Muestra un modal overlay con el stream de la cámara y botones para capturar
- * o cancelar. Retorna un dataUrl JPEG de la foto capturada, o null si el
- * usuario cancela.
- *
- * FILOSOFÍA (v3): El botón "Capturar foto" está SIEMPRE habilitado en cuanto
- * el video comienza a reproducirse. El usuario decide cuándo tomar la foto
- * mirando la pantalla. La detección de nitidez es puramente informativa
- * (un pequeño badge con tips), nunca bloqueante.
+ * NO hay detección automática de nitidez ni auto-captura. El usuario
+ * tiene control total.
  *
  * @param stream MediaStream ya abierto (de abrirCamara()).
  * @param opts Opciones: título, espejar (para selfie), texto del botón.
- * @returns dataUrl JPEG o null si cancela.
+ * @returns dataUrl JPEG (calidad alta) o null si cancela.
  */
 export function mostrarModalCamara(
   stream: MediaStream,
@@ -342,78 +281,100 @@ export function mostrarModalCamara(
   const { titulo = 'Tomar foto', textoBoton = 'Capturar', espejar = false } = opts
 
   return new Promise((resolve) => {
-    // Crear elementos
+    // === Estructura del DOM del modal ===
     const overlay = document.createElement('div')
     overlay.style.cssText =
-      'position:fixed;inset:0;background:rgba(0,0,0,0.95);z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:20px;gap:12px;'
+      'position:fixed;inset:0;background:rgba(0,0,0,0.97);z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:16px;gap:12px;font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;'
 
+    // Título
     const tituloEl = document.createElement('p')
     tituloEl.textContent = titulo
-    tituloEl.style.cssText = 'color:#fff;font-size:16px;font-weight:600;margin:0 0 8px 0;'
+    tituloEl.style.cssText = 'color:#fff;font-size:18px;font-weight:700;margin:0 0 4px 0;letter-spacing:-0.01em;'
     overlay.appendChild(tituloEl)
 
+    // Instrucción clara (estática, no cambia)
     const hintEl = document.createElement('p')
-    hintEl.innerHTML =
-      '📷 Mira la cámara en la pantalla.<br/>' +
-      '<strong>Cuando veas que el documento se ve bien claro, presiona el botón para tomar la foto.</strong><br/>' +
-      '<span style="opacity:0.7;font-size:11px;">El botón siempre está habilitado — tú decides cuándo capturar.</span>'
+    hintEl.textContent = 'Mira la cámara en la pantalla. Cuando la imagen se vea bien, presiona el botón para tomar la foto.'
     hintEl.style.cssText =
-      'color:#cbd5e1;font-size:13px;text-align:center;max-width:520px;margin:0 0 12px 0;line-height:1.5;'
+      'color:#cbd5e1;font-size:13px;text-align:center;max-width:560px;margin:0 0 8px 0;line-height:1.5;'
     overlay.appendChild(hintEl)
 
+    // Contenedor del video (con borde resaltado)
     const videoContainer = document.createElement('div')
     videoContainer.style.cssText =
-      'position:relative;border-radius:12px;overflow:hidden;box-shadow:0 0 0 2px rgba(99,102,241,0.5),0 12px 32px -8px rgba(0,0,0,0.6);'
+      'position:relative;border-radius:14px;overflow:hidden;box-shadow:0 0 0 3px rgba(99,102,241,0.6),0 16px 40px -10px rgba(0,0,0,0.7);background:#000;'
 
     const video = document.createElement('video')
     video.srcObject = stream
     video.autoplay = true
     video.playsInline = true
     video.muted = true
-    video.style.cssText = `max-width:90vw;max-height:60vh;display:block;${espejar ? 'transform:scaleX(-1);' : ''}`
+    video.style.cssText = `max-width:92vw;max-height:62vh;display:block;object-fit:cover;${espejar ? 'transform:scaleX(-1);' : ''}`
     videoContainer.appendChild(video)
     overlay.appendChild(videoContainer)
 
-    // === Indicador de nitidez (SOLO informativo) ===
-    // Pequeño badge discreto en la esquina superior izquierda.
-    // Nunca bloquea el botón de captura.
-    const nitidezBadge = document.createElement('div')
-    nitidezBadge.style.cssText =
-      'position:absolute;top:10px;left:10px;padding:6px 12px;border-radius:20px;font-size:11px;font-weight:600;color:white;backdrop-filter:blur(6px);background:rgba(0,0,0,0.55);transition:background 0.3s;display:flex;align-items:center;gap:6px;'
-    nitidezBadge.textContent = '⚪ Iniciando cámara...'
-    videoContainer.appendChild(nitidezBadge)
+    // Indicador "EN VIVO" — estático, no parpadea para no dar sensación de automatización
+    const liveBadge = document.createElement('div')
+    liveBadge.style.cssText =
+      'position:absolute;top:12px;right:12px;padding:5px 10px;border-radius:6px;font-size:10px;font-weight:700;color:#fff;background:#dc2626;letter-spacing:0.05em;display:flex;align-items:center;gap:6px;'
+    liveBadge.innerHTML =
+      '<span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:#fff;"></span>EN VIVO'
+    videoContainer.appendChild(liveBadge)
 
-    // Banner inferior con tips de mejora (solo informativo, nunca bloqueante).
-    const recomendacionBanner = document.createElement('div')
-    recomendacionBanner.style.cssText =
-      'position:absolute;bottom:0;left:0;right:0;padding:10px 14px;background:linear-gradient(0deg, rgba(0,0,0,0.85), rgba(0,0,0,0));color:white;font-size:12px;line-height:1.4;display:none;'
-    videoContainer.appendChild(recomendacionBanner)
+    // Capa de flash blanco al capturar (transición breve)
+    const flashLayer = document.createElement('div')
+    flashLayer.style.cssText =
+      'position:absolute;inset:0;background:#fff;opacity:0;pointer-events:none;transition:opacity 0.08s ease-out;'
+    videoContainer.appendChild(flashLayer)
 
-    // === Botones ===
+    // === Panel de confirmación (inicialmente oculto) ===
+    // Se muestra después de capturar para que el usuario confirme explícitamente.
+    const previewContainer = document.createElement('div')
+    previewContainer.style.cssText =
+      'position:absolute;inset:0;background:#000;display:none;flex-direction:column;align-items:center;justify-content:center;padding:16px;gap:12px;'
+    videoContainer.appendChild(previewContainer)
+
+    const previewImg = document.createElement('img')
+    previewImg.style.cssText = 'max-width:100%;max-height:75%;border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,0.6);'
+    previewContainer.appendChild(previewImg)
+
+    const previewLabel = document.createElement('p')
+    previewLabel.textContent = '¿La foto se ve bien?'
+    previewLabel.style.cssText = 'color:#fff;font-size:15px;font-weight:600;margin:0;'
+    previewContainer.appendChild(previewLabel)
+
+    // === Contenedor de botones (cambia entre "capturar" y "confirmar") ===
     const btnContainer = document.createElement('div')
-    btnContainer.style.cssText = 'margin-top:12px;display:flex;gap:12px;flex-wrap:wrap;justify-content:center;'
+    btnContainer.style.cssText = 'margin-top:8px;display:flex;gap:12px;flex-wrap:wrap;justify-content:center;align-items:center;'
+    overlay.appendChild(btnContainer)
 
+    // --- Botón Capturar (GRANDE, muy visible) ---
     const btnCapturar = document.createElement('button')
-    btnCapturar.textContent = '📸 ' + textoBoton
-    // Estado inicial: deshabilitado SOLO hasta que el video comience a reproducirse.
-    // Una vez que el video esté reproduciéndose (evento onplaying), se habilita
-    // permanentemente, sin importar la nitidez.
+    btnCapturar.textContent = '📸  ' + textoBoton
     btnCapturar.disabled = true
     btnCapturar.style.cssText =
-      'padding:14px 32px;background:linear-gradient(135deg,#6366f1,#a855f7);color:white;border:none;border-radius:12px;font-size:16px;font-weight:600;cursor:not-allowed;opacity:0.55;box-shadow:0 8px 24px -6px rgba(99,102,241,0.5);transition:transform 0.15s,opacity 0.2s;'
+      'padding:18px 40px;background:linear-gradient(135deg,#6366f1,#a855f7);color:white;border:none;border-radius:14px;font-size:18px;font-weight:700;cursor:not-allowed;opacity:0.55;box-shadow:0 10px 28px -8px rgba(99,102,241,0.6);transition:transform 0.12s,opacity 0.2s,box-shadow 0.2s;min-width:200px;'
     btnCapturar.onmouseover = () => {
-      if (!btnCapturar.disabled) btnCapturar.style.transform = 'scale(1.05)'
+      if (!btnCapturar.disabled) {
+        btnCapturar.style.transform = 'scale(1.04)'
+        btnCapturar.style.boxShadow = '0 14px 36px -8px rgba(99,102,241,0.75)'
+      }
     }
-    btnCapturar.onmouseout = () => (btnCapturar.style.transform = 'scale(1)')
+    btnCapturar.onmouseout = () => {
+      btnCapturar.style.transform = 'scale(1)'
+      btnCapturar.style.boxShadow = '0 10px 28px -8px rgba(99,102,241,0.6)'
+    }
 
+    // --- Botón Cancelar ---
     const btnCancelar = document.createElement('button')
     btnCancelar.textContent = '✕ Cancelar'
     btnCancelar.style.cssText =
-      'padding:14px 32px;background:rgba(255,255,255,0.1);color:white;border:1px solid rgba(255,255,255,0.2);border-radius:12px;font-size:16px;cursor:pointer;'
+      'padding:18px 28px;background:rgba(255,255,255,0.1);color:white;border:1px solid rgba(255,255,255,0.25);border-radius:14px;font-size:16px;font-weight:600;cursor:pointer;transition:background 0.15s;'
+    btnCancelar.onmouseover = () => (btnCancelar.style.background = 'rgba(255,255,255,0.18)')
+    btnCancelar.onmouseout = () => (btnCancelar.style.background = 'rgba(255,255,255,0.1)')
 
     btnContainer.appendChild(btnCancelar)
     btnContainer.appendChild(btnCapturar)
-    overlay.appendChild(btnContainer)
 
     document.body.appendChild(overlay)
 
@@ -423,145 +384,130 @@ export function mostrarModalCamara(
     // ====================================================================
     // HABILITAR BOTÓN EN CUANTO EL VIDEO COMIENZA A REPRODUCIRSE
     // ====================================================================
-    // Este es el punto clave: el botón se habilita UNA sola vez, en el evento
-    // `onplaying` del <video>. A partir de ahí, permanece habilitado sin
-    // importar la medición de nitidez. El usuario decide cuándo capturar.
+    // El botón se habilita UNA sola vez, en el primer evento de reproducción.
+    // A partir de ahí permanece SIEMPRE habilitado. NO hay ningún loop
+    // que lo deshabilite después — el usuario tiene control total.
     let botonHabilitado = false
     const habilitarBoton = () => {
       if (botonHabilitado) return
+      if (!video.videoWidth || !video.videoHeight) {
+        // Aún sin dimensiones — esperar al siguiente evento
+        return
+      }
       botonHabilitado = true
       btnCapturar.disabled = false
       btnCapturar.style.opacity = '1'
       btnCapturar.style.cursor = 'pointer'
-      btnCapturar.textContent = '📸 ' + textoBoton
       console.log('[camera] video reproduciéndose — botón capturar habilitado')
     }
 
-    // `loadeddata` se dispara cuando el primer frame está disponible.
-    // `playing` se dispara cuando la reproducción ha comenzado realmente.
-    // Usamos ambos para cubrir todos los navegadores (el primero que llegue habilita).
     video.addEventListener('loadeddata', habilitarBoton, { once: true })
     video.addEventListener('playing', habilitarBoton, { once: true })
+    video.addEventListener('loadedmetadata', habilitarBoton, { once: true })
 
     // Fallback de seguridad: si por algún motivo los eventos no se disparan
-    // en 3 segundos, habilitar el botón de todas formas (mejor dejar capturar
-    // que dejar al usuario esperando indefinidamente).
+    // en 5 segundos, habilitar el botón de todas formas. Preferimos un tiempo
+    // mayor (5s vs 3s anterior) para dar más margen a cámaras lentas; el
+    // usuario puede esperar o cancelar si prefiere.
     const fallbackTimer = setTimeout(() => {
       if (!botonHabilitado) {
-        console.warn('[camera] fallback de seguridad — habilitando botón tras 3s')
-        habilitarBoton()
+        console.warn('[camera] fallback de seguridad — habilitando botón tras 5s')
+        botonHabilitado = true
+        btnCapturar.disabled = false
+        btnCapturar.style.opacity = '1'
+        btnCapturar.style.cursor = 'pointer'
       }
-    }, 3000)
+    }, 5000)
 
     // ====================================================================
-    // LOOP DE MEDICIÓN DE NITIDEZ — SOLO INFORMATIVO
+    // CAPTURA MANUAL — sin validación de nitidez, sin auto-capture
     // ====================================================================
-    // El loop corre cada 600ms y actualiza el badge visual, pero NUNCA
-    // toca el estado del botón de captura. Es puramente orientativo.
-    let medicionInterval: ReturnType<typeof setInterval> | null = null
-    let medicionTimeout: ReturnType<typeof setTimeout> | null = null
-    let medicionActual: MedicionNitidez = {
-      varianza: 0,
-      nivel: 'SIN_SENAL',
-      mensaje: 'Iniciando cámara...',
-    }
+    let fotoCapturada: string | null = null
+    let streamDetenido = false
 
-    const actualizarBadge = (m: MedicionNitidez) => {
-      medicionActual = m
-
-      // Colores del badge: usamos tonos informativos, no rojos alarmantes.
-      // Verde para nítida, amarillo para aceptable, gris neutro para borrosa
-      // (no rojo, para no asustar al usuario ni sugerir que está bloqueado).
-      const colores: Record<MedicionNitidez['nivel'], string> = {
-        NITIDA: '#10b981',
-        ACEPTABLE: '#f59e0b',
-        BORROSA: '#94a3b8', // gris neutro — no rojo
-        SIN_SENAL: '#6b7280',
-      }
-      const iconos: Record<MedicionNitidez['nivel'], string> = {
-        NITIDA: '✓',
-        ACEPTABLE: '◐',
-        BORROSA: '◑',
-        SIN_SENAL: '○',
-      }
-
-      const nivelTexto: Record<MedicionNitidez['nivel'], string> = {
-        NITIDA: 'Imagen nítida',
-        ACEPTABLE: 'Imagen aceptable',
-        BORROSA: 'Imagen algo borrosa',
-        SIN_SENAL: 'Iniciando cámara...',
-      }
-
-      nitidezBadge.textContent = `${iconos[m.nivel]} ${nivelTexto[m.nivel]}`
-      nitidezBadge.style.background = `rgba(0,0,0,0.65)`
-      nitidezBadge.style.borderLeft = `4px solid ${colores[m.nivel]}`
-
-      // Banner de recomendación: solo informativo, nunca bloqueante.
-      // Se muestra solo si hay una recomendación útil.
-      if (m.nivel === 'NITIDA' || m.nivel === 'SIN_SENAL' || !m.recomendacion) {
-        recomendacionBanner.style.display = 'none'
-      } else {
-        recomendacionBanner.style.display = 'block'
-        recomendacionBanner.innerHTML =
-          `<div style="font-weight:600;margin-bottom:2px;">💡 Tip: ${m.mensaje}</div>` +
-          `<div style="opacity:0.9;font-size:11px;">${m.recomendacion}</div>`
-      }
-    }
-
-    const iniciarMedicionLoop = () => {
-      // Pequeño delay inicial para que el video se estabilice
-      medicionTimeout = setTimeout(() => {
-        // Medición inmediata
-        actualizarBadge(medirNitidez(video))
-        // Y luego cada 600ms
-        medicionInterval = setInterval(() => {
-          actualizarBadge(medirNitidez(video))
-        }, 600)
-      }, 300)
-    }
-    iniciarMedicionLoop()
-
-    const cleanup = () => {
-      if (medicionInterval) clearInterval(medicionInterval)
-      if (medicionTimeout) clearTimeout(medicionTimeout)
-      clearTimeout(fallbackTimer)
+    const detenerStream = () => {
+      if (streamDetenido) return
+      streamDetenido = true
       stream.getTracks().forEach((t) => t.stop())
-      if (overlay.parentNode) overlay.parentNode.removeChild(overlay)
     }
 
-    btnCancelar.onclick = () => {
-      cleanup()
-      resolve(null)
-    }
-
-    // Función para capturar la foto. Siempre disponible una vez que el video
-    // está reproduciéndose. No valida nitidez.
     const capturar = () => {
-      // Esperar a que el video tenga dimensiones válidas (debería estar listo
-      // porque el botón solo se habilita tras onplaying, pero por seguridad).
       if (!video.videoWidth || !video.videoHeight) {
-        // Reintentar en 150ms si el video aún no está listo
-        setTimeout(() => capturar(), 150)
+        // Reintentar en 150ms si el video aún no está listo (caso Edge)
+        setTimeout(capturar, 150)
         return
       }
+
+      // Canvas a resolución completa del video (hasta 1920×1080)
       const canvas = document.createElement('canvas')
       canvas.width = video.videoWidth
       canvas.height = video.videoHeight
       const ctx = canvas.getContext('2d')
-      if (!ctx) {
-        cleanup()
-        resolve(null)
-        return
-      }
-      // Si espejar (selfie), invertir horizontalmente para coincidir con lo que ve el usuario
+      if (!ctx) return
+
+      // Suavizado de alta calidad al escalar/dibujar
+      ctx.imageSmoothingEnabled = true
+      ctx.imageSmoothingQuality = 'high'
+
+      // Si espejar (selfie), invertir horizontalmente para coincidir
+      // con lo que ve el usuario en pantalla
       if (espejar) {
         ctx.translate(canvas.width, 0)
         ctx.scale(-1, 1)
       }
       ctx.drawImage(video, 0, 0)
-      const dataUrl = canvas.toDataURL('image/jpeg', 0.85)
-      cleanup()
-      resolve(dataUrl)
+
+      // JPEG alta calidad (0.92 — equilibrio entre nitidez y tamaño)
+      fotoCapturada = canvas.toDataURL('image/jpeg', 0.92)
+
+      // Flash visual breve para confirmar la captura al usuario
+      flashLayer.style.opacity = '0.9'
+      setTimeout(() => {
+        flashLayer.style.opacity = '0'
+      }, 120)
+
+      // Pausar el video para ahorrar CPU/batería durante la confirmación
+      video.pause()
+
+      // Mostrar panel de confirmación con la foto capturada
+      previewImg.src = fotoCapturada
+      previewContainer.style.display = 'flex'
+
+      // Cambiar botones: ocultar "Capturar", mostrar "Usar foto" + "Tomar otra"
+      btnCapturar.style.display = 'none'
+      const btnUsar = document.createElement('button')
+      btnUsar.textContent = '✓ Usar esta foto'
+      btnUsar.style.cssText =
+        'padding:18px 32px;background:linear-gradient(135deg,#10b981,#059669);color:white;border:none;border-radius:14px;font-size:17px;font-weight:700;cursor:pointer;box-shadow:0 10px 28px -8px rgba(16,185,129,0.6);transition:transform 0.12s;min-width:180px;'
+      btnUsar.onmouseover = () => (btnUsar.style.transform = 'scale(1.04)')
+      btnUsar.onmouseout = () => (btnUsar.style.transform = 'scale(1)')
+      btnUsar.onclick = () => {
+        detenerStream()
+        clearTimeout(fallbackTimer)
+        document.removeEventListener('keydown', onKey)
+        if (overlay.parentNode) overlay.parentNode.removeChild(overlay)
+        resolve(fotoCapturada)
+      }
+
+      const btnRetomar = document.createElement('button')
+      btnRetomar.textContent = '↻ Tomar otra'
+      btnRetomar.style.cssText =
+        'padding:18px 28px;background:rgba(255,255,255,0.1);color:white;border:1px solid rgba(255,255,255,0.25);border-radius:14px;font-size:16px;font-weight:600;cursor:pointer;transition:background 0.15s;'
+      btnRetomar.onmouseover = () => (btnRetomar.style.background = 'rgba(255,255,255,0.18)')
+      btnRetomar.onmouseout = () => (btnRetomar.style.background = 'rgba(255,255,255,0.1)')
+      btnRetomar.onclick = () => {
+        // Volver al modo captura
+        fotoCapturada = null
+        previewContainer.style.display = 'none'
+        btnCapturar.style.display = 'inline-block'
+        btnUsar.remove()
+        btnRetomar.remove()
+        // Reanudar video
+        video.play().catch(() => {})
+      }
+
+      btnContainer.appendChild(btnRetomar)
+      btnContainer.appendChild(btnUsar)
     }
 
     btnCapturar.onclick = () => {
@@ -569,12 +515,28 @@ export function mostrarModalCamara(
       capturar()
     }
 
+    // Cancelar: limpiar y resolver null
+    btnCancelar.onclick = () => {
+      detenerStream()
+      clearTimeout(fallbackTimer)
+      document.removeEventListener('keydown', onKey)
+      if (overlay.parentNode) overlay.parentNode.removeChild(overlay)
+      resolve(null)
+    }
+
     // ESC para cancelar
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
+        detenerStream()
+        clearTimeout(fallbackTimer)
         document.removeEventListener('keydown', onKey)
-        cleanup()
+        if (overlay.parentNode) overlay.parentNode.removeChild(overlay)
         resolve(null)
+      }
+      // Barra espaciadora o Enter = capturar (cuando el botón está habilitado)
+      if ((e.key === ' ' || e.key === 'Enter') && !btnCapturar.disabled && btnCapturar.style.display !== 'none') {
+        e.preventDefault()
+        capturar()
       }
     }
     document.addEventListener('keydown', onKey)

@@ -13,13 +13,14 @@ import { invalidarCachePlantillas } from '@/lib/plantillas'
 
 export async function GET(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   const auth = requireRole(req, ['ADMIN', 'GESTOR', 'CONSULTOR'])
   if (auth instanceof NextResponse) return auth
 
   try {
-    const plantilla = await db.plantilla.findUnique({ where: { id: params.id } })
+    const { id } = await params
+    const plantilla = await db.plantilla.findUnique({ where: { id } })
     if (!plantilla) {
       return NextResponse.json(
         { success: false, error: 'Plantilla no encontrada' },
@@ -37,14 +38,15 @@ export async function GET(
 
 export async function PATCH(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   const auth = requireRole(req, ['ADMIN'])
   if (auth instanceof NextResponse) return auth
 
   try {
+    const { id } = await params
     const body = await req.json()
-    const existente = await db.plantilla.findUnique({ where: { id: params.id } })
+    const existente = await db.plantilla.findUnique({ where: { id } })
     if (!existente) {
       return NextResponse.json(
         { success: false, error: 'Plantilla no encontrada' },
@@ -74,7 +76,7 @@ export async function PATCH(
     }
 
     const actualizada = await db.plantilla.update({
-      where: { id: params.id },
+      where: { id },
       data: updateData,
     })
 
@@ -91,13 +93,14 @@ export async function PATCH(
 
 export async function DELETE(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   const auth = requireRole(req, ['ADMIN'])
   if (auth instanceof NextResponse) return auth
 
   try {
-    const existente = await db.plantilla.findUnique({ where: { id: params.id } })
+    const { id } = await params
+    const existente = await db.plantilla.findUnique({ where: { id } })
     if (!existente) {
       return NextResponse.json(
         { success: false, error: 'Plantilla no encontrada' },
@@ -115,7 +118,7 @@ export async function DELETE(
       )
     }
 
-    await db.plantilla.delete({ where: { id: params.id } })
+    await db.plantilla.delete({ where: { id } })
 
     invalidarCachePlantillas()
 
