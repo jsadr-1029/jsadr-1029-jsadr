@@ -589,7 +589,7 @@ export default function PaginaFirma({ params }: { params: Promise<{ token: strin
               <div className="space-y-4">
                 <div className="bg-blue-50 p-3 rounded-md border border-blue-200">
                   <p className="text-sm text-blue-900">
-                    📸 <strong>Paso 1 de 4:</strong> Toma una foto clara de tu documento de identidad (cédula, pasaporte o licencia) por el lado frontal.
+                    📷 <strong>Paso 1 de 4:</strong> Sube una foto clara de tu documento de identidad (cédula, pasaporte o licencia) por el lado frontal.
                   </p>
                 </div>
 
@@ -611,17 +611,12 @@ export default function PaginaFirma({ params }: { params: Promise<{ token: strin
                   ) : (
                     <div className="border-2 border-dashed border-gray-300 rounded-md p-8 text-center space-y-3">
                       <FileText className="w-12 h-12 mx-auto text-gray-400" />
-                      <div className="flex flex-col sm:flex-row gap-2 justify-center">
-                        <Button onClick={() => tomarFoto('documento')}>
-                          <Camera className="w-4 h-4 mr-2" /> Tomar foto
-                        </Button>
-                        <Button variant="outline" asChild>
-                          <label className="cursor-pointer">
-                            <Upload className="w-4 h-4 mr-2" /> Subir archivo
-                            <input type="file" accept="image/*" className="hidden" onChange={(e) => manejarArchivo(e, 'documento')} />
-                          </label>
-                        </Button>
-                      </div>
+                      <Button variant="outline" asChild className="w-full sm:w-auto">
+                        <label className="cursor-pointer">
+                          <Upload className="w-4 h-4 mr-2" /> Subir archivo
+                          <input type="file" accept="image/*" className="hidden" onChange={(e) => manejarArchivo(e, 'documento')} />
+                        </label>
+                      </Button>
                     </div>
                   )}
                 </div>

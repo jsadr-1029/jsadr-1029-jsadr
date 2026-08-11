@@ -1210,26 +1210,16 @@ export function PortalClienteModal({
                       </p>
                     </div>
                   ) : (
-                    <div className="grid grid-cols-2 gap-2">
-                      <Button
-                        variant="outline"
-                        onClick={tomarFotoDocumento}
-                        className="flex flex-col items-center gap-2 h-24 rounded-xl border-dashed input-premium"
-                      >
-                        <Camera className="w-6 h-6" />
-                        <span className="text-xs">Tomar foto</span>
-                      </Button>
-                      <label className="flex flex-col items-center gap-2 h-24 justify-center rounded-xl border border-dashed border-white/15 hover:border-primary cursor-pointer transition-colors">
-                        <Upload className="w-6 h-6" />
-                        <span className="text-xs">Subir archivo</span>
-                        <input
-                          type="file"
-                          accept="image/jpeg,image/png,image/webp"
-                          className="hidden"
-                          onChange={subirFotoDocumentoArchivo}
-                        />
-                      </label>
-                    </div>
+                    <label className="flex flex-col items-center gap-2 h-24 justify-center rounded-xl border border-dashed border-white/15 hover:border-primary cursor-pointer transition-colors">
+                      <Upload className="w-6 h-6" />
+                      <span className="text-xs">Subir archivo</span>
+                      <input
+                        type="file"
+                        accept="image/jpeg,image/png,image/webp"
+                        className="hidden"
+                        onChange={subirFotoDocumentoArchivo}
+                      />
+                    </label>
                   )}
 
                   <div className="p-2.5 rounded-lg bg-white/5 text-xs text-muted-foreground">
@@ -3863,11 +3853,7 @@ function FlujoFirmaClient({
                   </div>
                 ) : (
                   <div className="space-y-1">
-                    <button type="button" onClick={() => tomarFoto('documento')} className="w-full p-2 rounded-md border-2 border-dashed border-violet-500/30 hover:border-violet-500/50 text-violet-300 text-[10px] flex flex-col items-center gap-0.5">
-                      <Camera className="w-3.5 h-3.5" />
-                      Tomar foto
-                    </button>
-                    <label className="w-full p-2 rounded-md border-2 border-dashed border-white/15 hover:border-white/30 text-muted-foreground text-[10px] flex flex-col items-center gap-0.5 cursor-pointer">
+                    <label className="w-full p-2 rounded-md border-2 border-dashed border-violet-500/30 hover:border-violet-500/50 text-violet-300 text-[10px] flex flex-col items-center gap-0.5 cursor-pointer">
                       <Upload className="w-3.5 h-3.5" />
                       Subir archivo
                       <input type="file" accept="image/*" className="hidden" onChange={(e) => manejarArchivo(e, 'documento')} />
