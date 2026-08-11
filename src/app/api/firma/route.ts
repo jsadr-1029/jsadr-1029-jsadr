@@ -19,16 +19,27 @@ export async function POST(req: NextRequest) {
     } else if (accion === 'enviar_otp') {
       return await enviarOTP(body)
     } else if (accion === 'guardar_fotos') {
+      // Legacy: acepta ambos fotos ( backward compat con aceptar-tyc-otp )
       return await guardarFotos(body, req)
+    } else if (accion === 'guardar_foto_documento') {
+      // Nuevo paso 1: solo foto del documento
+      return await guardarFotoDocumento(body, req)
     } else if (accion === 'guardar_firma') {
+      // Legacy: completa firma (todavía usado por aceptar-tyc-otp en algunos flujos)
       return await guardarFirma(body, req)
+    } else if (accion === 'guardar_firma_dibujo') {
+      // Nuevo paso 2: guarda la firma manuscrita SIN completar
+      return await guardarFirmaDibujo(body)
     } else if (accion === 'validar_otp') {
       return await validarOTP(body)
+    } else if (accion === 'finalizar_con_selfie') {
+      // Nuevo paso 4: guarda selfie + completa firma + activa préstamo
+      return await finalizarConSelfie(body, req)
     } else if (accion === 'rechazar_firma') {
       return await rechazarFirma(body)
     }
 
-    return NextResponse.json({ success: false, error: 'Acción no válida. Usa: iniciar_firma, enviar_otp, guardar_fotos, guardar_firma, validar_otp, rechazar_firma' }, { status: 400 })
+    return NextResponse.json({ success: false, error: 'Acción no válida. Usa: iniciar_firma, enviar_otp, guardar_foto_documento, guardar_firma_dibujo, validar_otp, finalizar_con_selfie, guardar_fotos (legacy), guardar_firma (legacy), rechazar_firma' }, { status: 400 })
   } catch (error: any) {
     return NextResponse.json({ success: false, error: sanitizeError(error).message }, { status: 500 })
   }
@@ -500,6 +511,229 @@ async function guardarFotos(body: any, req: NextRequest) {
       userAgent,
     },
     mensaje: 'Fotos guardadas correctamente. Ahora puedes dibujar tu firma.',
+  })
+}
+
+// === NUEVO PASO 1: Guardar SOLO foto del documento (sin selfie) ===
+async function guardarFotoDocumento(body: any, req: NextRequest) {
+  const { firmaId, fotoDocumento, geoUbicacion } = body
+  if (!firmaId) {
+    return NextResponse.json({ success: false, error: 'firmaId requerido' }, { status: 400 })
+  }
+  if (!fotoDocumento) {
+    return NextResponse.json({
+      success: false,
+      error: 'fotoDocumento es obligatorio (en formato base64)',
+    }, { status: 400 })
+  }
+
+  const firma = await db.firmaElectronica.findUnique({ where: { id: firmaId } })
+  if (!firma) {
+    return NextResponse.json({ success: false, error: 'Firma no encontrada' }, { status: 404 })
+  }
+  if (firma.estadoFirma === 'COMPLETADA') {
+    return NextResponse.json({ success: false, error: 'Esta firma ya fue completada' }, { status: 400 })
+  }
+  if (!fotoDocumento.startsWith('data:image/')) {
+    return NextResponse.json({ success: false, error: 'fotoDocumento debe ser una imagen en base64 (data:image/...)' }, { status: 400 })
+  }
+  if (Buffer.byteLength(fotoDocumento, 'utf8') > 14 * 1024 * 1024) {
+    return NextResponse.json({ success: false, error: 'La foto no puede superar 10MB' }, { status: 400 })
+  }
+
+  const hashDoc = crypto.createHash('sha256').update(fotoDocumento).digest('hex')
+
+  const forwarded = req.headers.get('x-forwarded-for')
+  const ip = forwarded ? forwarded.split(',')[0] : req.headers.get('x-real-ip') || 'desconocida'
+  const userAgent = req.headers.get('user-agent') || 'desconocido'
+
+  await db.firmaElectronica.update({
+    where: { id: firmaId },
+    data: {
+      fotoDocumento,
+      fotoDocumentoHash: hashDoc,
+      ipFirma: ip,
+      userAgent,
+      geoUbicacion: geoUbicacion || null,
+      fechaSubidaFotos: new Date(),
+      estadoFirma: 'FOTOS_SUBIDAS',
+    },
+  })
+
+  return NextResponse.json({
+    success: true,
+    data: { firmaId, estado: 'FOTOS_SUBIDAS', hashDocumento: hashDoc, ip, userAgent },
+    mensaje: 'Foto del documento guardada. Ahora puedes dibujar tu firma.',
+  })
+}
+
+// === NUEVO PASO 2: Guardar firma manuscrita SIN completar ===
+async function guardarFirmaDibujo(body: any) {
+  const { firmaId, imagenFirma } = body
+  if (!firmaId || !imagenFirma) {
+    return NextResponse.json(
+      { success: false, error: 'firmaId e imagenFirma son obligatorios' },
+      { status: 400 }
+    )
+  }
+
+  const firma = await db.firmaElectronica.findUnique({ where: { id: firmaId } })
+  if (!firma) {
+    return NextResponse.json({ success: false, error: 'Firma no encontrada' }, { status: 404 })
+  }
+  if (firma.estadoFirma === 'COMPLETADA') {
+    return NextResponse.json({ success: false, error: 'Esta firma ya fue completada' }, { status: 400 })
+  }
+  if (!firma.fotoDocumento) {
+    return NextResponse.json({ success: false, error: 'Debes subir primero la foto del documento' }, { status: 400 })
+  }
+  if (!imagenFirma.startsWith('data:image/png')) {
+    return NextResponse.json({ success: false, error: 'imagenFirma debe ser un PNG en base64' }, { status: 400 })
+  }
+
+  await db.firmaElectronica.update({
+    where: { id: firmaId },
+    data: {
+      imagenFirma,
+      estadoFirma: 'FIRMA_DIBUJADA',
+    },
+  })
+
+  return NextResponse.json({
+    success: true,
+    data: { firmaId, estado: 'FIRMA_DIBUJADA' },
+    mensaje: 'Firma manuscrita guardada. Ahora puedes solicitar el código OTP.',
+  })
+}
+
+// === NUEVO PASO 4: Guardar selfie + completar firma + activar préstamo ===
+async function finalizarConSelfie(body: any, req: NextRequest) {
+  const { firmaId, fotoSelfie, geoUbicacion } = body
+  if (!firmaId || !fotoSelfie) {
+    return NextResponse.json(
+      { success: false, error: 'firmaId y fotoSelfie son obligatorios' },
+      { status: 400 }
+    )
+  }
+
+  const firma = await db.firmaElectronica.findUnique({ where: { id: firmaId } })
+  if (!firma) {
+    return NextResponse.json({ success: false, error: 'Firma no encontrada' }, { status: 404 })
+  }
+  if (firma.estadoFirma === 'COMPLETADA') {
+    return NextResponse.json({ success: false, error: 'Esta firma ya fue completada' }, { status: 400 })
+  }
+  if (!firma.fotoDocumento) {
+    return NextResponse.json({ success: false, error: 'Falta la foto del documento (paso 1)' }, { status: 400 })
+  }
+  if (!firma.imagenFirma) {
+    return NextResponse.json({ success: false, error: 'Falta la firma manuscrita (paso 2)' }, { status: 400 })
+  }
+  if (!firma.otpValidado) {
+    return NextResponse.json({ success: false, error: 'Falta validar el código OTP (paso 3)' }, { status: 400 })
+  }
+  if (!fotoSelfie.startsWith('data:image/')) {
+    return NextResponse.json({ success: false, error: 'fotoSelfie debe ser una imagen en base64 (data:image/...)' }, { status: 400 })
+  }
+  if (Buffer.byteLength(fotoSelfie, 'utf8') > 14 * 1024 * 1024) {
+    return NextResponse.json({ success: false, error: 'La selfie no puede superar 10MB' }, { status: 400 })
+  }
+
+  const hashSelfie = crypto.createHash('sha256').update(fotoSelfie).digest('hex')
+
+  const forwarded = req.headers.get('x-forwarded-for')
+  const ip = forwarded ? forwarded.split(',')[0] : req.headers.get('x-real-ip') || firma.ipFirma || 'desconocida'
+  const userAgent = req.headers.get('user-agent') || firma.userAgent || 'desconocido'
+
+  // 1. Guardar selfie + completar firma
+  const firmaActualizada = await db.firmaElectronica.update({
+    where: { id: firmaId },
+    data: {
+      fotoSelfie,
+      fotoSelfieHash: hashSelfie,
+      ipFirma: ip,
+      userAgent,
+      geoUbicacion: geoUbicacion || firma.geoUbicacion || null,
+      estadoFirma: 'COMPLETADA',
+      fechaFirmaCompleta: new Date(),
+    },
+  })
+
+  // 2. Marcar tokens como usados
+  await db.tokenFirma.updateMany({
+    where: { firmaId },
+    data: { usado: true, fechaUsado: new Date() },
+  })
+
+  // 3. Activar préstamo si aplica
+  if (firma.prestamoId) {
+    const prestamoFirma = await db.prestamo.findUnique({
+      where: { id: firma.prestamoId },
+      select: {
+        plazoMeses: true, frecuencia: true, montoPrincipal: true,
+        tasaInteresAnual: true, fechaDesembolso: true, codigo: true,
+        cliente: { select: { nombre: true } },
+      },
+    })
+
+    let fechaVencimientoCalc = new Date()
+    if (prestamoFirma) {
+      try {
+        const calc = calcularPrestamo({
+          montoPrincipal: prestamoFirma.montoPrincipal,
+          tasaInteresAnual: prestamoFirma.tasaInteresAnual,
+          tasaMoraAnual: 0,
+          plazoMeses: prestamoFirma.plazoMeses,
+          frecuencia: prestamoFirma.frecuencia as any,
+          fechaDesembolso: new Date(),
+        })
+        if (calc?.tablaAmortizacion?.length > 0) {
+          fechaVencimientoCalc = new Date(calc.tablaAmortizacion[calc.tablaAmortizacion.length - 1].fechaVencimiento)
+        } else {
+          fechaVencimientoCalc = new Date()
+          fechaVencimientoCalc.setMonth(fechaVencimientoCalc.getMonth() + (prestamoFirma.plazoMeses || 1))
+        }
+      } catch (e) {
+        fechaVencimientoCalc = new Date()
+        fechaVencimientoCalc.setMonth(fechaVencimientoCalc.getMonth() + (prestamoFirma.plazoMeses || 1))
+      }
+    }
+
+    await db.prestamo.update({
+      where: { id: firma.prestamoId },
+      data: {
+        firmaId: firma.id,
+        tycAceptado: true,
+        tycFechaAceptacion: new Date(),
+        estado: 'ACTIVO',
+        fechaDesembolso: new Date(),
+        fechaVencimiento: fechaVencimientoCalc,
+      },
+    })
+
+    if (prestamoFirma) {
+      try {
+        await db.bitacoraPrestamo.create({
+          data: {
+            prestamoId: firma.prestamoId,
+            prestamoCodigo: prestamoFirma.codigo,
+            usuarioNombre: 'Sistema (firma electrónica)',
+            tipo: 'FIRMA',
+            titulo: 'Firma electrónica completada — préstamo activado',
+            descripcion: `El cliente ${prestamoFirma.cliente?.nombre || ''} completó el flujo de firma electrónica (foto documento + firma manuscrita + OTP + selfie con cédula). Préstamo activado con fecha de vencimiento ${fechaVencimientoCalc.toLocaleDateString('es-CO')} (${prestamoFirma.plazoMeses} meses).`,
+            resultado: 'Préstamo pasado a ACTIVO, TyC aceptados, firma vinculada',
+          },
+        })
+      } catch (e) {
+        console.error('[firma] bitácora falló:', e)
+      }
+    }
+  }
+
+  return NextResponse.json({
+    success: true,
+    data: firmaActualizada,
+    mensaje: '¡Firma electrónica completada con éxito! El préstamo ha sido activado.',
   })
 }
 

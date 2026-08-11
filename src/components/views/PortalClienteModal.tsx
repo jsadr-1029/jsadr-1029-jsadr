@@ -712,7 +712,7 @@ export function PortalClienteModal({
       color: 'text-indigo-300',
       gradient: 'from-indigo-500 via-indigo-600 to-violet-700',
       position: { x: 0, y: -110 },
-      badge: prestamos.filter(p => p.estado === 'PENDIENTE_ACEPTACION').length || undefined,
+      // Sin badge: los pendientes se muestran en Solicitudes
     },
     {
       id: 'proximos',
@@ -737,6 +737,8 @@ export function PortalClienteModal({
       color: 'text-amber-300',
       gradient: 'from-amber-400 via-amber-600 to-orange-700',
       position: { x: 0, y: 110 },
+      // Badge: cuenta préstamos pendientes de aceptación ( TyC ) que requieren firma electrónica
+      badge: prestamos.filter(p => p.estado === 'PENDIENTE_ACEPTACION').length || undefined,
     },
     {
       id: 'comunicaciones',
@@ -878,7 +880,9 @@ export function PortalClienteModal({
 
           {vista === 'prestamos' && (
             <PrestamosView
-              prestamos={prestamos}
+              // FILTRO: préstamos PENDIENTE_ACEPTACION ya NO se muestran en Créditos.
+              // Se muestran únicamente en la vista de Solicitudes.
+              prestamos={prestamos.filter(p => p.estado !== 'PENDIENTE_ACEPTACION')}
               onAbrirTyC={abrirFlujoTyC}
               onAceptarTyC={aceptarTyC}
               onPazYSalvo={generarPazYSalvo}
@@ -909,7 +913,12 @@ export function PortalClienteModal({
           )}
 
           {vista === 'solicitudes' && (
-            <MisSolicitudesPanel cedula={cliente.cedula} token={token} />
+            <MisSolicitudesPanel
+              cedula={cliente.cedula}
+              token={token}
+              prestamosPendientes={prestamos.filter(p => p.estado === 'PENDIENTE_ACEPTACION')}
+              onAbrirTyC={abrirFlujoTyC}
+            />
           )}
 
           {vista === 'comunicaciones' && (
@@ -3154,11 +3163,22 @@ interface SolicitudWebItem {
   flexibilidadCosto?: number
 }
 
-function MisSolicitudesPanel({ cedula, token }: { cedula: string; token?: string }) {
+function MisSolicitudesPanel({
+  cedula,
+  token,
+  prestamosPendientes = [],
+  onAbrirTyC,
+}: {
+  cedula: string
+  token?: string
+  prestamosPendientes?: any[]
+  onAbrirTyC?: (prestamoId: string, codigo: string) => void
+}) {
   const { toast } = useToast()
   const [solicitudes, setSolicitudes] = useState<SolicitudWebItem[]>([])
   const [loading, setLoading] = useState(true)
   const [expandida, setExpandida] = useState<string | null>(null)
+  const [generandoToken, setGenerandoToken] = useState<string | null>(null)
 
   const cargar = async () => {
     if (!token) {
@@ -3192,6 +3212,40 @@ function MisSolicitudesPanel({ cedula, token }: { cedula: string; token?: string
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cedula, token])
 
+  // === Generar token de firma electrónica y redirigir a /firma/[token] ===
+  const iniciarFirmaElectronica = async (prestamoId: string, codigo: string) => {
+    if (!token) {
+      toast({ title: 'Error', description: 'Tu sesión ha expirado. Vuelve a iniciar sesión.', variant: 'destructive' })
+      return
+    }
+    setGenerandoToken(prestamoId)
+    try {
+      const res = await fetch('/api/portal/iniciar-firma', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-portal-token': token,
+        },
+        body: JSON.stringify({ prestamoId }),
+      })
+      const json = await res.json()
+      if (json.success && json.data?.linkFirma) {
+        toast({
+          title: 'Abriendo firma electrónica',
+          description: `Préstamo ${codigo} — completing los 4 pasos en una nueva pestaña.`,
+        })
+        // Abrir el flujo de firma en una nueva pestaña
+        window.open(json.data.linkFirma, '_blank', 'noopener,noreferrer')
+      } else {
+        toast({ title: 'Error', description: json.error || 'No se pudo iniciar la firma', variant: 'destructive' })
+      }
+    } catch (e: any) {
+      toast({ title: 'Error', description: e.message, variant: 'destructive' })
+    } finally {
+      setGenerandoToken(null)
+    }
+  }
+
   if (!token) {
     return (
       <EmptyStatePremium
@@ -3211,8 +3265,8 @@ function MisSolicitudesPanel({ cedula, token }: { cedula: string; token?: string
     )
   }
 
-  const total = solicitudes.length
-  const pendientes = solicitudes.filter((s) => s.estado === 'PENDIENTE').length
+  const total = solicitudes.length + prestamosPendientes.length
+  const pendientes = solicitudes.filter((s) => s.estado === 'PENDIENTE').length + prestamosPendientes.length
   const enProceso = solicitudes.filter((s) => s.estado === 'EN_REVISION').length
   const finalizadas = solicitudes.filter(
     (s) => s.estado === 'CONVERTIDA' || s.estado === 'APROBADA' || s.estado === 'RECHAZADA'
@@ -3252,7 +3306,84 @@ function MisSolicitudesPanel({ cedula, token }: { cedula: string; token?: string
         </Card>
       </div>
 
-      {solicitudes.length === 0 ? (
+      {/* === SECCIÓN NUEVA: Préstamos pendientes de aceptación de TyC === */}
+      {prestamosPendientes.length > 0 && (
+        <div className="space-y-2">
+          <div className="flex items-center gap-2 px-1">
+            <ShieldCheck className="w-4 h-4 text-amber-300" />
+            <p className="text-xs font-semibold text-amber-200 uppercase tracking-wide">
+              Pendientes de firma electrónica
+            </p>
+          </div>
+          {prestamosPendientes.map((p) => (
+            <Card key={p.id} className="premium-card premium-card-hover rounded-2xl border-amber-400/50">
+              <CardContent className="p-3.5">
+                <div className="flex items-start justify-between gap-2 mb-2">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-mono text-sm font-bold">{p.codigo}</span>
+                      <EstadoBadge estado={p.estado} />
+                    </div>
+                    <p className="text-[10px] text-muted-foreground mt-1">
+                      Solicitado: {formatearFecha(p.fechaSolicitud || p.createdAt)}
+                    </p>
+                  </div>
+                  <div className="text-right shrink-0">
+                    <p className="text-[9px] text-muted-foreground uppercase tracking-wide">Principal</p>
+                    <p className="font-bold text-amber-300 text-sm">{formatearMoneda(p.montoPrincipal)}</p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-3 gap-2 text-xs mb-2.5">
+                  <div className="p-2 rounded-lg bg-white/5">
+                    <p className="text-[9px] text-muted-foreground uppercase tracking-wide">Cuotas</p>
+                    <p className="font-semibold text-[11px]">{p.numeroCuotas || p.plazoMeses}</p>
+                  </div>
+                  <div className="p-2 rounded-lg bg-white/5">
+                    <p className="text-[9px] text-muted-foreground uppercase tracking-wide">Cuota</p>
+                    <p className="font-semibold text-[11px]">{formatearMoneda(p.montoCuota)}</p>
+                  </div>
+                  <div className="p-2 rounded-lg bg-white/5">
+                    <p className="text-[9px] text-muted-foreground uppercase tracking-wide">Total</p>
+                    <p className="font-semibold text-[11px]">{formatearMoneda(p.totalPagar || p.saldoTotal)}</p>
+                  </div>
+                </div>
+
+                <div className="mb-2.5 p-2.5 rounded-lg bg-amber-500/10 border border-amber-400/30">
+                  <p className="text-xs font-semibold text-amber-200 mb-0.5 flex items-center gap-1">
+                    <AlertTriangle className="w-3.5 h-3.5" />
+                    Requiere tu aceptación
+                  </p>
+                  <p className="text-[10px] text-amber-100/80 mb-2">
+                    Inicia el flujo de firma electrónica: foto del documento → firma manuscrita → código OTP → selfie con cédula.
+                  </p>
+                  <Button
+                    size="sm"
+                    onClick={() => iniciarFirmaElectronica(p.id, p.codigo)}
+                    disabled={generandoToken === p.id}
+                    className="gradient-premium gradient-premium-hover btn-press w-full h-8"
+                  >
+                    {generandoToken === p.id ? (
+                      <>
+                        <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
+                        Generando enlace...
+                      </>
+                    ) : (
+                      <>
+                        <ShieldCheck className="w-3.5 h-3.5 mr-1.5" />
+                        Iniciar firma electrónica
+                      </>
+                    )}
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
+
+      {/* === Solicitudes web (modelo SolicitudWeb) === */}
+      {solicitudes.length === 0 && prestamosPendientes.length === 0 ? (
         <EmptyStatePremium
           icon={ClipboardList}
           title="No tienes solicitudes"
