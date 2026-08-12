@@ -3,6 +3,7 @@ import { db } from '@/lib/db'
 import { generarCodigoOtp, hashOtp, verificarOtp, registrarOtp, obtenerIp, obtenerUserAgent, validarEmailEntregable } from '@/lib/otp'
 import { calcularPrestamo } from '@/lib/finanzas'
 import { enviarWhatsApp, mensajeOTPFirma, guardarNotificacion } from '@/lib/whatsapp'
+import { enviarOTPSmart } from '@/lib/whatsapp-cloud'
 import { enviarEmail } from '@/lib/email'
 import { sanitizeError } from '@/lib/error-handler'
 import { buildAbsoluteUrl } from '@/lib/url'
@@ -331,7 +332,22 @@ async function enviarOTP(body: any) {
       codigoOtp: otp,
       tipoDocumento: firma.tipo === 'TYC' ? 'Términos y Condiciones' : firma.tipo,
     })
-    envioWhatsApp = await enviarWhatsApp(firma.cliente.telefono, mensaje)
+    // v4.13: usar envío inteligente (plantilla Authentication de Meta primero, fallback a texto libre)
+    const otpResult = await enviarOTPSmart(firma.cliente.telefono, otp, mensaje)
+    if (otpResult.exito) {
+      envioWhatsApp = {
+        exito: true,
+        wamid: otpResult.wamid,
+        canal: 'WHATSAPP',
+        modo: otpResult.modo,
+        respuesta: otpResult.respuesta,
+      }
+    } else {
+      envioWhatsApp = await enviarWhatsApp(firma.cliente.telefono, mensaje)
+      if (!envioWhatsApp.exito && otpResult.error) {
+        envioWhatsApp.errorOtpSmart = otpResult.error
+      }
+    }
     await guardarNotificacion({
       db,
       prestamoId: firma.prestamoId || null,

@@ -3,6 +3,7 @@ import { db } from '@/lib/db'
 import { calcularPrestamo, getTasaMoraAnual, formatearMoneda } from '@/lib/finanzas'
 import { generarCodigoOtp, hashOtp, verificarOtp, registrarOtp, validarEmailEntregable } from '@/lib/otp'
 import { enviarWhatsApp, guardarNotificacion } from '@/lib/whatsapp'
+import { enviarOTPSmart } from '@/lib/whatsapp-cloud'
 import { enviarEmail } from '@/lib/email'
 import crypto from 'crypto'
 import { sanitizeError } from '@/lib/error-handler'
@@ -506,7 +507,24 @@ async function enviarOTP(prestamoId: string, body: any) {
   let envioWhatsApp: any = null
   if (canalFinal === 'WHATSAPP' || canalFinal === 'AMBOS') {
     const mensaje = `🔐 *CÓDIGO DE VERIFICACIÓN - ACEPTACIÓN DE PRÉSTAMO*\n\nHola *${prestamo.cliente.nombre}*,\n\nPara confirmar la aceptación de los Términos y Condiciones de tu préstamo *${prestamo.codigo}*, ingresa el siguiente código:\n\n  >>  ${otp}  <<\n\n⏰ El código expira en 5 minutos.\n⚠️ No compartas este código con nadie.`
-    envioWhatsApp = await enviarWhatsApp(prestamo.cliente.telefono, mensaje)
+    // v4.13: usar envío inteligente (plantilla Authentication de Meta primero, fallback a texto libre)
+    const otpResult = await enviarOTPSmart(prestamo.cliente.telefono, otp, mensaje)
+    if (otpResult.exito) {
+      envioWhatsApp = {
+        exito: true,
+        wamid: otpResult.wamid,
+        canal: 'WHATSAPP',
+        modo: otpResult.modo,
+        respuesta: otpResult.respuesta,
+      }
+    } else {
+      // Caer al flujo anterior (texto libre via enviarWhatsApp → fallback wa.me link)
+      envioWhatsApp = await enviarWhatsApp(prestamo.cliente.telefono, mensaje)
+      // Si la Cloud API falló, registrar el error para diagnóstico
+      if (!envioWhatsApp.exito && otpResult.error) {
+        envioWhatsApp.errorOtpSmart = otpResult.error
+      }
+    }
     await guardarNotificacion({ db, prestamoId, telefono: prestamo.cliente.telefono, tipo: 'OTP', mensaje, envio: envioWhatsApp })
   }
 
