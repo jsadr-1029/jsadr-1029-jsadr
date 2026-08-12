@@ -1541,7 +1541,17 @@ ${linkFirmaCodeudor}
                           size="sm"
                           variant="ghost"
                           className={p.firmaId ? "text-blue-600 hover:text-blue-700" : "text-muted-foreground opacity-40"}
-                          onClick={() => p.firmaId && window.open(`/api/firma/certificado?firmaId=${p.firmaId}`, '_blank', 'noopener,noreferrer')}
+                          onClick={() => {
+                            if (!p.firmaId) return
+                            // FIX 2026-08-12: El endpoint /api/firma/certificado está
+                            // protegido por JWT. window.open() no envía el header
+                            // Authorization, por lo que el endpoint devolvía 401 y el
+                            // botón "Descargar Certificado de Firma Electrónica" no
+                            // funcionaba. Usamos abrirHtmlImprimible que hace fetch
+                            // autenticado (con Authorization: Bearer) y abre un blob
+                            // URL en una nueva pestaña.
+                            abrirHtmlImprimible(`/api/firma/certificado?firmaId=${p.firmaId}`)
+                          }}
                           title={p.firmaId ? `Descargar Certificado de Firma Electrónica (descargable las veces que necesite)${p.firmaFechaCompleta ? ` · Firmado: ${new Date(p.firmaFechaCompleta).toLocaleDateString('es-CO')}` : ''}` : "Sin firma electrónica completada"}
                           disabled={!p.firmaId}
                         >

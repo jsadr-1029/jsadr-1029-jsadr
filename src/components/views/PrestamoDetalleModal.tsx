@@ -871,14 +871,16 @@ export function PrestamoDetalleModal({
                       {data.codeudorFirmaId ? (
                         <span className="inline-flex items-center gap-2">
                           <strong className="text-emerald-700">✓ Registrada</strong>
-                          <a
-                            href={`/api/firma/certificado?firmaId=${data.codeudorFirmaId}`}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="inline-flex items-center gap-1 text-blue-700 hover:underline"
+                          {/* FIX 2026-08-12: el <a href target=_blank> no envía el
+                              header Authorization → 401. Usamos un botón que invoca
+                              abrirHtmlImprimible (fetch autenticado → blob URL). */}
+                          <button
+                            type="button"
+                            onClick={() => abrirHtmlImprimible(`/api/firma/certificado?firmaId=${data.codeudorFirmaId}`)}
+                            className="inline-flex items-center gap-1 text-blue-700 hover:underline cursor-pointer bg-transparent border-0 p-0"
                           >
                             <FileText className="w-3 h-3" /> Ver certificado
-                          </a>
+                          </button>
                         </span>
                       ) : (
                         <strong className="text-amber-700">⏳ Pendiente</strong>

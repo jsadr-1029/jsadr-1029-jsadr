@@ -19,6 +19,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useToast } from '@/hooks/use-toast'
 import { formatearFechaHora, formatearMoneda } from '@/lib/finanzas'
+import { abrirHtmlImprimible } from '@/lib/auth-docs'
 import {
   FolderOpen, Upload, Search, Trash2, Eye, FileImage,
   MessageSquare, User, CreditCard, Receipt, File, X, Download,
@@ -815,7 +816,9 @@ function FirmasElectronicasTab() {
   }
 
   const verCertificado = (firmaId: string) => {
-    window.open(`/api/firma/certificado?firmaId=${firmaId}`, '_blank')
+    // FIX 2026-08-12: usar abrirHtmlImprimible (fetch autenticado) en vez
+    // de window.open que no envía el header Authorization → 401.
+    abrirHtmlImprimible(`/api/firma/certificado?firmaId=${firmaId}`)
   }
 
   return (

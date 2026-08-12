@@ -1159,7 +1159,7 @@ function generarSeccionFirmaElectronica(firma: any, prestamo: any, esCodeudor: b
   const hashDocumentoCorto = firma.fotoDocumentoHash?.substring(0, 16) || 'N/A'
   const hashSelfieCorto = firma.fotoSelfieHash?.substring(0, 16) || 'N/A'
   const hashFirmaCorto = firma.imagenFirma
-    ? require('crypto').createHash('sha256').update(firma.imagenFirma).digest('hex').substring(0, 16)
+    ? crypto.createHash('sha256').update(firma.imagenFirma).digest('hex').substring(0, 16)
     : 'N/A'
 
   const contextoStr = documentoContexto ? ` · ${documentoContexto}` : ''
@@ -1209,10 +1209,72 @@ function generarSeccionFirmaElectronica(firma: any, prestamo: any, esCodeudor: b
       </tr>
     </table>
     <div style="text-align:center; margin-top:12px;">
-      <a href="/api/firma/certificado?firmaId=${firma.id}" target="_blank"
-         style="display:inline-block; padding:8px 20px; background:#1e3a5f; color:white; text-decoration:none; border-radius:4px; font-size:11px;">
+      <!-- FIX 2026-08-12: el <a href> no envía el header Authorization,
+           por lo que el endpoint /api/firma/certificado (protegido por JWT)
+           devolvía 401 al hacer clic. Lo reemplazamos por un <button> con
+           un script inline que usa fetch autenticado (con el token JWT del
+           localStorage de la app, al que la pestaña tiene acceso porque
+           el documento se abrió como blob URL del mismo origin) y abre el
+           HTML resultante en una nueva pestaña. -->
+      <button type="button" onclick="abrirCertificadoFirma('${firma.id}')"
+         style="display:inline-block; padding:8px 20px; background:#1e3a5f; color:white; text-decoration:none; border-radius:4px; font-size:11px; cursor:pointer; border:none;">
         📋 Ver Certificado de Firma Electrónica Completo
-      </a>
+      </button>
     </div>
-  </div>`
+  </div>
+  ${generarScriptAbrirCertificadoFirma()}`
+}
+
+// Script inline (se inyecta una sola vez por documento gracias al guard
+// `window.__certificadoFirmaScriptLoaded`) que define la función global
+// `abrirCertificadoFirma(firmaId)` usada por los botones del documento
+// imprimible para abrir el certificado de firma con auth JWT.
+function generarScriptAbrirCertificadoFirma(): string {
+  return `
+<script>
+(function(){
+  if (window.__certificadoFirmaScriptLoaded) return;
+  window.__certificadoFirmaScriptLoaded = true;
+  window.abrirCertificadoFirma = async function(firmaId) {
+    if (!firmaId) { alert('ID de firma no especificado'); return; }
+    try {
+      var token = null;
+      try { token = localStorage.getItem('access_token'); } catch(e) {}
+      var headers = {};
+      if (token && token.indexOf('portal_cliente_') !== 0) {
+        headers['Authorization'] = 'Bearer ' + token;
+      }
+      var res = await fetch('/api/firma/certificado?firmaId=' + encodeURIComponent(firmaId), {
+        method: 'GET',
+        credentials: 'same-origin',
+        headers: headers
+      });
+      if (res.status === 401) {
+        alert('Tu sesión ha expirado. Cierra sesión e ingresa nuevamente para ver el certificado.');
+        return;
+      }
+      if (!res.ok) {
+        var msg = 'HTTP ' + res.status;
+        try { var j = await res.json(); msg = j.error || msg; } catch(e) {}
+        alert('No se pudo abrir el certificado.\\n\\n' + msg);
+        return;
+      }
+      var blob = await res.blob();
+      var blobUrl = URL.createObjectURL(blob);
+      var win = window.open(blobUrl, '_blank');
+      if (!win) {
+        var a = document.createElement('a');
+        a.href = blobUrl;
+        a.download = 'Certificado_Firma_Electronica_' + firmaId.substring(0,8) + '.html';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+      }
+      setTimeout(function(){ URL.revokeObjectURL(blobUrl); }, 5 * 60 * 1000);
+    } catch (err) {
+      alert('Error al abrir el certificado: ' + (err && err.message ? err.message : err));
+    }
+  };
+})();
+</script>`
 }

@@ -110,7 +110,7 @@ async function generarCertificadoHTML(firma: any, cliente: any, prestamo: any, r
 
   // Hashes de integridad
   const hashFirma = firma.imagenFirma ?
-    require('crypto').createHash('sha256').update(firma.imagenFirma).digest('hex').substring(0, 32) : 'N/A'
+    crypto.createHash('sha256').update(firma.imagenFirma).digest('hex').substring(0, 32) : 'N/A'
   const hashSelfie = firma.fotoSelfieHash?.substring(0, 32) || 'N/A'
   const hashDocumento = firma.fotoDocumentoHash?.substring(0, 32) || 'N/A'
 
@@ -135,7 +135,7 @@ async function generarCertificadoHTML(firma: any, cliente: any, prestamo: any, r
 
   // ID corto para mostrar
   const idCorto = firma.id.substring(0, 12)
-  const uuidCertificado = require('crypto').randomUUID()
+  const uuidCertificado = crypto.randomUUID()
 
   return `<!DOCTYPE html>
 <html lang="es">
