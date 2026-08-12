@@ -649,13 +649,26 @@ function generarEstadoCuentaHTML({
           <h3 style="margin: 0; font-size: 14px; color: #14532d; font-weight: 700; letter-spacing: 0.5px;">ACEPTACIÓN Y FIRMA DEL CLIENTE</h3>
           <span style="margin-left: auto; background: #16a34a; color: white; padding: 3px 10px; border-radius: 12px; font-size: 10px; font-weight: 700;">✓ FIRMADO</span>
         </div>
-        ${p.firmas.map((f: any) => `
+        ${p.firmas.map((f: any) => {
+          // FIX 2026-08-12 (Task 6): Mostrar el destino concreto del OTP (email
+          // o teléfono confirmado por el cliente) al lado del canal, para que
+          // el estado de cuenta sea trazable y se pueda verificar a qué correo
+          // o WhatsApp llegó el código. Antes solo se veía "EMAIL" / "WHATSAPP"
+          // sin saber a qué contacto se envió.
+          const telCliente = p.cliente?.telefono || 'No registrado'
+          const emailCliente = p.cliente?.email || 'No registrado'
+          let destinoOtpTxt = 'No especificado'
+          if (f.otpCanal === 'WHATSAPP') destinoOtpTxt = `WhatsApp al ${telCliente}`
+          else if (f.otpCanal === 'EMAIL') destinoOtpTxt = `Correo a ${emailCliente}`
+          else if (f.otpCanal === 'AMBOS') destinoOtpTxt = `WhatsApp ${telCliente} y correo ${emailCliente}`
+          return `
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px 24px; font-size: 11px; color: #14532d;">
           <div><strong>📄 Tipo documento:</strong> ${f.tipo === 'TYC' ? 'Términos y Condiciones' : f.tipo === 'PAGARE' ? 'Pagaré' : f.tipo === 'CONTRATO' ? 'Contrato' : f.tipo}</div>
           <div><strong>👤 Firmante:</strong> ${f.firmanteNombre || p.cliente?.nombre || '—'}${f.firmanteRol ? ` (${f.firmanteRol})` : ''}</div>
-          <div><strong>🆔 Cédula firmante:</strong> ${f.firmanteCedula || '—'}</div>
+          <div><strong>🆔 Cédula firmante:</strong> ${f.firmanteCedula || p.cliente?.cedula || '—'}</div>
           <div><strong>🔐 Canal OTP:</strong> ${f.otpCanal || '—'}</div>
-          <div><strong>📅 Fecha firma:</strong> ${f.fechaFirmaCompleta ? formatearFecha(f.fechaFirmaCompleta) : '—'} ${f.fechaFirmaCompleta ? new Date(f.fechaFirmaCompleta).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' }) : ''}</div>
+          <div style="grid-column: 1 / -1;"><strong>📬 Destino OTP confirmado:</strong> <strong>${destinoOtpTxt}</strong></div>
+          <div><strong>📅 Fecha firma:</strong> ${f.fechaFirmaCompleta ? formatearFecha(f.fechaFirmaCompleta) : '—'} ${f.fechaFirmaCompleta ? new Date(f.fechaFirmaCompleta).toLocaleTimeString('es-CO', { timeZone: 'America/Bogota', hour: '2-digit', minute: '2-digit' }) : ''}</div>
           <div><strong>🌍 IP origen:</strong> ${f.ipFirma || '—'}</div>
           <div><strong>🔑 Estado:</strong> <span style="color: #16a34a; font-weight: 700;">COMPLETADA</span></div>
           <div><strong>🆔 ID firma:</strong> <span style="font-family: 'Courier New', monospace; font-size: 10px;">${f.id.substring(0, 18)}…</span></div>
@@ -679,7 +692,7 @@ function generarEstadoCuentaHTML({
           </div>
         </div>
         `}
-        `).join('')}
+        ` }).join('')}
       </div>
       ` : `
       <div class="firma-aceptacion" style="margin-top: 20px; border: 2px dashed #d1d5db; border-radius: 10px; padding: 16px 20px; background: #f9fafb;">

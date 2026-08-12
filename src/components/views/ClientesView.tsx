@@ -74,6 +74,22 @@ interface ReferidoMini {
   activo: boolean
 }
 
+// FIX 2026-08-12 (Task 6): Registro fotográfico del cliente (cédula + selfie)
+// que se carga al convertir la SolicitudNuevoCliente y/o al firmar
+// electrónicamente. Se muestra en el detalle del cliente para que el gestor
+// pueda disponer de la cédula y la foto en cualquier momento.
+interface DocumentoFotoCliente {
+  id: string
+  tipo: string // FOTO_DOCUMENTO | FOTO_CEDULA | FOTO_SELFI | FOTO_DOCUMENTO_REVERSO
+  titulo: string
+  descripcion: string | null
+  archivoBase64: string
+  archivoNombre: string
+  archivoTipo: string
+  subidoPor: string | null
+  fechaSubida: string
+}
+
 interface Cliente {
   id: string
   nombre: string
@@ -108,6 +124,8 @@ interface Cliente {
   preferenciaNotificacion?: 'WHATSAPP' | 'EMAIL' | 'AMBOS' | 'NINGUNO' | null
   createdAt: string
   _count?: { prestamos: number; referidos: number }
+  // FIX 2026-08-12 (Task 6): Registro fotográfico del cliente
+  documentosGestor?: DocumentoFotoCliente[]
 }
 
 interface FormData {
@@ -1410,6 +1428,12 @@ export function ClientesView({ onChanged }: { onChanged: () => void }) {
                   )}
                 </div>
 
+                {/* Registro fotográfico — cédula y selfie del cliente */}
+                {clienteDetalle.documentosGestor &&
+                  clienteDetalle.documentosGestor.length > 0 && (
+                    <RegistroFotograficoCliente fotos={clienteDetalle.documentosGestor} />
+                  )}
+
                 {/* Referidor */}
                 {clienteDetalle.referidoPor && (
                   <div className="p-3 rounded-md bg-blue-50 border border-blue-200">
@@ -1507,6 +1531,205 @@ export function ClientesView({ onChanged }: { onChanged: () => void }) {
                 </div>
               </div>
             </>
+          )}
+        </DialogContent>
+      </Dialog>
+    </div>
+  )
+}
+
+// =====================================================
+// RegistroFotograficoCliente
+// Muestra las fotos del cliente (cédula frente/reverso + selfie) que fueron
+// cargadas al convertir la solicitud de nuevo cliente y/o durante el flujo
+// de firma electrónica. Permite al gestor visualizar, ampliar y descargar
+// la cédula y la selfie directamente desde Clientes > Detalle.
+// =====================================================
+
+// Etiqueta legible según tipo de documento. Distingue cédula frente vs reverso:
+// el tipo puede ser 'FOTO_DOCUMENTO' para ambos (en registros antiguos la
+// migración guardaba ambos con el mismo tipo y se diferenciaban solo por el
+// titulo). Para nuevos registros usamos 'FOTO_DOCUMENTO_REVERSO' explícitamente.
+function etiquetaTipo(foto: DocumentoFotoCliente): { label: string; emoji: string; key: string } {
+  const t = foto.tipo
+  const tituloLower = (foto.titulo || '').toLowerCase()
+  if (t === 'FOTO_DOCUMENTO_REVERSO' || tituloLower.includes('reverso')) {
+    return { label: 'Cédula (reverso)', emoji: '🪪', key: 'FOTO_DOCUMENTO_REVERSO' }
+  }
+  switch (t) {
+    case 'FOTO_DOCUMENTO':
+      return { label: 'Cédula (frente)', emoji: '🪪', key: 'FOTO_DOCUMENTO' }
+    case 'FOTO_CEDULA':
+      return { label: 'Cédula', emoji: '🪪', key: 'FOTO_CEDULA' }
+    case 'FOTO_SELFI':
+      return { label: 'Selfie con cédula', emoji: '📸', key: 'FOTO_SELFI' }
+    default:
+      return { label: t, emoji: '📄', key: t }
+  }
+}
+
+// Normalizar el base64: si viene sin el prefijo data:image/..., agregarlo
+function normalizarSrcFoto(foto: DocumentoFotoCliente): string {
+  if (foto.archivoBase64.startsWith('data:')) return foto.archivoBase64
+  const mime = foto.archivoTipo || 'image/jpeg'
+  return `data:${mime};base64,${foto.archivoBase64}`
+}
+
+const TIPOS_FOTO_ORDEN = ['FOTO_DOCUMENTO', 'FOTO_DOCUMENTO_REVERSO', 'FOTO_CEDULA', 'FOTO_SELFI']
+
+function RegistroFotograficoCliente({ fotos }: { fotos: DocumentoFotoCliente[] }) {
+  const [ampliada, setAmpliada] = useState<DocumentoFotoCliente | null>(null)
+
+  // Como pueden haberse subido múltiples fotos del mismo tipo a lo largo del
+  // tiempo (registro inicial + re-firma), agrupamos por tipo y mostramos la
+  // más reciente de cada uno, más una lista colapsable con el histórico.
+  const fotosPorTipo = useMemo(() => {
+    const map = new Map<string, DocumentoFotoCliente[]>()
+    for (const t of TIPOS_FOTO_ORDEN) map.set(t, [])
+    for (const f of fotos) {
+      const { key } = etiquetaTipo(f)
+      const arr = map.get(key) || []
+      arr.push(f)
+      map.set(key, arr)
+    }
+    // Cada grupo ya viene ordenado por fechaSubida desc desde la API
+    return map
+  }, [fotos])
+
+  const tiposConFotos = TIPOS_FOTO_ORDEN
+    .map((t) => ({ tipo: t, lista: fotosPorTipo.get(t) || [] }))
+    .filter((g) => g.lista.length > 0)
+
+  if (tiposConFotos.length === 0) return null
+
+  const descargarFoto = (foto: DocumentoFotoCliente) => {
+    try {
+      const src = normalizarSrcFoto(foto)
+      const a = document.createElement('a')
+      a.href = src
+      a.download = foto.archivoNombre || `foto_${foto.tipo}.jpg`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+    } catch (e) {
+      console.error('[RegistroFotograficoCliente] Error descargando foto:', e)
+    }
+  }
+
+  return (
+    <div className="p-3 rounded-md bg-emerald-50 border border-emerald-200">
+      <div className="text-sm font-semibold text-emerald-900 flex items-center gap-2 mb-3">
+        <span className="text-base">📷</span> Registro fotográfico del cliente
+      </div>
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+        {tiposConFotos.map(({ tipo, lista }) => {
+          const foto = lista[0] // más reciente
+          const { label, emoji } = etiquetaTipo(foto)
+          return (
+            <div
+              key={tipo}
+              className="bg-white rounded-md border border-emerald-200 overflow-hidden flex flex-col"
+            >
+              <div className="aspect-[3/4] bg-muted/30 flex items-center justify-center overflow-hidden">
+                <img
+                  src={normalizarSrcFoto(foto)}
+                  alt={label}
+                  className="w-full h-full object-cover cursor-zoom-in hover:opacity-90 transition-opacity"
+                  onClick={() => setAmpliada(foto)}
+                />
+              </div>
+              <div className="p-2 text-xs">
+                <div className="font-semibold text-emerald-900 flex items-center gap-1">
+                  <span>{emoji}</span> {label}
+                </div>
+                <div className="text-muted-foreground mt-0.5">
+                  {formatearFecha(foto.fechaSubida)}
+                </div>
+                {lista.length > 1 && (
+                  <div className="text-emerald-700 mt-0.5">
+                    +{lista.length - 1} versión(es) anterior(es)
+                  </div>
+                )}
+                <div className="flex gap-1 mt-1.5">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-7 text-xs px-2"
+                    onClick={() => setAmpliada(foto)}
+                  >
+                    Ampliar
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-7 text-xs px-2"
+                    onClick={() => descargarFoto(foto)}
+                  >
+                    Descargar
+                  </Button>
+                </div>
+              </div>
+            </div>
+          )
+        })}
+      </div>
+      <p className="text-xs text-emerald-700 mt-2">
+        Estas fotos se cargaron cuando el cliente completó su registro inicial y/o
+        durante el proceso de firma electrónica. Se conservan como respaldo de
+        identidad.
+      </p>
+
+      {/* Modal de ampliar foto */}
+      <Dialog open={!!ampliada} onOpenChange={(v) => !v && setAmpliada(null)}>
+        <DialogContent className="max-w-3xl max-h-[95vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="text-sm">
+              {ampliada ? etiquetaTipo(ampliada).label : ''}
+              {ampliada?.titulo && (
+                <span className="text-muted-foreground font-normal ml-2">
+                  — {ampliada.titulo}
+                </span>
+              )}
+            </DialogTitle>
+          </DialogHeader>
+          {ampliada && (
+            <div className="space-y-3">
+              <div className="flex justify-center bg-muted/30 rounded-md p-2">
+                <img
+                  src={normalizarSrcFoto(ampliada)}
+                  alt={etiquetaTipo(ampliada).label}
+                  className="max-h-[70vh] max-w-full object-contain rounded"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-2 text-xs text-muted-foreground">
+                <div>
+                  <span>Subido por: </span>
+                  <strong>{ampliada.subidoPor || '—'}</strong>
+                </div>
+                <div>
+                  <span>Fecha: </span>
+                  <strong>{formatearFecha(ampliada.fechaSubida)}</strong>
+                </div>
+                {ampliada.descripcion && (
+                  <div className="col-span-2">
+                    <span>Descripción: </span>
+                    <strong>{ampliada.descripcion}</strong>
+                  </div>
+                )}
+                <div className="col-span-2">
+                  <span>Archivo: </span>
+                  <strong className="font-mono">{ampliada.archivoNombre}</strong>
+                </div>
+              </div>
+              <div className="flex justify-end gap-2 pt-2 border-t">
+                <Button variant="outline" size="sm" onClick={() => descargarFoto(ampliada)}>
+                  ⬇ Descargar
+                </Button>
+                <Button variant="outline" size="sm" onClick={() => setAmpliada(null)}>
+                  Cerrar
+                </Button>
+              </div>
+            </div>
           )}
         </DialogContent>
       </Dialog>

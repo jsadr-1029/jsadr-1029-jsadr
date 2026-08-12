@@ -1212,7 +1212,7 @@ function generarSeccionFirmaElectronica(firma: any, prestamo: any, esCodeudor: b
   }
 
   const fechaFirma = firma.fechaFirmaCompleta || firma.createdAt
-  const fechaFirmaStr = new Date(fechaFirma).toLocaleString('es-CO', { dateStyle: 'long', timeStyle: 'short' })
+  const fechaFirmaStr = new Date(fechaFirma).toLocaleString('es-CO', { timeZone: 'America/Bogota', dateStyle: 'long', timeStyle: 'short' })
   const canalOTP = firma.otpCanal === 'WHATSAPP' ? 'WhatsApp' :
                    firma.otpCanal === 'EMAIL' ? 'Correo Electrónico' :
                    firma.otpCanal === 'AMBOS' ? 'WhatsApp y Correo Electrónico' : 'No especificado'

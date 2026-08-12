@@ -210,9 +210,13 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       }
 
       // Subir las 3 fotos como DocumentoGestor asociados al cliente
+      // FIX 2026-08-12 (Task 6): Usamos tipos distintos (FOTO_DOCUMENTO vs
+      // FOTO_DOCUMENTO_REVERSO) para poder distinguir el frente y el reverso
+      // de la cédula en el detalle del cliente. Antes ambos se guardaban con
+      // tipo='FOTO_DOCUMENTO' y se diferenciaban solo por el titulo.
       const docsBase: { tipo: string; titulo: string; b64: string; nombre: string }[] = [
         { tipo: 'FOTO_DOCUMENTO', titulo: 'Cédula frente', b64: solicitud.fotoCedulaFrente || '', nombre: solicitud.fotoCedulaFrenteNombre || 'cedula-frente.jpg' },
-        { tipo: 'FOTO_DOCUMENTO', titulo: 'Cédula reverso', b64: solicitud.fotoCedulaReverso || '', nombre: solicitud.fotoCedulaReversoNombre || 'cedula-reverso.jpg' },
+        { tipo: 'FOTO_DOCUMENTO_REVERSO', titulo: 'Cédula reverso', b64: solicitud.fotoCedulaReverso || '', nombre: solicitud.fotoCedulaReversoNombre || 'cedula-reverso.jpg' },
         { tipo: 'FOTO_SELFI', titulo: 'Selfie con cédula', b64: solicitud.fotoSelfie || '', nombre: solicitud.fotoSelfieNombre || 'selfie.jpg' },
       ]
       for (const d of docsBase) {

@@ -350,7 +350,7 @@ async function generarCertificadoHTML(firma: any, cliente: any, prestamo: any, r
   <div class="section-body">
     <div class="datos-grid">
       <div class="dato"><span class="label">Fecha de firma:</span> <span class="value"><strong>${fechaSolo}</strong></span></div>
-      <div class="dato"><span class="label">Hora exacta:</span> <span class="value"><strong>${new Date(fechaFirma).toLocaleTimeString('es-CO')}</strong></span></div>
+      <div class="dato"><span class="label">Hora exacta:</span> <span class="value"><strong>${new Date(fechaFirma).toLocaleTimeString('es-CO', { timeZone: 'America/Bogota', hour: '2-digit', minute: '2-digit', second: '2-digit' })}</strong></span></div>
       <div class="dato"><span class="label">Zona horaria:</span> <span class="value">America/Bogota (UTC-5)</span></div>
       <div class="dato"><span class="label">Timestamp ISO:</span> <span class="value" style="font-family:monospace; font-size:10px;">${new Date(fechaFirma).toISOString()}</span></div>
       <div class="dato"><span class="label">Creación registro:</span> <span class="value">${formatearFechaHora(firma.createdAt)}</span></div>
@@ -442,7 +442,7 @@ async function generarCertificadoHTML(firma: any, cliente: any, prestamo: any, r
   identificado(a) con cédula de ciudadanía No. <strong>${cliente.cedula}</strong>, firmó electrónicamente
   el documento <strong>${firma.tipo === 'TYC' ? 'Términos y Condiciones' : firma.tipo}</strong>
   ${prestamo ? `correspondiente al préstamo <strong>${codigoPrestamo}</strong>` : ''}
-  el día <strong>${fechaSolo}</strong> a las <strong>${new Date(fechaFirma).toLocaleTimeString('es-CO')}</strong>,
+  el día <strong>${fechaSolo}</strong> a las <strong>${new Date(fechaFirma).toLocaleTimeString('es-CO', { timeZone: 'America/Bogota', hour: '2-digit', minute: '2-digit', second: '2-digit' })}</strong>,
   mediante verificación de identidad con código OTP enviado por ${destinoOTP},
   fotografía selfie con documento de identidad, y firma manuscrita digitalizada.
   Este certificado tiene plena validez legal conforme a la legislación colombiana sobre firma electrónica.

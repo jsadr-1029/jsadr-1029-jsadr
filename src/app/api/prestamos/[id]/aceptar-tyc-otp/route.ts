@@ -463,7 +463,7 @@ async function enviarOTP(prestamoId: string, body: any) {
     })
   }
   if (firma) {
-    firma = await db.firmaElectronica.update({ where: { id: firma.id }, data: { otpEnviado: true, otpCodigo: hashOtp(otp), otpCanal: canalFinal, otpFechaEnvio: new Date(), estadoFirma: 'OTP_ENVIADO', intentosOTP: 0, otpValidado: false } })
+    firma = await db.firmaElectronica.update({ where: { id: firma.id }, data: { otpEnviado: true, otpCodigo: hashOtp(otp), otpCanal: canalFinal, otpFechaEnvio: new Date(), estadoFirma: 'OTP_ENVIADO', intentosOTP: 0, otpValidado: false, firmanteRol: firma.firmanteRol || 'DEUDOR', firmanteNombre: firma.firmanteNombre || prestamo.cliente.nombre, firmanteCedula: firma.firmanteCedula || prestamo.cliente.cedula } })
     // Limpieza: eliminar firmas huérfanas (sin fotos, sin OTP validado) que
     // pudieron ser creadas por el bug anterior. Solo se eliminan firmas en
     // estados PENDIENTE u OTP_ENVIADO que NO tengan fotos — no se tocan las
@@ -484,7 +484,7 @@ async function enviarOTP(prestamoId: string, body: any) {
       console.error('[enviarOTP] Limpieza de firmas huérfanas falló:', e)
     }
   } else {
-    firma = await db.firmaElectronica.create({ data: { prestamoId, clienteId: prestamo.cliente.id, tipo: 'TYC', imagenFirma: '', otpEnviado: true, otpCodigo: hashOtp(otp), otpCanal: canalFinal, otpFechaEnvio: new Date(), estadoFirma: 'OTP_ENVIADO' } })
+    firma = await db.firmaElectronica.create({ data: { prestamoId, clienteId: prestamo.cliente.id, tipo: 'TYC', imagenFirma: '', otpEnviado: true, otpCodigo: hashOtp(otp), otpCanal: canalFinal, otpFechaEnvio: new Date(), estadoFirma: 'OTP_ENVIADO', firmanteRol: 'DEUDOR', firmanteNombre: prestamo.cliente.nombre, firmanteCedula: prestamo.cliente.cedula } })
   }
 
   // Registrar en OtpRegistro (trazabilidad centralizada)
@@ -668,6 +668,10 @@ async function confirmarConFoto(prestamoId: string, body: any) {
       fechaSubidaFotos: new Date(),
       estadoFirma: 'COMPLETADA',
       fechaFirmaCompleta: new Date(),
+      // FIX 2026-08-12 (Task 6): Reforzar datos del firmante (deudor).
+      firmanteRol: firma.firmanteRol || 'DEUDOR',
+      firmanteNombre: firma.firmanteNombre || prestamo.cliente?.nombre || '',
+      firmanteCedula: firma.firmanteCedula || prestamo.cliente?.cedula || '',
     },
   })
 
@@ -925,6 +929,12 @@ async function guardarFotosSimple(prestamoId: string, body: any) {
         fotoSelfieHash: hashSelfie,
         fechaSubidaFotos: new Date(),
         estadoFirma: 'FOTOS_SUBIDAS',
+        // FIX 2026-08-12 (Task 6): Asegurar que los datos del firmante queden
+        // registrados (para que aparezcan en el estado de cuenta y certificado).
+        // Usamos `||` para no sobreescribir si ya existen (p.ej. firma de codeudor).
+        firmanteRol: firma.firmanteRol || 'DEUDOR',
+        firmanteNombre: firma.firmanteNombre || prestamo.cliente?.nombre || '',
+        firmanteCedula: firma.firmanteCedula || prestamo.cliente?.cedula || '',
       },
     })
   } else {
@@ -1023,6 +1033,10 @@ async function guardarFirmaManuscrita(prestamoId: string, body: any) {
       data: {
         imagenFirma: imagenFirmaBase64,
         estadoFirma: 'FIRMA_DIBUJADA',
+        // FIX 2026-08-12 (Task 6): Mismo refuerzo que en guardarFotosSimple.
+        firmanteRol: firma.firmanteRol || 'DEUDOR',
+        firmanteNombre: firma.firmanteNombre || prestamo.cliente?.nombre || '',
+        firmanteCedula: firma.firmanteCedula || prestamo.cliente?.cedula || '',
       },
     })
   } else {
@@ -1110,6 +1124,13 @@ async function confirmarActivacion(prestamoId: string) {
     data: {
       estadoFirma: 'COMPLETADA',
       fechaFirmaCompleta: new Date(),
+      // FIX 2026-08-12 (Task 6): Última oportunidad para asegurar que los
+      // datos del firmante queden registrados (deudor). Si por algún motivo
+      // la firma se creó sin estos campos (p.ej. por un bug previo), los
+      // seteamos aquí usando los datos del préstamo.
+      firmanteRol: firma.firmanteRol || 'DEUDOR',
+      firmanteNombre: firma.firmanteNombre || prestamo?.cliente?.nombre || '',
+      firmanteCedula: firma.firmanteCedula || prestamo?.cliente?.cedula || '',
     },
   })
 

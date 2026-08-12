@@ -255,6 +255,7 @@ export function formatearFecha(fecha: Date | string | null | undefined): string 
   if (!fecha) return '—'
   const d = typeof fecha === 'string' ? new Date(fecha) : fecha
   return d.toLocaleDateString('es-CO', {
+    timeZone: 'America/Bogota',
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',
@@ -265,6 +266,7 @@ export function formatearFechaHora(fecha: Date | string | null | undefined): str
   if (!fecha) return '—'
   const d = typeof fecha === 'string' ? new Date(fecha) : fecha
   return d.toLocaleString('es-CO', {
+    timeZone: 'America/Bogota',
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',

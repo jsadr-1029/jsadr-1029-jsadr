@@ -43,6 +43,28 @@ export async function GET(
         },
         categoria: true,
         cuentaRecaudo: true,
+        // FIX 2026-08-12 (Task 6): Incluir el registro fotográfico del cliente
+        // (cédula frente/reverso + selfie) que se carga desde la solicitud de
+        // nuevo cliente al ser convertida, y también las fotos subidas en el
+        // flujo de firma electrónica. Así el gestor puede disponer de la cédula
+        // y la foto del cliente desde Préstamos > Clientes > Detalle.
+        documentosGestor: {
+          where: {
+            tipo: { in: ['FOTO_DOCUMENTO', 'FOTO_CEDULA', 'FOTO_SELFI', 'FOTO_DOCUMENTO_REVERSO'] },
+          },
+          select: {
+            id: true,
+            tipo: true,
+            titulo: true,
+            descripcion: true,
+            archivoBase64: true,
+            archivoNombre: true,
+            archivoTipo: true,
+            subidoPor: true,
+            fechaSubida: true,
+          },
+          orderBy: { fechaSubida: 'desc' },
+        },
         _count: { select: { prestamos: true, referidos: true } },
       },
     })
