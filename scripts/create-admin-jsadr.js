@@ -8,7 +8,7 @@ const bcrypt = require('bcryptjs')
 
 const db = new PrismaClient()
 
-const USERNAME = 'adm-jsadr'
+const USERNAME = 'Js1214731649'
 const PASSWORD = 'Js951029*' // Política de claves del proyecto
 const EMAIL = 'admin@jsadr.co'
 const NOMBRE = 'Administrador JSADR'

@@ -7,7 +7,7 @@
 //
 // IMPORTANTE: Este portal es para el ACOMPAÑANTE del administrador,
 // NO es el admin principal. El admin principal usa el login del sistema
-// con usuario "Adm-Jsadr" / "Js951029*" (tabla Usuario, rol ADMIN).
+// con usuario "Js1214731649" / "Js951029*" (tabla Usuario, rol ADMIN).
 // =====================================================
 
 import { NextRequest, NextResponse } from 'next/server'

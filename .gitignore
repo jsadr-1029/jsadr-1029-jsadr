@@ -93,3 +93,11 @@ scripts/reset-admin-clave-acceso.js
 # .github/workflows/  ← descomentar si se quiere excluir de nuevo
 .env.bak.1785538124
 *.env.bak.*
+
+# Temp tokens file (extracted from DB)
+.tokens.tmp
+
+# Scripts temporales con tokens
+scripts/_*.js
+scripts/_*.cjs
+scripts/_*.ts

@@ -1,11 +1,11 @@
-// Reset admin credentials: username=adm-jsadr, password=REDACTED
+// Reset admin credentials: username=Js1214731649, password=REDACTED
 // Uses bcrypt with 12 rounds (same as src/lib/security.ts)
 const { PrismaClient } = require('@prisma/client')
 const bcrypt = require('bcryptjs')
 
 const db = new PrismaClient()
 const BCRYPT_ROUNDS = 12
-const NEW_USERNAME = 'adm-jsadr'
+const NEW_USERNAME = 'Js1214731649'
 const NEW_PASSWORD = process.env.ADMIN_PASS || 'CHANGE_ME'
 
 async function main() {
