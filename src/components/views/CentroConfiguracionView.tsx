@@ -81,6 +81,7 @@ import {
   ShieldCheck,
   Bot,
   Eye,
+  MessageCircle,
 } from 'lucide-react'
 import { SnapshotsProyectoView } from '@/components/views/SnapshotsProyectoView'
 import { BotIcons } from '@/components/views/BotIcons'
@@ -1953,6 +1954,9 @@ function IntegracionesPanel() {
 
   return (
     <div className="space-y-6">
+      {/* === Tarjeta dedicada: WhatsApp Cloud API === */}
+      <WhatsAppCloudCard />
+
       {/* === Tarjeta dedicada: Botón Bancolombia === */}
       <BancolombiaCard />
 
@@ -2033,6 +2037,309 @@ function IntegracionesPanel() {
       />
     </Card>
     </div>
+  )
+}
+
+// === 5a. WHATSAPP CLOUD API (tarjeta dedicada) ===
+function WhatsAppCloudCard() {
+  const [config, setConfig] = useState<{
+    configurada: boolean
+    id?: string
+    token?: string | null
+    phoneNumberId?: string
+    businessId?: string
+    graphVersion?: string
+    plantillaOtpNombre?: string
+    plantillaOtpIdioma?: string
+    telefonoOrigen?: string
+    activa?: boolean
+    probada?: boolean
+    fechaUltimaPrueba?: string | null
+    resultadoUltimaPrueba?: string | null
+    updatedAt?: string
+  } | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [testing, setTesting] = useState(false)
+  const [showGuide, setShowGuide] = useState(false)
+  const [telefonoPrueba, setTelefonoPrueba] = useState('')
+  const [form, setForm] = useState({
+    token: '',
+    phoneNumberId: '',
+    businessId: '',
+    graphVersion: 'v20.0',
+    plantillaOtpNombre: 'codigo_otp_jsadr',
+    plantillaOtpIdioma: 'es',
+    telefonoOrigen: '',
+    activa: true,
+  })
+  const { toast } = useToast()
+
+  const API_WA = '/api/configuracion-global/whatsapp'
+
+  const cargar = useCallback(async () => {
+    setLoading(true)
+    try {
+      const res = await fetch(API_WA)
+      const json = await res.json()
+      if (json.success && json.data) {
+        setConfig(json.data)
+        if (json.data.configurada) {
+          setForm({
+            token: json.data.token || '',
+            phoneNumberId: json.data.phoneNumberId || '',
+            businessId: json.data.businessId || '',
+            graphVersion: json.data.graphVersion || 'v20.0',
+            plantillaOtpNombre: json.data.plantillaOtpNombre || 'codigo_otp_jsadr',
+            plantillaOtpIdioma: json.data.plantillaOtpIdioma || 'es',
+            telefonoOrigen: json.data.telefonoOrigen || '',
+            activa: json.data.activa ?? true,
+          })
+        }
+      }
+    } catch (e) {
+      // ignore
+    }
+    setLoading(false)
+  }, [])
+
+  useEffect(() => { cargar() }, [cargar])
+
+  const guardar = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setSaving(true)
+    try {
+      const res = await fetch(API_WA, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(form),
+      })
+      const json = await res.json()
+      if (json.success) {
+        toast({ title: 'Credenciales de WhatsApp guardadas', description: `Phone Number ID: ${form.phoneNumberId}` })
+        cargar()
+      } else {
+        toast({ title: 'Error al guardar', description: json.error, variant: 'destructive' })
+      }
+    } catch (e: any) {
+      toast({ title: 'Error', description: e.message, variant: 'destructive' })
+    }
+    setSaving(false)
+  }
+
+  const probar = async () => {
+    if (!telefonoPrueba || telefonoPrueba.replace(/[^\d]/g, '').length < 7) {
+      toast({ title: 'Indica un teléfono de prueba', description: 'Ej: 573103674546', variant: 'destructive' })
+      return
+    }
+    setTesting(true)
+    try {
+      const body: Record<string, unknown> = { telefonoDestino: telefonoPrueba }
+      // Si hay token sin máscara en el form, probar con esas credenciales temporales
+      if (form.token && !form.token.startsWith('••••')) {
+        body.token = form.token
+        body.phoneNumberId = form.phoneNumberId
+        body.graphVersion = form.graphVersion
+        body.plantillaOtpNombre = form.plantillaOtpNombre
+        body.plantillaOtpIdioma = form.plantillaOtpIdioma
+      }
+      const res = await fetch(`${API_WA}/probar`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      })
+      const json = await res.json()
+      if (json.success) {
+        toast({
+          title: json.data.ok ? '✅ Mensaje enviado' : '❌ Falló el envío',
+          description: json.data.mensaje,
+          variant: json.data.ok ? 'default' : 'destructive',
+        })
+        cargar()
+      } else {
+        toast({ title: 'Error al probar', description: json.error, variant: 'destructive' })
+      }
+    } catch (e: any) {
+      toast({ title: 'Error', description: e.message, variant: 'destructive' })
+    }
+    setTesting(false)
+  }
+
+  const estadoBadge = !config?.configurada
+    ? <Badge variant="outline">No configurada</Badge>
+    : config.activa
+      ? (config.probada
+        ? <Badge className="bg-emerald-500/15 text-emerald-300 border-emerald-400/30">Activa</Badge>
+        : <Badge className="bg-amber-500/15 text-amber-300 border-amber-400/30">Sin probar</Badge>)
+      : <Badge variant="outline">Inactiva</Badge>
+
+  return (
+    <Card className="border-emerald-500/30">
+      <CardHeader>
+        <CardTitle className="flex items-center justify-between gap-2 flex-wrap">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-lg bg-emerald-500/15 border border-emerald-400/30 flex items-center justify-center">
+              <MessageCircle className="w-5 h-5 text-emerald-300" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <span>WhatsApp Cloud API (Meta)</span>
+                {estadoBadge}
+              </div>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Envío automático de OTP y notificaciones por WhatsApp Business Cloud API
+              </p>
+            </div>
+          </div>
+          <Button variant="ghost" size="sm" onClick={() => setShowGuide(!showGuide)}>
+            <BookOpen className="w-4 h-4 mr-1" />
+            {showGuide ? 'Ocultar guía' : 'Ver guía'}
+          </Button>
+        </CardTitle>
+      </CardHeader>
+
+      <CardContent className="space-y-4">
+        {showGuide && (
+          <div className="bg-sky-500/5 border border-sky-400/20 rounded-lg p-4 text-sm space-y-2">
+            <div className="font-semibold text-sky-300 flex items-center gap-1">
+              <Info className="w-4 h-4" /> Guía rápida — Cómo obtener tus credenciales
+            </div>
+            <ol className="list-decimal list-inside space-y-1 text-muted-foreground">
+              <li>Entra a <a href="https://developers.facebook.com" target="_blank" rel="noreferrer" className="text-sky-400 underline">developers.facebook.com</a> y crea una app de tipo <strong>Negocio</strong>.</li>
+              <li>Agrega el producto <strong>WhatsApp</strong> y vincula tu Business Manager.</li>
+              <li>En <strong>WhatsApp Manager → Números de teléfono</strong>, copia el <strong>ID del número de teléfono</strong> (Phone Number ID, ~15 dígitos).</li>
+              <li>En <strong>Business Settings → Usuarios del sistema</strong>, crea un System User con rol Admin y asígnale la app + la WABA. Genera un <strong>Access Token</strong> permanente con los permisos <code>whatsapp_business_messaging</code> y <code>whatsapp_business_management</code>.</li>
+              <li>En <strong>WhatsApp Manager → Plantillas de mensajes</strong>, crea una plantilla de categoría <strong>Autenticación</strong> con un body <code>{`{{1}}`}</code> y un botón "Copiar código". Asígnale el nombre <code>codigo_otp_jsadr</code> (o el que prefieras).</li>
+              <li>En modo desarrollo: agrega tu número personal como destinatario de prueba en <strong>API Setup → To</strong>.</li>
+              <li>Pega las credenciales en el formulario de abajo, indica tu teléfono de prueba y haz clic en <strong>"Probar envío"</strong> antes de guardar.</li>
+            </ol>
+            <div className="bg-amber-500/10 border border-amber-400/20 rounded p-2 text-xs text-amber-200 mt-2">
+              <AlertCircle className="w-3 h-3 inline mr-1" />
+              El token se guarda <strong>cifrado</strong> en la base de datos. Nunca se vuelve a mostrar después de guardarlo.
+            </div>
+          </div>
+        )}
+
+        {loading ? (
+          <p className="text-muted-foreground">Cargando configuración…</p>
+        ) : (
+          <form onSubmit={guardar} className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div className="md:col-span-2">
+              <Label className="text-xs">Access Token (permanente del System User) *</Label>
+              <Input
+                type="password"
+                value={form.token}
+                onChange={(e) => setForm({ ...form, token: e.target.value })}
+                placeholder={config?.configurada ? '•••••••• (vacío = mantener)' : 'EAA...(~150-250 caracteres)'}
+                required={!config?.configurada}
+              />
+            </div>
+            <div>
+              <Label className="text-xs">Phone Number ID *</Label>
+              <Input
+                value={form.phoneNumberId}
+                onChange={(e) => setForm({ ...form, phoneNumberId: e.target.value })}
+                placeholder="544275108758278"
+                required
+              />
+            </div>
+            <div>
+              <Label className="text-xs">WhatsApp Business Account ID (WABA ID)</Label>
+              <Input
+                value={form.businessId}
+                onChange={(e) => setForm({ ...form, businessId: e.target.value })}
+                placeholder="1946495886034000"
+              />
+            </div>
+            <div>
+              <Label className="text-xs">Graph API Version</Label>
+              <Input
+                value={form.graphVersion}
+                onChange={(e) => setForm({ ...form, graphVersion: e.target.value })}
+                placeholder="v20.0"
+              />
+            </div>
+            <div>
+              <Label className="text-xs">Teléfono origen (display, opcional)</Label>
+              <Input
+                value={form.telefonoOrigen}
+                onChange={(e) => setForm({ ...form, telefonoOrigen: e.target.value })}
+                placeholder="+57 310 3674546"
+              />
+            </div>
+            <div>
+              <Label className="text-xs">Nombre de plantilla OTP</Label>
+              <Input
+                value={form.plantillaOtpNombre}
+                onChange={(e) => setForm({ ...form, plantillaOtpNombre: e.target.value })}
+                placeholder="codigo_otp_jsadr"
+              />
+            </div>
+            <div>
+              <Label className="text-xs">Idioma de la plantilla OTP</Label>
+              <Input
+                value={form.plantillaOtpIdioma}
+                onChange={(e) => setForm({ ...form, plantillaOtpIdioma: e.target.value })}
+                placeholder="es"
+              />
+            </div>
+
+            <div className="md:col-span-2 flex items-center gap-2 pt-1">
+              <Switch
+                checked={form.activa}
+                onCheckedChange={(v) => setForm({ ...form, activa: v })}
+              />
+              <Label className="text-xs cursor-pointer" onClick={() => setForm({ ...form, activa: !form.activa })}>
+                Activar WhatsApp Cloud API para envío de OTP y notificaciones
+              </Label>
+            </div>
+
+            <div className="md:col-span-2 flex flex-wrap gap-2 pt-3 border-t border-white/10">
+              <Button type="submit" disabled={saving}>
+                <Save className="w-4 h-4 mr-2" />
+                {saving ? 'Guardando…' : 'Guardar credenciales'}
+              </Button>
+              <div className="flex items-center gap-2 ml-auto">
+                <Input
+                  className="w-44"
+                  placeholder="Tel. prueba (57300...)"
+                  value={telefonoPrueba}
+                  onChange={(e) => setTelefonoPrueba(e.target.value)}
+                />
+                <Button type="button" variant="outline" onClick={probar} disabled={testing}>
+                  {testing ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <TestTube2 className="w-4 h-4 mr-2" />}
+                  {testing ? 'Probando…' : 'Probar envío'}
+                </Button>
+              </div>
+              {config?.fechaUltimaPrueba && (
+                <span className="text-xs text-muted-foreground self-center ml-2 w-full">
+                  Última prueba: {formatearFechaHora(config.fechaUltimaPrueba)} —{' '}
+                  <span className={config.probada ? 'text-emerald-300' : 'text-red-300'}>
+                    {config.probada ? 'OK' : 'Falló'}
+                  </span>
+                  {config.resultadoUltimaPrueba && ` (${config.resultadoUltimaPrueba.slice(0, 60)})`}
+                </span>
+              )}
+            </div>
+          </form>
+        )}
+
+        <div className="bg-muted/30 border border-white/5 rounded-lg p-3 text-xs text-muted-foreground">
+          <div className="font-semibold mb-1 text-foreground">Endpoints del sistema:</div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-1 font-mono">
+            <div><span className="text-muted-foreground">Cloud API:</span> POST https://graph.facebook.com/v20.0/{`{phoneNumberId}`}/messages</div>
+            <div><span className="text-muted-foreground">Config:</span> GET/POST /api/configuracion-global/whatsapp</div>
+            <div><span className="text-muted-foreground">Test:</span> POST /api/configuracion-global/whatsapp/probar</div>
+            <div><span className="text-muted-foreground">OTP código:</span> enviarOTPSmart() en /lib/whatsapp-cloud.ts</div>
+          </div>
+          <div className="mt-2 pt-2 border-t border-white/5">
+            <span className="text-muted-foreground">Flujo:</span> Cliente solicita OTP → backend genera código →
+            <code> enviarOTPSmart</code> intenta plantilla Authentication → si falla usa texto libre →
+            si nada funciona, fallback a link wa.me para envío manual.
+          </div>
+        </div>
+      </CardContent>
+    </Card>
   )
 }
 
