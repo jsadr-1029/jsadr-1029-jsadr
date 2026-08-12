@@ -764,7 +764,9 @@ async function finalizarConSelfie(body: any, req: NextRequest) {
 
 // === VALIDAR OTP (sin guardar firma todavía) ===
 async function validarOTP(body: any) {
-  const { firmaId, otpIngresado } = body
+  // FIX 2026-08-12: Aceptar `otp` como alias legacy de `otpIngresado`.
+  const firmaId = body.firmaId
+  const otpIngresado = body.otpIngresado ?? body.otp ?? body.codigo
   if (!firmaId || !otpIngresado) {
     return NextResponse.json({ success: false, error: 'firmaId y otpIngresado son obligatorios' }, { status: 400 })
   }

@@ -3557,10 +3557,14 @@ function FlujoFirmaClient({
       const headers: Record<string, string> = { 'Content-Type': 'application/json' }
       if (token) headers['x-portal-token'] = token
       // 1. Validar OTP
+      // FIX 2026-08-12: El backend espera `otpIngresado`, no `otp`.
+      // Antes se enviaba `{ otp: otpValor }` y el backend leía `otpIngresado`
+      // (undefined), devolviendo "Código requerido" → el cliente veía
+      // "OTP inválido" aunque el código fuera correcto.
       const resVal = await fetch(`/api/prestamos/${prestamoId}/aceptar-tyc-otp`, {
         method: 'POST',
         headers,
-        body: JSON.stringify({ accion: 'validar_otp', otp: otpValor }),
+        body: JSON.stringify({ accion: 'validar_otp', otpIngresado: otpValor }),
       })
       const jsonVal = await resVal.json()
       if (!jsonVal.success) {

@@ -473,7 +473,11 @@ async function enviarOTP(prestamoId: string, body: any) {
 }
 
 async function validarOTP(prestamoId: string, body: any) {
-  const { otpIngresado } = body
+  // FIX 2026-08-12: Aceptar tanto `otpIngresado` (canónico) como `otp`
+  // (legacy / front-end desactualizado) para evitar el falso "Código
+  // requerido" → "OTP inválido" cuando el cliente envía el código correcto
+  // pero con el nombre de campo equivocado.
+  const otpIngresado = body.otpIngresado ?? body.otp ?? body.codigo
   if (!otpIngresado) return NextResponse.json({ success: false, error: 'Código requerido' }, { status: 400 })
   const firma = await db.firmaElectronica.findFirst({ where: { prestamoId, tipo: 'TYC', estadoFirma: 'OTP_ENVIADO' }, orderBy: { createdAt: 'desc' } })
   if (!firma || !firma.otpFechaEnvio) return NextResponse.json({ success: false, error: 'No hay código pendiente' }, { status: 400 })

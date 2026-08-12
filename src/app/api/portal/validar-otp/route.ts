@@ -15,7 +15,10 @@ import { verificarOtp, incrementarIntentoOtp, obtenerIp, obtenerUserAgent } from
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
-    const { firmaId, otp } = body
+    // FIX 2026-08-12: Aceptar `otpIngresado` y `codigo` como aliases de `otp`
+    // para evitar falsos negativos si algún front-end usa otro nombre de campo.
+    const firmaId = body.firmaId
+    const otp = body.otp ?? body.otpIngresado ?? body.codigo
 
     if (!firmaId || !otp) {
       return NextResponse.json({ error: 'firmaId y otp son requeridos' }, { status: 400 })
