@@ -341,8 +341,26 @@ async function enviarOTP(prestamoId: string, body: any) {
   // === Permitir OTP en estados SOLICITUD o PENDIENTE_ACEPTACION ===
   // El flujo de firma del cliente se habilita cuando la solicitud web fue aprobada.
   // El préstamo puede estar en estado SOLICITUD (recién creado) o PENDIENTE_ACEPTACION.
+  // FIX 2026-08-12: También permitir si hay una firma EN PROGRESO (PENDIENTE,
+  // FOTOS_SUBIDAS, FIRMA_DIBUJADA, OTP_ENVIADO) aunque el estado del préstamo
+  // haya cambiado — esto evita bloquear al cliente si el préstamo cambió de
+  // estado mientras la firma estaba en curso.
   if (prestamo.estado !== 'PENDIENTE_ACEPTACION' && prestamo.estado !== 'SOLICITUD') {
-    return NextResponse.json({ success: false, error: 'El préstamo no está pendiente de aceptación' }, { status: 400 })
+    // Verificar si hay una firma en progreso para este préstamo
+    const firmaEnProgreso = await db.firmaElectronica.findFirst({
+      where: {
+        prestamoId,
+        estadoFirma: { in: ['PENDIENTE', 'FOTOS_SUBIDAS', 'FIRMA_DIBUJADA', 'OTP_ENVIADO'] },
+      },
+      orderBy: { createdAt: 'desc' },
+    })
+    if (!firmaEnProgreso) {
+      return NextResponse.json({
+        success: false,
+        error: `El préstamo no está pendiente de aceptación (estado actual: ${prestamo.estado}). Solo se puede enviar OTP a préstamos en SOLICITUD o PENDIENTE_ACEPTACION, o que tengan una firma electrónica en progreso.`,
+      }, { status: 400 })
+    }
+    // Hay una firma en progreso — permitir continuar
   }
   if (!prestamo.cliente) return NextResponse.json({ success: false, error: 'Cliente no encontrado' }, { status: 404 })
   if (canalFinal === 'EMAIL' && !prestamo.cliente.email) return NextResponse.json({ success: false, error: 'El cliente no tiene correo electrónico' }, { status: 400 })
