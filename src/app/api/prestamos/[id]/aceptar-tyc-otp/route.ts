@@ -423,9 +423,66 @@ async function enviarOTP(prestamoId: string, body: any) {
 
   // === Generar nuevo OTP (no hay activo o ya expiró) ===
   const otp = generarCodigoOtp('numeric', 6)
-  let firma = await db.firmaElectronica.findFirst({ where: { prestamoId, tipo: 'TYC', estadoFirma: { in: ['PENDIENTE', 'OTP_ENVIADO'] } }, orderBy: { createdAt: 'desc' } })
+  // FIX 2026-08-12 (Faltan las fotos): El flujo correcto del portal es:
+  //   1. guardar_fotos_simple   → estadoFirma = FOTOS_SUBIDAS (con fotoDocumento + fotoSelfie)
+  //   2. guardar_firma_manuscrita → estadoFirma = FIRMA_DIBUJADA (con imagenFirma)
+  //   3. enviar_otp             → debería actualizar ESA firma y ponerla en OTP_ENVIADO
+  //   4. validar_otp            → valida el OTP en la misma firma
+  //   5. confirmar_activacion   → verifica fotoDocumento + fotoSelfie + imagenFirma
+  //
+  // Antes este query solo buscaba estados ['PENDIENTE', 'OTP_ENVIADO'], así que
+  // cuando el cliente ya había subido fotos y firma (estados FOTOS_SUBIDAS /
+  // FIRMA_DIBUJADA), NO encontraba la firma existente y creaba una NUEVA firma
+  // vacía (sin fotos ni firma manuscrita). Luego validar_otp validaba el OTP en
+  // la firma nueva, y confirmar_activacion fallaba con "Faltan las fotos.
+  // Vuelve al paso 1." aunque el cliente SÍ había subido las fotos.
+  //
+  // Fix: incluir FOTOS_SUBIDAS y FIRMA_DIBUJADA en el filtro, y preferir la
+  // firma que YA tiene fotos (fotoDocumento != null) para no perder ese
+  // trabajo previo. Si hay firmas huérfanas sin fotos (creadas por el bug
+  // anterior), se limpian para evitar que confirmar_activacion las encuentre.
+  let firma = await db.firmaElectronica.findFirst({
+    where: {
+      prestamoId,
+      tipo: 'TYC',
+      estadoFirma: { in: ['PENDIENTE', 'OTP_ENVIADO', 'FOTOS_SUBIDAS', 'FIRMA_DIBUJADA'] },
+      fotoDocumento: { not: null },
+    },
+    orderBy: { createdAt: 'desc' },
+  })
+  if (!firma) {
+    // Fallback: cualquier firma en progreso (puede ser una firma vacía creada
+    // por un flujo interrumpido, sin fotos aún).
+    firma = await db.firmaElectronica.findFirst({
+      where: {
+        prestamoId,
+        tipo: 'TYC',
+        estadoFirma: { in: ['PENDIENTE', 'OTP_ENVIADO', 'FOTOS_SUBIDAS', 'FIRMA_DIBUJADA'] },
+      },
+      orderBy: { createdAt: 'desc' },
+    })
+  }
   if (firma) {
     firma = await db.firmaElectronica.update({ where: { id: firma.id }, data: { otpEnviado: true, otpCodigo: hashOtp(otp), otpCanal: canalFinal, otpFechaEnvio: new Date(), estadoFirma: 'OTP_ENVIADO', intentosOTP: 0, otpValidado: false } })
+    // Limpieza: eliminar firmas huérfanas (sin fotos, sin OTP validado) que
+    // pudieron ser creadas por el bug anterior. Solo se eliminan firmas en
+    // estados PENDIENTE u OTP_ENVIADO que NO tengan fotos — no se tocan las
+    // firmas COMPLETADAS, RECHAZADAS ni las que ya tienen fotos.
+    try {
+      await db.firmaElectronica.deleteMany({
+        where: {
+          prestamoId,
+          tipo: 'TYC',
+          id: { not: firma.id },
+          fotoDocumento: null,
+          otpValidado: false,
+          estadoFirma: { in: ['PENDIENTE', 'OTP_ENVIADO'] },
+        },
+      })
+    } catch (e) {
+      // No bloquear el envío de OTP si la limpieza falla
+      console.error('[enviarOTP] Limpieza de firmas huérfanas falló:', e)
+    }
   } else {
     firma = await db.firmaElectronica.create({ data: { prestamoId, clienteId: prestamo.cliente.id, tipo: 'TYC', imagenFirma: '', otpEnviado: true, otpCodigo: hashOtp(otp), otpCanal: canalFinal, otpFechaEnvio: new Date(), estadoFirma: 'OTP_ENVIADO' } })
   }
@@ -479,7 +536,16 @@ async function validarOTP(prestamoId: string, body: any) {
   // pero con el nombre de campo equivocado.
   const otpIngresado = body.otpIngresado ?? body.otp ?? body.codigo
   if (!otpIngresado) return NextResponse.json({ success: false, error: 'Código requerido' }, { status: 400 })
-  const firma = await db.firmaElectronica.findFirst({ where: { prestamoId, tipo: 'TYC', estadoFirma: 'OTP_ENVIADO' }, orderBy: { createdAt: 'desc' } })
+  // FIX 2026-08-12 (Faltan las fotos): Si existen múltiples firmas en estado
+  // OTP_ENVIADO (p.ej. por el bug anterior donde enviar_otp creaba una firma
+  // nueva sin fotos), preferir la firma con el OTP más reciente
+  // (otpFechaEnvio más nuevo) — ese es el código que el cliente tiene en su
+  // WhatsApp/correo ahora mismo. Antes se ordenaba por createdAt, lo que
+  // podía seleccionar una firma antigua cuyo OTP ya expiró o fue reemplazado.
+  const firma = await db.firmaElectronica.findFirst({
+    where: { prestamoId, tipo: 'TYC', estadoFirma: 'OTP_ENVIADO' },
+    orderBy: { otpFechaEnvio: 'desc' },
+  })
   if (!firma || !firma.otpFechaEnvio) return NextResponse.json({ success: false, error: 'No hay código pendiente' }, { status: 400 })
   const exp = new Date(firma.otpFechaEnvio.getTime() + 5 * 60000)
   if (new Date() > exp) return NextResponse.json({ success: false, error: 'El código ha expirado. Solicita uno nuevo.' }, { status: 400 })
@@ -819,10 +885,33 @@ async function guardarFotosSimple(prestamoId: string, body: any) {
   if (!prestamo) return NextResponse.json({ success: false, error: 'Préstamo no encontrado' }, { status: 404 })
 
   // Buscar o crear FirmaElectronica(tipo='TYC')
+  // FIX 2026-08-12 (Faltan las fotos): Preferir la firma que ya tiene fotos o
+  // firma manuscrita, para no esparcir los datos en múltiples firmas. Antes
+  // se usaba `orderBy: createdAt desc` que podía seleccionar una firma vacía
+  // creada por un bug anterior, dejando la firma con fotos huérfana.
   let firma = await db.firmaElectronica.findFirst({
-    where: { prestamoId, tipo: 'TYC' },
+    where: {
+      prestamoId,
+      tipo: 'TYC',
+      estadoFirma: { in: ['PENDIENTE', 'OTP_ENVIADO', 'FOTOS_SUBIDAS', 'FIRMA_DIBUJADA'] },
+      OR: [
+        { fotoDocumento: { not: null } },
+        { imagenFirma: { not: '' } },
+      ],
+    },
     orderBy: { createdAt: 'desc' },
   })
+  if (!firma) {
+    // Fallback: cualquier firma en progreso (puede ser una firma vacía).
+    firma = await db.firmaElectronica.findFirst({
+      where: {
+        prestamoId,
+        tipo: 'TYC',
+        estadoFirma: { in: ['PENDIENTE', 'OTP_ENVIADO', 'FOTOS_SUBIDAS', 'FIRMA_DIBUJADA'] },
+      },
+      orderBy: { createdAt: 'desc' },
+    })
+  }
   const hashDocumento = crypto.createHash('sha256').update(fotoDocumentoBase64).digest('hex')
   const hashSelfie = crypto.createHash('sha256').update(fotoSelfieBase64).digest('hex')
 
@@ -902,10 +991,31 @@ async function guardarFirmaManuscrita(prestamoId: string, body: any) {
   const prestamo = await db.prestamo.findUnique({ where: { id: prestamoId }, include: { cliente: true } })
   if (!prestamo) return NextResponse.json({ success: false, error: 'Préstamo no encontrado' }, { status: 404 })
 
+  // FIX 2026-08-12 (Faltan las fotos): Preferir la firma que ya tiene fotos
+  // o firma manuscrita, para consolidar todos los datos en una sola firma y
+  // no crear firmas huérfanas. Esto es consistente con guardarFotosSimple.
   let firma = await db.firmaElectronica.findFirst({
-    where: { prestamoId, tipo: 'TYC' },
+    where: {
+      prestamoId,
+      tipo: 'TYC',
+      estadoFirma: { in: ['PENDIENTE', 'OTP_ENVIADO', 'FOTOS_SUBIDAS', 'FIRMA_DIBUJADA'] },
+      OR: [
+        { fotoDocumento: { not: null } },
+        { imagenFirma: { not: '' } },
+      ],
+    },
     orderBy: { createdAt: 'desc' },
   })
+  if (!firma) {
+    firma = await db.firmaElectronica.findFirst({
+      where: {
+        prestamoId,
+        tipo: 'TYC',
+        estadoFirma: { in: ['PENDIENTE', 'OTP_ENVIADO', 'FOTOS_SUBIDAS', 'FIRMA_DIBUJADA'] },
+      },
+      orderBy: { createdAt: 'desc' },
+    })
+  }
 
   if (firma) {
     await db.firmaElectronica.update({
@@ -937,11 +1047,32 @@ async function guardarFirmaManuscrita(prestamoId: string, body: any) {
 // Paso final: marca la firma como COMPLETADA y activa el préstamo.
 // Requiere que el OTP haya sido validado previamente.
 async function confirmarActivacion(prestamoId: string) {
-  const firma = await db.firmaElectronica.findFirst({
-    where: { prestamoId, tipo: 'TYC', otpValidado: true },
+  // FIX 2026-08-12 (Faltan las fotos): Si existen múltiples firmas con
+  // otpValidado=true para el mismo préstamo (p.ej. por el bug anterior donde
+  // enviar_otp creaba una firma nueva sin fotos), preferir la firma que SÍ
+  // tiene fotos y firma manuscrita. Esto permite al cliente recuperar el
+  // flujo sin tener que rehacer todo desde cero.
+  let firma = await db.firmaElectronica.findFirst({
+    where: {
+      prestamoId,
+      tipo: 'TYC',
+      otpValidado: true,
+      fotoDocumento: { not: null },
+      fotoSelfie: { not: null },
+    },
     orderBy: { createdAt: 'desc' },
     include: { prestamo: { include: { cliente: true } } },
   })
+  if (!firma) {
+    // Fallback: cualquier firma con OTP validado (aunque no tenga fotos).
+    // Si llega aquí y la firma no tiene fotos, se devolverá el error
+    // "Faltan las fotos" abajo — lo cual es correcto.
+    firma = await db.firmaElectronica.findFirst({
+      where: { prestamoId, tipo: 'TYC', otpValidado: true },
+      orderBy: { createdAt: 'desc' },
+      include: { prestamo: { include: { cliente: true } } },
+    })
+  }
   if (!firma) {
     return NextResponse.json({ success: false, error: 'Debes validar el OTP antes de activar el crédito.' }, { status: 400 })
   }
