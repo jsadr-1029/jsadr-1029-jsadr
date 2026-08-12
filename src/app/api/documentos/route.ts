@@ -511,11 +511,88 @@ const CSS_BASE = `
   .doc-separator { text-align:center; padding:8px; background:#1e3a5f; color:#fff; font-size:11px; letter-spacing:2px; margin:0 0 16px 0; border-radius:4px; }
   .print-btn { display: block; margin: 20px auto; padding: 10px 30px; background: #1e3a5f; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; }
   @media print { .no-print { display: none; } }
+
+  /* === Membrete del Acreedor === */
+  /* Aparece al inicio de cada documento (pagaré, carta, combinado) con los
+     datos de contacto del acreedor. En impresión se repite mediante
+     position: running() + @page { @top-center } en el futuro; por ahora
+     se imprime una sola vez al inicio de cada documento. */
+  .membrete-acreedor {
+    border: 2px solid #1e3a5f;
+    border-radius: 6px;
+    padding: 12px 18px;
+    margin: 0 0 22px 0;
+    background: linear-gradient(135deg, #f7f9fc 0%, #eef2f8 100%);
+    text-align: center;
+    font-size: 12px;
+    color: #1a1a1a;
+    page-break-inside: avoid;
+  }
+  .membrete-acreedor .ma-nombre {
+    font-size: 15px;
+    font-weight: bold;
+    letter-spacing: 1.2px;
+    color: #1e3a5f;
+    text-transform: uppercase;
+    margin: 0 0 4px 0;
+  }
+  .membrete-acreedor .ma-doc {
+    font-size: 11.5px;
+    color: #333;
+    margin: 0 0 8px 0;
+  }
+  .membrete-acreedor .ma-linea {
+    font-size: 11px;
+    color: #444;
+    margin: 2px 0;
+    line-height: 1.5;
+  }
+  .membrete-acreedor .ma-linea strong {
+    color: #1e3a5f;
+    font-weight: bold;
+    margin-right: 4px;
+  }
 `
 
 // Alias para mantener compatibilidad con código existente
 const CSS_PAGARE = CSS_BASE
 const CSS_CARTA = CSS_BASE
+
+// =====================================================
+// DATOS DEL ACREEDOR — Johan Sebastian Alvarez Del Rio
+// =====================================================
+// Estos datos son los que aparecen en el membrete del pagaré y la carta de
+// instrucciones, tomados del documento de referencia "formato solo para
+// pagare.docx" (header + footer). El correo se actualizó a jsa@jsadr.com.co
+// según indicación del usuario (dominio corporativo).
+// =====================================================
+const DATOS_ACREEDOR = {
+  nombre: 'JOHAN SEBASTIAN ALVAREZ DEL RIO',
+  cedula: '1.214.731.649',
+  direccion: 'CALLE 92 44A 34 / ARANJUEZ',
+  ciudad: 'MEDELLÍN · ANTIOQUIA',
+  telefonos: '3103674546 - 3235949510',
+  correo: 'jsa@jsadr.com.co',
+}
+
+// =====================================================
+// MEMBRETE DEL ACREEDOR — bloque HTML reutilizable
+// =====================================================
+// Renderiza el encabezado con los datos de contacto del acreedor al inicio
+// de cada documento (pagaré en blanco, pagaré diligenciado, carta de
+// instrucciones y combinado). Esto le da formalidad jurídica al documento
+// y permite localizar al acreedor para notificaciones y cobro.
+// =====================================================
+function generarMembreteAcreedor(): string {
+  return `
+<div class="membrete-acreedor">
+  <div class="ma-nombre">${DATOS_ACREEDOR.nombre}</div>
+  <div class="ma-doc">C.C. ${DATOS_ACREEDOR.cedula}</div>
+  <div class="ma-linea"><strong>DIRECCIÓN:</strong> ${DATOS_ACREEDOR.direccion} · ${DATOS_ACREEDOR.ciudad}</div>
+  <div class="ma-linea"><strong>TELÉFONO:</strong> ${DATOS_ACREEDOR.telefonos}</div>
+  <div class="ma-linea"><strong>CORREO:</strong> ${DATOS_ACREEDOR.correo}</div>
+</div>`
+}
 
 // =====================================================
 // TEXTO LEGAL — CLÁUSULA ACELERATORIA (compartido por pagaré y combinado)
@@ -629,6 +706,8 @@ async function generarPagareBlancoHTML(prestamo: any, firmaElectronica?: any, fi
 </head>
 <body>
 
+${generarMembreteAcreedor()}
+
 <div class="titulo">PAGARÉ No.</div>
 <p class="center">${blankNumPagare}</p>
 
@@ -638,7 +717,7 @@ async function generarPagareBlancoHTML(prestamo: any, firmaElectronica?: any, fi
 <p>Domicilio: <span class="campo-larga">${blankDomicilio}</span></p>
 <p>identificado(s) como aparece(mos) al pie de mi(nuestras) firma(s), actuando en mi (nuestro) propio nombre, o en la condición indicada al píe de mi(nuestras) firma(s), declaro(amos):</p>
 
-<p><strong>PRIMERO:</strong> Que me(nos) obligo(amos) a pagar solidaria, indivisible, irrevocable e incondicionalmente a la orden de <strong>Johan Sebastian Alvarez Del Rio</strong>. en adelante EL ACREEDOR, o a quien represente sus derechos, el día ( ${blankDia} ) del mes de ${blankMes} del año ${blankAnio} , en sus oficinas del país o en los puntos de pago autorizados expresamente para el efecto, las siguientes sumas de dinero:</p>
+<p><strong>PRIMERO:</strong> Que me(nos) obligo(amos) a pagar solidaria, indivisible, irrevocable e incondicionalmente a la orden de <strong>JOHAN SEBASTIAN ALVAREZ DEL RIO</strong>, mayor de edad, identificado con cédula de ciudadanía No. <strong>1.214.731.649</strong>, con domicilio en la CALLE 92 44A 34, barrio Aranjuez, Medellín (Antioquia), en adelante EL ACREEDOR, o a quien represente sus derechos, el día ( ${blankDia} ) del mes de ${blankMes} del año ${blankAnio} , en sus oficinas del país o en los puntos de pago autorizados expresamente para el efecto, las siguientes sumas de dinero:</p>
 
 <p><strong>POR CAPITAL:</strong></p>
 <p>${blankCapitalLine}</p>
@@ -664,7 +743,7 @@ ${TEXTO_CLAUSULA_ACELERATORIA}
 
 <p>El suscriptor declara haber suministrado voluntariamente al acreedor copia de su documento de identidad, la cual hace parte de los soportes de identificación de la presente obligación.</p>
 
-<p>Para constancia se firma en un (1) original, con destino a <strong>Johan Sebastian Alvarez Del Rio</strong> quien presta el dinero a los ( ${dia} ) días del mes de ${mes} del año ${anio}.</p>
+<p>Para constancia se firma en un (1) original, con destino a <strong>JOHAN SEBASTIAN ALVAREZ DEL RIO</strong>, C.C. 1.214.731.649, quien presta el dinero a los ( ${dia} ) días del mes de ${mes} del año ${anio}.</p>
 </div>
 
 ${generarBloqueDatosFirma('deudor', { nombre: '', cedula: '', direccion: '', telefono: '', correo: '' }, firmaElectronica)}
@@ -718,6 +797,8 @@ async function generarPagareDiligenciadoHTML(prestamo: any, calculo: any, firmaE
   const blankPesos = '__________________________________________________'
 
   const contenido = `
+${generarMembreteAcreedor()}
+
 <div class="titulo">PAGARÉ No. ${prestamo.codigo}</div>
 
 <div class="cuerpo">
@@ -726,7 +807,7 @@ async function generarPagareDiligenciadoHTML(prestamo: any, calculo: any, firmaE
 <p>Domicilio: <span class="campo-larga">${domicilioDeudor}</span></p>
 <p>identificado(s) como aparece(mos) al pie de mi(nuestras) firma(s), actuando en mi (nuestro) propio nombre, o en la condición indicada al píe de mi(nuestras) firma(s), declaro(amos):</p>
 
-<p><strong>PRIMERO:</strong> Que me(nos) obligo(amos) a pagar solidaria, indivisible, irrevocable e incondicionalmente a la orden de <strong>Johan Sebastian Alvarez Del Rio</strong>. en adelante EL ACREEDOR, o a quien represente sus derechos, el día ( <span class="campo-corta">${dia}</span> ) del mes de <span class="campo">${mes}</span> del año <span class="campo-corta">${anio}</span> , en sus oficinas del país o en los puntos de pago autorizados expresamente para el efecto, las siguientes sumas de dinero:</p>
+<p><strong>PRIMERO:</strong> Que me(nos) obligo(amos) a pagar solidaria, indivisible, irrevocable e incondicionalmente a la orden de <strong>JOHAN SEBASTIAN ALVAREZ DEL RIO</strong>, mayor de edad, identificado con cédula de ciudadanía No. <strong>1.214.731.649</strong>, con domicilio en la CALLE 92 44A 34, barrio Aranjuez, Medellín (Antioquia), en adelante EL ACREEDOR, o a quien represente sus derechos, el día ( <span class="campo-corta">${dia}</span> ) del mes de <span class="campo">${mes}</span> del año <span class="campo-corta">${anio}</span> , en sus oficinas del país o en los puntos de pago autorizados expresamente para el efecto, las siguientes sumas de dinero:</p>
 
 <p><strong>POR CAPITAL:</strong></p>
 <p><span class="campo-larga" style="min-width:520px;">${blankLineLarga}</span></p>
@@ -752,7 +833,7 @@ ${TEXTO_CLAUSULA_ACELERATORIA}
 
 <p>El suscriptor declara haber suministrado voluntariamente al acreedor copia de su documento de identidad, la cual hace parte de los soportes de identificación de la presente obligación.</p>
 
-<p>Para constancia se firma en un (1) original, con destino a <strong>Johan Sebastian Alvarez Del Rio</strong> quien presta el dinero a los ( <span class="campo-corta">${dia}</span> ) días del mes de <span class="campo">${mes}</span> del año <span class="campo-corta">${anio}</span>.</p>
+<p>Para constancia se firma en un (1) original, con destino a <strong>JOHAN SEBASTIAN ALVAREZ DEL RIO</strong>, C.C. 1.214.731.649, quien presta el dinero a los ( <span class="campo-corta">${dia}</span> ) días del mes de <span class="campo">${mes}</span> del año <span class="campo-corta">${anio}</span>.</p>
 </div>
 
 ${generarBloqueDatosFirma('deudor', {
@@ -820,6 +901,8 @@ async function generarCartaInstruccionesHTML(prestamo: any, firmaElectronica?: a
   ].filter(Boolean).join(' · ') || '________________________________'
 
   const contenido = `
+${generarMembreteAcreedor()}
+
 <div class="titulo">CARTA DE INSTRUCCIONES</div>
 
 <p>Señores</p>
@@ -832,7 +915,7 @@ async function generarCartaInstruccionesHTML(prestamo: any, firmaElectronica?: a
 <p><span class="campo-larga"><strong>${cliente.nombre}</strong></span> mayor(es) de edad, con domicilio en el Municipio de Medellín Antioquia Domicilio <span class="campo-larga">${domicilioDeudor}</span></p>
 <p>identificado(s) como aparece(mos) al pie mi(nuestras) firma(s), actuando en mi(nuestro) propio nombre, o en la condición indicada al píe de mi(nuestras) firma(s), declaro(amos):</p>
 
-<p>Que de conformidad con lo dispuesto en el artículo 622 del Código de Comercio, por medio del presente documento autorizo(amos) irrevocablemente y de manera permanente al quien presta el dinero en adelante el ACREEDOR o a quien represente sus derechos, para llenar sin previo aviso los espacios en blanco y demás aspectos generales y particulares del pagaré indicado en la referencia, el cual he(mos) otorgado a su orden con espacios en blanco y del que hago(hacemos) entrega con efectos negociables, teniendo en cuenta las siguientes instrucciones:</p>
+<p>Que de conformidad con lo dispuesto en el artículo 622 del Código de Comercio, por medio del presente documento autorizo(amos) irrevocablemente y de manera permanente a <strong>JOHAN SEBASTIAN ALVAREZ DEL RIO</strong>, C.C. 1.214.731.649, en adelante el ACREEDOR o a quien represente sus derechos, para llenar sin previo aviso los espacios en blanco y demás aspectos generales y particulares del pagaré indicado en la referencia, el cual he(mos) otorgado a su orden con espacios en blanco y del que hago(hacemos) entrega con efectos negociables, teniendo en cuenta las siguientes instrucciones:</p>
 
 <p><strong>1.</strong> El pagaré podrá ser llenado cuando exista incumplimiento o mora en el pago de cualquier obligación a mí (nuestro) cargo, individual o conjuntamente, en los casos estipulados en la ley, en el pagaré mismo y demás documentos suscritos por mi (nosotros). Podrá también ser endosado, previo a su diligenciamiento, en razón de ser negociado cualquier derecho de crédito a mi (nuestro) cargo, individual, conjunta y solidariamente.</p>
 
@@ -984,6 +1067,8 @@ async function generarDocumentoCombinadoHTML(prestamo: any, calculo: any, firmaE
 <!-- ===================================================== -->
 <div class="doc-separator">DOCUMENTO 1 DE 2 · PAGARÉ</div>
 
+${generarMembreteAcreedor()}
+
 <div class="titulo">PAGARÉ No. ${prestamo.codigo}</div>
 
 <div class="cuerpo">
@@ -992,7 +1077,7 @@ async function generarDocumentoCombinadoHTML(prestamo: any, calculo: any, firmaE
 <p>Domicilio: <span class="campo-larga">${domicilioDeudor}</span></p>
 <p>identificado(s) como aparece(mos) al pie de mi(nuestras) firma(s), actuando en mi (nuestro) propio nombre, o en la condición indicada al píe de mi(nuestras) firma(s), declaro(amos):</p>
 
-<p><strong>PRIMERO:</strong> Que me(nos) obligo(amos) a pagar solidaria, indivisible, irrevocable e incondicionalmente a la orden de <strong>Johan Sebastian Alvarez Del Rio</strong>. en adelante EL ACREEDOR, o a quien represente sus derechos, el día ( <span class="campo-corta">${dia}</span> ) del mes de <span class="campo">${mes}</span> del año <span class="campo-corta">${anio}</span> , en sus oficinas del país o en los puntos de pago autorizados expresamente para el efecto, las siguientes sumas de dinero:</p>
+<p><strong>PRIMERO:</strong> Que me(nos) obligo(amos) a pagar solidaria, indivisible, irrevocable e incondicionalmente a la orden de <strong>JOHAN SEBASTIAN ALVAREZ DEL RIO</strong>, mayor de edad, identificado con cédula de ciudadanía No. <strong>1.214.731.649</strong>, con domicilio en la CALLE 92 44A 34, barrio Aranjuez, Medellín (Antioquia), en adelante EL ACREEDOR, o a quien represente sus derechos, el día ( <span class="campo-corta">${dia}</span> ) del mes de <span class="campo">${mes}</span> del año <span class="campo-corta">${anio}</span> , en sus oficinas del país o en los puntos de pago autorizados expresamente para el efecto, las siguientes sumas de dinero:</p>
 
 <p><strong>POR CAPITAL:</strong></p>
 <p><span class="campo-larga" style="min-width:520px;">${blankLineLarga}</span></p>
@@ -1018,7 +1103,7 @@ ${TEXTO_CLAUSULA_ACELERATORIA}
 
 <p>El suscriptor declara haber suministrado voluntariamente al acreedor copia de su documento de identidad, la cual hace parte de los soportes de identificación de la presente obligación.</p>
 
-<p>Para constancia se firma en un (1) original, con destino a <strong>Johan Sebastian Alvarez Del Rio</strong> quien presta el dinero a los ( <span class="campo-corta">${dia}</span> ) días del mes de <span class="campo">${mes}</span> del año <span class="campo-corta">${anio}</span>.</p>
+<p>Para constancia se firma en un (1) original, con destino a <strong>JOHAN SEBASTIAN ALVAREZ DEL RIO</strong>, C.C. 1.214.731.649, quien presta el dinero a los ( <span class="campo-corta">${dia}</span> ) días del mes de <span class="campo">${mes}</span> del año <span class="campo-corta">${anio}</span>.</p>
 </div>
 
 ${generarBloqueDatosFirma('deudor', datosDeudor, firmaElectronica)}
@@ -1038,6 +1123,8 @@ ${verifPagare}
 <!-- ===================================================== -->
 <div class="doc-separator">DOCUMENTO 2 DE 2 · CARTA DE INSTRUCCIONES</div>
 
+${generarMembreteAcreedor()}
+
 <div class="titulo">CARTA DE INSTRUCCIONES</div>
 
 <p>Señores</p>
@@ -1050,7 +1137,7 @@ ${verifPagare}
 <p><span class="campo-larga"><strong>${cliente.nombre}</strong></span> mayor(es) de edad, con domicilio en el Municipio de Medellín Antioquia Domicilio <span class="campo-larga">${domicilioDeudor}</span></p>
 <p>identificado(s) como aparece(mos) al pie mi(nuestras) firma(s), actuando en mi(nuestro) propio nombre, o en la condición indicada al píe de mi(nuestras) firma(s), declaro(amos):</p>
 
-<p>Que de conformidad con lo dispuesto en el artículo 622 del Código de Comercio, por medio del presente documento autorizo(amos) irrevocablemente y de manera permanente al quien presta el dinero en adelante el ACREEDOR o a quien represente sus derechos, para llenar sin previo aviso los espacios en blanco y demás aspectos generales y particulares del pagaré indicado en la referencia, el cual he(mos) otorgado a su orden con espacios en blanco y del que hago(hacemos) entrega con efectos negociables, teniendo en cuenta las siguientes instrucciones:</p>
+<p>Que de conformidad con lo dispuesto en el artículo 622 del Código de Comercio, por medio del presente documento autorizo(amos) irrevocablemente y de manera permanente a <strong>JOHAN SEBASTIAN ALVAREZ DEL RIO</strong>, C.C. 1.214.731.649, en adelante el ACREEDOR o a quien represente sus derechos, para llenar sin previo aviso los espacios en blanco y demás aspectos generales y particulares del pagaré indicado en la referencia, el cual he(mos) otorgado a su orden con espacios en blanco y del que hago(hacemos) entrega con efectos negociables, teniendo en cuenta las siguientes instrucciones:</p>
 
 <p><strong>1.</strong> El pagaré podrá ser llenado cuando exista incumplimiento o mora en el pago de cualquier obligación a mí (nuestro) cargo, individual o conjuntamente, en los casos estipulados en la ley, en el pagaré mismo y demás documentos suscritos por mi (nosotros). Podrá también ser endosado, previo a su diligenciamiento, en razón de ser negociado cualquier derecho de crédito a mi (nuestro) cargo, individual, conjunta y solidariamente.</p>
 
