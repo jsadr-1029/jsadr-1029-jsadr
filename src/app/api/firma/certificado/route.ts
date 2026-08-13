@@ -336,7 +336,7 @@ async function generarCertificadoHTML(firma: any, cliente: any, prestamo: any, r
   <div class="section-title">2. Documento Firmado</div>
   <div class="section-body">
     <div class="datos-grid">
-      <div class="dato"><span class="label">Tipo documento:</span> <span class="value">${firma.tipo === 'TYC' ? 'Términos y Condiciones' : firma.tipo === 'PAGARE' ? 'Pagaré' : firma.tipo}</span></div>
+      <div class="dato"><span class="label">Tipo documento:</span> <span class="value">${firma.tipo === 'TYC' ? 'Términos y Condiciones' : firma.tipo === 'PAGARE' ? 'Pagaré' : firma.tipo === 'ACUERDO_PAGO' ? 'Otro Sí (Acuerdo de Pago)' : firma.tipo}</span></div>
       <div class="dato"><span class="label">Código préstamo:</span> <span class="value"><strong>${codigoPrestamo}</strong></span></div>
       <div class="dato"><span class="label">Monto:</span> <span class="value">${montoPrestamo}</span></div>
       <div class="dato"><span class="label">Estado firma:</span> <span class="value">✓ ${firma.estadoFirma}</span></div>
@@ -440,7 +440,7 @@ async function generarCertificadoHTML(firma: any, cliente: any, prestamo: any, r
 <div class="declaracion">
   <strong>DECLARACIÓN:</strong> El presente certificado acredita que el(la) señor(a) <strong>${cliente.nombre}</strong>,
   identificado(a) con cédula de ciudadanía No. <strong>${cliente.cedula}</strong>, firmó electrónicamente
-  el documento <strong>${firma.tipo === 'TYC' ? 'Términos y Condiciones' : firma.tipo}</strong>
+  el documento <strong>${firma.tipo === 'TYC' ? 'Términos y Condiciones' : firma.tipo === 'PAGARE' ? 'Pagaré' : firma.tipo === 'ACUERDO_PAGO' ? 'Otro Sí (Acuerdo de Pago)' : firma.tipo}</strong>
   ${prestamo ? `correspondiente al préstamo <strong>${codigoPrestamo}</strong>` : ''}
   el día <strong>${fechaSolo}</strong> a las <strong>${new Date(fechaFirma).toLocaleTimeString('es-CO', { timeZone: 'America/Bogota', hour: '2-digit', minute: '2-digit', second: '2-digit' })}</strong>,
   mediante verificación de identidad con código OTP enviado por ${destinoOTP},

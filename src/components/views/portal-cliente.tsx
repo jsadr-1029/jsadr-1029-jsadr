@@ -5,7 +5,7 @@ import { apiPost } from '@/hooks/use-fetch'
 import { Card, PageHeader, Badge, EmptyState, LoadingState } from '@/components/shared/ui'
 import { formatCOP, formatDate, formatPercent, getInitials, estadoPrestamoColor } from '@/lib/format'
 import { calcularPrestamo, generarCronograma } from '@/lib/finance'
-import { LogIn, ArrowLeft, Phone, Lock, Calculator, FileCheck, Send, KeyRound, ShieldCheck, Eye, EyeOff, QrCode, Copy, Check, Sparkles, PenTool, Eraser } from 'lucide-react'
+import { LogIn, ArrowLeft, Phone, Lock, Calculator, FileCheck, Send, KeyRound, ShieldCheck, Eye, EyeOff, QrCode, Copy, Check, Sparkles, PenTool, Eraser, FileSignature, FileText, Clock, ExternalLink, AlertCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -165,6 +165,7 @@ export function PortalCliente({ navigate }: { navigate: (v: any) => void }) {
 function PortalHome({ session, onLogout, navigate }: { session: PortalSession; onLogout: () => void; navigate: (v: any) => void }) {
   const [data, setData] = useState<any>(null)
   const [loading, setLoading] = useState(true)
+  const [pendientesFirmaCount, setPendientesFirmaCount] = useState(0)
 
   useEffect(() => {
     fetch(`/api/portal/prestamos?token=${session.token}`)
@@ -172,6 +173,16 @@ function PortalHome({ session, onLogout, navigate }: { session: PortalSession; o
       .then(d => setData(d))
       .catch(e => toast.error('Error: ' + e.message))
       .finally(() => setLoading(false))
+
+    // === Cargar contador de Otros Síes pendientes de firma ===
+    fetch('/api/portal/otros-si-pendientes', {
+      headers: { 'x-portal-token': session.token },
+    })
+      .then(r => r.json())
+      .then(d => {
+        if (d.success) setPendientesFirmaCount(d.pendientesCount || 0)
+      })
+      .catch(() => {/* no crítico */})
   }, [session.token])
 
   if (loading) return <LoadingState />
@@ -195,8 +206,16 @@ function PortalHome({ session, onLogout, navigate }: { session: PortalSession; o
       </Card>
 
       <Tabs defaultValue="prestamos">
-        <TabsList className="grid w-full grid-cols-4">
+        <TabsList className="grid w-full grid-cols-5">
           <TabsTrigger value="prestamos">Mis Préstamos</TabsTrigger>
+          <TabsTrigger value="firmar">
+            Documentos
+            {pendientesFirmaCount > 0 && (
+              <span className="ml-1 inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 text-white text-[10px] font-bold">
+                {pendientesFirmaCount}
+              </span>
+            )}
+          </TabsTrigger>
           <TabsTrigger value="pagos">Pagos / QR</TabsTrigger>
           <TabsTrigger value="simular">Simular</TabsTrigger>
           <TabsTrigger value="perfil">Mi Perfil</TabsTrigger>
@@ -214,6 +233,10 @@ function PortalHome({ session, onLogout, navigate }: { session: PortalSession; o
               </div>
             )}
           </Card>
+        </TabsContent>
+
+        <TabsContent value="firmar">
+          <DocumentosPorFirmarPanel token={session.token} />
         </TabsContent>
 
         <TabsContent value="pagos">
@@ -707,6 +730,216 @@ function FirmarModal({ prestamo, token, onClose, navigate }: any) {
           </div>
         )}
       </div>
+    </div>
+  )
+}
+
+// =====================================================
+// DocumentosPorFirmarPanel — Lista de Otros Síes pendientes
+// de firma electrónica para el cliente, y los ya firmados.
+// Muestra botones para ver el documento y firmarlo (link público /firma/{token}).
+// =====================================================
+function DocumentosPorFirmarPanel({ token }: { token: string }) {
+  const [data, setData] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+  const [refreshKey, setRefreshKey] = useState(0)
+
+  useEffect(() => {
+    setLoading(true)
+    fetch('/api/portal/otros-si-pendientes', {
+      headers: { 'x-portal-token': token },
+    })
+      .then(r => r.json())
+      .then(d => {
+        if (d.success) setData(d.data || [])
+        else toast.error(d.error || 'No se pudo cargar la lista de documentos')
+      })
+      .catch(e => toast.error('Error: ' + e.message))
+      .finally(() => setLoading(false))
+  }, [token, refreshKey])
+
+  if (loading) return <LoadingState />
+
+  if (data.length === 0) {
+    return (
+      <Card title="Documentos por firmar">
+        <EmptyState
+          icon={FileSignature}
+          title="No tienes documentos pendientes"
+          description="Aquí aparecerán los Otros Síes que debas firmar electrónicamente cuando tu gestor los genere."
+        />
+      </Card>
+    )
+  }
+
+  const pendientes = data.filter((d: any) => d.estado === 'PENDIENTE_FIRMA')
+  const firmados = data.filter((d: any) => d.estado === 'FIRMADO')
+
+  // Abrir el documento HTML del Otro Sí usando fetch + blob URL (porque el endpoint
+  // requiere header x-portal-token que no se puede pasar en una navegación normal).
+  const abrirDocumentoViaFetch = async (otroSiId: string) => {
+    try {
+      const res = await fetch(`/api/portal/otros-si-pendientes/${otroSiId}/documento`, {
+        headers: { 'x-portal-token': token },
+      })
+      if (!res.ok) throw new Error('No se pudo cargar el documento')
+      const html = await res.text()
+      const blob = new Blob([html], { type: 'text/html' })
+      const url = URL.createObjectURL(blob)
+      window.open(url, '_blank')
+      // Limpiar la URL del blob después de 1 minuto
+      setTimeout(() => URL.revokeObjectURL(url), 60000)
+    } catch (e: any) {
+      toast.error('Error al abrir documento: ' + e.message)
+    }
+  }
+
+  const abrirLinkFirma = (link: string) => {
+    window.open(link, '_blank')
+    // Recargar la lista después de 5 segundos para refrescar el estado
+    setTimeout(() => setRefreshKey(k => k + 1), 5000)
+  }
+
+  return (
+    <div className="space-y-4">
+      {/* === Banner informativo === */}
+      <Card className="bg-gradient-to-r from-amber-50 to-orange-50 border-amber-200">
+        <div className="flex items-start gap-3">
+          <div className="w-10 h-10 rounded-lg bg-amber-200 text-amber-800 flex items-center justify-center flex-shrink-0">
+            <AlertCircle className="w-5 h-5" />
+          </div>
+          <div className="flex-1">
+            <p className="font-semibold text-amber-900 text-sm">
+              {pendientes.length > 0
+                ? `Tienes ${pendientes.length} documento(s) pendiente(s) de firma`
+                : 'No tienes documentos pendientes de firma'}
+            </p>
+            <p className="text-xs text-amber-800 mt-1">
+              Los Otros Síes son acuerdos de modificación de fechas de pago que se anexan a tu préstamo
+              sin modificar el pagaré ni la carta de instrucciones originales. Deben firmarse electrónicamente
+              con verificación OTP + selfie.
+            </p>
+          </div>
+        </div>
+      </Card>
+
+      {/* === Documentos PENDIENTES de firma === */}
+      {pendientes.length > 0 && (
+        <Card title="Pendientes de firma" subtitle={`${pendientes.length} documento(s)`}>
+          <div className="space-y-3">
+            {pendientes.map((os: any) => (
+              <div key={os.id} className="p-4 rounded-lg border-2 border-amber-300 bg-amber-50/50">
+                <div className="flex items-start justify-between gap-3 mb-2">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="font-mono text-xs font-bold text-amber-900 bg-amber-200 px-2 py-0.5 rounded">
+                        {os.codigo}
+                      </span>
+                      <Badge className="bg-amber-100 text-amber-800 border-amber-300">
+                        <Clock className="w-3 h-3 mr-1" />
+                        Pendiente de firma
+                      </Badge>
+                      <span className="text-[11px] text-slate-500">
+                        {os.tipoModificacion === 'CAMBIO_FECHA' ? 'Cambio de fecha' : 'Traslado de cuota'}
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-600 mb-2">
+                      Préstamo: <span className="font-mono font-semibold">{os.prestamo?.codigo || '—'}</span>
+                      {' · '}Solicitado: {formatDate(os.fechaSolicitud)}
+                    </p>
+                    <p className="text-sm text-slate-700 line-clamp-2">{os.descripcion}</p>
+                  </div>
+                </div>
+                <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-amber-200">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => abrirDocumentoViaFetch(os.id)}
+                  >
+                    <FileText className="w-4 h-4 mr-1" />
+                    Ver documento
+                  </Button>
+                  {os.linkFirma ? (
+                    <Button
+                      size="sm"
+                      className="bg-amber-600 hover:bg-amber-700 text-white"
+                      onClick={() => abrirLinkFirma(os.linkFirma)}
+                    >
+                      <PenTool className="w-4 h-4 mr-1" />
+                      Firmar electrónicamente
+                      <ExternalLink className="w-3 h-3 ml-1" />
+                    </Button>
+                  ) : (
+                    <span className="text-xs text-slate-500 italic">
+                      Sin link de firma activo. Contacta a tu gestor.
+                    </span>
+                  )}
+                  {os.firma?.otpEnviado && (
+                    <span className="text-[11px] text-amber-700 ml-auto">
+                      📧 OTP enviado · {os.firma.otpCanal === 'EMAIL' ? 'Correo' : os.firma.otpCanal}
+                    </span>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
+
+      {/* === Documentos ya FIRMADOS === */}
+      {firmados.length > 0 && (
+        <Card title="Documentos firmados" subtitle={`${firmados.length} documento(s)`}>
+          <div className="space-y-3">
+            {firmados.map((os: any) => (
+              <div key={os.id} className="p-4 rounded-lg border border-emerald-200 bg-emerald-50/30">
+                <div className="flex items-start justify-between gap-3 mb-2">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="font-mono text-xs font-bold text-emerald-900 bg-emerald-200 px-2 py-0.5 rounded">
+                        {os.codigo}
+                      </span>
+                      <Badge className="bg-emerald-100 text-emerald-800 border-emerald-300">
+                        <Check className="w-3 h-3 mr-1" />
+                        Firmado electrónicamente
+                      </Badge>
+                      <span className="text-[11px] text-slate-500">
+                        {os.tipoModificacion === 'CAMBIO_FECHA' ? 'Cambio de fecha' : 'Traslado de cuota'}
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-600 mb-2">
+                      Préstamo: <span className="font-mono font-semibold">{os.prestamo?.codigo || '—'}</span>
+                      {' · '}Firmado: {os.fechaFirma ? formatDate(os.fechaFirma) : '—'}
+                    </p>
+                    <p className="text-sm text-slate-700 line-clamp-2">{os.descripcion}</p>
+                  </div>
+                </div>
+                <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-emerald-200">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => abrirDocumentoViaFetch(os.id)}
+                  >
+                    <FileText className="w-4 h-4 mr-1" />
+                    Ver Otro Sí firmado
+                  </Button>
+                  {os.linkConstancia && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="text-blue-700 border-blue-300 hover:bg-blue-50"
+                      onClick={() => window.open(os.linkConstancia, '_blank')}
+                    >
+                      <ShieldCheck className="w-4 h-4 mr-1" />
+                      Ver constancia de firma
+                      <ExternalLink className="w-3 h-3 ml-1" />
+                    </Button>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
     </div>
   )
 }

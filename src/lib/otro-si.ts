@@ -59,6 +59,21 @@ export interface DatosOtroSi {
 
   // Fecha en la que se genera el Otro Sí
   fechaGeneracion: Date
+
+  // === Datos de firma electrónica (opcional — cuando el Otro Sí ya está firmado) ===
+  firma?: {
+    firmaId: string
+    imagenFirma: string  // base64 data URL de la firma manuscrita
+    fechaFirma: Date
+    ipFirma?: string | null
+    userAgent?: string | null
+    otpCanal?: string | null
+    otpValidado?: boolean
+    fotoSelfie?: string | null  // base64 data URL de la selfie con cédula
+    estadoFirma?: string
+  }
+  // URL absoluta a la constancia de firma electrónica (si está firmado)
+  linkConstancia?: string
 }
 
 /**
@@ -133,6 +148,8 @@ export function generarHtmlOtroSi(datos: DatosOtroSi): string {
     modificaciones,
     descripcion,
     fechaGeneracion,
+    firma,
+    linkConstancia,
   } = datos
 
   const tituloDocumento =
@@ -474,7 +491,14 @@ export function generarHtmlOtroSi(datos: DatosOtroSi): string {
     <div class="firma-cuadro">
       <div class="firma-nombre">${clienteNombre}</div>
       <div class="firma-cc">C.C. ${clienteCedula}</div>
-      <div class="firma-linea">Firma del Deudor</div>
+      ${firma && firma.imagenFirma
+        ? `<img src="${firma.imagenFirma}" alt="Firma electrónica de ${clienteNombre}" style="max-height:90px; max-width:220px; margin-top:8px; object-fit:contain;" />
+           <div class="firma-linea" style="margin-top:8px;">
+             ✓ Firma electrónica verificada · ${formatearFechaLarga(firma.fechaFirma)} · ${new Date(firma.fechaFirma).toLocaleTimeString('es-CO', { timeZone: 'America/Bogota', hour: '2-digit', minute: '2-digit' })}
+             ${firma.ipFirma ? `<br/><span style="font-size:10px; color:#888;">IP: ${firma.ipFirma} · OTP: ${firma.otpCanal || 'N/A'}</span>` : ''}
+           </div>`
+        : `<div class="firma-linea">Firma del Deudor</div>`
+      }
     </div>
     <div class="firma-cuadro">
       <div class="firma-nombre">EL ACREEDOR</div>
@@ -483,10 +507,56 @@ export function generarHtmlOtroSi(datos: DatosOtroSi): string {
     </div>
   </div>
 
+  ${firma && firma.imagenFirma ? `
+  <!-- === Bloque de constancia de firma electrónica === -->
+  <div style="margin-top:24px; padding:14px 16px; border:2px solid #1e40af; border-radius:8px; background:#f0f4ff; page-break-inside:avoid;">
+    <div style="display:flex; align-items:flex-start; gap:14px; flex-wrap:wrap;">
+      ${firma.fotoSelfie ? `<div style="flex-shrink:0; text-align:center;">
+        <img src="${firma.fotoSelfie}" alt="Selfie con cédula" style="max-width:110px; max-height:140px; border:2px solid #1e3a5f; border-radius:6px;" />
+        <p style="font-size:9px; color:#555; margin-top:4px;">Selfie de verificación</p>
+      </div>` : ''}
+      <div style="flex:1; min-width:260px;">
+        <h3 style="color:#1e40af; margin:0 0 6px 0; font-size:14px; letter-spacing:1px;">🔐 CONSTANCIA DE FIRMA ELECTRÓNICA</h3>
+        <table style="width:100%; font-size:11px; border-collapse:collapse;">
+          <tr>
+            <td style="padding:3px; border:1px solid #cbd5e0; background:#e0e7ff; font-weight:bold; width:140px;">Estado de la firma:</td>
+            <td style="padding:3px; border:1px solid #cbd5e0;">✓ ${firma.estadoFirma || 'COMPLETADA'}</td>
+          </tr>
+          <tr>
+            <td style="padding:3px; border:1px solid #cbd5e0; background:#e0e7ff; font-weight:bold;">Fecha y hora:</td>
+            <td style="padding:3px; border:1px solid #cbd5e0;">${formatearFechaLarga(firma.fechaFirma)} · ${new Date(firma.fechaFirma).toLocaleTimeString('es-CO', { timeZone: 'America/Bogota', hour: '2-digit', minute: '2-digit', second: '2-digit' })} (America/Bogota)</td>
+          </tr>
+          <tr>
+            <td style="padding:3px; border:1px solid #cbd5e0; background:#e0e7ff; font-weight:bold;">Método OTP:</td>
+            <td style="padding:3px; border:1px solid #cbd5e0;">${firma.otpCanal === 'EMAIL' ? 'Correo electrónico' : firma.otpCanal === 'WHATSAPP' ? 'WhatsApp' : firma.otpCanal === 'AMBOS' ? 'WhatsApp y correo' : 'N/A'} ${firma.otpValidado ? '✓ Validado' : ''}</td>
+          </tr>
+          ${firma.ipFirma ? `<tr>
+            <td style="padding:3px; border:1px solid #cbd5e0; background:#e0e7ff; font-weight:bold;">Dirección IP:</td>
+            <td style="padding:3px; border:1px solid #cbd5e0; font-family:monospace; font-size:10px;">${firma.ipFirma}</td>
+          </tr>` : ''}
+          <tr>
+            <td style="padding:3px; border:1px solid #cbd5e0; background:#e0e7ff; font-weight:bold;">ID de la firma:</td>
+            <td style="padding:3px; border:1px solid #cbd5e0; font-family:monospace; font-size:10px;">${firma.firmaId}</td>
+          </tr>
+        </table>
+        ${linkConstancia ? `<p style="font-size:11px; margin:8px 0 0 0;">
+          <a href="${linkConstancia}" target="_blank" style="color:#1e40af; font-weight:bold; text-decoration:none;">
+            📄 Ver certificado completo de firma electrónica →
+          </a>
+        </p>` : ''}
+        <p style="font-size:9px; color:#555; margin:6px 0 0 0; text-align:justify;">
+          Este Otro Sí fue firmado electrónicamente conforme a la Ley 527 de 1999 y el Decreto 1074 de 2015.
+          La identidad del firmante fue verificada mediante doble factor: código OTP y selfie con documento.
+        </p>
+      </div>
+    </div>
+  </div>` : ''}
+
   <div class="footer-doc">
     Documento generado el ${formatearFechaLarga(fechaGeneracion)} ·
     Código: ${codigo} ·
     Préstamo: ${prestamoCodigo}
+    ${firma && firma.imagenFirma ? `· Firmado electrónicamente el ${formatearFechaLarga(firma.fechaFirma)}` : ''}
   </div>
 
 </body>

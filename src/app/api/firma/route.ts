@@ -706,6 +706,64 @@ async function finalizarConSelfie(body: any, req: NextRequest) {
     data: { usado: true, fechaUsado: new Date() },
   })
 
+  // === Si la firma es de un Otro Sí, marcarlo como FIRMADO y NO tocar el préstamo ===
+  // (el préstamo ya está ACTIVO, no se debe re-activar ni cambiar fechas)
+  if (firma.tipo === 'ACUERDO_PAGO') {
+    const otroSiVinculado = await db.otroSiCambioFecha.findFirst({
+      where: { firmaId: firma.id },
+      include: { prestamo: { include: { cliente: true } } },
+    })
+    if (otroSiVinculado) {
+      await db.otroSiCambioFecha.update({
+        where: { id: otroSiVinculado.id },
+        data: {
+          estado: 'FIRMADO',
+          fechaFirma: new Date(),
+        },
+      })
+      try {
+        await db.bitacoraPrestamo.create({
+          data: {
+            prestamoId: otroSiVinculado.prestamoId,
+            prestamoCodigo: otroSiVinculado.prestamo.codigo,
+            usuarioNombre: 'Sistema (firma electrónica)',
+            tipo: 'OTRO',
+            titulo: `OTRO SÍ FIRMADO: ${otroSiVinculado.codigo}`,
+            descripcion:
+              `El cliente ${otroSiVinculado.prestamo.cliente?.nombre || ''} completó el flujo de firma electrónica del Otro Sí ${otroSiVinculado.codigo} (${otroSiVinculado.tipoModificacion === 'CAMBIO_FECHA' ? 'Cambio de fecha' : 'Traslado de cuota'}) para el préstamo ${otroSiVinculado.prestamo.codigo}.\n\n` +
+              `Datos de la firma electrónica:\n` +
+              `  • ID firma: ${firma.id}\n` +
+              `  • Fecha: ${new Date().toLocaleString('es-CO', { timeZone: 'America/Bogota' })}\n` +
+              `  • IP: ${ip}\n` +
+              `  • Dispositivo: ${userAgent}\n` +
+              `  • Canal OTP: ${firma.otpCanal || 'N/A'}\n` +
+              `  • Método: foto documento + firma manuscrita + OTP + selfie con cédula\n\n` +
+              `Descripción del Otro Sí: ${otroSiVinculado.descripcion}\n\n` +
+              `El préstamo no fue modificado (sigue ${otroSiVinculado.prestamo.estado}). Solo se actualizó el estado del Otro Sí a FIRMADO.`,
+            resultado: `Otro Sí ${otroSiVinculado.codigo} marcado como FIRMADO`,
+            fechaEvento: new Date(),
+          },
+        })
+      } catch (e) {
+        console.error('[firma] bitácora Otro Sí falló:', e)
+      }
+
+      // Retornar SIN activar préstamo
+      return NextResponse.json({
+        success: true,
+        data: firmaActualizada,
+        esFirmaOtroSi: true,
+        otroSi: {
+          id: otroSiVinculado.id,
+          codigo: otroSiVinculado.codigo,
+          estado: 'FIRMADO',
+        },
+        mensaje: `¡Firma del Otro Sí ${otroSiVinculado.codigo} completada con éxito!`,
+      })
+    }
+    // Si es ACUERDO_PAGO pero no tiene Otro Sí vinculado, caer al flujo normal
+  }
+
   // 3. Activar préstamo si aplica
   if (firma.prestamoId) {
     const prestamoFirma = await db.prestamo.findUnique({
@@ -888,6 +946,55 @@ async function guardarFirma(body: any, req: NextRequest) {
     where: { firmaId },
     data: { usado: true, fechaUsado: new Date() },
   })
+
+  // === Si la firma es de un Otro Sí, marcarlo como FIRMADO y NO tocar el préstamo ===
+  // (el préstamo ya está ACTIVO, no se debe re-activar ni cambiar fechas)
+  if (firma.tipo === 'ACUERDO_PAGO') {
+    const otroSiVinculado = await db.otroSiCambioFecha.findFirst({
+      where: { firmaId: firma.id },
+      include: { prestamo: { include: { cliente: true } } },
+    })
+    if (otroSiVinculado) {
+      await db.otroSiCambioFecha.update({
+        where: { id: otroSiVinculado.id },
+        data: {
+          estado: 'FIRMADO',
+          fechaFirma: new Date(),
+        },
+      })
+      try {
+        await db.bitacoraPrestamo.create({
+          data: {
+            prestamoId: otroSiVinculado.prestamoId,
+            prestamoCodigo: otroSiVinculado.prestamo.codigo,
+            usuarioNombre: 'Sistema (firma electrónica)',
+            tipo: 'OTRO',
+            titulo: `OTRO SÍ FIRMADO: ${otroSiVinculado.codigo}`,
+            descripcion:
+              `El cliente ${otroSiVinculado.prestamo.cliente?.nombre || ''} completó el flujo de firma electrónica del Otro Sí ${otroSiVinculado.codigo} (${otroSiVinculado.tipoModificacion === 'CAMBIO_FECHA' ? 'Cambio de fecha' : 'Traslado de cuota'}) para el préstamo ${otroSiVinculado.prestamo.codigo}.`,
+            resultado: `Otro Sí ${otroSiVinculado.codigo} marcado como FIRMADO`,
+            fechaEvento: new Date(),
+          },
+        })
+      } catch (e) {
+        console.error('[firma] bitácora Otro Sí falló:', e)
+      }
+
+      // Retornar SIN activar préstamo
+      return NextResponse.json({
+        success: true,
+        data: firmaActualizada,
+        esFirmaOtroSi: true,
+        otroSi: {
+          id: otroSiVinculado.id,
+          codigo: otroSiVinculado.codigo,
+          estado: 'FIRMADO',
+        },
+        mensaje: `¡Firma del Otro Sí ${otroSiVinculado.codigo} completada con éxito!`,
+      })
+    }
+    // Si es ACUERDO_PAGO pero no tiene Otro Sí vinculado, caer al flujo normal
+  }
 
   // Si es de un préstamo, actualizar referencia y aceptar T&C automáticamente
   if (firma.prestamoId) {

@@ -430,6 +430,7 @@ export default function PaginaFirma({ params }: { params: Promise<{ token: strin
 
   // === Paso 5: Completado ===
   if (paso === 5) {
+    const esOtroSi = datos.firma?.tipo === 'ACUERDO_PAGO'
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-green-50 to-emerald-100 p-4">
         <Card className="max-w-md w-full">
@@ -438,9 +439,13 @@ export default function PaginaFirma({ params }: { params: Promise<{ token: strin
               <CheckCircle className="w-10 h-10 text-green-600" />
             </div>
             <div>
-              <h2 className="text-xl font-bold text-green-700">¡Firma Completada!</h2>
+              <h2 className="text-xl font-bold text-green-700">
+                {esOtroSi ? '¡Otro Sí Firmado!' : '¡Firma Completada!'}
+              </h2>
               <p className="text-sm text-muted-foreground mt-1">
-                Tu firma electrónica se ha guardado correctamente.
+                {esOtroSi
+                  ? 'Tu Otro Sí se ha firmado electrónicamente. Queda anexado a tu préstamo sin modificar el pagaré ni la carta de instrucciones originales.'
+                  : 'Tu firma electrónica se ha guardado correctamente.'}
               </p>
             </div>
             {datos.prestamo && (
@@ -450,19 +455,46 @@ export default function PaginaFirma({ params }: { params: Promise<{ token: strin
                   <span className="font-mono">{datos.prestamo.codigo}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-muted-foreground">Estado:</span>
-                  <Badge className="bg-green-100 text-green-700 hover:bg-green-100">ACTIVO</Badge>
+                  <span className="text-muted-foreground">Tipo:</span>
+                  <span className="font-medium">
+                    {esOtroSi ? 'Otro Sí (Acuerdo de Pago)' : 'Términos y Condiciones / Pagaré'}
+                  </span>
                 </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Desembolsado:</span>
-                  <span>{formatearFecha(new Date().toISOString())}</span>
-                </div>
+                {!esOtroSi && (
+                  <>
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Estado:</span>
+                      <Badge className="bg-green-100 text-green-700 hover:bg-green-100">ACTIVO</Badge>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Desembolsado:</span>
+                      <span>{formatearFecha(new Date().toISOString())}</span>
+                    </div>
+                  </>
+                )}
+                {esOtroSi && (
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Fecha firma:</span>
+                    <span>{formatearFecha(new Date().toISOString())}</span>
+                  </div>
+                )}
               </div>
             )}
             <div className="text-xs text-muted-foreground flex items-center gap-1">
               <Shield className="w-3 h-3" />
-              Firma electrónica con verificación de identidad
+              Firma electrónica con verificación de identidad (OTP + selfie + firma manuscrita)
             </div>
+            {esOtroSi && datos.firma?.id && (
+              <a
+                href={`/api/firma/certificado?firmaId=${datos.firma.id}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-blue-700 bg-blue-50 hover:bg-blue-100 rounded-md border border-blue-200"
+              >
+                <Shield className="w-4 h-4" />
+                Ver certificado de firma electrónica
+              </a>
+            )}
           </CardContent>
         </Card>
       </div>
@@ -492,7 +524,7 @@ export default function PaginaFirma({ params }: { params: Promise<{ token: strin
               Firma Electrónica con Verificación de Identidad
             </CardTitle>
             <p className="text-sm text-muted-foreground">
-              {firma.tipo === 'TYC' ? 'Términos y Condiciones' : firma.tipo} - Documento para firmar
+              {firma.tipo === 'TYC' ? 'Términos y Condiciones' : firma.tipo === 'PAGARE' ? 'Pagaré' : firma.tipo === 'ACUERDO_PAGO' ? 'Otro Sí (Acuerdo de Pago)' : firma.tipo} - Documento para firmar
             </p>
           </CardHeader>
         </Card>
