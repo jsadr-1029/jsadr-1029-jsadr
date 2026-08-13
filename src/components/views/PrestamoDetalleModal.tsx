@@ -28,6 +28,14 @@ import {
 } from '@/components/ui/table'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Badge } from '@/components/ui/badge'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import { EstadoBadge } from '@/components/ui-basics'
 import { BitacoraPanel } from '@/components/views/BitacoraPanel'
 import { useToast } from '@/hooks/use-toast'
@@ -52,6 +60,8 @@ import {
   Sparkles,
   Plus,
   RefreshCw,
+  ChevronDown,
+  FileSignature,
 } from 'lucide-react'
 
 interface PrestamoDetalle {
@@ -402,6 +412,42 @@ export function PrestamoDetalleModal({
       w.print()
     }, 500)
   }
+
+  // === Otro Sí — Ver / Imprimir un Otro Sí existente (firmado) ===
+  // Abre el HTML del Otro Sí en una nueva pestaña para que el usuario
+  // pueda imprimirlo o guardarlo como PDF. Solo se debe invocar para
+  // Otros Síes que ya estén FIRMADOS.
+  const verOtroSiFirmado = async (otroSiId: string, codigo: string) => {
+    const url = `/api/prestamos/${prestamoId}/otro-si/${otroSiId}`
+    const ok = await abrirHtmlImprimible(url)
+    if (!ok) {
+      toast({
+        title: 'No se pudo abrir',
+        description: `Otro Sí ${codigo} — intenta nuevamente.`,
+        variant: 'destructive',
+      })
+    }
+  }
+
+  // === Otro Sí — Descargar un Otro Sí existente (firmado) ===
+  // Fuerza la descarga del HTML del Otro Sí como archivo .html
+  // (el usuario puede abrirlo e imprimirlo offline, o convertirlo a PDF
+  // desde su navegador). Solo se debe invocar para Otros Síes firmados.
+  const descargarOtroSiFirmado = async (otroSiId: string, codigo: string) => {
+    const url = `/api/prestamos/${prestamoId}/otro-si/${otroSiId}?descargar=1`
+    const nombreLimpio = codigo.replace(/[^A-Za-z0-9-]/g, '_')
+    const ok = await descargarArchivo(url, `OtroSi_${nombreLimpio}.html`)
+    if (!ok) {
+      toast({
+        title: 'No se pudo descargar',
+        description: `Otro Sí ${codigo} — intenta nuevamente.`,
+        variant: 'destructive',
+      })
+    }
+  }
+
+  // Otros Síes firmados (ordenados por createdAt desc — el más reciente primero)
+  const otrosSiFirmados = otrosSi.filter((os) => os.estado === 'FIRMADO')
 
   const registrarPago = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -929,6 +975,123 @@ export function PrestamoDetalleModal({
                   <Printer className="w-4 h-4 mr-2" />
                   Ver Pagaré + Carta (PDF único)
                 </Button>
+              )}
+
+              {/* === Otro Sí — Ver / Descargar (solo si hay Otros Síes firmados) === */}
+              {/* Solo se muestra cuando al menos un Otro Sí del préstamo ya está FIRMADO. */}
+              {/* Si hay uno solo → botones directos. Si hay varios → dropdown. */}
+              {otrosSiFirmados.length === 1 && (
+                <>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() =>
+                      verOtroSiFirmado(otrosSiFirmados[0].id, otrosSiFirmados[0].codigo)
+                    }
+                    title={`Ver / imprimir el Otro Sí ${otrosSiFirmados[0].codigo} (firmado)`}
+                  >
+                    <Printer className="w-4 h-4 mr-2" />
+                    Ver Otro Sí {otrosSiFirmados[0].codigo}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() =>
+                      descargarOtroSiFirmado(otrosSiFirmados[0].id, otrosSiFirmados[0].codigo)
+                    }
+                    title={`Descargar el Otro Sí ${otrosSiFirmados[0].codigo} (firmado)`}
+                  >
+                    <FileSignature className="w-4 h-4 mr-2" />
+                    Descargar Otro Sí {otrosSiFirmados[0].codigo}
+                  </Button>
+                </>
+              )}
+              {otrosSiFirmados.length > 1 && (
+                <>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="outline" size="sm">
+                        <Printer className="w-4 h-4 mr-2" />
+                        Ver Otro Sí
+                        <ChevronDown className="w-3.5 h-3.5 ml-1.5" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="start">
+                      <DropdownMenuLabel>
+                        Otros Síes firmados ({otrosSiFirmados.length})
+                      </DropdownMenuLabel>
+                      <DropdownMenuSeparator />
+                      {otrosSiFirmados.map((os) => {
+                        let mods: any[] = []
+                        try {
+                          mods = JSON.parse(os.fechasAnteriores || '[]')
+                        } catch {}
+                        return (
+                          <DropdownMenuItem
+                            key={os.id}
+                            onClick={() => verOtroSiFirmado(os.id, os.codigo)}
+                          >
+                            <div className="flex flex-col">
+                              <span>
+                                <span className="font-mono font-bold text-blue-700">{os.codigo}</span>
+                                <span className="text-xs text-muted-foreground ml-2">
+                                  {os.tipoModificacion === 'CAMBIO_FECHA'
+                                    ? 'Cambio de fecha'
+                                    : 'Traslado de cuota'}
+                                </span>
+                              </span>
+                              <span className="text-[11px] text-muted-foreground">
+                                {mods.length} cuota(s) · {formatearFechaHora(os.createdAt)}
+                              </span>
+                            </div>
+                          </DropdownMenuItem>
+                        )
+                      })}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="outline" size="sm">
+                        <FileSignature className="w-4 h-4 mr-2" />
+                        Descargar Otro Sí
+                        <ChevronDown className="w-3.5 h-3.5 ml-1.5" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="start">
+                      <DropdownMenuLabel>
+                        Descargar Otro Sí firmado
+                      </DropdownMenuLabel>
+                      <DropdownMenuSeparator />
+                      {otrosSiFirmados.map((os) => {
+                        let mods: any[] = []
+                        try {
+                          mods = JSON.parse(os.fechasAnteriores || '[]')
+                        } catch {}
+                        return (
+                          <DropdownMenuItem
+                            key={os.id}
+                            onClick={() => descargarOtroSiFirmado(os.id, os.codigo)}
+                          >
+                            <div className="flex flex-col">
+                              <span>
+                                <span className="font-mono font-bold text-blue-700">{os.codigo}</span>
+                                <span className="text-xs text-muted-foreground ml-2">
+                                  {os.tipoModificacion === 'CAMBIO_FECHA'
+                                    ? 'Cambio de fecha'
+                                    : 'Traslado de cuota'}
+                                </span>
+                              </span>
+                              <span className="text-[11px] text-muted-foreground">
+                                {mods.length} cuota(s) · {formatearFechaHora(os.createdAt)}
+                              </span>
+                            </div>
+                          </DropdownMenuItem>
+                        )
+                      })}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </>
               )}
               <Button
                 variant="outline"
@@ -1662,9 +1825,35 @@ export function PrestamoDetalleModal({
                                   : 'Traslado de cuota'}
                               </span>
                             </div>
-                            <span className="text-xs text-muted-foreground">
-                              {formatearFechaHora(os.createdAt)}
-                            </span>
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs text-muted-foreground">
+                                {formatearFechaHora(os.createdAt)}
+                              </span>
+                              {os.estado === 'FIRMADO' && (
+                                <div className="flex items-center gap-1">
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    className="h-7 px-2 text-xs"
+                                    onClick={() => verOtroSiFirmado(os.id, os.codigo)}
+                                    title={`Ver / imprimir Otro Sí ${os.codigo}`}
+                                  >
+                                    <Printer className="w-3.5 h-3.5 mr-1" />
+                                    Ver
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    className="h-7 px-2 text-xs text-blue-700 hover:text-blue-800"
+                                    onClick={() => descargarOtroSiFirmado(os.id, os.codigo)}
+                                    title={`Descargar Otro Sí ${os.codigo}`}
+                                  >
+                                    <FileSignature className="w-3.5 h-3.5 mr-1" />
+                                    Descargar
+                                  </Button>
+                                </div>
+                              )}
+                            </div>
                           </div>
                           <div className="text-xs space-y-1">
                             <p className="text-muted-foreground">
