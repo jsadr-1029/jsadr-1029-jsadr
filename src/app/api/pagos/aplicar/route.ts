@@ -4,6 +4,7 @@ import {
   calcularPrestamo,
   calcularMoraCompuesta,
   calcularDiasMora, getTasaMoraAnual,
+  calcularCargosInicialesPendientes,
 } from '@/lib/finanzas'
 import { sanitizeError } from '@/lib/error-handler'
 import { rateLimit, getClientInfo } from '@/lib/security'
@@ -115,7 +116,34 @@ export async function GET(req: NextRequest) {
       const moraPendiente = Math.max(0, moraActual - moraPagadaCuota)
       const cuotaBase = cuotaPendiente?.montoCuota || p.montoCuota
       const totalCuotaConMora = cuotaBase + moraPendiente
-      const montoPendiente = Math.max(0, totalCuotaConMora - totalPagadoCuota)
+
+      // === FIX Task 12: Cargos iniciales en cuota 1 ===
+      // Si la próxima cuota es la #1 y hay cargos iniciales pendientes (pagaré,
+      // tarifa plataforma, flexibilidad financiera, fondo garantía), se suman
+      // al total a pagar para que el cliente los pague junto con la cuota 1.
+      //
+      // Política: el texto del estado de cuenta dice "Este cargo se aplica una
+      // sola vez al inicio del crédito y está incluido en la primera cuota."
+      // Por eso solo se suman cuando proximaCuota === 1.
+      const cargosInicialesInfo = proximaCuota === 1
+        ? calcularCargosInicialesPendientes(p)
+        : { cargos: [], totalPendiente: 0, totalConfigurado: 0, totalYaCobrado: 0 }
+      // Si la cuota 1 ya fue aplicada (legacy), los cargos del pagaré (que no
+      // tienen flag propio) se consideran cobrados.
+      const cuota1Aplicada = p.pagos.some(pg => pg.numeroCuota === 1 && pg.estado === 'APLICADO')
+      const cargosInicialesInfoAjustada = {
+        ...cargosInicialesInfo,
+        cargos: cargosInicialesInfo.cargos.map(c => {
+          if (c.concepto === 'PAGARE_CARTA' && cuota1Aplicada) return { ...c, yaCobrado: true }
+          return c
+        }),
+      }
+      const cargosInicialesPendientesMonto = proximaCuota === 1
+        ? cargosInicialesInfoAjustada.cargos.filter(c => !c.yaCobrado).reduce((s, c) => s + c.monto, 0)
+        : 0
+      const totalCuotaConCargos = totalCuotaConMora + cargosInicialesPendientesMonto
+
+      const montoPendiente = Math.max(0, totalCuotaConCargos - totalPagadoCuota)
       const montoTotalPendiente = montoPendiente
 
       // === Resolución de cuenta de recaudo con prioridad correcta ===
@@ -222,6 +250,12 @@ export async function GET(req: NextRequest) {
           : proximaCuota < 2
           ? 'No se puede usar flexibilidad desde la prima (primera cuota)'
           : null,
+        // === FIX Task 12: información de cargos iniciales en cuota 1 ===
+        // Para que el frontend muestre el monto correcto a pagar (cuota + cargos)
+        // y el detalle de los conceptos incluidos.
+        cargosInicialesPendientes: cargosInicialesInfoAjustada.cargos.filter(c => !c.yaCobrado),
+        cargosInicialesPendientesMonto,
+        totalCuotaConCargos,  // con cargos (lo que el cliente debe pagar)
       }
     })
 

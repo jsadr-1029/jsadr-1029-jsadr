@@ -4,6 +4,7 @@ import {
   calcularPrestamo,
   calcularMoraCompuesta,
   calcularDiasMora, getTasaMoraAnual,
+  calcularCargosInicialesPendientes,
   formatearMoneda,
   formatearFecha,
 } from '@/lib/finanzas'
@@ -86,6 +87,7 @@ export async function GET(req: NextRequest) {
     let totalPagado = 0
     let totalSaldo = 0
     let totalMora = 0
+    let totalCargosInicialesPendientes = 0  // nuevo (Task 12)
 
     const prestamosCalculados = cliente.prestamos.map((p) => {
       const calculo = calcularPrestamo({
@@ -96,6 +98,32 @@ export async function GET(req: NextRequest) {
         frecuencia: p.frecuencia as any,
         fechaDesembolso: p.fechaDesembolso || undefined,
       })
+
+      // === FIX Task 12: calcular cargos iniciales pendientes de cobrar ===
+      // Estos cargos (pagaré + carta, tarifa plataforma, flexibilidad financiera,
+      // fondo de garantía) se mostraban en el estado de cuenta como "incluidos
+      // en la primera cuota" pero NUNCA se sumaban al saldo pendiente ni a la
+      // cuota. Ahora se calculan y se exponen al template HTML para que:
+      //   - La primera cuota muestre el monto con cargos incluidos
+      //   - El saldo pendiente incluya los cargos pendientes
+      const cargosInicialesInfo = calcularCargosInicialesPendientes(p)
+
+      // Verificar si la cuota 1 ya fue pagada (APLICADO) para saber si los
+      // cargos del pagaré (que no tiene flag propio) ya se consideran cobrados.
+      const cuota1Aplicada = p.pagos.some(pg => pg.numeroCuota === 1 && pg.estado === 'APLICADO')
+      // Si la cuota 1 fue aplicada, los cargos del pagaré ya se cobraron (legacy)
+      const cargosInicialesInfoAjustada = {
+        ...cargosInicialesInfo,
+        cargos: cargosInicialesInfo.cargos.map(c => {
+          if (c.concepto === 'PAGARE_CARTA' && cuota1Aplicada) {
+            return { ...c, yaCobrado: true }
+          }
+          return c
+        }),
+      }
+      const cargosInicialesPendientes = cargosInicialesInfoAjustada.cargos
+        .filter(c => !c.yaCobrado)
+        .reduce((s, c) => s + c.monto, 0)
 
       // Para cada pago, calcular si tiene mora
       const pagosConMora = p.pagos.map((pago) => {
@@ -108,14 +136,30 @@ export async function GET(req: NextRequest) {
 
       totalPrestado += p.montoPrincipal
       totalPagado += p.montoPagado
-      totalSaldo += p.saldoTotal
+      // === FIX Task 12: sumar cargos iniciales pendientes al saldo mostrado ===
+      totalSaldo += p.saldoTotal + cargosInicialesPendientes
       totalMora += p.montoMora
+      totalCargosInicialesPendientes += cargosInicialesPendientes
 
       return {
         ...p,
         tablaAmortizacion: calculo.tablaAmortizacion,
         pagos: pagosConMora,
         cuentaRecaudoPago: p.categoria?.cuentaRecaudo || cliente.categoria?.cuentaRecaudo || null,
+        // === FIX 2026-08-13 (Task 12): incluir datos del cliente para que la
+        // sección de firma electrónica NO muestre "No registrado" cuando el
+        // cliente SÍ tiene email/teléfono. Antes este objeto venía sin
+        // `cliente` y la plantilla caía en `p.cliente?.email || 'No registrado'`.
+        cliente: {
+          nombre: cliente.nombre,
+          cedula: cliente.cedula,
+          telefono: cliente.telefono,
+          email: cliente.email,
+        },
+        // === FIX Task 12: información de cargos iniciales para el template ===
+        cargosInicialesInfo: cargosInicialesInfoAjustada,
+        cargosInicialesPendientes,
+        cuota1Aplicada,
       }
     })
 
@@ -141,6 +185,7 @@ export async function GET(req: NextRequest) {
         totalSaldo,
         totalMora,
         numPrestamos: prestamosCalculados.length,
+        totalCargosInicialesPendientes,  // nuevo (Task 12)
       },
       fechaGeneracion: new Date().toISOString(),
     })
@@ -447,6 +492,15 @@ function generarEstadoCuentaHTML({
           <div class="value">${formatearMoneda(totales.totalMora)}</div>
         </div>
       </div>
+      ${totales.totalCargosInicialesPendientes > 0 ? `
+      <div style="margin-top: 10px; padding: 8px 12px; background: #faf5ff; border-left: 4px solid #7c3aed; border-radius: 0 6px 6px 0; font-size: 11px; color: #4c1d95;">
+        <strong>📌 Cargos iniciales pendientes (incluidos en la primera cuota):</strong> ${formatearMoneda(totales.totalCargosInicialesPendientes)}
+        <div style="font-size: 9px; color: #6d28d9; margin-top: 2px;">
+          Corresponde a Pagaré + Carta, Tarifa de Plataforma, Flexibilidad Financiera y/o Fondo de Garantía que aún no han sido cobrados.
+          Se suman a la primera cuota pendiente del crédito.
+        </div>
+      </div>
+      ` : ''}
       <p style="margin: 8px 0 0 0; color: #6b7280; font-size: 10px;">
         <strong>${totales.numPrestamos}</strong> préstamo(s) registrado(s)
       </p>
@@ -467,8 +521,8 @@ function generarEstadoCuentaHTML({
           <div><strong>Monto:</strong> ${formatearMoneda(p.montoPrincipal)}</div>
           <div><strong>Cuota:</strong> ${formatearMoneda(p.montoCuota)}</div>
           <div><strong>Cuotas:</strong> ${p.cuotasPagadas}/${p.numeroCuotas} (${p.frecuencia.toLowerCase()})</div>
-          <div><strong>Total a pagar:</strong> ${formatearMoneda(p.totalPagar)}</div>
-          <div><strong>Saldo:</strong> ${formatearMoneda(p.saldoTotal)}</div>
+          <div><strong>Total a pagar:</strong> ${formatearMoneda(p.totalPagar + (p.cargosInicialesPendientes || 0))}${p.cargosInicialesPendientes > 0 ? `<br/><span style="font-size:8px;color:#6d28d9;">incluye ${formatearMoneda(p.cargosInicialesPendientes)} cargos iniciales</span>` : ''}</div>
+          <div><strong>Saldo:</strong> ${formatearMoneda(p.saldoTotal + (p.cargosInicialesPendientes || 0))}${p.cargosInicialesPendientes > 0 ? `<br/><span style="font-size:8px;color:#6d28d9;">+${formatearMoneda(p.cargosInicialesPendientes)} cargos pendientes</span>` : ''}</div>
           <div><strong>Interés anual:</strong> ${p.tasaInteresAnual}%</div>
           <div><strong>Mora diaria:</strong> ${p.tasaMoraDiaria}%</div>
           <div><strong>Desembolso:</strong> ${p.fechaDesembolso ? formatearFecha(p.fechaDesembolso) : '—'}</div>
@@ -500,6 +554,10 @@ function generarEstadoCuentaHTML({
         <tbody>
           ${p.tablaAmortizacion.map((c: any) => {
             const pago = p.pagos.find((pg: any) => pg.numeroCuota === c.numero && (pg.estado === 'APLICADO' || pg.estado === 'PAGO_PARCIAL'))
+            // === FIX Task 12: en la cuota 1, sumar los cargos iniciales pendientes al total ===
+            // Esto refleja que los cargos (pagaré, tarifa plataforma, flexibilidad, fondo garantía)
+            // se cobran UNA sola vez al inicio y van sumados a la primera cuota.
+            const cargosCuota1 = (c.numero === 1 && !p.cuota1Aplicada) ? (p.cargosInicialesPendientes || 0) : 0
             if (pago) {
               return `
               <tr>
@@ -519,6 +577,7 @@ function generarEstadoCuentaHTML({
               // Cuota pendiente
               const diasMora = calcularDiasMora(c.fechaVencimiento)
               const mora = diasMora > 0 ? calcularMoraCompuesta(p.montoPrincipal, p.tasaMoraDiaria, diasMora) : 0
+              const totalCuotaConCargos = c.montoCuota + mora + cargosCuota1
               return `
               <tr style="background: ${diasMora > 0 ? '#fef2f2' : '#fffbeb'}20;">
                 <td>${c.numero}</td>
@@ -527,7 +586,7 @@ function generarEstadoCuentaHTML({
                 <td class="num">${formatearMoneda(c.capital)}</td>
                 <td class="num">${formatearMoneda(c.interes)}</td>
                 <td class="num">${mora > 0 ? '<span style="color: #dc2626;">' + formatearMoneda(mora) + '</span>' : '—'}</td>
-                <td class="num">${formatearMoneda(c.montoCuota + mora)}</td>
+                <td class="num">${formatearMoneda(totalCuotaConCargos)}${cargosCuota1 > 0 ? `<br/><span style="font-size:8px;color:#6d28d9;">incluye ${formatearMoneda(cargosCuota1)} cargos iniciales</span>` : ''}</td>
                 <td>—</td>
                 <td><span class="badge badge-PENDIENTE">${diasMora > 0 ? 'VENCIDA (' + diasMora + ' días)' : 'PENDIENTE'}</span></td>
               </tr>
@@ -655,8 +714,8 @@ function generarEstadoCuentaHTML({
           // el estado de cuenta sea trazable y se pueda verificar a qué correo
           // o WhatsApp llegó el código. Antes solo se veía "EMAIL" / "WHATSAPP"
           // sin saber a qué contacto se envió.
-          const telCliente = p.cliente?.telefono || 'No registrado'
-          const emailCliente = p.cliente?.email || 'No registrado'
+          const telCliente = p.cliente?.telefono || '—'
+          const emailCliente = p.cliente?.email || '—'
           let destinoOtpTxt = 'No especificado'
           if (f.otpCanal === 'WHATSAPP') destinoOtpTxt = `WhatsApp al ${telCliente}`
           else if (f.otpCanal === 'EMAIL') destinoOtpTxt = `Correo a ${emailCliente}`

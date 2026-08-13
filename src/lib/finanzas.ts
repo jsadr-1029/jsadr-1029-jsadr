@@ -275,6 +275,133 @@ export function formatearFechaHora(fecha: Date | string | null | undefined): str
   })
 }
 
+// =====================================================
+// CARGOS INICIALES PENDIENTES DE COBRAR
+// =====================================================
+// Los préstamos pueden tener hasta 4 cargos únicos que se cobran UNA sola vez
+// al inicio del crédito y deben ir sumados a la PRIMERA CUOTA:
+//   1. Pagaré + Carta de Instrucciones (cobroPagareCarta / valorPagareCarta)
+//   2. Tarifa de Uso de Plataforma    (cobroTarifaPlataforma / valorTarifaPlataforma)
+//   3. Flexibilidad Financiera         (flexibilidadFinanciera / flexibilidadCosto)
+//   4. Fondo de Garantía               (fondoGarantiaCargado / fondoGarantiaMonto)
+//
+// Cada uno tiene su propio flag "cobrado/aplicado" que se setea en true
+// cuando el pago de la primera cuota lo cubre. Si el flag ya está en true,
+// el cargo NO se vuelve a cobrar.
+//
+// Esta función devuelve el detalle y el total pendiente para que el estado
+// de cuenta y el flujo de pagos lo sumen a la cuota 1.
+//
+// Política de cobro (FIX 2026-08-13 Task 12):
+//   - El pago de la cuota 1 debe incluir estos cargos.
+//   - Si el cliente paga la cuota 1 sin los cargos (legacy), los cargos
+//     quedan como saldo pendiente adicional hasta que el gestor los cobre
+//     explícitamente con un pago complementario.
+//   - El saldo total del préstamo = totalPagar + cargosInicialesPendientes - montoPagado.
+// =====================================================
+
+export interface CargoInicialDetalle {
+  concepto: 'PAGARE_CARTA' | 'TARIFA_PLATAFORMA' | 'FLEXIBILIDAD' | 'FONDO_GARANTIA'
+  etiqueta: string
+  monto: number
+  yaCobrado: boolean
+  flagCampo?: string  // nombre del campo Prisma que indica si ya fue cobrado
+}
+
+export interface CargosInicialesPendientes {
+  cargos: CargoInicialDetalle[]
+  totalPendiente: number
+  totalConfigurado: number
+  totalYaCobrado: number
+}
+
+export function calcularCargosInicialesPendientes(prestamo: {
+  // Pagaré + Carta
+  cobroPagareCarta?: boolean
+  valorPagareCarta?: number
+  // Tarifa Plataforma
+  cobroTarifaPlataforma?: boolean
+  valorTarifaPlataforma?: number
+  tarifaPlataformaCargada?: boolean
+  // Flexibilidad Financiera
+  flexibilidadFinanciera?: boolean
+  flexibilidadCosto?: number
+  flexibilidadCobroAplicado?: boolean
+  // Fondo de Garantía
+  fondoGarantiaCargado?: boolean
+  fondoGarantiaMonto?: number
+}): CargosInicialesPendientes {
+  const cargos: CargoInicialDetalle[] = []
+
+  // 1. Pagaré + Carta — no tiene flag propio; se considera cobrado solo si
+  //    la primera cuota fue pagada (APLICADO). Para no romper préstamos
+  //    legacy donde la cuota 1 ya se pagó sin el cargo, exponemos el monto
+  //    como "pendiente" y dejamos que el gestor decida. La UI de pagos
+  //    mostrará el cargo solo si la cuota 1 aún no está APLICADO.
+  if (prestamo.cobroPagareCarta) {
+    const monto = Number(prestamo.valorPagareCarta) > 0 ? Number(prestamo.valorPagareCarta) : 19900
+    cargos.push({
+      concepto: 'PAGARE_CARTA',
+      etiqueta: 'Pagaré + Carta de Instrucciones',
+      monto,
+      yaCobrado: false,  // se resuelve dinámicamente con cuota 1
+      flagCampo: 'cuota1Aplicada',
+    })
+  }
+
+  // 2. Tarifa de Plataforma — tiene flag explícito
+  if (prestamo.cobroTarifaPlataforma) {
+    const monto = Number(prestamo.valorTarifaPlataforma) > 0 ? Number(prestamo.valorTarifaPlataforma) : 4900
+    cargos.push({
+      concepto: 'TARIFA_PLATAFORMA',
+      etiqueta: 'Tarifa de Uso de Plataforma',
+      monto,
+      yaCobrado: !!prestamo.tarifaPlataformaCargada,
+      flagCampo: 'tarifaPlataformaCargada',
+    })
+  }
+
+  // 3. Flexibilidad Financiera — tiene flag explícito
+  if (prestamo.flexibilidadFinanciera) {
+    const monto = Number(prestamo.flexibilidadCosto) > 0 ? Number(prestamo.flexibilidadCosto) : 0
+    if (monto > 0) {
+      cargos.push({
+        concepto: 'FLEXIBILIDAD',
+        etiqueta: 'Flexibilidad Financiera',
+        monto,
+        yaCobrado: !!prestamo.flexibilidadCobroAplicado,
+        flagCampo: 'flexibilidadCobroAplicado',
+      })
+    }
+  }
+
+  // 4. Fondo de Garantía — tiene flag explícito (fondoGarantiaCargado=true
+  //    significa que el fondo ya fue cargado al préstamo, NO que ya fue cobrado).
+  //    Para detectar "ya cobrado" usamos el mismo flag (si el fondo ya está
+  //    cargado al préstamo, el cobro ya se hizo al inicio). Por eso lo
+  //    exponemos como "yaCobrado: true" cuando fondoGarantiaCargado=true.
+  if (prestamo.fondoGarantiaCargado && Number(prestamo.fondoGarantiaMonto) > 0) {
+    cargos.push({
+      concepto: 'FONDO_GARANTIA',
+      etiqueta: 'Fondo de Garantía',
+      monto: Number(prestamo.fondoGarantiaMonto),
+      yaCobrado: true,  // se cobra al momento de cargar el préstamo
+      flagCampo: 'fondoGarantiaCargado',
+    })
+  }
+
+  const totalConfigurado = cargos.reduce((s, c) => s + c.monto, 0)
+  const totalYaCobrado = cargos.filter(c => c.yaCobrado).reduce((s, c) => s + c.monto, 0)
+  const totalPendiente = cargos.filter(c => !c.yaCobrado).reduce((s, c) => s + c.monto, 0)
+
+  return {
+    cargos,
+    totalPendiente,
+    totalConfigurado,
+    totalYaCobrado,
+  }
+}
+
 /**
  * Genera un código de pago único para links de pago
  */

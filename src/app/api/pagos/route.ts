@@ -6,6 +6,7 @@ import {
   calcularMoraCompuesta,
   calcularDiasMora, getTasaMoraDiaria,
   calcularFechaVencimiento,
+  calcularCargosInicialesPendientes,
   generarCodigoPago,
   formatearFecha,
   formatearMoneda,
@@ -336,10 +337,32 @@ async function aplicarPago(body: any, user: any) {
   const montoTotalNum = parseFloat(montoTotal)
   const totalCuotaConMora = cuota.montoCuota + moraGenerada
 
-  // === DISTRIBUCIÓN PROPORCIONAL: mora → interés → capital ===
+  // === FIX 2026-08-13 (Task 12): Cargos iniciales en cuota 1 ===
+  // Los cargos únicos (pagaré + carta, tarifa plataforma, flexibilidad financiera,
+  // fondo de garantía) se cobran UNA sola vez al inicio del crédito y deben ir
+  // sumados a la PRIMERA CUOTA. Antes estos cargos se mostraban en el estado
+  // de cuenta como "incluidos en la primera cuota" pero NUNCA se sumaban al
+  // total a pagar, por lo que el cliente los veía en pantalla pero no los pagaba.
+  //
+  // Ahora: cuando se aplica pago a la cuota 1, calculamos los cargos pendientes
+  // (los que aún no tienen flag "cobrado/aplicado") y los sumamos al total de
+  // la cuota. La distribución del pago queda: mora → cargosIniciales → interés → capital.
+  //
+  // Solo se suman a la cuota 1 porque el texto del estado de cuenta dice
+  // "Este cargo se aplica una sola vez al inicio del crédito y está incluido
+  // en la primera cuota." — coherente con lo que el cliente ve en pantalla.
+  const esCuotaInicial = parseInt(numeroCuota) === 1
+  const cargosInicialesInfo = esCuotaInicial
+    ? calcularCargosInicialesPendientes(prestamo)
+    : { cargos: [], totalPendiente: 0, totalConfigurado: 0, totalYaCobrado: 0 }
+  const cargosInicialesPendientesMonto = cargosInicialesInfo.totalPendiente
+  const totalCuotaConCargos = totalCuotaConMora + cargosInicialesPendientesMonto
+
+  // === DISTRIBUCIÓN PROPORCIONAL: mora → cargosIniciales → interés → capital ===
   let montoMoraPagada = 0
   let montoInteresPagado = 0
   let montoCapitalPagado = 0
+  let montoCargosInicialesPagado = 0  // nuevo
   let resto = montoTotalNum
 
   const pagosParcialesPrevios = prestamo.pagos.filter(
@@ -348,13 +371,29 @@ async function aplicarPago(body: any, user: any) {
   const interesPagadoAnterior = pagosParcialesPrevios.reduce((s, p) => s + p.montoInteres, 0)
   const capitalPagadoAnterior = pagosParcialesPrevios.reduce((s, p) => s + p.montoCapital, 0)
   const moraPagadaAnterior = pagosParcialesPrevios.reduce((s, p) => s + p.montoMora, 0)
+  // Cargos iniciales ya pagados en pagos parciales previos (van en montoMora
+  // en legacy, pero para nuevos pagos usamos un campo aparte en notas).
+  // Como no hay campo dedicado, los cargos se registran como "otros" en notas
+  // y se acumulan en una variable interna para saber cuánto falta.
+  const cargosInicialesPagadosAnterior = pagosParcialesPrevios.reduce((s, p) => {
+    // Heurística legacy: si el pago tiene notas que mencionan "CARGOS_INICIALES",
+    // extraer el monto. Si no, asumir 0.
+    const match = (p.notas || '').match(/CARGOS_INICIALES:(\d+(?:\.\d+)?)/)
+    return s + (match ? parseFloat(match[1]) : 0)
+  }, 0)
   const moraPendienteCuota = Math.max(0, moraGenerada - moraPagadaAnterior)
+  const cargosInicialesPendientesDeEstePago = Math.max(0, cargosInicialesPendientesMonto - cargosInicialesPagadosAnterior)
   const interesPendienteCuota = Math.max(0, cuota.interes - interesPagadoAnterior)
   const capitalPendienteCuota = Math.max(0, cuota.capital - capitalPagadoAnterior)
 
   if (moraPendienteCuota > 0) {
     montoMoraPagada = Math.min(resto, moraPendienteCuota)
     resto = Math.max(0, resto - montoMoraPagada)
+  }
+  // === NUEVO: cargar los cargos iniciales después de mora y antes de interés ===
+  if (resto > 0 && cargosInicialesPendientesDeEstePago > 0) {
+    montoCargosInicialesPagado = Math.min(resto, cargosInicialesPendientesDeEstePago)
+    resto = Math.max(0, resto - montoCargosInicialesPagado)
   }
   if (resto > 0 && interesPendienteCuota > 0) {
     montoInteresPagado = Math.min(resto, interesPendienteCuota)
@@ -375,14 +414,15 @@ async function aplicarPago(body: any, user: any) {
     resto = 0
   }
 
-  const totalPagadoEnCuota = montoMoraPagada + montoInteresPagado + montoCapitalPagado
+  const totalPagadoEnCuota = montoMoraPagada + montoInteresPagado + montoCapitalPagado + montoCargosInicialesPagado
   const montoPagadoAnteriorEnCuota = pagosParcialesPrevios.reduce((s, p) => s + p.montoTotal, 0)
   const montoTotalAcumuladoCuota = montoPagadoAnteriorEnCuota + totalPagadoEnCuota
 
   let estadoPago: string
   let cuotaCompleta = false
   let esPagoParcial: boolean
-  if (montoTotalAcumuladoCuota < totalCuotaConMora) {
+  // === FIX Task 12: comparar contra totalCuotaConCargos (no solo totalCuotaConMora) ===
+  if (montoTotalAcumuladoCuota < totalCuotaConCargos) {
     estadoPago = 'PAGO_PARCIAL'
     esPagoParcial = true
   } else {
@@ -391,15 +431,24 @@ async function aplicarPago(body: any, user: any) {
     esPagoParcial = false
   }
 
+  // === Marca de cargos iniciales en notas (formato parseable: CARGOS_INICIALES:monto) ===
+  // Esto permite que futuros pagos parciales sobre la cuota 1 sepan cuánto se ha
+  // ido abonando a los cargos iniciales y no los vuelvan a cobrar.
+  const marcaCargosIniciales = montoCargosInicialesPagado > 0
+    ? `CARGOS_INICIALES:${montoCargosInicialesPagado.toFixed(2)} `
+    : ''
+
   const notasPagoBase = excedente > 0
     ? `Pago con excedente de ${formatearMoneda(excedente)}. ` +
-      `Recibido: ${formatearMoneda(montoTotalNum)}, distribuido: mora ${formatearMoneda(montoMoraPagada)} + interés ${formatearMoneda(montoInteresPagado)} + capital ${formatearMoneda(montoCapitalPagado)}. ` +
+      `Recibido: ${formatearMoneda(montoTotalNum)}, distribuido: mora ${formatearMoneda(montoMoraPagada)} + cargos iniciales ${formatearMoneda(montoCargosInicialesPagado)} + interés ${formatearMoneda(montoInteresPagado)} + capital ${formatearMoneda(montoCapitalPagado)}. ` +
       `El gestor debe decidir: reembolsar o aplicar a cuota siguiente.`
     : esPagoParcial
-    ? `Pago parcial de ${formatearMoneda(montoTotalNum)}. Total cuota: ${formatearMoneda(totalCuotaConMora)}. Acumulado: ${formatearMoneda(montoTotalAcumuladoCuota)}. Faltan: ${formatearMoneda(totalCuotaConMora - montoTotalAcumuladoCuota)}`
+    ? `Pago parcial de ${formatearMoneda(montoTotalNum)}. Total cuota (con cargos): ${formatearMoneda(totalCuotaConCargos)}. Acumulado: ${formatearMoneda(montoTotalAcumuladoCuota)}. Faltan: ${formatearMoneda(totalCuotaConCargos - montoTotalAcumuladoCuota)}`
     : montoPagadoAnteriorEnCuota > 0
-    ? `Pago final de ${formatearMoneda(montoTotalNum)}. Cuota completada con pagos parciales previos de ${formatearMoneda(montoPagadoAnteriorEnCuota)}. Total cuota: ${formatearMoneda(totalCuotaConMora)}.`
+    ? `Pago final de ${formatearMoneda(montoTotalNum)}. Cuota completada con pagos parciales previos de ${formatearMoneda(montoPagadoAnteriorEnCuota)}. Total cuota (con cargos): ${formatearMoneda(totalCuotaConCargos)}.`
     : null
+
+  const notasPagoConMarca = marcaCargosIniciales + (notasPagoBase || '')
 
   // Añadir nota de mora renegociada si aplica
   const notaMoraRenegociada = moraEsRenegociada
@@ -410,8 +459,8 @@ async function aplicarPago(body: any, user: any) {
     : null
 
   const notasPago = notaMoraRenegociada
-    ? (notasPagoBase ? notaMoraRenegociada + notasPagoBase : notaMoraRenegociada)
-    : notasPagoBase
+    ? (notasPagoConMarca ? notaMoraRenegociada + notasPagoConMarca : notaMoraRenegociada)
+    : notasPagoConMarca
 
   // === TRANSACCIÓN atómica v4.0 ===
   // Pago create → caja movimiento → recálculo saldos son atómicos.
@@ -419,15 +468,24 @@ async function aplicarPago(body: any, user: any) {
   // v4.7 (QA M04 TC-PAG-005): si el body trae fechaPago, se usa esa (ya validada
   // que no es futura); si no, se usa new Date() (ahora).
   const fechaPagoFinal = fechaPago ? new Date(fechaPago) : new Date()
+  // === FIX Task 12: declarar variables fuera de la transacción para poder
+  // usarlas en el log/respuesta después de que la tx se resuelva.
+  let cargosRecienCubiertos = false
+  let ajusteTotalPagar = 0
   const resultado = await db.$transaction(async (tx) => {
     // 1. Crear o actualizar pago
+    // === FIX Task 12: los cargos iniciales se acumulan en `montoMora` para
+    // que la suma montoCapital+montoInteres+montoMora = montoTotal (sin
+    // excedente). Esto mantiene la consistencia contable del registro de pago
+    // y permite que el `montoPagado` acumulado del préstamo incluya los cargos. ===
+    const montoMoraConCargos = montoMoraPagada + montoCargosInicialesPagado
     const pago = pagoExistente
       ? await tx.pago.update({
           where: { id: pagoExistente.id },
           data: {
             montoCapital: montoCapitalPagado,
             montoInteres: montoInteresPagado,
-            montoMora: montoMoraPagada,
+            montoMora: montoMoraConCargos,
             montoTotal: montoTotalNum,
             fechaPago: fechaPagoFinal,
             metodoPago: metodoPago || 'EFECTIVO',
@@ -443,7 +501,7 @@ async function aplicarPago(body: any, user: any) {
             numeroCuota: parseInt(numeroCuota),
             montoCapital: montoCapitalPagado,
             montoInteres: montoInteresPagado,
-            montoMora: montoMoraPagada,
+            montoMora: montoMoraConCargos,
             montoTotal: montoTotalNum,
             fechaPago: fechaPagoFinal,
             fechaVencimiento: cuota.fechaVencimiento,
@@ -461,6 +519,45 @@ async function aplicarPago(body: any, user: any) {
       where: { id: prestamoId },
       include: { pagos: true },
     })
+
+    // === FIX Task 12: ajustar totalPagar/saldoTotal cuando se cobran cargos iniciales ===
+    // Los cargos iniciales (pagaré, tarifa plataforma, flexibilidad) NO están
+    // incluidos en `totalPagar` (que solo es capital + interés). Cuando el
+    // pago de la cuota 1 los cubre completamente, los marcamos como cobrados
+    // y ajustamos `totalPagar` para que el saldo refleje correctamente la
+    // deuda total pendiente.
+    //
+    // Sin este ajuste, el `montoPagado` (que incluye los cargos vía montoMora)
+    // reduciría el `saldoTotal` por debajo del valor real, porque estaría
+    // restando cargos que NO estaban sumados en `totalPagar`.
+    cargosRecienCubiertos =
+      esCuotaInicial &&
+      montoCargosInicialesPagado > 0 &&
+      montoCargosInicialesPagado >= cargosInicialesPendientesMonto &&
+      cuotaCompleta
+
+    if (cargosRecienCubiertos && prestamoCompleto) {
+      ajusteTotalPagar = cargosInicialesPendientesMonto
+      // Ajustar totalPagar (y por ende saldoTotal) para incluir los cargos
+      await tx.prestamo.update({
+        where: { id: prestamoId },
+        data: {
+          totalPagar: { increment: ajusteTotalPagar },
+          // Marcar flags de cargos aplicados
+          ...(prestamo.flexibilidadFinanciera && !prestamo.flexibilidadCobroAplicado
+            ? { flexibilidadCobroAplicado: true } : {}),
+          ...(prestamo.cobroTarifaPlataforma && !prestamo.tarifaPlataformaCargada
+            ? { tarifaPlataformaCargada: true } : {}),
+        },
+      })
+      // Recargar préstamo con el nuevo totalPagar
+      const prestamoAjustado = await tx.prestamo.findUnique({
+        where: { id: prestamoId },
+        include: { pagos: true },
+      })
+      if (prestamoAjustado) prestamoCompleto.totalPagar = prestamoAjustado.totalPagar
+    }
+
     if (prestamoCompleto) {
       const pagosValidos = prestamoCompleto.pagos.filter(
         (p) => p.estado === 'APLICADO' || p.estado === 'PAGO_PARCIAL'
@@ -520,6 +617,60 @@ async function aplicarPago(body: any, user: any) {
       }
     }
 
+    // === 4. NUEVO: Movimientos de caja por cargos iniciales (Task 12) ===
+    // Los cargos iniciales se contabilizan como ingresos en cajas específicas:
+    //   - Pagaré + Carta → CAJA-PAGARE-CARTA (si existe) o CAJA-INGRESOS-VARIOS
+    //   - Tarifa Plataforma → CAJA-USO-PLATAFORMA (creada en schema)
+    //   - Flexibilidad Financiera → CAJA-FLEXIBILIDAD-FINANCIERA (si existe) o CAJA-INGRESOS-VARIOS
+    // Los cargos se abonaron en `montoCargosInicialesPagado` (parte del `montoMora`
+    // del pago para mantener compatibilidad legacy). Aquí se registran por separado
+    // para trazabilidad contable.
+    if (montoCargosInicialesPagado > 0) {
+      // Distribuir el monto entre los conceptos pendientes (en orden proporcional)
+      let montoCargosRestante = montoCargosInicialesPagado
+      for (const cargo of cargosInicialesInfo.cargos.filter(c => !c.yaCobrado)) {
+        if (montoCargosRestante <= 0) break
+        const montoEsteCargo = Math.min(montoCargosRestante, cargo.monto)
+        montoCargosRestante -= montoEsteCargo
+
+        // Determinar caja destino
+        let codigoCaja = 'CAJA-INGRESOS-VARIOS'
+        let conceptoMov = ''
+        if (cargo.concepto === 'TARIFA_PLATAFORMA') {
+          codigoCaja = 'CAJA-USO-PLATAFORMA'
+          conceptoMov = `Tarifa Plataforma - Préstamo ${prestamo.codigo}`
+        } else if (cargo.concepto === 'PAGARE_CARTA') {
+          codigoCaja = 'CAJA-PAGARE-CARTA'
+          conceptoMov = `Pagaré + Carta - Préstamo ${prestamo.codigo}`
+        } else if (cargo.concepto === 'FLEXIBILIDAD') {
+          codigoCaja = 'CAJA-FLEXIBILIDAD-FINANCIERA'
+          conceptoMov = `Flexibilidad Financiera (${prestamo.flexibilidadModalidad || 'BASICA'}) - Préstamo ${prestamo.codigo}`
+        }
+
+        const cajaCargo = await tx.cajaMenor.findUnique({ where: { codigo: codigoCaja } })
+        if (cajaCargo) {
+          await tx.movimientoCaja.create({
+            data: {
+              cajaId: cajaCargo.id,
+              tipo: 'INGRESO',
+              monto: montoEsteCargo,
+              concepto: conceptoMov,
+              referencia: prestamo.codigo,
+              prestamoId,
+              usuarioId: user.id,
+            },
+          })
+          await tx.cajaMenor.update({
+            where: { id: cajaCargo.id },
+            data: {
+              saldoActual: { increment: montoEsteCargo },
+              totalIngresos: { increment: montoEsteCargo },
+            },
+          })
+        }
+      }
+    }
+
     return { pago, estadisticas: { saldoTotal: prestamoCompleto?.saldoTotal || 0 } }
   })
 
@@ -563,6 +714,9 @@ async function aplicarPago(body: any, user: any) {
     detalles: JSON.stringify({
       prestamoId, numeroCuota, monto: montoTotalNum, metodo: metodoPago || 'EFECTIVO',
       estado: estadoPago, capital: montoCapitalPagado, interes: montoInteresPagado, mora: montoMoraPagada,
+      cargosIniciales: montoCargosInicialesPagado,
+      cargosInicialesRecienCubiertos: cargosRecienCubiertos,
+      ajusteTotalPagar,
     }),
     ipOrigen: '', userAgent: '',
   })
@@ -575,9 +729,10 @@ async function aplicarPago(body: any, user: any) {
       ? `Pago parcial aplicado — cuota ${numeroCuota}`
       : `Pago aplicado — cuota ${numeroCuota}`
     const descBit = `Monto recibido: ${formatearMoneda(montoTotalNum)}. ` +
-      `Distribuido: mora ${formatearMoneda(montoMoraPagada)} + interés ${formatearMoneda(montoInteresPagado)} + capital ${formatearMoneda(montoCapitalPagado)}. ` +
+      `Distribuido: mora ${formatearMoneda(montoMoraPagada)} + cargos iniciales ${formatearMoneda(montoCargosInicialesPagado)} + interés ${formatearMoneda(montoInteresPagado)} + capital ${formatearMoneda(montoCapitalPagado)}. ` +
       `Método: ${metodoPago || 'EFECTIVO'}. Referencia: ${referencia || 'sin referencia'}. ` +
       (excedente > 0 ? `EXCEDENTE de ${formatearMoneda(excedente)} pendiente de decisión del gestor. ` : '') +
+      (cargosRecienCubiertos ? `CARGOS INICIALES cobrados por ${formatearMoneda(cargosInicialesPendientesMonto)} (ajuste totalPagar +${formatearMoneda(ajusteTotalPagar)}). ` : '') +
       `Estado del pago: ${estadoPago}. Nuevo saldo del préstamo: ${formatearMoneda(prestamoActualizado?.saldoTotal ?? 0)}.`
     await db.bitacoraPrestamo.create({
       data: {
@@ -600,9 +755,12 @@ async function aplicarPago(body: any, user: any) {
     prestamo: prestamoActualizado,
     whatsapp: envio,
     moraCobrada: montoMoraPagada,
+    cargosInicialesCobrados: montoCargosInicialesPagado,
+    cargosInicialesRecienCubiertos: cargosRecienCubiertos,
+    ajusteTotalPagar,
     esPagoParcial,
     excedente,
-    montoFaltanteCuota: esPagoParcial ? (totalCuotaConMora - montoTotalAcumuladoCuota) : 0,
+    montoFaltanteCuota: esPagoParcial ? (totalCuotaConCargos - montoTotalAcumuladoCuota) : 0,
   })
 }
 
