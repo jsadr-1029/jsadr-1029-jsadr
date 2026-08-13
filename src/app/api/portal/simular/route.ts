@@ -21,6 +21,13 @@ export async function POST(req: NextRequest) {
     // El cobro se hace UNA sola vez al inicio del crédito (cargado en la primera cuota).
     const FLEXIBILIDAD_COSTO_BASICA = 15000
     const FLEXIBILIDAD_COSTO_PREMIUM = 34900
+
+    // === Tarifa de Plataforma (OBLIGATORIA para toda simulación) ===
+    // $4.900 COP — cobro único al inicio del crédito (cargado en la primera cuota).
+    // Cubre uso de firma electrónica, generación de pagaré digital,
+    // almacenamiento seguro del expediente y trazabilidad del AuditLog.
+    const TARIFA_PLATAFORMA = 4900
+
     const plazoNumFlex = Number(plazoMeses) || 1
     const frecFlex = frecuencia || 'MENSUAL'
     let cuotasSimuladas = plazoNumFlex
@@ -40,6 +47,13 @@ export async function POST(req: NextRequest) {
     }
     if (!categoria) {
       // Si no hay categoría, usar valores por defecto
+      const calcDefault = calcularPrestamo({
+        monto: Number(monto),
+        tasaMensual: 20,
+        plazoMeses: Number(plazoMeses) || 1,
+        frecuencia: frecuencia || 'MENSUAL',
+      })
+      const totalConCargosDefault = calcDefault.totalPagar + TARIFA_PLATAFORMA + flexCostoCalculado
       return NextResponse.json({
         simulacion: {
           monto: Number(monto),
@@ -47,12 +61,39 @@ export async function POST(req: NextRequest) {
           tasaAnual: 240,
           plazoMeses: Number(plazoMeses) || 1,
           frecuencia: frecuencia || 'MENSUAL',
-          ...calcularPrestamo({
-            monto: Number(monto),
-            tasaMensual: 20,
-            plazoMeses: Number(plazoMeses) || 1,
-            frecuencia: frecuencia || 'MENSUAL',
-          }),
+          ...calcDefault,
+          // === Tarifa Plataforma (obligatoria) ===
+          tarifaPlataforma: TARIFA_PLATAFORMA,
+          tarifaPlataformaObligatoria: true,
+          // === Flexibilidad Financiera (solo si cuotas >= 4) ===
+          flexibilidadFinanciera: flexActivada,
+          flexibilidadElegible: flexElegible,
+          flexibilidadModalidad: flexActivada ? modalidadElegida : null,
+          flexibilidadCosto: flexCostoCalculado,
+          flexibilidadCuotasRequeridas: 4,
+          flexibilidadUsosDisponibles: flexUsosDisponibles,
+          // === Totales con cargos ===
+          totalCargosIniciales: TARIFA_PLATAFORMA + flexCostoCalculado,
+          totalPagarConCargos: totalConCargosDefault,
+          primeraCuotaConCargos: calcDefault.montoCuota + TARIFA_PLATAFORMA + flexCostoCalculado,
+          cargosIniciales: [
+            {
+              concepto: 'TARIFA_PLATAFORMA',
+              descripcion: 'Tarifa de Uso de Plataforma',
+              monto: TARIFA_PLATAFORMA,
+              obligatorio: true,
+            },
+            ...(flexActivada
+              ? [{
+                  concepto: 'FLEXIBILIDAD',
+                  descripcion: `Flexibilidad Financiera ${modalidadElegida}`,
+                  monto: flexCostoCalculado,
+                  obligatorio: false,
+                  modalidad: modalidadElegida,
+                  usosDisponibles: flexUsosDisponibles,
+                }]
+              : []),
+          ],
         },
         cronograma: generarCronograma({
           monto: Number(monto),
@@ -112,6 +153,9 @@ export async function POST(req: NextRequest) {
       frecuencia: frec,
     })
 
+    const totalConCargos = calc.totalPagar + TARIFA_PLATAFORMA + flexCostoCalculado
+    const primeraCuotaConCargos = calc.montoCuota + TARIFA_PLATAFORMA + flexCostoCalculado
+
     return NextResponse.json({
       simulacion: {
         monto: montoNum,
@@ -122,6 +166,10 @@ export async function POST(req: NextRequest) {
         frecuencia: frec,
         categoria: { id: categoria.id, nombre: categoria.nombre, codigo: categoria.codigo },
         ...calc,
+        // === Tarifa Plataforma (OBLIGATORIA para toda simulación) ===
+        // $4.900 COP — cobro único al inicio del crédito (cargado en la primera cuota).
+        tarifaPlataforma: TARIFA_PLATAFORMA,
+        tarifaPlataformaObligatoria: true,
         // === Flexibilidad Financiera (solo si cuotas >= 4) ===
         // DOS tarifas: BASICA $15.000 (1 uso) | PREMIUM $34.900 (2 usos)
         flexibilidadFinanciera: flexActivada,
@@ -130,6 +178,28 @@ export async function POST(req: NextRequest) {
         flexibilidadCosto: flexCostoCalculado,
         flexibilidadCuotasRequeridas: 4,
         flexibilidadUsosDisponibles: flexUsosDisponibles,
+        // === Totales con cargos iniciales incluidos ===
+        totalCargosIniciales: TARIFA_PLATAFORMA + flexCostoCalculado,
+        totalPagarConCargos: totalConCargos,
+        primeraCuotaConCargos: primeraCuotaConCargos,
+        cargosIniciales: [
+          {
+            concepto: 'TARIFA_PLATAFORMA',
+            descripcion: 'Tarifa de Uso de Plataforma',
+            monto: TARIFA_PLATAFORMA,
+            obligatorio: true,
+          },
+          ...(flexActivada
+            ? [{
+                concepto: 'FLEXIBILIDAD',
+                descripcion: `Flexibilidad Financiera ${modalidadElegida}`,
+                monto: flexCostoCalculado,
+                obligatorio: false,
+                modalidad: modalidadElegida,
+                usosDisponibles: flexUsosDisponibles,
+              }]
+            : []),
+        ],
         flexibilidadTarifas: flexElegible
           ? [
               {

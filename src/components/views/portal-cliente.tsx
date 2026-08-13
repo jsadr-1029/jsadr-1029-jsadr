@@ -721,8 +721,17 @@ function SimuladorPrestamo({ token }: { token: string }) {
   const [categorias, setCategorias] = useState<any[]>([])
   const [resultado, setResultado] = useState<any>(null)
   // === Flexibilidad Financiera (beneficio opcional, cuotas >= 4) ===
+  // DOS planes:
+  //   - BÁSICA:  $15.000 COP — 1 uso durante la vigencia
+  //   - PREMIUM: $34.900 COP — 2 usos durante la vigencia
   const [flexibilidadFinanciera, setFlexibilidadFinanciera] = useState(false)
-  const FLEXIBILIDAD_COSTO = 10000
+  const [flexibilidadModalidad, setFlexibilidadModalidad] = useState<'BASICA' | 'PREMIUM'>('BASICA')
+  const FLEXIBILIDAD_COSTO_BASICA = 15000
+  const FLEXIBILIDAD_COSTO_PREMIUM = 34900
+
+  // === Tarifa de Plataforma (OBLIGATORIA para toda simulación) ===
+  // $4.900 COP — cobro único al inicio del crédito (cargado en la primera cuota).
+  const TARIFA_PLATAFORMA = 4900
 
   useEffect(() => {
     fetch('/api/categorias').then(r => r.json()).then(d => setCategorias(d.categorias || []))
@@ -736,6 +745,7 @@ function SimuladorPrestamo({ token }: { token: string }) {
         monto: Number(form.monto),
         plazoMeses: Number(form.plazoMeses),
         flexibilidadFinanciera,
+        flexibilidadModalidad,
         token,
       })
       setResultado(res)
@@ -750,6 +760,15 @@ function SimuladorPrestamo({ token }: { token: string }) {
     if (form.frecuencia === 'SEMANAL') return plazo * 4
     return plazo
   })()
+
+  const flexElegible = cuotasSimuladas >= 4
+  const flexCostoSeleccionado = flexibilidadFinanciera && flexElegible
+    ? (flexibilidadModalidad === 'PREMIUM' ? FLEXIBILIDAD_COSTO_PREMIUM : FLEXIBILIDAD_COSTO_BASICA)
+    : 0
+  const flexUsosSeleccionado = flexCostoSeleccionado > 0
+    ? (flexibilidadModalidad === 'PREMIUM' ? 2 : 1)
+    : 0
+  const totalCargosIniciales = TARIFA_PLATAFORMA + flexCostoSeleccionado
 
   return (
     <Card title="Simulador de Préstamo">
@@ -785,14 +804,42 @@ function SimuladorPrestamo({ token }: { token: string }) {
           </div>
         </div>
 
+        {/* === Tarifa de Plataforma (OBLIGATORIA — siempre visible) === */}
+        <div className="p-3 rounded-lg border-2 border-slate-300 bg-slate-50/80">
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <span className="inline-flex items-center justify-center w-6 h-6 rounded-md bg-slate-200 text-slate-700">
+                <ShieldCheck className="w-3.5 h-3.5" />
+              </span>
+              <div>
+                <p className="text-sm font-semibold text-slate-900">
+                  Tarifa de Uso de Plataforma
+                  <span className="ml-2 inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wide bg-slate-700 text-white">
+                    Obligatoria
+                  </span>
+                </p>
+                <p className="text-[11px] text-slate-600">
+                  Firma electrónica, pagaré digital, expediente seguro y trazabilidad.
+                </p>
+              </div>
+            </div>
+            <Badge className="bg-slate-200 text-slate-800 border-slate-400">
+              +{formatCOP(TARIFA_PLATAFORMA)}
+            </Badge>
+          </div>
+          <p className="text-[11px] text-slate-600 mt-1.5">
+            Se cobra una sola vez al inicio del crédito (se suma a la primera cuota).
+          </p>
+        </div>
+
         {/* === Flexibilidad Financiera (solo si cuotas >= 4) === */}
-        {cuotasSimuladas >= 4 ? (
+        {flexElegible ? (
           <div className={`p-3 rounded-lg border-2 transition-colors ${
             flexibilidadFinanciera
               ? 'bg-emerald-50 border-emerald-400'
               : 'bg-emerald-50/30 border-emerald-200'
           }`}>
-            <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center justify-between gap-2 mb-2">
               <div className="flex items-center gap-2">
                 <input
                   type="checkbox"
@@ -812,20 +859,93 @@ function SimuladorPrestamo({ token }: { token: string }) {
               <Badge className={flexibilidadFinanciera
                 ? 'bg-emerald-100 text-emerald-800 border-emerald-400'
                 : 'bg-slate-100 text-slate-600 border-slate-300'}>
-                {flexibilidadFinanciera ? `✨ +${formatCOP(FLEXIBILIDAD_COSTO)}` : `Opcional · ${formatCOP(FLEXIBILIDAD_COSTO)}`}
+                {flexibilidadFinanciera
+                  ? `✨ +${formatCOP(flexCostoSeleccionado)}`
+                  : 'Opcional'}
               </Badge>
             </div>
-            <p className="text-xs text-emerald-800 mt-1.5">
+
+            <p className="text-xs text-emerald-800 mb-2">
               {flexibilidadFinanciera
-                ? '✅ Activo: podrás (previo pago) trasladar una cuota al final del crédito o solicitar cambio de fecha de pago.'
-                : `Disponible porque la simulación tiene ${cuotasSimuladas} cuotas (≥ 4). Podrás:`}
+                ? `Plan ${flexibilidadModalidad} seleccionado: ${flexUsosSeleccionado} uso(s) disponible(s) durante la vigencia del crédito.`
+                : `Disponible porque la simulación tiene ${cuotasSimuladas} cuotas (≥ 4). Selecciona un plan:`}
             </p>
-            {!flexibilidadFinanciera && (
-              <ul className="list-disc list-inside text-[11px] text-emerald-800 ml-2 mt-1 space-y-0.5">
-                <li>Trasladar UNA cuota al final del crédito</li>
-                <li>Solicitar cambio de fecha de pago (genera "Otro Sí" firmado con OTP)</li>
-              </ul>
+
+            {/* === Selector de Planes (BÁSICA / PREMIUM) === */}
+            {flexibilidadFinanciera && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-2">
+                {/* Plan BÁSICA */}
+                <button
+                  type="button"
+                  onClick={() => setFlexibilidadModalidad('BASICA')}
+                  className={`text-left p-2.5 rounded-lg border-2 transition-all ${
+                    flexibilidadModalidad === 'BASICA'
+                      ? 'border-emerald-500 bg-white shadow-sm'
+                      : 'border-emerald-200 bg-white/60 hover:border-emerald-300'
+                  }`}
+                >
+                  <div className="flex items-center justify-between gap-1.5">
+                    <span className="text-xs font-bold text-emerald-900 uppercase tracking-wide">Básica</span>
+                    {flexibilidadModalidad === 'BASICA' && (
+                      <span className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-emerald-500 text-white text-[10px]">✓</span>
+                    )}
+                  </div>
+                  <p className="text-base font-bold text-emerald-900 mt-0.5">{formatCOP(FLEXIBILIDAD_COSTO_BASICA)}</p>
+                  <p className="text-[11px] text-slate-700 mt-0.5">1 uso durante la vigencia</p>
+                  <ul className="list-disc list-inside text-[10px] text-slate-600 mt-1 space-y-0.5">
+                    <li>Trasladar UNA cuota al final</li>
+                    <li>O cambio de fecha (Otro Sí firmado)</li>
+                  </ul>
+                </button>
+
+                {/* Plan PREMIUM */}
+                <button
+                  type="button"
+                  onClick={() => setFlexibilidadModalidad('PREMIUM')}
+                  className={`text-left p-2.5 rounded-lg border-2 transition-all relative ${
+                    flexibilidadModalidad === 'PREMIUM'
+                      ? 'border-emerald-500 bg-white shadow-sm'
+                      : 'border-emerald-200 bg-white/60 hover:border-emerald-300'
+                  }`}
+                >
+                  <span className="absolute -top-2 right-2 px-1.5 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wide bg-emerald-600 text-white">
+                    Recomendado
+                  </span>
+                  <div className="flex items-center justify-between gap-1.5">
+                    <span className="text-xs font-bold text-emerald-900 uppercase tracking-wide">Premium</span>
+                    {flexibilidadModalidad === 'PREMIUM' && (
+                      <span className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-emerald-500 text-white text-[10px]">✓</span>
+                    )}
+                  </div>
+                  <p className="text-base font-bold text-emerald-900 mt-0.5">{formatCOP(FLEXIBILIDAD_COSTO_PREMIUM)}</p>
+                  <p className="text-[11px] text-slate-700 mt-0.5">2 usos durante la vigencia</p>
+                  <ul className="list-disc list-inside text-[10px] text-slate-600 mt-1 space-y-0.5">
+                    <li>2 traslados/cambios de fecha</li>
+                    <li>Ideal para créditos largos</li>
+                  </ul>
+                </button>
+              </div>
             )}
+
+            {!flexibilidadFinanciera && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-2 opacity-70">
+                <div className="p-2.5 rounded-lg border border-dashed border-emerald-300 bg-white/40">
+                  <span className="text-[10px] font-bold text-emerald-900 uppercase tracking-wide">Básica</span>
+                  <p className="text-sm font-bold text-emerald-900">{formatCOP(FLEXIBILIDAD_COSTO_BASICA)}</p>
+                  <p className="text-[10px] text-slate-600">1 uso · 1 cuota al final o cambio de fecha</p>
+                </div>
+                <div className="p-2.5 rounded-lg border border-dashed border-emerald-300 bg-white/40">
+                  <span className="text-[10px] font-bold text-emerald-900 uppercase tracking-wide">Premium</span>
+                  <p className="text-sm font-bold text-emerald-900">{formatCOP(FLEXIBILIDAD_COSTO_PREMIUM)}</p>
+                  <p className="text-[10px] text-slate-600">2 usos · 2 cuotas/cambios de fecha</p>
+                </div>
+              </div>
+            )}
+
+            <p className="text-[11px] text-emerald-700 mt-2 pt-2 border-t border-emerald-200">
+              💡 Los Otros Síes <strong>NO modifican</strong> el pagaré ni la carta de instrucciones
+              originales — se anexan como documentos complementarios.
+            </p>
           </div>
         ) : (
           <div className="p-2 rounded-md bg-slate-50 border border-dashed border-slate-300 text-xs text-slate-500">
@@ -833,6 +953,30 @@ function SimuladorPrestamo({ token }: { token: string }) {
             <strong> 4 o más cuotas</strong>. Actual: {cuotasSimuladas} cuota(s).
           </div>
         )}
+
+        {/* === Resumen de cargos iniciales (siempre visible) === */}
+        <div className="p-2.5 rounded-md bg-slate-50 border border-slate-200 text-xs space-y-1">
+          <p className="font-semibold text-slate-700 mb-1">Resumen de cargos iniciales (primera cuota)</p>
+          <div className="flex items-center justify-between text-slate-600">
+            <span>• Tarifa de Uso de Plataforma <span className="text-[10px] text-slate-500">(obligatoria)</span></span>
+            <span className="font-medium">{formatCOP(TARIFA_PLATAFORMA)}</span>
+          </div>
+          <div className="flex items-center justify-between text-slate-600">
+            <span>
+              • Flexibilidad Financiera
+              {flexibilidadFinanciera && flexElegible ? (
+                <span className="text-emerald-700"> · {flexibilidadModalidad}</span>
+              ) : (
+                <span className="text-[10px] text-slate-500"> (opcional, no seleccionada)</span>
+              )}
+            </span>
+            <span className="font-medium">{formatCOP(flexCostoSeleccionado)}</span>
+          </div>
+          <div className="flex items-center justify-between pt-1 border-t border-slate-200 text-slate-800 font-semibold">
+            <span>Total cargos iniciales</span>
+            <span>{formatCOP(totalCargosIniciales)}</span>
+          </div>
+        </div>
 
         <Button type="submit"><Calculator className="w-4 h-4 mr-1" />Simular</Button>
       </form>
@@ -860,6 +1004,58 @@ function SimuladorPrestamo({ token }: { token: string }) {
             </div>
           </div>
 
+          {/* === Bloque de Cargos Iniciales (Tarifa Plataforma + Flexibilidad) === */}
+          <div className="p-3 rounded-lg bg-amber-50 border-2 border-amber-300 text-sm space-y-2">
+            <div className="flex items-center gap-2 text-amber-900">
+              <ShieldCheck className="w-4 h-4" />
+              <strong>Cargos iniciales (sumados a la primera cuota)</strong>
+            </div>
+
+            {/* Tarifa Plataforma — siempre presente */}
+            <div className="flex items-center justify-between text-amber-900 text-xs pl-6">
+              <div>
+                <span>Tarifa de Uso de Plataforma</span>
+                <span className="ml-1.5 inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wide bg-amber-700 text-white">
+                  Obligatoria
+                </span>
+              </div>
+              <span className="font-semibold">+{formatCOP(resultado.simulacion.tarifaPlataforma ?? TARIFA_PLATAFORMA)}</span>
+            </div>
+
+            {/* Flexibilidad Financiera — solo si está activada */}
+            {flexibilidadFinanciera && resultado?.simulacion?.numeroCuotas >= 4 && (
+              <div className="flex items-center justify-between text-emerald-900 text-xs pl-6">
+                <div>
+                  <span>Flexibilidad Financiera {resultado.simulacion.flexibilidadModalidad || flexibilidadModalidad}</span>
+                  <span className="ml-1.5 inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wide bg-emerald-200 text-emerald-900">
+                    {resultado.simulacion.flexibilidadUsosDisponibles ?? flexUsosSeleccionado} uso(s)
+                  </span>
+                </div>
+                <span className="font-semibold">+{formatCOP(resultado.simulacion.flexibilidadCosto ?? flexCostoSeleccionado)}</span>
+              </div>
+            )}
+
+            {/* Totales */}
+            <div className="pt-2 mt-1 border-t border-amber-300 space-y-1 text-xs">
+              <div className="flex items-center justify-between text-amber-900">
+                <span>Valor normal de la 1ra cuota</span>
+                <span>{formatCOP(resultado.simulacion.montoCuota)}</span>
+              </div>
+              <div className="flex items-center justify-between text-amber-900">
+                <span>+ Total cargos iniciales</span>
+                <span className="font-semibold">+{formatCOP(resultado.simulacion.totalCargosIniciales ?? totalCargosIniciales)}</span>
+              </div>
+              <div className="flex items-center justify-between text-amber-900 font-bold text-sm pt-1 border-t border-amber-300">
+                <span>Primera cuota con cargos</span>
+                <span>{formatCOP(resultado.simulacion.primeraCuotaConCargos ?? (resultado.simulacion.montoCuota + (resultado.simulacion.totalCargosIniciales ?? totalCargosIniciales)))}</span>
+              </div>
+              <div className="flex items-center justify-between text-amber-900 font-bold text-sm pt-1 border-t border-amber-300">
+                <span>Total a pagar con cargos</span>
+                <span>{formatCOP(resultado.simulacion.totalPagarConCargos ?? (resultado.simulacion.totalPagar + (resultado.simulacion.totalCargosIniciales ?? totalCargosIniciales)))}</span>
+              </div>
+            </div>
+          </div>
+
           {/* === Bloque de Flexibilidad Financiera en el resultado === */}
           {flexibilidadFinanciera && resultado?.simulacion?.numeroCuotas >= 4 && (
             <div className="p-3 rounded-lg bg-emerald-50 border border-emerald-200 text-sm space-y-2">
@@ -867,12 +1063,12 @@ function SimuladorPrestamo({ token }: { token: string }) {
                 <Sparkles className="w-4 h-4" />
                 <strong>Flexibilidad Financiera adquirida</strong>
                 <span className="ml-auto text-xs px-2 py-0.5 rounded-full bg-emerald-200 text-emerald-900 font-semibold">
-                  +{formatCOP(FLEXIBILIDAD_COSTO)}
+                  +{formatCOP(resultado.simulacion.flexibilidadCosto ?? flexCostoSeleccionado)}
                 </span>
               </div>
               <p className="text-xs text-emerald-800">
                 Al aprobarse tu préstamo, podrás activar el beneficio pagando{' '}
-                <strong>{formatCOP(FLEXIBILIDAD_COSTO)}</strong> adicionales. Tendrás derecho a:
+                <strong>{formatCOP(resultado.simulacion.flexibilidadCosto ?? flexCostoSeleccionado)}</strong> adicionales. Tendrás derecho a:
               </p>
               <ul className="list-disc list-inside text-xs text-emerald-800 ml-2 space-y-0.5">
                 <li>Trasladar UNA cuota al final del crédito</li>
@@ -900,13 +1096,20 @@ function SimuladorPrestamo({ token }: { token: string }) {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
-                    {resultado.cronograma.map((c: any) => (
-                      <tr key={c.numero}>
+                    {resultado.cronograma.map((c: any, idx: number) => (
+                      <tr key={c.numero} className={idx === 0 ? 'bg-amber-50' : ''}>
                         <td className="px-3 py-2 font-medium">{c.numero}</td>
                         <td className="px-3 py-2">{formatDate(c.fechaVencimiento)}</td>
                         <td className="px-3 py-2 text-right">{formatCOP(c.capital)}</td>
                         <td className="px-3 py-2 text-right">{formatCOP(c.interes)}</td>
-                        <td className="px-3 py-2 text-right font-semibold">{formatCOP(c.montoTotal)}</td>
+                        <td className="px-3 py-2 text-right font-semibold">
+                          {formatCOP(c.montoTotal)}
+                          {idx === 0 && (
+                            <span className="block text-[9px] text-amber-700 font-normal">
+                              + {formatCOP(resultado.simulacion.totalCargosIniciales ?? totalCargosIniciales)} cargos = {formatCOP(c.montoTotal + (resultado.simulacion.totalCargosIniciales ?? totalCargosIniciales))}
+                            </span>
+                          )}
+                        </td>
                       </tr>
                     ))}
                   </tbody>
