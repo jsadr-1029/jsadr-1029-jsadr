@@ -80,3 +80,46 @@ Stage Summary:
      - Registra ingresos en CAJA-USO-PLATAFORMA, CAJA-PAGARE-CARTA, CAJA-FLEXIBILIDAD-FINANCIERA
      - Ajusta totalPagar del préstamo a $862.278
      - El saldo restante será $609.433 (= $862.278 - $252.845)
+
+---
+Task ID: 13-descargar-otro-si-firmado
+Agent: Super Z (main)
+Task: Agregar opción para descargar el "Otro Sí" junto a donde están el Pagaré y la Carta de Instrucciones, en caso de que ese documento esté firmado.
+
+Work Log:
+- Localizado el componente `PrestamoDetalleModal.tsx` donde se muestran los botones "Ver Pagaré", "Ver Carta" y "Ver Pagaré + Carta (PDF único)" en la sección "Acciones rápidas".
+- Revisada la librería `src/lib/otro-si.ts` que define `generarHtmlOtroSi` y el modelo de datos.
+- Revisada la API existente `/api/prestamos/[id]/otro-si/route.ts` (GET=lista, POST=crea con HTML en response, PATCH=activa flexibilidad). No existía endpoint para obtener HTML de un Otro Sí existente.
+- Revisada la BD (Prisma) — el Otro Sí se considera firmado cuando `estado === 'FIRMADO'` (model `OtroSiCambioFecha`).
+- Creado endpoint GET `/api/prestamos/[id]/otro-si/[otroSiId]/route.ts`:
+  - Regenera el HTML del Otro Sí desde datos almacenados (codigo, tipoModificacion, modificaciones, descripcion, prestamo, cliente).
+  - Query `?descargar=1` → Content-Disposition: attachment para forzar descarga.
+  - Default → inline (abrir/imprimir como el Pagaré y la Carta).
+  - Roles: ADMIN, GESTOR, CONSULTOR.
+  - Bitácora no bloqueante del evento.
+- Modificado `PrestamoDetalleModal.tsx`:
+  - Helpers `verOtroSiFirmado(id, codigo)` (abrir/imprimir) y `descargarOtroSiFirmado(id, codigo)` (descarga forzada) usando `abrirHtmlImprimible`/`descargarArchivo` con auth JWT.
+  - `otrosSiFirmados` = lista filtrada por `estado === 'FIRMADO'`.
+  - En "Acciones rápidas" (junto a Pagaré/Carta):
+    - 1 Otro Sí firmado → 2 botones directos: "Ver Otro Sí OS-XXX" y "Descargar Otro Sí OS-XXX".
+    - >1 Otro Sí firmado → 2 DropdownMenu con un ítem por cada Otro Sí firmado.
+    - 0 firmados → no se muestra nada (cumple "en caso de que se firme ese documento").
+  - En la lista de Otros Síes (tab "Otro Sí"): cada fila FIRMADO ahora tiene botones "Ver" y "Descargar" para acceso rápido.
+- TypeScript typecheck: PASS (exit 0).
+- ESLint en ambos archivos: PASS (exit 0).
+- Commit: 2ccc97f → push origin main → Vercel auto-deploy disparado.
+
+Stage Summary:
+- ✅ Endpoint GET /api/prestamos/[id]/otro-si/[otroSiId] creado.
+- ✅ Botones "Ver Otro Sí" y "Descargar Otro Sí" agregados junto a Pagaré y Carta.
+- ✅ Solo aparecen cuando al menos un Otro Sí del préstamo está FIRMADO.
+- ✅ Si hay múltiples, usa dropdown para elegir cuál ver/descargar.
+- ✅ Acceso adicional desde la lista de Otros Síes en la pestaña "Otro Sí".
+- 📌 Esperar ~2 min a que Vercel despliegue, luego:
+  1. Recargar el admin (Ctrl+Shift+R para evitar caché).
+  2. Abrir el detalle de un préstamo que tenga al menos un Otro Sí firmado.
+  3. En la sección "Acciones rápidas" deberían aparecer los botones
+     "Ver Otro Sí OS-XXX" y "Descargar Otro Sí OS-XXX" justo después
+     de "Ver Pagaré + Carta (PDF único)".
+  4. Si el préstamo no tiene Otros Síes firmados, los botones no aparecerán
+     (eso es el comportamiento esperado: "en caso de que se firme ese documento").
