@@ -215,3 +215,67 @@ Stage Summary:
 - 📌 También desde el detalle del préstamo (botón "Ver detalle"):
   · En "Acciones rápidas" aparecen botones "Ver Otro Sí OS-001" y "Descargar Otro Sí OS-001".
   · En la pestaña "Otro Sí" se ve la lista con el OS-001 firmado y botones por fila.
+
+---
+Task ID: 14-portal-simulador-planes-tarifa
+Agent: Super Z (main)
+Task: Actualizar en el portal del cliente (simulador) los planes de flexibilidad financiera, y cargar de manera automática el cobro "Tarifa Plataforma: $4.900" de manera obligatoria para todas las simulaciones.
+
+Work Log:
+- Localizado el simulador del portal del cliente: src/components/views/portal-cliente.tsx → componente `SimuladorPrestamo` (líneas 714+).
+- Localizada las tarifas reales en el API: src/app/api/portal/simular/route.ts ya soportaba BÁSICA $15.000 (1 uso) y PREMIUM $34.900 (2 usos), pero el frontend NO las usaba — tenía una constante incorrecta FLEXIBILIDAD_COSTO=10000 y solo enviaba `flexibilidadFinanciera` (booleano) sin `flexibilidadModalidad`.
+- Confirmado el valor de Tarifa Plataforma ($4.900 COP) en src/lib/finanzas.ts (línea 354) y src/lib/bot-conocimiento-plataforma.ts.
+
+Cambios aplicados (commit 1b5367a):
+
+1. **src/app/api/portal/simular/route.ts**:
+   - Nueva constante `TARIFA_PLATAFORMA = 4900` con documentación del alcance (firma electrónica, pagaré digital, expediente seguro, trazabilidad AuditLog).
+   - Tanto el branch con categoría como el branch por defecto (sin categoría) ahora incluyen en la respuesta:
+     * `tarifaPlataforma: 4900`
+     * `tarifaPlataformaObligatoria: true`
+     * `totalCargosIniciales: TARIFA_PLATAFORMA + flexCostoCalculado`
+     * `totalPagarConCargos: totalPagar + cargosIniciales`
+     * `primeraCuotaConCargos: montoCuota + cargosIniciales`
+     * `cargosIniciales[]` — array con detalle de cada cargo (concepto, descripcion, monto, obligatorio, modalidad, usosDisponibles)
+
+2. **src/components/views/portal-cliente.tsx → SimuladorPrestamo**:
+   - Reemplazada constante incorrecta `FLEXIBILIDAD_COSTO = 10000` por `FLEXIBILIDAD_COSTO_BASICA = 15000` y `FLEXIBILIDAD_COSTO_PREMIUM = 34900`.
+   - Nuevo estado `flexibilidadModalidad: 'BASICA' | 'PREMIUM'` (default 'BASICA').
+   - Se envía `flexibilidadModalidad` al API junto con `flexibilidadFinanciera`.
+   - Nuevo bloque visual "Tarifa de Uso de Plataforma" SIEMPRE visible (no opcional), con:
+     * Icono ShieldCheck
+     * Badge "Obligatoria" en fondo slate-700
+     * Descripción: "Firma electrónica, pagaré digital, expediente seguro y trazabilidad."
+     * Badge "+$4.900"
+     * Texto: "Se cobra una sola vez al inicio del crédito (se suma a la primera cuota)."
+   - Selector visual de planes en tarjetas clicables (BÁSICA / PREMIUM) con:
+     * Plan BÁSICA: $15.000 · 1 uso · "Trasladar UNA cuota al final / O cambio de fecha"
+     * Plan PREMIUM: $34.900 · 2 usos · "2 traslados/cambios de fecha" + badge "Recomendado"
+     * Estado activo se muestra con borde emerald-500 + sombra + check ✓
+   - Nuevo "Resumen de cargos iniciales" siempre visible antes del botón Simular, con tabla:
+     * Tarifa de Uso de Plataforma (obligatoria) → $4.900
+     * Flexibilidad Financiera · {MODALIDAD} → $X (o "opcional, no seleccionada" → $0)
+     * Total cargos iniciales → $4.900 + $X
+   - En el resultado, nuevo bloque ámbar "Cargos iniciales (sumados a la primera cuota)" con:
+     * Desglose de Tarifa Plataforma (siempre) y Flexibilidad (si aplica)
+     * Subtotales: valor normal 1ra cuota + total cargos iniciales = primera cuota con cargos
+     * Total a pagar con cargos
+   - Cronograma: la primera cuota se resalta en ámbar (bg-amber-50) y debajo del total muestra "+ $X cargos = $Y" con el valor real a pagar.
+   - Bloque existente "Flexibilidad Financiera adquirida" ahora usa `resultado.simulacion.flexibilidadCosto` (del API) en vez del hardcodeado.
+
+Verificación:
+- `npx tsc --noEmit` → OK (sin errores)
+- `npx eslint` sobre los dos archivos modificados → OK (sin errores)
+- Commit 1b5367a pusheado a origin/main. Vercel auto-deploy disparado.
+
+Stage Summary:
+- ✅ Planes de Flexibilidad Financiera (BÁSICA $15.000 / PREMIUM $34.900) ahora visibles y seleccionables en el simulador del portal del cliente.
+- ✅ Tarifa de Plataforma $4.900 ahora se carga de manera OBLIGATORIA y AUTOMÁTICA en todas las simulaciones del portal (incluso si el cliente no selecciona Flexibilidad Financiera).
+- ✅ Los totales mostrados (primera cuota con cargos, total a pagar con cargos) reflejan correctamente la suma de los cargos iniciales.
+- 📌 El usuario debe esperar ~2 min para que Vercel despliegue, luego:
+  1. Iniciar sesión en el portal del cliente
+  2. Ir a la pestaña "Simular"
+  3. Verificar que aparezca siempre el bloque "Tarifa de Uso de Plataforma — $4.900 — Obligatoria"
+  4. Si la simulación tiene ≥4 cuotas, verificar que aparezcan los dos planes (Básica / Premium) seleccionables
+  5. Al simular, verificar que aparezca el bloque ámbar "Cargos iniciales" con: 1ra cuota con cargos = valor cuota + $4.900 (+ flexibilidad si aplica) y Total a pagar con cargos
+- ⚠️ Nota: Este cambio solo afecta la simulación del PORTAL DEL CLIENTE. El simulador del admin (SimuladorView.tsx) no se modificó porque el usuario pidió específicamente "portal del cliente". Si se requiere el mismo comportamiento en el admin, repetir el ejercicio.
