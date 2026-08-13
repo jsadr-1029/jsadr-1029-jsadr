@@ -47,6 +47,7 @@ import { SimuladorView } from '@/components/views/SimuladorView'
 import { DocumentosPrestamosView } from '@/components/views/DocumentosPrestamosView'
 import { DashboardPrestamos } from '@/components/views/DashboardPrestamos'
 import { BotIcons } from '@/components/views/BotIcons'
+import { OtroSiAccionesDropdown } from '@/components/views/OtroSiAccionesDropdown'
 
 interface Prestamo {
   id: string
@@ -1534,6 +1535,13 @@ ${linkFirmaCodeudor}
                         >
                           <FileText className="w-4 h-4" />
                         </Button>
+                        {/* === Otros Síes — ver / descargar Otros Síes firmados === */}
+                        {/* Dropdown con lazy-load: al abrir, hace fetch de los Otros Síes */}
+                        {/* del préstamo y habilita Ver / Descargar para los FIRMADO. */}
+                        <OtroSiAccionesDropdown
+                          prestamoId={p.id}
+                          prestamoCodigo={p.codigo}
+                        />
                         {/* Reforzado: botón para ver certificado de firma electrónica.
                             Habilitado para descarga repetida — cuantas veces el gestor lo necesite.
                             Solo se deshabilita si NO existe ninguna firma completada. */}
