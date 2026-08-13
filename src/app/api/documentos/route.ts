@@ -1316,6 +1316,14 @@ function generarSeccionFirmaElectronica(firma: any, prestamo: any, esCodeudor: b
 // `window.__certificadoFirmaScriptLoaded`) que define la función global
 // `abrirCertificadoFirma(firmaId)` usada por los botones del documento
 // imprimible para abrir el certificado de firma con auth JWT.
+//
+// FIX 2026-08-13: el documento imprimible se abre como `blob:https://jsadr.com.co/...`
+// (vía URL.createObjectURL en abrirHtmlImprimible). En el contexto de un blob URL,
+// las URLs relativas como `/api/firma/certificado?firmaId=...` NO se resuelven
+// contra el dominio del creador, sino contra la URL del blob (que no tiene path
+// válido) → el fetch falla con "Failed to parse URL from /api/firma/certificado...".
+// Solución: construir la URL absoluta usando `window.location.origin`, que en
+// blob URLs preserva el origin del creador (https://jsadr.com.co).
 function generarScriptAbrirCertificadoFirma(): string {
   return `
 <script>
@@ -1331,7 +1339,16 @@ function generarScriptAbrirCertificadoFirma(): string {
       if (token && token.indexOf('portal_cliente_') !== 0) {
         headers['Authorization'] = 'Bearer ' + token;
       }
-      var res = await fetch('/api/firma/certificado?firmaId=' + encodeURIComponent(firmaId), {
+      // Construir URL absoluta: en contexto blob URL, window.location.origin
+      // preserva el origin del creador (https://jsadr.com.co). En contexto
+      // normal, también funciona correctamente.
+      var origin = window.location.origin || '';
+      if (!origin || origin.indexOf('http') !== 0) {
+        // Fallback: usar el dominio canónico de producción
+        origin = 'https://jsadr.com.co';
+      }
+      var url = origin + '/api/firma/certificado?firmaId=' + encodeURIComponent(firmaId);
+      var res = await fetch(url, {
         method: 'GET',
         credentials: 'same-origin',
         headers: headers
