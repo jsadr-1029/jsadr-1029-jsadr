@@ -123,3 +123,38 @@ Stage Summary:
      de "Ver Pagaré + Carta (PDF único)".
   4. Si el préstamo no tiene Otros Síes firmados, los botones no aparecerán
      (eso es el comportamiento esperado: "en caso de que se firme ese documento").
+
+---
+Task ID: 14-otro-si-acciones-prestamos
+Agent: Super Z (main)
+Task: El usuario no veía la opción para descargar Otros Síes. Pidió colocar la opción adentro de "Acciones" en el módulo de Préstamos - Solicitudes.
+
+Work Log:
+- VLM analizó captura del usuario: muestra el tab "Bitácora" del detalle de un préstamo donde se ve "OTRO SÍ CREADO: OS-001" pero NO hay botón para descargarlo.
+- Diagnóstico: la opción de descarga SÍ existía dentro del modal PrestamoDetalleModal (commit 2ccc97f), pero el usuario la buscaba en la tabla principal del módulo "Préstamos - Solicitudes" → columna "Acciones".
+- Revisada la estructura: el módulo Préstamos es PrestamosView.tsx, con una tabla que tiene columna "Acciones" con iconos por fila (Ver detalle, Estado de cuenta, Certificado firma, etc.).
+- Creado nuevo componente `src/components/views/OtroSiAccionesDropdown.tsx`:
+  - Botón con icono FileSignature (color ámbar) que abre un DropdownMenu.
+  - Lazy-load: al abrir, hace fetch a GET /api/prestamos/[id]/otro-si (no carga datos hasta que el usuario abre el dropdown → no penaliza el render de la tabla).
+  - Para cada Otro Sí FIRMADO: dos botones por ítem — "Ver" (abrir HTML imprimible en nueva pestaña) y "Descargar" (fuerza descarga .html con Content-Disposition: attachment).
+  - Muestra metadata de cada Otro Sí: código (OS-XXX), tipo (Cambio de fecha / Traslado de cuota), n° de cuotas modificadas.
+  - Estados vacíos: "Sin Otros Síes generados" / "Hay N Otros Síes pero ninguno está firmado todavía".
+  - Otros Síes no firmados (PENDIENTE_FIRMA / ANULADO) se muestran como info-only al final (no descargables).
+  - Maneja su propio estado (no contamina al padre con N estados).
+- Modificado `PrestamosView.tsx`:
+  - Import de OtroSiAccionesDropdown.
+  - En la columna "Acciones" de cada fila, agregado el dropdown entre el botón de estado de cuenta (FileText) y el de certificado de firma (Shield).
+- TypeScript typecheck: PASS (exit 0).
+- ESLint en ambos archivos: PASS (exit 0).
+- Commit a1f9a7c → push origin main → Vercel auto-deploy disparado.
+
+Stage Summary:
+- ✅ Botón "Otros Síes" (icono FileSignature, ámbar) agregado en columna Acciones del módulo Préstamos.
+- ✅ Al hacer clic, muestra dropdown con lazy-load de los Otros Síes del préstamo.
+- ✅ Cada Otro Sí FIRMADO tiene botones "Ver" e "Descargar".
+- ✅ Maneja correctamente los estados vacío y pendiente de firma.
+- 📌 Esperar ~2 min a que Vercel despliegue, luego:
+  1. Recargar el admin (Ctrl+Shift+R para evitar caché).
+  2. Ir al módulo "Préstamos" → columna "Acciones" de cualquier préstamo.
+  3. Verás un nuevo botón con icono de firma (ámbar) entre el botón de estado de cuenta (morado) y el de certificado de firma (azul).
+  4. Al hacer clic se despliega el menú con los Otros Síes firmados del préstamo, cada uno con botones Ver / Descargar.
