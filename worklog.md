@@ -279,3 +279,86 @@ Stage Summary:
   4. Si la simulación tiene ≥4 cuotas, verificar que aparezcan los dos planes (Básica / Premium) seleccionables
   5. Al simular, verificar que aparezca el bloque ámbar "Cargos iniciales" con: 1ra cuota con cargos = valor cuota + $4.900 (+ flexibilidad si aplica) y Total a pagar con cargos
 - ⚠️ Nota: Este cambio solo afecta la simulación del PORTAL DEL CLIENTE. El simulador del admin (SimuladorView.tsx) no se modificó porque el usuario pidió específicamente "portal del cliente". Si se requiere el mismo comportamiento en el admin, repetir el ejercicio.
+
+---
+Task ID: 15-otro-si-firma-portal-cliente
+Agent: Super Z (main)
+Task: Los Otros Síes generados desde el admin no llegaban al portal del cliente para su firma. Se requiere que el cliente vea las solicitudes de firma del Otro Sí en su portal, con el mismo flujo de firma electrónica (foto documento + firma manuscrita + OTP + selfie) usado para el pagaré, y que quede la constancia de firma electrónica.
+
+Work Log:
+- Analizada la captura del usuario: muestra un Otro Sí OS-B01 generado para el préstamo EJEMPLO-FLEX-QVSB27, con los cuadros de firma vacíos (sin firma electrónica).
+- Revisado el flujo actual:
+  * POST /api/prestamos/[id]/otro-si crea OtroSiCambioFecha + FirmaElectronica (tipo='ACUERDO_PAGO') + TokenFirma + envía OTP por email
+  * Pero el portal del cliente NO consultaba ni mostraba estos Otros Síes → el cliente nunca veía la solicitud de firma
+  * El flujo /firma/{token} SÍ funcionaba si el cliente tenía el link, pero el link solo se enviaba por email
+  * Cuando el cliente firmaba, finalizarConSelfie / guardarFirma RE-ACTIVABAN el préstamo (estado=ACTIVO, tycAceptado=true, fechaDesembolso=now), lo cual es un BUG grave porque el préstamo ya estaba ACTIVO
+
+Cambios aplicados (commit 20654bc):
+
+1. **src/lib/otro-si.ts** (DatosOtroSi + generarHtmlOtroSi):
+   - DatosOtroSi ahora acepta `firma` (firmaId, imagenFirma, fechaFirma, ipFirma, userAgent, otpCanal, otpValidado, fotoSelfie, estadoFirma) y `linkConstancia` opcionales
+   - Cuando el Otro Sí está firmado, generarHtmlOtroSi:
+     * Incrusta la imagen de la firma manuscrita en el cuadro del Deudor
+     * Muestra fecha/hora de firma + IP + canal OTP debajo de la firma
+     * Agrega un bloque 'CONSTANCIA DE FIRMA ELECTRÓNICA' con: tabla de datos (estado, fecha, método OTP, IP, ID firma), selfie de verificación, link al certificado completo, y declaración legal
+     * Footer del documento: 'Firmado electrónicamente el DD de MMM de YYYY'
+
+2. **src/app/api/portal/otros-si-pendientes/route.ts** (NUEVO):
+   - GET con header x-portal-token devuelve los Otros Síes del cliente autenticado (PENDIENTE_FIRMA y FIRMADO, excluye ANULADO)
+   - Para cada Otro Sí retorna: id, codigo, tipoModificacion, descripcion, estado, fechaSolicitud, fechaFirma, prestamo{id,codigo,...}, firma{id,estadoFirma,otpCanal,otpEnviado,...}, tokenFirma, tokenFirmaExpira, linkFirma (URL pública /firma/{token}), linkDocumento (HTML regenerado), linkConstancia (solo si FIRMADO)
+   - pendientesCount en la respuesta para mostrar el badge en el tab
+
+3. **src/app/api/portal/otros-si-pendientes/[id]/documento/route.ts** (NUEVO):
+   - GET con header x-portal-token devuelve el HTML del Otro Sí regenerado
+   - Si estado=FIRMADO, incluye los datos de la firma (imagenFirma, fechaFirma, ipFirma, fotoSelfie, etc.) y el linkConstancia → generarHtmlOtroSi produce el documento con firma incrustada + bloque de constancia
+   - Valida que el Otro Sí pertenezca a un préstamo del cliente autenticado
+   - Soporta ?descargar=1 para forzar descarga con Content-Disposition: attachment
+
+4. **src/app/api/firma/route.ts** (finalizarConSelfie + guardarFirma):
+   - Cuando firma.tipo === 'ACUERDO_PAGO', busca el OtroSiCambioFecha vinculado por firmaId
+   - Si lo encuentra: marca estado='FIRMADO', fechaFirma=now(), registra bitácora 'OTRO SÍ FIRMADO' y RETORNA SIN tocar el préstamo (no cambia estado, tycAceptado, fechaDesembolso, fechaVencimiento)
+   - Respuesta incluye esFirmaOtroSi=true + datos del Otro Sí firmado
+   - Si no encuentra Otro Sí vinculado, cae al flujo normal (backward compatible)
+
+5. **src/app/api/firma/certificado/route.ts**:
+   - tipo='ACUERDO_PAGO' se muestra como 'Otro Sí (Acuerdo de Pago)' en el certificado (antes mostraba 'ACUERDO_PAGO' literal)
+
+6. **src/app/firma/[token]/page.tsx** (página pública de firma):
+   - Subtítulo muestra 'Otro Sí (Acuerdo de Pago)' cuando aplica
+   - Pantalla de éxito (paso 5) ahora:
+     * Título '¡Otro Sí Firmado!' en vez de '¡Firma Completada!'
+     * Mensaje explica que queda anexado sin modificar pagaré ni carta originales
+     * Oculta 'ACTIVO' y 'Desembolsado' (porque el préstamo no cambia)
+     * Muestra 'Fecha firma' en su lugar
+     * Agrega botón 'Ver certificado de firma electrónica' que abre /api/firma/certificado
+
+7. **src/components/views/portal-cliente.tsx**:
+   - Nuevo tab 'Documentos' (5 columnas en vez de 4)
+   - Badge rojo con el número de pendientes de firma (cargado al iniciar sesión)
+   - Nuevo componente DocumentosPorFirmarPanel:
+     * Banner informativo explicando qué son los Otros Síes
+     * Lista PENDIENTE_FIRMA (border ámbar) con: código, badge 'Pendiente de firma', tipo, préstamo, fecha solicitud, descripción, botones 'Ver documento' (abre HTML vía fetch+blob URL) y 'Firmar electrónicamente' (abre /firma/{token})
+     * Lista FIRMADO (border esmeralda) con: código, badge 'Firmado electrónicamente', fecha firma, botones 'Ver Otro Sí firmado' y 'Ver constancia de firma'
+     * Auto-refresh 5s después de abrir el link de firma para refrescar el estado
+   - Importa nuevos iconos: FileSignature, FileText, Clock, ExternalLink, AlertCircle
+
+Verificación:
+- `npx tsc --noEmit` → OK (sin errores)
+- `npx eslint` en los 7 archivos modificados → OK (sin errores)
+- Commit 20654bc pusheado a origin/main. Vercel auto-deploy disparado.
+
+Stage Summary:
+- ✅ El cliente ahora VE los Otros Síes pendientes de firma en el portal (tab 'Documentos' con badge rojo)
+- ✅ Al hacer clic en 'Firmar electrónicamente', se abre el mismo flujo de firma electrónica del pagaré (foto documento + firma manuscrita + OTP + selfie con cédula)
+- ✅ Al firmar, el Otro Sí cambia a FIRMADO, se incrusta la firma en el documento HTML, se muestra el bloque de constancia con todos los datos (IP, fecha, OTP, selfie) y se agrega link al certificado completo
+- ✅ El préstamo NO se modifica (no se re-activa, no se cambian fechas) — solo se actualiza el estado del Otro Sí
+- ✅ La constancia de firma electrónica existente (/api/firma/certificado) funciona para Otros Síes, mostrando el tipo como 'Otro Sí (Acuerdo de Pago)'
+- 📌 El usuario debe esperar ~2 min para que Vercel despliegue, luego:
+  1. Generar un Otro Sí desde el admin para un préstamo con flexibilidad activada
+  2. Iniciar sesión en el portal del cliente
+  3. Ver el badge rojo en el tab 'Documentos'
+  4. Abrir el tab y ver el Otro Sí pendiente
+  5. Hacer clic en 'Ver documento' para previsualizar el Otro Sí sin firma
+  6. Hacer clic en 'Firmar electrónicamente' y completar el flujo (foto doc + firma + OTP + selfie)
+  7. Al completar, la pantalla muestra '¡Otro Sí Firmado!' con link a la constancia
+  8. Volver al portal (refresco automático) y ver el Otro Sí ahora en la sección 'Documentos firmados' con botones 'Ver Otro Sí firmado' (con firma incrustada) y 'Ver constancia de firma'
