@@ -158,3 +158,60 @@ Stage Summary:
   2. Ir al módulo "Préstamos" → columna "Acciones" de cualquier préstamo.
   3. Verás un nuevo botón con icono de firma (ámbar) entre el botón de estado de cuenta (morado) y el de certificado de firma (azul).
   4. Al hacer clic se despliega el menú con los Otros Síes firmados del préstamo, cada uno con botones Ver / Descargar.
+
+---
+Task ID: 15-ejemplo-prestamo-10-cuotas-flexibilidad
+Agent: Super Z (main)
+Task: Crear un préstamo de ejemplo de 10 cuotas que cumpla la condición de número de cuotas para generar Otro Sí y poder aplicar Flexibilidad Financiera.
+
+Work Log:
+- Revisadas las condiciones: Flexibilidad Financiera se ofrece cuando el préstamo tiene >= 4 cuotas. Modalidades:
+  - BASICA: $15.000 (1 uso)
+  - PREMIUM: $34.900 (2 usos)
+- Creado script `scripts/_crear-ejemplo-prestamo-10-cuotas.ts` que:
+  - Busca el cliente Johan Alvarez (CC 1214731649) — encontrado.
+  - Reutiliza categoría CAT-2 (Categoría Estándar) y cuenta de recaudo existentes.
+  - Crea préstamo con parámetros:
+    · Monto: $2.000.000 COP
+    · Tasa: 26% anual (2.17% mensual)
+    · Plazo: 10 meses / 10 cuotas mensuales (cumple condición >= 4)
+    · Cuota fija: $224.599 (sistema francés)
+    · Total a pagar: $2.245.991
+    · Flexibilidad PREMIUM $34.900 — 2 usos disponibles
+    · Cobro Pagaré + Carta $19.900 (cargado en cuota 1)
+    · Tarifa Plataforma $4.900 (cargado en cuota 1)
+  - Marca préstamo en estado ACTIVO con T&C aceptados y firmas (PAGARE, CARTA, TYC) completadas.
+  - Crea 10 pagos en estado PENDIENTE con sus fechas de vencimiento (1 cuota por mes desde el desembolso).
+  - Crea 1 Otro Sí firmado de ejemplo:
+    · Código: OS-001
+    · Tipo: CAMBIO_FECHA
+    · Modificación: cuota #3 del 14/11/2026 → 21/11/2026 (+7 días)
+    · Estado: FIRMADO (con firma electrónica COMPLETADA, otpValidado=true)
+    · Descripción: ejercicio de Flexibilidad Financiera PREMIUM.
+  - Marca flexibilidadUsosEjercidos=1 (queda 1 uso disponible).
+  - Registra entrada en bitácora del préstamo.
+
+- Ejecutado script con éxito. Préstamo creado:
+    Código: EJEMPLO-FLEX-QVSB27
+    ID:    cmsqvsb2m0001vcxlr29e56if
+    Otro Sí OS-001 ID: cmsqvse6c000vvcxlihuqlnio
+
+- Verificación en BD (Neon):
+    · Préstamo ACTIVO, Flexibilidad PREMIUM activada, 10 cuotas creadas.
+    · 4 firmas electrónicas (PAGARE, CARTA, TYC, ACUERDO_PAGO) todas COMPLETADAS.
+    · Otro Sí OS-001 en estado FIRMADO con firma COMPLETADA.
+    · 1 uso ejercido de flexibilidad, 1 restante.
+
+Stage Summary:
+- ✅ Préstamo de ejemplo EJEMPLO-FLEX-QVSB27 creado en BD Neon.
+- ✅ Cumple condición (10 cuotas >= 4) → Flexibilidad Financiera aplicada.
+- ✅ Otro Sí OS-001 firmado, listo para probar descarga.
+- 📌 Cómo probarlo en el admin:
+  1. Ir al módulo "Préstamos".
+  2. Buscar préstamo con código "EJEMPLO-FLEX-QVSB27".
+  3. En la columna "Acciones", hacer clic en el botón ámbar (icono FileSignature).
+  4. Se despliega el dropdown con el Otro Sí OS-001 firmado.
+  5. Botones "Ver" (HTML imprimible) y "Descargar" (.html) funcionales.
+- 📌 También desde el detalle del préstamo (botón "Ver detalle"):
+  · En "Acciones rápidas" aparecen botones "Ver Otro Sí OS-001" y "Descargar Otro Sí OS-001".
+  · En la pestaña "Otro Sí" se ve la lista con el OS-001 firmado y botones por fila.
