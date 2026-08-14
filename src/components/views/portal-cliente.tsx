@@ -5,13 +5,14 @@ import { apiPost } from '@/hooks/use-fetch'
 import { Card, PageHeader, Badge, EmptyState, LoadingState } from '@/components/shared/ui'
 import { formatCOP, formatDate, formatPercent, getInitials, estadoPrestamoColor } from '@/lib/format'
 import { calcularPrestamo, generarCronograma } from '@/lib/finance'
-import { LogIn, ArrowLeft, Phone, Lock, Calculator, FileCheck, Send, KeyRound, ShieldCheck, Eye, EyeOff, QrCode, Copy, Check, Sparkles, PenTool, Eraser, FileSignature, FileText, Clock, ExternalLink, AlertCircle } from 'lucide-react'
+import { LogIn, ArrowLeft, Phone, Lock, Calculator, FileCheck, Send, KeyRound, ShieldCheck, Eye, EyeOff, QrCode, Copy, Check, Sparkles, PenTool, Eraser, FileSignature, FileText, Clock, ExternalLink, AlertCircle, Trophy, Download } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { toast } from 'sonner'
+import { PasaporteConfianzaView } from './pasaporte/PasaporteConfianzaView'
 
 type View = { name: string; id?: string }
 
@@ -166,6 +167,7 @@ function PortalHome({ session, onLogout, navigate }: { session: PortalSession; o
   const [data, setData] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [pendientesFirmaCount, setPendientesFirmaCount] = useState(0)
+  const [novedadesPasaporteCount, setNovedadesPasaporteCount] = useState(0)
 
   useEffect(() => {
     fetch(`/api/portal/prestamos?token=${session.token}`)
@@ -181,6 +183,22 @@ function PortalHome({ session, onLogout, navigate }: { session: PortalSession; o
       .then(r => r.json())
       .then(d => {
         if (d.success) setPendientesFirmaCount(d.pendientesCount || 0)
+      })
+      .catch(() => {/* no crítico */})
+
+    // === Cargar contador de novedades del Pasaporte de Confianza ===
+    fetch(`/api/portal/pasaporte?token=${session.token}`)
+      .then(r => r.json())
+      .then(d => {
+        if (d.success && d.data?.novedades) {
+          // Contar solo novedades críticas/warning para el badge
+          const count = d.data.novedades.filter((n: any) =>
+            n.tipo === 'PAGO_EXCEDIDO' ||
+            n.tipo === 'COMPROMISO_VENCIDO' ||
+            n.tipo === 'PAGO_PARCIAL'
+          ).length
+          setNovedadesPasaporteCount(count)
+        }
       })
       .catch(() => {/* no crítico */})
   }, [session.token])
@@ -206,8 +224,8 @@ function PortalHome({ session, onLogout, navigate }: { session: PortalSession; o
       </Card>
 
       <Tabs defaultValue="prestamos">
-        <TabsList className="grid w-full grid-cols-5">
-          <TabsTrigger value="prestamos">Mis Préstamos</TabsTrigger>
+        <TabsList className="grid w-full grid-cols-6">
+          <TabsTrigger value="prestamos">Préstamos</TabsTrigger>
           <TabsTrigger value="firmar">
             Documentos
             {pendientesFirmaCount > 0 && (
@@ -218,6 +236,19 @@ function PortalHome({ session, onLogout, navigate }: { session: PortalSession; o
           </TabsTrigger>
           <TabsTrigger value="pagos">Pagos / QR</TabsTrigger>
           <TabsTrigger value="simular">Simular</TabsTrigger>
+          <TabsTrigger value="pasaporte">
+            <span className="flex items-center gap-1">
+              <Trophy className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Pasaporte</span>
+              {novedadesPasaporteCount > 0 ? (
+                <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 text-white text-[10px] font-bold">
+                  {novedadesPasaporteCount}
+                </span>
+              ) : (
+                <span className="inline-flex items-center justify-center min-w-[10px] h-[10px] rounded-full bg-emerald-500" title="Trayectoria excelente" />
+              )}
+            </span>
+          </TabsTrigger>
           <TabsTrigger value="perfil">Mi Perfil</TabsTrigger>
         </TabsList>
 
@@ -245,6 +276,10 @@ function PortalHome({ session, onLogout, navigate }: { session: PortalSession; o
 
         <TabsContent value="simular">
           <SimuladorPrestamo token={session.token} />
+        </TabsContent>
+
+        <TabsContent value="pasaporte">
+          <PasaporteConfianzaView token={session.token} />
         </TabsContent>
 
         <TabsContent value="perfil">
@@ -382,6 +417,21 @@ function PrestamoCard({ prestamo, token, navigate }: any) {
   const [firmarOpen, setFirmarOpen] = useState(false)
   const progreso = prestamo.numeroCuotas > 0 ? (prestamo.cuotasPagadas / prestamo.numeroCuotas) * 100 : 0
 
+  // === Determinar si el préstamo está saldado/cancelado ===
+  const estaCancelado = prestamo.estado === 'CANCELADO'
+  const estaSaldado = prestamo.saldoTotal <= 0 && prestamo.cuotasPagadas >= prestamo.numeroCuotas
+  const puedeDescargarPazYSalvo = estaCancelado || estaSaldado
+
+  const handleDescargarPazYSalvo = () => {
+    if (!puedeDescargarPazYSalvo) {
+      toast.error('El paz y salvo solo se puede descargar para créditos completamente pagados o cancelados. Este crédito aún está vigente.')
+      return
+    }
+    // Abrir el paz y salvo en una nueva pestaña
+    const url = `/api/paz-y-salvo?prestamoId=${prestamo.id}&token=${token}&formato=html&auto=1`
+    window.open(url, '_blank')
+  }
+
   return (
     <div className="p-3 rounded-lg border border-slate-200">
       <div className="flex items-center justify-between mb-2">
@@ -409,11 +459,24 @@ function PrestamoCard({ prestamo, token, navigate }: any) {
           <div className="h-full bg-gradient-to-r from-emerald-500 to-emerald-600" style={{ width: `${progreso}%` }} />
         </div>
       </div>
-      {!prestamo.tycAceptado && (
-        <Button size="sm" className="w-full" onClick={() => setFirmarOpen(true)}>
-          <FileCheck className="w-4 h-4 mr-1" /> Firmar TyC
+
+      <div className="flex gap-2">
+        {!prestamo.tycAceptado && (
+          <Button size="sm" className="flex-1" onClick={() => setFirmarOpen(true)}>
+            <FileCheck className="w-4 h-4 mr-1" /> Firmar TyC
+          </Button>
+        )}
+        <Button
+          size="sm"
+          variant={puedeDescargarPazYSalvo ? 'default' : 'outline'}
+          className={puedeDescargarPazYSalvo ? 'flex-1 bg-amber-600 hover:bg-amber-700' : 'flex-1'}
+          onClick={handleDescargarPazYSalvo}
+          title={puedeDescargarPazYSalvo ? 'Descargar paz y salvo' : 'Crédito vigente - no disponible'}
+        >
+          <Download className="w-4 h-4 mr-1" /> Paz y Salvo
         </Button>
-      )}
+      </div>
+
       {prestamo.tycAceptado && prestamo.pagos?.length > 0 && (
         <div className="mt-2 pt-2 border-t border-slate-100">
           <p className="text-xs font-semibold text-slate-700 mb-1">Últimos pagos</p>

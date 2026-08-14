@@ -165,6 +165,9 @@ model Cliente {
   conversacionesChat ConversacionChat[]
   otpsChat        OtpChat[]
   otpRegistros    OtpRegistro[] @relation("ClienteOtpRegistro")
+  // === Pasaporte de Confianza ===
+  compromisosPago     CompromisoPago[] @relation("ClienteCompromisos")
+  pasaporteAuditoria  PasaporteAuditoria[] @relation("ClientePasaporteAuditoria")
 }
 
 // -----------------------------------------------------
@@ -419,6 +422,9 @@ model Prestamo {
   tokensFirma         TokenFirma[] @relation("PrestamoTokenFirma")
   movimientosCaja     MovimientoCaja[]
   otrosSi             OtroSiCambioFecha[]
+  // === Pasaporte de Confianza ===
+  compromisosPago     CompromisoPago[]
+  pasaporteAuditoria  PasaporteAuditoria[]
 
   @@index([fechaCancelacion])
   @@index([estado, fechaDesembolso])
@@ -2323,4 +2329,130 @@ model Plantilla {
   @@index([tipo, activa])
   @@index([categoria])
   @@index([evento])
+}
+
+// =====================================================
+// 🏆 PASAPORTE DE CONFIANZA — Modelos para la experiencia
+// premium del portal del cliente que convierte el comportamiento
+// de pago en una trayectoria visible, dinámica y motivadora.
+//
+// Concepto: "CADA PAGO CONSTRUYE TU SIGUIENTE OPORTUNIDAD."
+//
+// NO es un score crediticio. Es una trayectoria dentro de la entidad.
+// =====================================================
+
+// -----------------------------------------------------
+// CompromisoPago — Compromisos que el cliente registra
+// cuando tiene una novedad de pago (fecha excedida, pago
+// parcial, etc.). El cliente indica la razón, una fecha
+// propuesta y un valor comprometido.
+// El sistema verifica si el pago se cumple en la fecha.
+// -----------------------------------------------------
+model CompromisoPago {
+  id                  String   @id @default(cuid())
+  clienteId           String
+  cliente             Cliente  @relation("ClienteCompromisos", fields: [clienteId], references: [id])
+  prestamoId          String
+  prestamo            Prestamo @relation(fields: [prestamoId], references: [id])
+  pagoId              String?  // referencia al Pago específico (si aplica)
+  numeroCuota         Int?     // número de cuota asociada
+
+  // Razón del incumplimiento (opciones configurables + opción "otra")
+  razon               String   // SIN_DISPONIBILIDAD | INCIDENTE_TEMPORAL | ESPERANDO_INGRESO | PROBLEMA_MEDIO_PAGO | SITUACION_PERSONAL | OTRO
+  razonOtroTexto      String?  // texto libre cuando razon=OTRO
+  observacionCliente  String?  // observación adicional del cliente
+
+  // Compromiso
+  fechaComprometida   DateTime  // fecha propuesta por el cliente
+  valorComprometido   Float     // monto que el cliente se compromete a pagar
+  moneda              String   @default("COP")
+
+  // Estado del compromiso
+  estado              String   @default("REGISTRADO")
+  // REGISTRADO | PROXIMO | CUMPLIDO | INCUMPLIDO | CANCELADO
+  fechaCumplimiento   DateTime?  // cuando el sistema detecta el pago y marca CUMPLIDO
+  pagoCumplimientoId  String?    // ID del Pago que cumplió el compromiso
+  diasRetrasoCumplimiento Int?   // días de retraso vs la fecha comprometida (si se cumplió tarde)
+
+  // Si el cliente incumple y registra una nueva situación
+  actualizaciones     String?  // JSON array con historial de actualizaciones [{fecha, razon, valor, observacion}]
+  ultimaActualizacion DateTime?
+
+  // Auditoría
+  ipOrigen            String?
+  userAgent           String?
+  registradoEn        DateTime @default(now())
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@index([clienteId, estado])
+  @@index([prestamoId])
+  @@index([estado, fechaComprometida])
+}
+
+// -----------------------------------------------------
+// PasaporteConfig — Reglas configurables por el administrador
+// para el cálculo del nivel de trayectoria y la elegibilidad
+// de renovación. Se almacena como una sola fila (clave='PASAPORTE_CONFIG_GLOBAL').
+// -----------------------------------------------------
+model PasaporteConfig {
+  id                  String   @id @default(cuid())
+  clave               String   @unique  // "PASAPORTE_CONFIG_GLOBAL"
+  activo              Boolean  @default(true)
+
+  // === Umbrales de niveles (porcentaje de cumplimiento histórico) ===
+  // Ordenados de menor a mayor: EN_CONSTRUCCION < CONFIABLE < DESTACADO < PREFERENTE
+  nivelEnConstruccionMax Float  @default(60.0)  // 0% - 60% → EN_CONSTRUCCION
+  nivelConfiableMax      Float  @default(75.0)  // 60% - 75% → CONFIABLE
+  nivelDestacadoMax      Float  @default(90.0)  // 75% - 90% → DESTACADO
+  // > 90% → PREFERENTE
+
+  // === Criterios de elegibilidad para renovación ===
+  // El cliente puede explorar renovación si cumple TODOS estos criterios:
+  renovacionCumplimientoMinimo  Float   @default(75.0)  // % mínimo de cumplimiento histórico
+  renovacionCreditosMinimos     Int     @default(1)     // créditos completados mínimos
+  renovacionCompromisoCumplimiento Float @default(70.0) // % mínimo de cumplimiento de compromisos
+  renovacionProximidadFinalMeses Int    @default(2)     // meses máximos para considerar "próximo a finalizar"
+
+  // === Configuración de novedades ===
+  novedadDiasAntesVencimiento   Int     @default(3)   // días antes del vencimiento para alertar "próximo"
+  novedadDiasDespuesExcedido    Int     @default(1)   // días después del vencimiento para alertar "excedido"
+
+  // === Mensajes personalizables ===
+  mensajeEnConstruccion  String?  // mensaje para nivel EN_CONSTRUCCION
+  mensajeConfiable       String?
+  mensajeDestacado       String?
+  mensajePreferente      String?
+
+  // Metadata
+  actualizadoPor         String?
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+}
+
+// -----------------------------------------------------
+// PasaporteAuditoria — Registro inmutable de acciones
+// importantes del Pasaporte de Confianza.
+// Quién / cuándo / qué crédito / qué acción / valor / estado.
+// -----------------------------------------------------
+model PasaporteAuditoria {
+  id                  String   @id @default(cuid())
+  clienteId           String
+  cliente             Cliente  @relation("ClientePasaporteAuditoria", fields: [clienteId], references: [id])
+  prestamoId          String?
+  prestamo            Prestamo? @relation(fields: [prestamoId], references: [id])
+  compromisoId        String?  // referencia al CompromisoPago si aplica
+  tipoAccion          String   // CONSULTA_PASAPORTE | COMPROMISO_REGISTRADO | COMPROMISO_ACTUALIZADO | COMPROMISO_CUMPLIDO | COMPROMISO_INCUMPLIDO | SIMULACION_RENOVACION | NOVEDAD_DETECTADA | NOVEDAD_INFORMADA
+  descripcion         String
+  valor               Float?
+  fechaComprometida   DateTime?
+  estado              String?
+  // Metadata
+  ipOrigen            String?
+  userAgent           String?
+  fecha               DateTime @default(now())
+
+  @@index([clienteId, fecha])
+  @@index([tipoAccion])
+  @@index([prestamoId])
 }
