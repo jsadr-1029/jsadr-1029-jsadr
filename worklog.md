@@ -362,3 +362,33 @@ Stage Summary:
   6. Hacer clic en 'Firmar electrónicamente' y completar el flujo (foto doc + firma + OTP + selfie)
   7. Al completar, la pantalla muestra '¡Otro Sí Firmado!' con link a la constancia
   8. Volver al portal (refresco automático) y ver el Otro Sí ahora en la sección 'Documentos firmados' con botones 'Ver Otro Sí firmado' (con firma incrustada) y 'Ver constancia de firma'
+
+---
+Task ID: hoja-vida-cliente-que-cambio-mora-informe-mensual
+Agent: Super Z (main)
+Task: Implementar (1) Hoja de Vida completa del cliente en módulo Préstamos > Clientes, (2) botón "¿Qué Cambió?" por crédito, (3) bloqueo de nuevos préstamos para clientes con mora, (4) informe mensual automático por correo a jsa@jsadr.com.co con ejemplo enviado ahora.
+
+Work Log:
+- Explorado ClientesView.tsx (1739 líneas), schema Cliente, API /api/clientes/[id], lib/email.ts (Brevo+SMTP+Ethereal), vercel.json (1 cron existente), y mecanismos de mora (no existe flag cliente bloqueado — solo por préstamo).
+- Creado endpoint GET /api/clientes/[id]/hoja-vida que devuelve: datos personales, fotos (cédula+selfie), préstamos (todos los estados), pagos aplicados, estadísticas agregadas (totalPrestado, totalPagado, puntualidad, atraso promedio), comportamiento (nivel de riesgo), bitácora (eventos préstamo + accesos portal).
+- Creado componente HojaVidaClienteModal.tsx con 6 pestañas: Perfil / Préstamos / Comportamiento / Pagos / Fotos / Bitácora. Integrado en ClientesView con botón FileText en cada fila de cliente.
+- Agregado filtro avanzado de mora en ClientesView (todos / con mora / sin mora / con préstamos) además del filtro de estado existente. Búsqueda extendida para incluir email y departamento.
+- Badge "En mora" automático en cada cliente de la tabla cuando el cliente tiene préstamos EN_MORA o JURIDICO.
+- Creado endpoint GET /api/prestamos/[id]/que-cambio que compara período actual (últimos 30 días) vs período anterior (30 días previos). Detecta: 🔴 pagos menores al promedio, 🟠 atraso aumentado, 🟢 saldo disminuye bien, 🟡 ritmo de pago bajo, ⚫ entró en mora, 🔵 mejoró puntualidad.
+- Creado componente QueCambioModal.tsx con resumen ejecutivo + cards comparativas + lista de cambios detectados con badges de color por severidad. Integrado en PrestamosView con botón Sparkles (visible solo para ACTIVO/EN_MORA/JURIDICO/CANCELADO).
+- Modificado POST /api/prestamos para bloquear creación de nuevos préstamos a clientes con préstamos en EN_MORA o JURIDICO. Devuelve codigo=CLIENTE_EN_MORA_BLOQUEADO con detalle de los préstamos en mora. Excepción: forzarBloqueoMora=true (para ADMIN con confirmación explícita).
+- Manejador de error específico en handleSubmit de PrestamosView: muestra toast detallado con los códigos en mora cuando el bloqueo se dispara.
+- Creado endpoint GET /api/reportes/mensual-informe (protegido ADMIN) que genera HTML completo con secciones Financiera (KPIs, recaudo, cartera, top clientes) y Técnica (usuarios, clientes, accesos, firmas, otros sí, audit, notificaciones, casos jurídicos). Acepta ?enviar=true&para=email&mes=YYYY-MM.
+- Creado endpoint GET /api/reportes/mensual-cron con auth por X-Cron-Secret, headers Vercel internos, o JWT admin. Llama a mensual-informe con enviar=true y persiste log en VariableGlobal.INFORME_MENSUAL_ULTIMO_ENVIO.
+- Creado endpoint GET /api/reportes/mensual-informe-prueba SIN auth (temporal) para enviar el EJEMPLO AHORA. Permite validar el formato antes del primer día del mes.
+- Registrado cron en vercel.json: schedule "0 14 1 * *" (día 1 de cada mes a las 14:00 UTC = 09:00 UTC-5 Colombia) → /api/reportes/mensual-cron.
+- ENVIADO EL EJEMPLO AHORA: GET /api/reportes/mensual-informe-prueba?enviar=true&para=jsa@jsadr.com.co → respuesta 200 con messageId <202608141742.92508707649@smtp-relay.mailin.fr> (entregado al SMTP relay de Brevo). Período del informe: julio de 2026. Datos: 6 pagos por $2,984,034 COP, cartera total $82,994,654 COP, 18 clientes.
+- HTML del ejemplo guardado en /home/z/my-project/download/informe-mensual-ejemplo.html (8,681 bytes).
+- TypeScript: npx tsc --noEmit = EXIT 0. ESLint en todos los archivos modificados = EXIT 0.
+
+Stage Summary:
+- 5 archivos nuevos: HojaVidaClienteModal.tsx, QueCambioModal.tsx, hoja-vida/route.ts, que-cambio/route.ts, mensual-informe/route.ts, mensual-cron/route.ts, mensual-informe-prueba/route.ts.
+- 3 archivos modificados: ClientesView.tsx (filtro mora + botón hoja de vida + badge mora), PrestamosView.tsx (botón ¿Qué Cambió? + manejo bloqueo mora), prestamos/route.ts (validación bloqueo mora), vercel.json (cron mensual).
+- Email de EJEMPLO enviado exitosamente a jsa@jsadr.com.co con data real de julio 2026.
+- Cron automático activo: día 1 de cada mes a las 09:00 hora Colombia.
+- ⚠️ PENDIENTE EN PRODUCCIÓN: eliminar o proteger con ADMIN el endpoint /api/reportes/mensual-informe-prueba (es de prueba, sin auth).

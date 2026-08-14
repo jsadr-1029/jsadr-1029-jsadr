@@ -48,8 +48,10 @@ import {
   Landmark,
   Percent,
   AlertCircle,
+  FileText,
 } from 'lucide-react'
 import { SolicitudesPendientesPanel } from './SolicitudesPendientesPanel'
+import { HojaVidaClienteModal } from './HojaVidaClienteModal'
 
 interface ReferidorInfo {
   id: string
@@ -193,12 +195,19 @@ export function ClientesView({ onChanged }: { onChanged: () => void }) {
   const [loading, setLoading] = useState(true)
   const [busqueda, setBusqueda] = useState('')
   const [filtroActivo, setFiltroActivo] = useState<'todos' | 'activos' | 'inactivos'>('todos')
+  // === Filtro adicional: clientes con mora activa o con préstamos activos ===
+  const [filtroMora, setFiltroMora] = useState<'todos' | 'conMora' | 'sinMora' | 'conPrestamos'>('todos')
   const [modalAbierto, setModalAbierto] = useState(false)
   const [modalDetalle, setModalDetalle] = useState(false)
+  // === Modal Hoja de Vida completo del cliente ===
+  const [modalHojaVida, setModalHojaVida] = useState(false)
+  const [clienteHojaVidaId, setClienteHojaVidaId] = useState<string | null>(null)
   const [editandoId, setEditandoId] = useState<string | null>(null)
   const [clienteDetalle, setClienteDetalle] = useState<Cliente | null>(null)
   const [form, setForm] = useState<FormData>(VACIO)
   const [guardando, setGuardando] = useState(false)
+  // === Estados de mora por cliente (cargados al cargar la lista) ===
+  const [clientesConMora, setClientesConMora] = useState<Set<string>>(new Set())
   const { toast } = useToast()
 
   useEffect(() => {
@@ -213,6 +222,31 @@ export function ClientesView({ onChanged }: { onChanged: () => void }) {
       const res = await fetch('/api/clientes')
       const json = await res.json()
       if (json.success) setClientes(json.data)
+      // === Cargar IDs de clientes con mora activa (EN_MORA o JURIDICO) ===
+      // Consultamos /api/prestamos con filtro estado=EN_MORA y estado=JURIDICO
+      // para construir un Set de clienteIds con mora. Esto permite mostrar
+      // el badge "En mora" en la tabla de clientes y filtrar por mora activa.
+      try {
+        const [resMora, resJuridico] = await Promise.all([
+          fetch('/api/prestamos?estado=EN_MORA'),
+          fetch('/api/prestamos?estado=JURIDICO'),
+        ])
+        const [jsonMora, jsonJuridico] = await Promise.all([resMora.json(), resJuridico.json()])
+        const setMora = new Set<string>()
+        if (jsonMora.success) {
+          for (const p of jsonMora.data || []) {
+            if (p.clienteId) setMora.add(p.clienteId)
+          }
+        }
+        if (jsonJuridico.success) {
+          for (const p of jsonJuridico.data || []) {
+            if (p.clienteId) setMora.add(p.clienteId)
+          }
+        }
+        setClientesConMora(setMora)
+      } catch (e) {
+        console.error('Error cargando mora de clientes:', e)
+      }
     } catch (e) {
       console.error(e)
     } finally {
@@ -247,15 +281,25 @@ export function ClientesView({ onChanged }: { onChanged: () => void }) {
         c.nombre.toLowerCase().includes(q) ||
         c.cedula.includes(q) ||
         c.telefono.includes(q) ||
+        (c.email || '').toLowerCase().includes(q) ||
         (c.municipio || '').toLowerCase().includes(q) ||
+        (c.departamento || '').toLowerCase().includes(q) ||
         (c.referidoPor?.nombre || '').toLowerCase().includes(q)
       const matchEstado =
         filtroActivo === 'todos' ||
         (filtroActivo === 'activos' && c.activo) ||
         (filtroActivo === 'inactivos' && !c.activo)
-      return matchBusqueda && matchEstado
+      // === Filtro de mora ===
+      const enMora = clientesConMora.has(c.id)
+      const tienePrestamos = (c._count?.prestamos || 0) > 0
+      const matchMora =
+        filtroMora === 'todos' ||
+        (filtroMora === 'conMora' && enMora) ||
+        (filtroMora === 'sinMora' && !enMora) ||
+        (filtroMora === 'conPrestamos' && tienePrestamos)
+      return matchBusqueda && matchEstado && matchMora
     })
-  }, [clientes, busqueda, filtroActivo])
+  }, [clientes, busqueda, filtroActivo, filtroMora, clientesConMora])
 
   // Clientes disponibles como referidores (todos menos el que se está editando)
   const referidoresDisponibles = useMemo(() => {
@@ -512,7 +556,7 @@ export function ClientesView({ onChanged }: { onChanged: () => void }) {
         <div className="relative flex-1 max-w-md">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <Input
-            placeholder="Buscar por nombre, cédula, teléfono, municipio o referidor..."
+            placeholder="Buscar por nombre, cédula, teléfono, email, municipio, departamento o referidor..."
             value={busqueda}
             onChange={(e) => setBusqueda(e.target.value)}
             className="pl-9"
@@ -522,13 +566,28 @@ export function ClientesView({ onChanged }: { onChanged: () => void }) {
           value={filtroActivo}
           onValueChange={(v: any) => setFiltroActivo(v)}
         >
-          <SelectTrigger className="w-full sm:w-48">
-            <SelectValue placeholder="Estado" />
+          <SelectTrigger className="w-full sm:w-44">
+            <SelectValue placeholder="Estado cliente" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="todos">Todos</SelectItem>
+            <SelectItem value="todos">Todos los estados</SelectItem>
             <SelectItem value="activos">Solo activos</SelectItem>
             <SelectItem value="inactivos">Solo inactivos</SelectItem>
+          </SelectContent>
+        </Select>
+        {/* === Filtro avanzado de mora / actividad crediticia === */}
+        <Select
+          value={filtroMora}
+          onValueChange={(v: any) => setFiltroMora(v)}
+        >
+          <SelectTrigger className="w-full sm:w-52">
+            <SelectValue placeholder="Mora / Créditos" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="todos">Todos los clientes</SelectItem>
+            <SelectItem value="conMora">🚫 Con mora activa</SelectItem>
+            <SelectItem value="sinMora">✅ Sin mora</SelectItem>
+            <SelectItem value="conPrestamos">Con préstamos</SelectItem>
           </SelectContent>
         </Select>
       </div>
@@ -571,7 +630,14 @@ export function ClientesView({ onChanged }: { onChanged: () => void }) {
                     onClick={() => abrirModalDetalle(c)}
                   >
                     <TableCell>
-                      <div className="font-semibold">{c.nombre}</div>
+                      <div className="font-semibold flex items-center gap-2">
+                        {c.nombre}
+                        {clientesConMora.has(c.id) && (
+                          <Badge variant="destructive" className="text-[10px]" title="Cliente con mora activa">
+                            <AlertCircle className="w-3 h-3 mr-1" /> En mora
+                          </Badge>
+                        )}
+                      </div>
                       {c.email && (
                         <div className="text-xs text-muted-foreground flex items-center gap-1">
                           <Mail className="w-3 h-3" /> {c.email}
@@ -645,6 +711,21 @@ export function ClientesView({ onChanged }: { onChanged: () => void }) {
                     </TableCell>
                     <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
                       <div className="flex justify-end gap-1">
+                        {/* === Hoja de Vida del Cliente — botón destacado === */}
+                        {/* Abre un modal completo con perfil, préstamos, pagos, */}
+                        {/* comportamiento, fotos y bitácora del cliente. */}
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="text-blue-600 hover:text-blue-700"
+                          onClick={() => {
+                            setClienteHojaVidaId(c.id)
+                            setModalHojaVida(true)
+                          }}
+                          title="Ver Hoja de Vida completa del cliente"
+                        >
+                          <FileText className="w-4 h-4" />
+                        </Button>
                         <Button
                           size="sm"
                           variant="ghost"
@@ -1534,6 +1615,17 @@ export function ClientesView({ onChanged }: { onChanged: () => void }) {
           )}
         </DialogContent>
       </Dialog>
+
+      {/* === Hoja de Vida del Cliente (modal completo) === */}
+      {/* Modal con pestañas: Perfil / Préstamos / Comportamiento / Pagos / Fotos / Bitácora */}
+      <HojaVidaClienteModal
+        clienteId={clienteHojaVidaId}
+        open={modalHojaVida}
+        onClose={() => {
+          setModalHojaVida(false)
+          setClienteHojaVidaId(null)
+        }}
+      />
     </div>
   )
 }

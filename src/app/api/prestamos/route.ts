@@ -243,6 +243,43 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, error: 'Cliente no encontrado' }, { status: 404 })
     }
 
+    // === BLOQUEO DE NUEVOS PRÉSTAMOS PARA CLIENTES CON MORA ACTIVA ===
+    // Si el cliente tiene al menos un préstamo en estado EN_MORA o JURIDICO,
+    // NO se permite crear un nuevo préstamo. El gestor debe primero resolver
+    // la mora (renegociar, pagar, etc.) antes de otorgar nuevo crédito.
+    //
+    // Excepción: si `forzarBloqueoMora === true` en el body, se omite el bloqueo.
+    // Esto permite al ADMIN crear el préstamo con confirmación explícita del riesgo.
+    const forzarBloqueoMora = body.forzarBloqueoMora === true
+    const prestamosEnMora = await db.prestamo.findMany({
+      where: {
+        clienteId,
+        estado: { in: ['EN_MORA', 'JURIDICO'] },
+      },
+      select: {
+        id: true,
+        codigo: true,
+        estado: true,
+        diasMora: true,
+        saldoTotal: true,
+        montoMora: true,
+      },
+    })
+    if (prestamosEnMora.length > 0 && !forzarBloqueoMora) {
+      const detalle = prestamosEnMora
+        .map((p) => `${p.codigo} (${p.estado}, ${p.diasMora} días mora, saldo ${p.saldoTotal.toLocaleString('es-CO')} COP)`)
+        .join('; ')
+      return NextResponse.json(
+        {
+          success: false,
+          error: `Cliente bloqueado para nuevos préstamos: tiene ${prestamosEnMora.length} crédito(s) en mora o jurídico. Debe resolver la mora antes de crear un nuevo préstamo. Detalle: ${detalle}`,
+          codigo: 'CLIENTE_EN_MORA_BLOQUEADO',
+          prestamosEnMora,
+        },
+        { status: 400 }
+      )
+    }
+
     // === v4.6 (QA M03 TC-PRE-003): validacion global de monto minimo ===
     // Minimo absoluto del sistema: 50,000 COP. Aplica siempre, incluso si el cliente
     // no tiene categoria asignada. Previere prestamos administrativamente inviables.

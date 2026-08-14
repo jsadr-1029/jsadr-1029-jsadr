@@ -48,6 +48,7 @@ import { DocumentosPrestamosView } from '@/components/views/DocumentosPrestamosV
 import { DashboardPrestamos } from '@/components/views/DashboardPrestamos'
 import { BotIcons } from '@/components/views/BotIcons'
 import { OtroSiAccionesDropdown } from '@/components/views/OtroSiAccionesDropdown'
+import { QueCambioModal } from '@/components/views/QueCambioModal'
 
 interface Prestamo {
   id: string
@@ -275,6 +276,10 @@ function PrestamosPanel({
   const [busqueda, setBusqueda] = useState('')
   const [filtroEstado, setFiltroEstado] = useState<string>('all')
   const [modalAbierto, setModalAbierto] = useState(false)
+  // === Modal "¿Qué Cambió?" — análisis de comportamiento de pagos ===
+  const [modalQueCambio, setModalQueCambio] = useState(false)
+  const [prestamoQueCambioId, setPrestamoQueCambioId] = useState<string | null>(null)
+  const [prestamoQueCambioCodigo, setPrestamoQueCambioCodigo] = useState<string>('')
   const { toast } = useToast()
 
   // === Tick para refresco dinámico del CONTEO DE VIGENCIA ===
@@ -1395,7 +1400,23 @@ ${linkFirmaCodeudor}
           }, 400)
         }
       } else {
-        toast({ title: 'Error', description: json.error, variant: 'destructive' })
+        // === Manejo específico del bloqueo por mora ===
+        // Si el cliente tiene créditos en mora, la API devuelve codigo=CLIENTE_EN_MORA_BLOQUEADO
+        // y el detalle de los préstamos en mora. Mostramos un toast detallado y permitimos
+        // al admin decidir si forzar la creación con confirmación explícita.
+        if (json.codigo === 'CLIENTE_EN_MORA_BLOQUEADO' && json.prestamosEnMora?.length > 0) {
+          const detalleMora = json.prestamosEnMora.map((p: any) =>
+            `• ${p.codigo} (${p.estado}, ${p.diasMora} días mora, saldo ${formatearMoneda(p.saldoTotal)})`
+          ).join('\n')
+          toast({
+            title: '🚫 Cliente bloqueado por mora',
+            description: `El cliente tiene ${json.prestamosEnMora.length} crédito(s) en mora.\n${detalleMora}\n\nResuelva la mora antes de crear un nuevo préstamo.`,
+            variant: 'destructive',
+            duration: 12000,
+          })
+        } else {
+          toast({ title: 'Error', description: json.error, variant: 'destructive' })
+        }
       }
     } catch (e: any) {
       toast({ title: 'Error', description: e.message, variant: 'destructive' })
@@ -1780,6 +1801,25 @@ ${linkFirmaCodeudor}
                         >
                           <Shield className="w-4 h-4" />
                         </Button>
+                        {/* === ¿QUÉ CAMBIÓ? — Análisis de comportamiento de pagos === */}
+                        {/* Solo se muestra para préstamos con pagos (ACTIVO/EN_MORA/JURIDICO/CANCELADO). */}
+                        {/* Compara el comportamiento actual vs anterior y muestra los */}
+                        {/* cambios detectados: pagos menores, atrasos, ritmo de pago, etc. */}
+                        {['ACTIVO', 'EN_MORA', 'JURIDICO', 'CANCELADO'].includes(p.estado) && (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="text-purple-600 hover:text-purple-700"
+                            onClick={() => {
+                              setPrestamoQueCambioId(p.id)
+                              setPrestamoQueCambioCodigo(p.codigo)
+                              setModalQueCambio(true)
+                            }}
+                            title="¿Qué cambió? — Analiza el comportamiento actual vs. anterior del crédito"
+                          >
+                            <Sparkles className="w-4 h-4" />
+                          </Button>
+                        )}
                         {p.estado === 'SOLICITUD' && (
                           <>
                             <Button
@@ -3754,6 +3794,18 @@ ${linkFirmaCodeudor}
           </form>
         </DialogContent>
       </Dialog>
+
+      {/* === Modal "¿QUÉ CAMBIÓ?" — Análisis de comportamiento de pagos === */}
+      {/* Muestra los cambios detectados comparando los últimos 30 días vs. los 30 días anteriores. */}
+      <QueCambioModal
+        prestamoId={prestamoQueCambioId}
+        prestamoCodigo={prestamoQueCambioCodigo}
+        open={modalQueCambio}
+        onClose={() => {
+          setModalQueCambio(false)
+          setPrestamoQueCambioId(null)
+        }}
+      />
     </div>
   )
 }
