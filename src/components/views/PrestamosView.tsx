@@ -45,6 +45,7 @@ import { BuzonSolicitudesView } from '@/components/views/BuzonSolicitudesView'
 import { PlanClienteView } from '@/components/views/PlanClienteView'
 import { SimuladorView } from '@/components/views/SimuladorView'
 import { DocumentosPrestamosView } from '@/components/views/DocumentosPrestamosView'
+import { LineaTiempoView } from '@/components/views/LineaTiempoView'
 import { DashboardPrestamos } from '@/components/views/DashboardPrestamos'
 import { BotIcons } from '@/components/views/BotIcons'
 import { OtroSiAccionesDropdown } from '@/components/views/OtroSiAccionesDropdown'
@@ -3887,7 +3888,7 @@ export function PrestamosView({
         {/* === FIX MOBILE (2026-08-05): Antes era grid-cols-2 que mostraba 9 pestañas
             en 5 filas en la mitad de la pantalla del móvil, bloqueando la navegación.
             Ahora es un TabsList horizontal con scroll suave en móvil, y grid en desktop. === */}
-        <TabsList className="flex overflow-x-auto whitespace-nowrap md:grid md:grid-cols-4 lg:grid-cols-9 w-full gap-1 md:gap-0 no-scrollbar">
+        <TabsList className="flex overflow-x-auto whitespace-nowrap md:grid md:grid-cols-4 lg:grid-cols-10 w-full gap-1 md:gap-0 no-scrollbar">
           <TabsTrigger value="solicitudes" className="flex-1 md:flex-initial">Solicitudes</TabsTrigger>
           <TabsTrigger value="clientes" className="flex-1 md:flex-initial">Clientes</TabsTrigger>
           <TabsTrigger value="simulador" className="flex-1 md:flex-initial">Simulador</TabsTrigger>
@@ -3897,6 +3898,7 @@ export function PrestamosView({
           <TabsTrigger value="documentos" className="flex-1 md:flex-initial">Documentos</TabsTrigger>
           <TabsTrigger value="buzon" className="flex-1 md:flex-initial">Buzón Web</TabsTrigger>
           <TabsTrigger value="plan-cliente" className="flex-1 md:flex-initial">Plan Cliente</TabsTrigger>
+          <TabsTrigger value="linea-tiempo" className="flex-1 md:flex-initial" title="Línea de Tiempo 360°">🕰️ Línea de Tiempo</TabsTrigger>
         </TabsList>
 
         <TabsContent value="solicitudes" className="mt-6">
@@ -3938,6 +3940,10 @@ export function PrestamosView({
 
         <TabsContent value="plan-cliente" className="mt-6">
           <PlanClienteView />
+        </TabsContent>
+
+        <TabsContent value="linea-tiempo" className="mt-6">
+          <LineaTiempoView />
         </TabsContent>
       </Tabs>
     </div>

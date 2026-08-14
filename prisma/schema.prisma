@@ -387,16 +387,69 @@ model Prestamo {
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
 
+  // === Línea de Tiempo 360° ===
+  // fechaCancelacion: timestamp real en que el préstamo pasó a CANCELADO.
+  // Antes se usaba updatedAt como aproximación, lo cual era poco confiable porque
+  // cualquier modificación posterior (notas, etc.) movía updatedAt hacia adelante.
+  // Para créditos cancelados antes de la creación de este campo, el backfill lo
+  // deriva de: AuditLog.detalles.estado=CANCELADO, RenovacionPrestamo.fechaCancelacionAnterior,
+  // o como último recurso el propio updatedAt.
+  fechaCancelacion    DateTime?
+
   pagos               Pago[]
   pagosProgramados    PagoProgramado[]
   refinanciaciones    Refinanciacion[]
   casoJuridico        CasoJuridico?
   notificaciones      NotificacionLog[]
-  documentos      DocumentoGestor[] @relation("DocumentosPrestamo")
+  documentos          DocumentoGestor[] @relation("DocumentosPrestamo")
   firmas              FirmaElectronica[]
   tokensFirma         TokenFirma[] @relation("PrestamoTokenFirma")
   movimientosCaja     MovimientoCaja[]
   otrosSi             OtroSiCambioFecha[]
+
+  @@index([fechaCancelacion])
+  @@index([estado, fechaDesembolso])
+}
+
+// -----------------------------------------------------
+// 🕰️ FOTOGRAFÍA HISTÓRICA — Snapshot inmutable de cartera
+// -----------------------------------------------------
+// Generado por la Línea de Tiempo 360° cuando el usuario pulsa "Guardar Fotografía".
+// Captura el estado reconstruido de la cartera en una fecha determinada.
+// Es INMUTABLE: nunca se modifica una vez creado.
+// -----------------------------------------------------
+model FotografiaCartera {
+  id                  String   @id @default(cuid())
+  uuid                String   @unique @default(cuid())
+  fechaCorte          DateTime                  // fecha histórica reconstruida
+  fechaGeneracion     DateTime @default(now())  // cuándo se generó el snapshot
+  usuarioId           String?
+  usuarioNombre       String?
+  nombre              String                    // etiqueta amigable
+  descripcion         String?
+
+  // Métricas clave (inmutables)
+  totalPrestamos      Int      @default(0)
+  creditosActivos     Int      @default(0)
+  creditosDentroPlazo Int      @default(0)
+  creditosPlazoCumplido Int    @default(0)
+  creditosExcedidos   Int      @default(0)
+  creditosCancelados  Int      @default(0)
+  creditosEnMora      Int      @default(0)
+  creditosJuridico    Int      @default(0)
+  carteraPendiente    Float    @default(0)
+  carteraActiva       Float    @default(0)
+  carteraMora         Float    @default(0)
+  capitalPrestado     Float    @default(0)
+  dineroRecuperado    Float    @default(0)
+
+  // Detalle completo en JSON (lista de créditos con estado/saldo en la fecha)
+  detalleJSON         String?
+
+  createdAt           DateTime @default(now())
+
+  @@index([fechaCorte])
+  @@index([createdAt])
 }
 
 // -----------------------------------------------------
