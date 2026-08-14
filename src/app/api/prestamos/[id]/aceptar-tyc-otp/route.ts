@@ -17,6 +17,7 @@ import { requireRole } from '@/lib/auth-guard'
 //   • Días causados (corte)      → CAJA-INGRESOS-CAUSADOS
 //   • Pagaré + Carta             → CAJA-PAGARE-CARTA
 //   • Tarifa de Uso de Plataforma → CAJA-USO-PLATAFORMA
+//   • Renovación Anticipada      → CAJA-RENOVACIONES
 // Solo registra los ingresos que apliquen al préstamo y que no se hayan
 // registrado antes (idempotente vía tarifaPlataformaCargada / flag en
 // la descripción del movimiento).
@@ -37,13 +38,15 @@ async function registrarIngresosCajasPorActivacion(prestamoId: string) {
       cobroTarifaPlataforma: true,
       valorTarifaPlataforma: true,
       tarifaPlataformaCargada: true,
+      renovacionAnticipada: true,
+      renovacionAnticipadaCosto: true,
       cliente: { select: { nombre: true } },
     },
   })
   if (!prestamo) return null
 
-  // Buscar las 4 cajas (deben existir — creadas por scripts/_seed-cajas-tarea-u.cjs)
-  const codigosCajas = ['CAJA-FLEXIBILIDAD', 'CAJA-INGRESOS-CAUSADOS', 'CAJA-PAGARE-CARTA', 'CAJA-USO-PLATAFORMA']
+  // Buscar las 5 cajas (deben existir — creadas por scripts/_seed-cajas-tarea-u.cjs y _seed-caja-renovaciones.cjs)
+  const codigosCajas = ['CAJA-FLEXIBILIDAD', 'CAJA-INGRESOS-CAUSADOS', 'CAJA-PAGARE-CARTA', 'CAJA-USO-PLATAFORMA', 'CAJA-RENOVACIONES']
   const cajas = await db.cajaMenor.findMany({ where: { codigo: { in: codigosCajas } } })
   const cajaPorCodigo: Record<string, string> = {}
   for (const c of cajas) cajaPorCodigo[c.codigo] = c.id
@@ -86,6 +89,20 @@ async function registrarIngresosCajasPorActivacion(prestamoId: string) {
       cajaCodigo: 'CAJA-USO-PLATAFORMA',
       monto: prestamo.valorTarifaPlataforma,
       concepto: `Tarifa de Uso de Plataforma — Préstamo ${prestamo.codigo}`,
+      referencia: prestamo.codigo,
+    })
+  }
+
+  // 5) Renovación Anticipada (beneficio opcional del simulador del portal)
+  // Cobro único de $9.900 COP cuando el cliente activa este beneficio.
+  // El movimiento se identifica por su concepto único, así que la verificación
+  // de duplicados (más abajo) previene doble cobro si el flujo de activación
+  // se ejecuta dos veces.
+  if (prestamo.renovacionAnticipada && (prestamo.renovacionAnticipadaCosto || 0) > 0) {
+    ingresos.push({
+      cajaCodigo: 'CAJA-RENOVACIONES',
+      monto: prestamo.renovacionAnticipadaCosto,
+      concepto: `Renovación Anticipada — Préstamo ${prestamo.codigo}`,
       referencia: prestamo.codigo,
     })
   }

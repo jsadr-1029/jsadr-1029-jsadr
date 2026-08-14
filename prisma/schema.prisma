@@ -383,6 +383,19 @@ model Prestamo {
   renovacionPrestamoAnteriorId     String?
   renovacionFechaCancelacionAnterior DateTime?
 
+  // === RENOVACIÓN ANTICIPADA (beneficio opcional del simulador del portal) ===
+  // El cliente puede activar este beneficio en el simulador del portal del
+  // cliente por un cobro único de $9.900 COP. Le da derecho a:
+  //   - Reserva anticipada de su cupo para el siguiente ciclo de crédito
+  //   - Prioridad en el procesamiento de su próxima solicitud
+  //   - Tasa preferencial mantenida (sin re-evaluación)
+  //   - Aceleración del proceso de desembolso
+  // El cobro se hace UNA sola vez al inicio del crédito (al activarse tras
+  // la aceptación de T&C) y se registra como INGRESO automático en la caja
+  // CAJA-RENOVACIONES.
+  renovacionAnticipada             Boolean    @default(false)
+  renovacionAnticipadaCosto        Float      @default(0)
+
   notas               String?
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
@@ -1266,6 +1279,12 @@ model SolicitudWeb {
   flexibilidadFinanciera Boolean @default(false)
   flexibilidadModalidad  String? // BASICA | PREMIUM
   flexibilidadCosto      Float   @default(0)
+  // === Renovación Anticipada elegida por el cliente en la simulación ===
+  // Beneficio opcional con cobro único de $9.900 COP. Se persiste aquí
+  // para que el administrador pueda ver la elección del cliente al revisar
+  // la solicitud y se preserve al convertir en préstamo.
+  renovacionAnticipada   Boolean @default(false)
+  renovacionAnticipadaCosto Float @default(0)
   observaciones    String?
   revisadoPor      String?
   fechaRevision    DateTime?

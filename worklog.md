@@ -453,3 +453,52 @@ Stage Summary:
 - Neon: schema actualizado con fechaCancelacion + tabla FotografiaCartera.
 - Cron mensual: ya activo, 09:00 Colombia día 1 de cada mes.
 - Zona horaria: America/Bogota consistente en todo el stack.
+
+---
+Task ID: ANALYSIS-1
+Agent: Explore (subagent)
+Task: Research-only analysis of JSADR project architecture to answer 7 specific questions about: Portal del Cliente, Simulador de Crédito, Módulo de Cajas, Prisma Prestamo schema, API endpoints, PDF generation, Authentication & Session.
+
+Work Log:
+- Leído worklog.md previo (historial completo de tasks: 11-fix-certificado-blob-url, hoja-vida-cliente, linea-tiempo-360, etc.).
+- Leído prisma/schema.prisma (2308 líneas, 60+ modelos) — foco en Prestamo (líneas 224-412), Pago (511-599), CajaMenor (776-789), MovimientoCaja (794-814), BitacoraPrestamo (951-964), Cliente (71-168), SolicitudWeb (1235-1279).
+- Leído package.json — dependencias clave: pdfkit ^0.19.1, @types/pdfkit, exceljs, jsonwebtoken, bcryptjs, qrcode, next-auth, prisma 6.x, next 16.x.
+- Explorado src/app/ (estructura completa de rutas y APIs).
+- Leído src/components/views/portal-cliente.tsx (1362 líneas — portal legacy).
+- Leído src/components/views/PortalClienteModal.tsx (3865 líneas — portal premium actual, con flujo SolicitudWeb + Clave Dinámica).
+- Leído src/components/views/CajasView.tsx (331 líneas).
+- Leído src/components/views/SimuladorView.tsx (626 líneas — simulador admin).
+- Leído src/lib/format.ts (estadoPrestamoColor y helpers).
+- Leído src/lib/auth-guard.ts (requireAuth, requireRole, getAuthUser — JWT para staff).
+- Leído src/lib/recalcular-saldos.ts (lógica de marcaje de estado CANCELADO).
+- Leído src/app/api/paz-y-salvo/route.ts (HTML+window.print, validación token portal).
+- Leído src/app/api/estado-cuenta/route.ts (HTML imprimible, validación token portal).
+- Leído src/app/api/cajas/route.ts y src/app/api/cajas/[id]/movimientos/route.ts (CRUD cajas).
+- Leído src/app/api/portal/prestamos/route.ts, src/app/api/portal/login/route.ts, src/app/api/portal/[cedula]/route.ts, src/app/api/portal/simular/route.ts.
+- Leído src/app/api/solicitudes-web/route.ts (POST = crear solicitud desde portal, requiere Clave Dinámica).
+- Leído src/app/api/prestamos/[id]/aceptar-tyc-otp/route.ts (registrarIngresosCajasPorActivacion).
+- Leído src/app/api/reportes/cartera/route.ts (uso de pdfkit para PDF server-side).
+- Leído src/app/api/documentos/route.ts (pagare/carta HTML — no PDF).
+- Leído src/app/api/pagos/recibo/route.ts (recibo HTML con hash SHA-256).
+- Leído scripts/_seed-cajas-tarea-u.cjs (seed de 4 cajas nuevas).
+- Leído src/app/page.tsx (carga PortalClienteModal cuando rol=CLIENTE).
+- Buscado archivos con "portal", "cliente", "customer", "simulador", "caja", "pdf", "paz-y-salvo" — exhaustivo.
+- Confirmado: NO existe ruta /portal/page.tsx — el portal es un componente React renderizado dentro de /app/page.tsx (no es una Next.js route separada).
+
+Findings clave:
+1. Portal del Cliente = 2 implementaciones paralelas:
+   - portal-cliente.tsx (legacy, dentro de admin dashboard)
+   - PortalClienteModal.tsx (premium, cargado dinámicamente en / cuando user.esPortalCliente)
+2. Simulador = 2 implementaciones:
+   - SimuladorView.tsx (admin, solo calcula)
+   - PortalClienteModal.tsx (cliente, simulación + envío a /api/solicitudes-web con Clave Dinámica OTP)
+3. Cajas = 6 cajas con códigos hardcoded (CAJA-MORA, CAJA-GARANTIA, CAJA-FLEXIBILIDAD, CAJA-INGRESOS-CAUSADOS, CAJA-PAGARE-CARTA, CAJA-USO-PLATAFORMA), sembradas via scripts. Sin UI para crear nuevas cajas.
+4. Prestamo.estado = string (no enum) con valores: SOLICITUD | PENDIENTE_ACEPTACION | ACTIVO | EN_MORA | JURIDICO | CANCELADO | RECHAZADO.
+5. fechaCancelacion existe en schema pero NO se setea en recalcular-saldos.ts ni en /api/prestamos/[id] route (cerrar). Solo se setea en backfill script y en mensajes WhatsApp.
+6. PDF generation: pdfkit instalado, usado SOLO en /api/reportes/cartera. paz-y-salvo y estado-cuenta usan HTML+window.print().
+7. Auth: dual — staff via JWT (Authorization: Bearer), clientes via tokenSesion (header x-portal-token o query ?token=).
+
+Stage Summary:
+- Reporte completo entregado al agente main con: archivos encontrados, snippets de código relevantes, gaps identificados, recomendaciones de implementación.
+- NO se escribió código nuevo (research-only).
+- Próximos pasos sugeridos: (1) setear fechaCancelacion en recalcular-saldos.ts y /api/prestamos/[id] route (cerrar); (2) si se necesita crear nuevas cajas desde UI, agregar POST /api/cajas con rol ADMIN; (3) si se necesita PDF real (no HTML+print), extender pdfkit a paz-y-salvo y estado-cuenta.

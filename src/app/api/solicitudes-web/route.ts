@@ -152,6 +152,8 @@ export async function POST(req: NextRequest) {
       flexibilidadFinanciera,
       flexibilidadModalidad,
       flexibilidadCosto,
+      renovacionAnticipada,
+      renovacionAnticipadaCosto,
     } = body || {}
 
     // === Persistir Flexibilidad Financiera (2 tarifas) ===
@@ -161,6 +163,21 @@ export async function POST(req: NextRequest) {
       ? (Number(flexibilidadCosto) > 0
           ? Number(flexibilidadCosto)
           : (modalidadElegida === 'PREMIUM' ? 34900 : 15000))
+      : 0
+
+    // === Persistir Renovación Anticipada (cobro único $9.900) ===
+    // Beneficio opcional que el cliente puede activar en el simulador del portal.
+    // Le da derecho a reserva anticipada de cupo, prioridad en procesamiento,
+    // tasa preferencial mantenida y desembolso acelerado.
+    // El cobro se hace UNA sola vez al inicio del crédito (al activarse tras
+    // la aceptación de T&C) y se registra como INGRESO automático en la caja
+    // CAJA-RENOVACIONES.
+    const RENOVACION_ANTICIPADA_COSTO_DEFAULT = 9900
+    const renovElegida = !!renovacionAnticipada
+    const renovCostoFinal = renovElegida
+      ? (Number(renovacionAnticipadaCosto) > 0
+          ? Number(renovacionAnticipadaCosto)
+          : RENOVACION_ANTICIPADA_COSTO_DEFAULT)
       : 0
 
     // Validar campos requeridos
@@ -430,6 +447,9 @@ export async function POST(req: NextRequest) {
         flexibilidadFinanciera: flexElegida,
         flexibilidadModalidad: flexElegida ? modalidadElegida : null,
         flexibilidadCosto: flexCostoFinal,
+        // === Renovación Anticipada (cobro único $9.900) persistida en la solicitud ===
+        renovacionAnticipada: renovElegida,
+        renovacionAnticipadaCosto: renovCostoFinal,
         historialEstados,
       },
     })
@@ -454,6 +474,10 @@ export async function POST(req: NextRequest) {
             tasaOrigen,
             cuotaEstimada: resultado.montoCuota,
             totalPagar: resultado.totalPagar,
+            flexibilidadFinanciera: flexElegida,
+            flexibilidadCosto: flexCostoFinal,
+            renovacionAnticipada: renovElegida,
+            renovacionAnticipadaCosto: renovCostoFinal,
             ipOrigen: clientInfo.ip,
           }),
           ipOrigen: clientInfo.ip,

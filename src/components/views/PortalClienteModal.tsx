@@ -85,6 +85,9 @@ import {
   Clock3,
   Lock,
   BellRing,
+  Repeat,
+  Zap,
+  BadgeCheck,
 } from 'lucide-react'
 import { CentroComunicacionesPortal } from '@/components/views/CentroComunicacionesPortal'
 import { useInactivityAutoLogout } from '@/hooks/use-inactivity-auto-logout'
@@ -534,9 +537,26 @@ export function PortalClienteModal({
   }
 
   // Generar paz y salvo para préstamos cancelados
-  const generarPazYSalvo = (prestamoId: string, codigo: string) => {
+  // Si el préstamo NO está saldado/cancelado, mostrar mensaje al cliente
+  // indicando que el crédito aún se encuentra vigente.
+  const generarPazYSalvo = (prestamoId: string, codigo: string, estado?: string, saldoTotal?: number, cuotasPagadas?: number, numeroCuotas?: number) => {
+    // Validación local: el endpoint ya valida, pero damos feedback
+    // inmediato sin necesidad de abrir una nueva pestaña.
+    const estaCancelado = estado === 'CANCELADO'
+    const estaSaldado = (saldoTotal ?? 0) <= 0 && (cuotasPagadas ?? 0) >= (numeroCuotas ?? 0)
+    if (!estaCancelado && !estaSaldado) {
+      const saldoPendiente = formatearMoneda(saldoTotal ?? 0)
+      const cuotasFaltantes = Math.max(0, (numeroCuotas ?? 0) - (cuotasPagadas ?? 0))
+      toast({
+        title: '🔒 Crédito vigente',
+        description: `Tu crédito ${codigo} aún se encuentra vigente. Saldo pendiente: ${saldoPendiente} · Cuotas restantes: ${cuotasFaltantes}. Solo podrás descargar el paz y salvo cuando el crédito esté 100% saldado.`,
+        variant: 'destructive',
+        duration: 6000,
+      })
+      return
+    }
     const tokenParam = token ? `&token=${encodeURIComponent(token)}` : ''
-    window.open(`/api/paz-y-salvo?prestamoId=${prestamoId}&codigo=${codigo}${tokenParam}`, '_blank')
+    window.open(`/api/paz-y-salvo?prestamoId=${prestamoId}&codigo=${codigo}${tokenParam}&auto=1`, '_blank')
   }
 
   // Descargar estado de cuenta (global o por préstamo)
@@ -1595,7 +1615,7 @@ function PrestamosView({
   prestamos: any[]
   onAbrirTyC: (prestamoId: string, codigo: string) => void
   onAceptarTyC: (prestamoId: string) => Promise<void>
-  onPazYSalvo: (prestamoId: string, codigo: string) => void
+  onPazYSalvo: (prestamoId: string, codigo: string, estado?: string, saldoTotal?: number, cuotasPagadas?: number, numeroCuotas?: number) => void
   onEstadoCuenta: (prestamoId?: string) => void
 }) {
   if (prestamos.length === 0) {
@@ -1761,17 +1781,20 @@ function PrestamosView({
                   <FileDown className="w-3 h-3 mr-1" />
                   Estado cuenta
                 </Button>
-                {cancelado && (
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => onPazYSalvo(p.id, p.codigo)}
-                    className="text-[10px] h-7 border-emerald-400/40 text-emerald-300 hover:bg-emerald-500/10"
-                  >
-                    <FileCheck className="w-3 h-3 mr-1" />
-                    Paz y salvo
-                  </Button>
-                )}
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => onPazYSalvo(p.id, p.codigo, p.estado, p.saldoTotal, p.cuotasPagadas, p.numeroCuotas)}
+                  className={`text-[10px] h-7 ${
+                    cancelado
+                      ? 'border-emerald-400/40 text-emerald-300 hover:bg-emerald-500/10'
+                      : 'border-amber-400/40 text-amber-300 hover:bg-amber-500/10'
+                  }`}
+                  title={cancelado ? 'Descargar certificado de paz y salvo' : 'El crédito aún está vigente'}
+                >
+                  <FileCheck className="w-3 h-3 mr-1" />
+                  {cancelado ? 'Paz y salvo' : '🔒 Paz y salvo'}
+                </Button>
               </div>
             </CardContent>
           </Card>
@@ -2283,6 +2306,18 @@ function SimuladorCredito({
   const FLEXIBILIDAD_COSTO_PREMIUM = 34900
   const FLEXIBILIDAD_COSTO = flexibilidadModalidad === 'PREMIUM' ? FLEXIBILIDAD_COSTO_PREMIUM : FLEXIBILIDAD_COSTO_BASICA
 
+  // === Renovación Anticipada (beneficio opcional con cobro único) ===
+  // El cliente puede activar este beneficio en el simulador del portal
+  // por un cobro único de $9.900 COP. Le da derecho a:
+  //   - Reserva anticipada de su cupo para el siguiente ciclo
+  //   - Prioridad en el procesamiento de su próxima solicitud
+  //   - Tasa preferencial mantenida (sin re-evaluación)
+  //   - Aceleración del proceso de desembolso
+  // El cobro se hace UNA sola vez al inicio del crédito y se registra
+  // automáticamente en la caja CAJA-RENOVACIONES.
+  const [renovacionAnticipada, setRenovacionAnticipada] = useState(false)
+  const RENOVACION_ANTICIPADA_COSTO = 9900
+
   // === Flujo de Clave Dinámica (confirmación para enviar solicitud) ===
   const [claveDinamicaSolicitada, setClaveDinamicaSolicitada] = useState(false)
   const [claveDinamicaEnviando, setClaveDinamicaEnviando] = useState(false)
@@ -2483,6 +2518,9 @@ function SimuladorCredito({
           flexibilidadFinanciera,
           flexibilidadModalidad,
           flexibilidadCosto: FLEXIBILIDAD_COSTO,
+          // === Renovación Anticipada (cobro único $9.900) ===
+          renovacionAnticipada,
+          renovacionAnticipadaCosto: RENOVACION_ANTICIPADA_COSTO,
         }),
       })
       const json = await res.json()
@@ -2819,6 +2857,109 @@ function SimuladorCredito({
               </Card>
             )
           })()}
+
+          {/* === Renovación Anticipada (beneficio opcional, cobro único $9.900) === */}
+          {/* El cliente puede activar este beneficio para reservar su cupo anticipadamente */}
+          <Card className={`premium-card rounded-2xl border-2 transition-colors ${
+            renovacionAnticipada
+              ? 'border-amber-500/60'
+              : 'border-amber-500/20'
+          }`}>
+            <CardContent className="p-3 space-y-2">
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2 min-w-0">
+                  <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${
+                    renovacionAnticipada
+                      ? 'bg-gradient-to-br from-amber-500 to-orange-600'
+                      : 'bg-muted/40'
+                  }`}>
+                    <Repeat className={`w-3.5 h-3.5 ${renovacionAnticipada ? 'text-white' : 'text-muted-foreground'}`} />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-xs font-bold flex items-center gap-1.5">
+                      Renovación Anticipada
+                      <Badge
+                        variant="outline"
+                        className={`text-[9px] px-1.5 py-0 ${
+                          renovacionAnticipada
+                            ? 'text-amber-300 border-amber-500/40 bg-amber-500/10'
+                            : 'text-muted-foreground'
+                        }`}
+                      >
+                        {renovacionAnticipada
+                          ? `✨ Activado · +${formatearMoneda(RENOVACION_ANTICIPADA_COSTO)}`
+                          : 'Opcional · $9.900'}
+                      </Badge>
+                    </p>
+                    <p className="text-[10px] text-muted-foreground truncate">
+                      {renovacionAnticipada
+                        ? 'Beneficio activado · Reserva tu cupo para el siguiente crédito'
+                        : 'Reserva tu cupo y obtén beneficios exclusivos'}
+                    </p>
+                  </div>
+                </div>
+                <input
+                  type="checkbox"
+                  id="renovacionAnticipadaPortal"
+                  checked={renovacionAnticipada}
+                  onChange={(e) => setRenovacionAnticipada(e.target.checked)}
+                  className="w-4 h-4 accent-amber-500 shrink-0 cursor-pointer"
+                  aria-label="Activar Renovación Anticipada"
+                />
+              </div>
+
+              {/* Mensaje comercial persuasivo */}
+              <div className="mt-2 p-2.5 rounded-md bg-amber-500/10 border border-amber-500/30 text-[10px] text-amber-100 leading-relaxed">
+                <div className="font-semibold mb-1 flex items-center gap-1">
+                  <Zap className="w-3 h-3" /> ¿Por qué tomar Renovación Anticipada?
+                </div>
+                <ul className="list-disc list-inside space-y-0.5 ml-1">
+                  <li>
+                    <strong>Reserva anticipada de tu cupo:</strong> asegura la
+                    disponibilidad de tu monto para el siguiente ciclo de crédito,
+                    sin depender de aprobaciones tardías.
+                  </li>
+                  <li>
+                    <strong>Prioridad en el procesamiento:</strong> tu próxima
+                    solicitud pasa al frente de la fila, reduciendo tiempos de
+                    espera.
+                  </li>
+                  <li>
+                    <strong>Tasa preferencial mantenida:</strong> conservas la
+                    tasa actual sin re-evaluación, incluso si las condiciones del
+                    mercado cambian.
+                  </li>
+                  <li>
+                    <strong>Desembolso acelerado:</strong> al cancelar tu crédito
+                    actual, el nuevo se desembolsa en menos de 24 horas hábiles.
+                  </li>
+                  <li>
+                    <strong>Trámite simplificado:</strong> omites el cargue de
+                    documentos y la validación de identidad en tu próxima solicitud.
+                  </li>
+                </ul>
+                <p className="mt-2 pt-1.5 border-t border-amber-500/20">
+                  💡 Por solo <strong>{formatearMoneda(RENOVACION_ANTICIPADA_COSTO)}</strong> pagaderos
+                  una sola vez al inicio del crédito, te aseguras continuidad
+                  financiera y ventajas exclusivas. El cobro se refleja en la
+                  primera cuota y se notifica en tu estado de cuenta.
+                </p>
+              </div>
+
+              {/* Banner de confirmación visual cuando está activo */}
+              {renovacionAnticipada && (
+                <div className="mt-2 p-2 rounded-md bg-emerald-500/10 border border-emerald-500/30 text-[10px] text-emerald-100 flex items-center gap-1.5">
+                  <BadgeCheck className="w-3.5 h-3.5 shrink-0" />
+                  <span>
+                    ✅ Beneficio activado. Se cobrarán{' '}
+                    <strong>{formatearMoneda(RENOVACION_ANTICIPADA_COSTO)}</strong> una
+                    sola vez al inicio del crédito. Tu solicitud tendrá marcador
+                    de prioridad para el asesor.
+                  </span>
+                </div>
+              )}
+            </CardContent>
+          </Card>
 
           {/* === PASO 1: Solicitar Clave Dinámica === */}
           {!claveDinamicaSolicitada && !claveDinamicaVerificada && (

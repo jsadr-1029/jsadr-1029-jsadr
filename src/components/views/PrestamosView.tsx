@@ -233,6 +233,9 @@ export interface SimulacionParams {
   flexibilidadFinanciera?: boolean
   flexibilidadModalidad?: 'BASICA' | 'PREMIUM'
   flexibilidadCosto?: number
+  // === Renovación Anticipada elegida por el cliente en la simulación ===
+  renovacionAnticipada?: boolean
+  renovacionAnticipadaCosto?: number
 }
 
 // Tipo mínimo estructuralmente compatible con la interfaz SolicitudWeb
@@ -251,6 +254,9 @@ interface SolicitudWebMin {
   flexibilidadFinanciera?: boolean
   flexibilidadModalidad?: string | null
   flexibilidadCosto?: number
+  // === Renovación Anticipada elegida por el cliente ===
+  renovacionAnticipada?: boolean
+  renovacionAnticipadaCosto?: number
 }
 
 // =====================================================
@@ -383,6 +389,14 @@ function PrestamosPanel({
   const FLEXIBILIDAD_COSTO_BASICA = 15000
   const FLEXIBILIDAD_COSTO_PREMIUM = 34900
   const flexibilidadCosto = flexibilidadModalidad === 'PREMIUM' ? FLEXIBILIDAD_COSTO_PREMIUM : FLEXIBILIDAD_COSTO_BASICA
+
+  // === Renovación Anticipada (beneficio opcional del simulador del portal) ===
+  // Cobro único de $9.900 COP cuando el cliente activa este beneficio en el
+  // simulador del portal del cliente. Se persiste en el préstamo y se cobra
+  // automáticamente al activarse tras la aceptación de T&C, registrándose
+  // en la caja CAJA-RENOVACIONES.
+  const [renovacionAnticipada, setRenovacionAnticipada] = useState(false)
+  const RENOVACION_ANTICIPADA_COSTO = 9900
 
   // === Cobro de Pagaré + Carta de Instrucciones ===
   // Cargo editable (por defecto $19.900 COP) que se cobra UNA sola vez al cliente
@@ -978,6 +992,10 @@ function PrestamosPanel({
       const modalidad = (simulacionInicial.flexibilidadModalidad || 'BASICA').toUpperCase() === 'PREMIUM' ? 'PREMIUM' : 'BASICA'
       setFlexibilidadModalidad(modalidad)
     }
+    // === Preservar Renovación Anticipada elegida por el cliente ===
+    if (simulacionInicial.renovacionAnticipada) {
+      setRenovacionAnticipada(true)
+    }
     setModalAbierto(true)
   }, [simulacionInicial])
 
@@ -1171,6 +1189,14 @@ function PrestamosPanel({
         body.flexibilidadFinanciera = true
         body.flexibilidadModalidad = flexibilidadModalidad
         body.flexibilidadCosto = flexibilidadCosto
+      }
+
+      // === Renovación Anticipada (beneficio opcional del simulador del portal) ===
+      // Cobro único de $9.900 COP. Se cobra UNA sola vez al inicio del crédito
+      // (al activarse tras T&C) y se registra automáticamente en CAJA-RENOVACIONES.
+      if (renovacionAnticipada) {
+        body.renovacionAnticipada = true
+        body.renovacionAnticipadaCosto = RENOVACION_ANTICIPADA_COSTO
       }
 
       // === Fondo de Garantía (opcional, tasa configurable) ===
@@ -1467,6 +1493,8 @@ ${linkFirmaCodeudor}
     setCodeudorId('')
     // Reset flexibilidad financiera
     setFlexibilidadFinanciera(false)
+    // Reset renovación anticipada
+    setRenovacionAnticipada(false)
   }
 
   const cambiarEstado = async (id: string, accion: string) => {
@@ -3278,6 +3306,57 @@ ${linkFirmaCodeudor}
               </div>
             )}
 
+            {/* === RENOVACIÓN ANTICIPADA (beneficio opcional del simulador del portal) === */}
+            {/* Cobro único de $9.900 COP. Se cobra al activarse tras T&C y se */}
+            {/* registra automáticamente en la caja CAJA-RENOVACIONES. */}
+            <div className={`space-y-3 p-4 rounded-lg border-2 transition-colors ${
+              renovacionAnticipada
+                ? 'bg-amber-50 dark:bg-amber-900/40 border-amber-500 dark:border-amber-500'
+                : 'bg-muted/30 border-muted-foreground/20'
+            }`}>
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex-1 min-w-0">
+                  <Label className="text-sm font-semibold flex items-center gap-2">
+                    <RefreshCw className="w-4 h-4 text-amber-600 dark:text-amber-400" />
+                    Renovación Anticipada
+                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-200 dark:bg-amber-800 text-amber-900 dark:text-amber-100 font-bold">
+                      $9.900
+                    </span>
+                  </Label>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Beneficio opcional que el cliente puede activar desde el simulador del portal.
+                    Le da derecho a reserva anticipada de cupo, prioridad en procesamiento,
+                    tasa preferencial mantenida y desembolso acelerado.
+                  </p>
+                </div>
+                <input
+                  type="checkbox"
+                  id="renovacionAnticipadaAdmin"
+                  checked={renovacionAnticipada}
+                  onChange={(e) => setRenovacionAnticipada(e.target.checked)}
+                  className="w-4 h-4 accent-amber-500 shrink-0 cursor-pointer mt-1"
+                  aria-label="Activar Renovación Anticipada"
+                />
+              </div>
+              {renovacionAnticipada && (
+                <div className="mt-2 p-3 rounded-md bg-amber-50 dark:bg-amber-950/30 border border-amber-300 dark:border-amber-800 text-[11px] text-amber-900 dark:text-amber-100">
+                  <div className="font-semibold mb-1">✨ Beneficios que recibe el cliente:</div>
+                  <ul className="list-disc list-inside space-y-0.5 ml-1">
+                    <li>Reserva anticipada de su cupo para el siguiente ciclo</li>
+                    <li>Prioridad en el procesamiento de la próxima solicitud</li>
+                    <li>Tasa preferencial mantenida (sin re-evaluación)</li>
+                    <li>Desembolso acelerado (menos de 24 horas hábiles)</li>
+                    <li>Trámite simplificado (sin cargue de documentos)</li>
+                  </ul>
+                  <p className="mt-2 pt-1.5 border-t border-amber-300 dark:border-amber-800">
+                    El cobro de <strong>{formatearMoneda(RENOVACION_ANTICIPADA_COSTO)}</strong> se hará
+                    una sola vez al activarse el préstamo tras la aceptación de T&C,
+                    y se registrará automáticamente en la caja <strong>CAJA-RENOVACIONES</strong>.
+                  </p>
+                </div>
+              )}
+            </div>
+
             {/* === COBRO DE PAGARÉ + CARTA DE INSTRUCCIONES === */}
             {/* Cargo editable $19.900 — se cobra UNA sola vez al inicio del crédito */}
             {requiereDocumentos && (generarPagare || generarCarta) && (
@@ -3866,6 +3945,9 @@ export function PrestamosView({
       flexibilidadFinanciera: solicitud.flexibilidadFinanciera,
       flexibilidadModalidad: (solicitud.flexibilidadModalidad === 'PREMIUM' ? 'PREMIUM' : 'BASICA'),
       flexibilidadCosto: solicitud.flexibilidadCosto,
+      // === Preservar Renovación Anticipada elegida por el cliente ===
+      renovacionAnticipada: solicitud.renovacionAnticipada,
+      renovacionAnticipadaCosto: solicitud.renovacionAnticipadaCosto,
     }
     setSimulacionInicial(params)
     setTab('solicitudes')

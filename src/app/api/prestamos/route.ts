@@ -148,6 +148,12 @@ export async function POST(req: NextRequest) {
       // por el uso de la plataforma tecnológica asociada al crédito.
       cobroTarifaPlataforma,
       valorTarifaPlataforma,
+      // === Renovación Anticipada (beneficio opcional del simulador del portal) ===
+      // Cobro único de $9.900 COP cuando el cliente activa este beneficio en el
+      // simulador. Se cobra UNA sola vez al inicio del crédito y se registra
+      // automáticamente en la caja CAJA-RENOVACIONES al activarse tras T&C.
+      renovacionAnticipada,
+      renovacionAnticipadaCosto,
       // === ID de la solicitud web origen (para auto-marcarla como CONVERTIDA) ===
       solicitudWebOrigenId,
     } = body
@@ -648,6 +654,14 @@ export async function POST(req: NextRequest) {
             ? (Number(valorTarifaPlataforma) > 0 ? Number(valorTarifaPlataforma) : 4900)
             : 0,
           tarifaPlataformaCargada: false,  // se marca true cuando se registre el ingreso en caja
+          // === Renovación Anticipada (beneficio opcional del simulador del portal) ===
+          // Cobro único de $9.900 COP cuando el cliente activa este beneficio.
+          // El cobro se registra automáticamente en CAJA-RENOVACIONES al activarse
+          // el préstamo tras la aceptación de T&C.
+          renovacionAnticipada: !!renovacionAnticipada,
+          renovacionAnticipadaCosto: renovacionAnticipada
+            ? (Number(renovacionAnticipadaCosto) > 0 ? Number(renovacionAnticipadaCosto) : 9900)
+            : 0,
           // === RENOVACIÓN DIFERIDA (Tarea T) ===
           // Si es renovación, marcamos el nuevo préstamo como pendiente de T&C y
           // guardamos la referencia al crédito anterior. El crédito anterior NO se
