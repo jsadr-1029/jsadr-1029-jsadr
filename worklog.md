@@ -392,3 +392,64 @@ Stage Summary:
 - Email de EJEMPLO enviado exitosamente a jsa@jsadr.com.co con data real de julio 2026.
 - Cron automático activo: día 1 de cada mes a las 09:00 hora Colombia.
 - ⚠️ PENDIENTE EN PRODUCCIÓN: eliminar o proteger con ADMIN el endpoint /api/reportes/mensual-informe-prueba (es de prueba, sin auth).
+
+---
+Task ID: linea-tiempo-360
+Agent: main
+Task: Implementar 🕰️ Línea de Tiempo 360° en PRÉSTAMOS — máquina de exploración histórica que reconstruye cartera, clientes y créditos "as of date T" usando eventos reales.
+
+Work Log:
+- Exploración profunda de arquitectura (2 subagentes en paralelo): PrestamosView, ClientesView, APIs, Prisma schema (32 modelos), cron y timezone.
+- Identificado gap crítico: NO existe fechaCancelacion en Prestamo, se usaba updatedAt como aproximación débil.
+- Schema: añadido Prestamo.fechaCancelacion DateTime? + nuevo modelo FotografiaCartera (snapshot inmutable de cartera).
+- prisma db push a Neon exitoso (10.87s).
+- Backfill de fechaCancelacion para 2 créditos CANCELADOS existentes (fallback a updatedAt cuando no hay AuditLog con estado=CANCELADO).
+- Creado src/lib/prestamo-historico.ts (~640 líneas) con motor de reconstrucción histórica:
+  - reconstruirPrestamoHastaFecha(p, T): rebobina estado, saldoTotal, montoPagado, cuotasPagadas, diasMora, estadoPlazo, diasTranscurridos, congelado en cancelación.
+  - reconstruirCarteraHastaFecha(T): agrega cartera completa, KPIs, advertencias.
+  - obtenerEventosPrestamo(p, T): timeline completa con 11 tipos de eventos (solicitud, aprobación, desembolso, pagos, parciales, anulados, reversados, cancelación, mora renegociada, otros sí, refinanciaciones, renovaciones, bitácora).
+  - compararCarteraEntreFechas(A, B): desglose con origen — nuevos desembolsos, pagos recibidos, créditos cancelados (con detalle), nuevos créditos, créditos que pasaron a excedidos.
+  - encontrarPrimerCambio(p): detecta primera desviación de comportamiento (pago reducido, pago tardío, gestión cobranza).
+- APIs creadas (5):
+  - GET /api/linea-tiempo/cartera?fecha=YYYY-MM-DD
+  - GET /api/linea-tiempo/prestamo/[id]?fecha=YYYY-MM-DD
+  - GET /api/linea-tiempo/cliente/[id]?fecha=YYYY-MM-DD
+  - GET /api/linea-tiempo/comparar?fechaA=&fechaB=
+  - GET/POST /api/linea-tiempo/fotografias (guardar y listar snapshots inmutables)
+- Creado src/components/views/LineaTiempoView.tsx (~1300 líneas) con:
+  - Encabezado premium con gradientes, shimmer animation, badge MODO PRESENTE/HISTÓRICO.
+  - Pestañas 🏦 Cartera Completa / 👤 Por Cliente.
+  - Selector de fecha + controles de navegación temporal (día/semana/mes, reproducir/pausar con velocidades 0.5x/1x/2x/5x/10x).
+  - Dashboard de 8 KPIs dinámicos (cartera pendiente, activos, dentro/cumplido/excedido/cancelados, capital prestado, recuperado).
+  - Tabla de créditos históricos con filtros (todos/activos/dentro/cumplido/excedidos/cancelados/mora) + búsqueda.
+  - Modal vida del crédito con tabs: Eventos / Detalle / ¿Qué cambió? (primer cambio detectado).
+  - Modal hoja de vida histórica del cliente con estadísticas + nivel de riesgo histórico + línea de tiempo de eventos.
+  - Modal comparar fechas con KPIs lado a lado + desglose del cambio + "Ver origen" (créditos responsables).
+  - Timeline vertical de eventos agrupados por día con iconos, montos, usuarios.
+  - Botón 📸 Guardar fotografía (crea snapshot inmutable en DB).
+  - Botón ↩️ Volver al presente.
+- Integrado en PrestamosView.tsx como nueva pestaña "🕰️ Línea de Tiempo" (TabsList expandido a 10 columnas).
+- Tests smoke ejecutados contra Neon con datos reales (37 préstamos): TODOS PASARON.
+  - Reconstrucción a hoy: 37 préstamos, 31 activos, 2 cancelados, cartera $90.4M, recuperado $25.8M.
+  - Reconstrucción a hace 6 meses: 0 préstamos (correcto, no existían).
+  - Comparación: +31 activos, +$90.4M cartera, $106.1M nuevos desembolsos, $25.8M pagos, 33 nuevos créditos.
+  - Eventos de préstamo: 9 eventos correctamente ordenados.
+  - Reconstrucción de préstamo individual a mitad de plazo: estado ACTIVO, saldo $2.2M, día 15/304, 0 pagos (correcto).
+- TypeScript: npx tsc --noEmit = EXIT 0.
+- Commit + push a GitHub exitoso (52544d4 → 02ecc4f).
+- Vercel auto-deploy verificado: HTTPS 200 en jsadr-1029-jsadr.vercel.app y jsadr.com.co.
+- Endpoints nuevos verificados como activos (HTTP 401 = existen y requieren auth):
+  - /api/linea-tiempo/cartera
+  - /api/linea-tiempo/fotografias
+  - /api/linea-tiempo/comparar
+- Cron mensual ya configurado en vercel.json: schedule "0 14 1 * *" = 09:00 hora Colombia día 1 (UTC-5, sin DST).
+- Timezone America/Bogota forzada via next.config.ts (afecta TODOS los new Date() server-side).
+
+Stage Summary:
+- 11 archivos: 1 schema modificado, 1 PrestamosView modificado, 5 APIs nuevas, 1 vista nueva, 1 lib nueva, 2 scripts.
+- 3,192 líneas añadidas.
+- GitHub: sincronizado (push exitoso).
+- Vercel: auto-deploy exitoso, todos los endpoints activos.
+- Neon: schema actualizado con fechaCancelacion + tabla FotografiaCartera.
+- Cron mensual: ya activo, 09:00 Colombia día 1 de cada mes.
+- Zona horaria: America/Bogota consistente en todo el stack.
