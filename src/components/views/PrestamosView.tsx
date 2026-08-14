@@ -67,6 +67,14 @@ interface Prestamo {
   montoPagado: number
   estado: string
   fechaSolicitud: string
+  // === Fechas para el conteo de vigencia ===
+  // fechaDesembolso: fecha real de inicio del crédito (se setea al activar).
+  // fechaVencimiento: fecha final pactada (se setea al activar).
+  // updatedAt: fecha de la última modificación — se usa como aproximación
+  //   de la fecha de cancelación cuando el crédito pasa a CANCELADO.
+  fechaDesembolso?: string | null
+  fechaVencimiento?: string | null
+  updatedAt?: string
   requiereDocumentos: boolean
   tycAceptado: boolean
   firmaId?: string | null
@@ -76,6 +84,131 @@ interface Prestamo {
   tieneCodeudor?: boolean
   codeudorNombre?: string | null
   codeudorCedula?: string | null
+}
+
+// =====================================================
+// CONTEO DE VIGENCIA DE CRÉDITOS
+// =====================================================
+// Calcula automáticamente los días transcurridos del crédito en relación
+// con el plazo total pactado. La lógica es:
+//
+//   - Si el crédito está CANCELADO → el conteo se CONGELA en la fecha de
+//     cancelación (updatedAt). No sigue incrementándose.
+//   - Si el crédito está ACTIVO/EN_MORA/JURIDICO → el conteo es dinámico
+//     y usa la fecha actual del sistema.
+//   - Para otros estados (SOLICITUD, PENDIENTE_ACEPTACION, RECHAZADO) el
+//     conteo no aplica (aún no hay crédito vigente).
+//
+// Estados del plazo:
+//   🟢 DENTRO DEL PLAZO   → días transcurridos < plazo total
+//   🟡 PLAZO CUMPLIDO     → días transcurridos = plazo total
+//   🔴 EXCEDIÓ EL PLAZO   → días transcurridos > plazo total (muestra días excedidos)
+//   —                      → crédito CANCELADO (conteo congelado, sin estado de plazo)
+
+export type EstadoPlazo = 'DENTRO' | 'CUMPLIDO' | 'EXCEDIDO' | 'CANCELADO' | 'NO_APLICA'
+
+export interface ConteoVigencia {
+  aplica: boolean                 // false si el conteo no aplica (solicitud, rechazado, etc.)
+  diasTranscurridos: number       // días desde inicio hasta corte
+  plazoTotalDias: number          // plazo total pactado en días
+  diasExcedidos: number           // días que exceden el plazo (0 si no excede)
+  estadoPlazo: EstadoPlazo        // estado del plazo
+  congelado: boolean              // true si el conteo está congelado (crédito cancelado)
+  fechaCorte: Date                // fecha usada para el cálculo
+  fechaInicio: Date               // fecha de inicio del crédito
+}
+
+function calcularPlazoTotalDias(p: Prestamo): number {
+  // Preferir la diferencia real entre fechaVencimiento y fechaDesembolso,
+  // que refleja el plazo exacto pactado (incluye ajustes de frecuencia).
+  if (p.fechaVencimiento && p.fechaDesembolso) {
+    const diffMs = new Date(p.fechaVencimiento).getTime() - new Date(p.fechaDesembolso).getTime()
+    const dias = Math.round(diffMs / (1000 * 60 * 60 * 24))
+    if (dias > 0) return dias
+  }
+  // Fallback: calcular según frecuencia y número de cuotas
+  const cuotas = p.numeroCuotas || 0
+  switch (p.frecuencia) {
+    case 'MENSUAL': return cuotas * 30
+    case 'QUINCENAL': return cuotas * 15
+    case 'SEMANAL': return cuotas * 7
+    case 'DIARIO': return cuotas
+    default: return cuotas * 30
+  }
+}
+
+export function calcularConteoVigencia(p: Prestamo, ahora: Date = new Date()): ConteoVigencia {
+  // Solo aplica a créditos activos, en mora, jurídicos o cancelados.
+  // No aplica a solicitudes pendientes ni a préstamos rechazados.
+  const estadosValidos = ['ACTIVO', 'EN_MORA', 'JURIDICO', 'CANCELADO']
+  if (!estadosValidos.includes(p.estado)) {
+    return {
+      aplica: false,
+      diasTranscurridos: 0,
+      plazoTotalDias: 0,
+      diasExcedidos: 0,
+      estadoPlazo: 'NO_APLICA',
+      congelado: false,
+      fechaCorte: ahora,
+      fechaInicio: ahora,
+    }
+  }
+
+  // Fecha de inicio: fechaDesembolso (cuando el crédito realmente se activó).
+  // Si por algún motivo no existe, no podemos calcular el conteo.
+  const fechaInicio = p.fechaDesembolso ? new Date(p.fechaDesembolso) : null
+  if (!fechaInicio) {
+    return {
+      aplica: false,
+      diasTranscurridos: 0,
+      plazoTotalDias: 0,
+      diasExcedidos: 0,
+      estadoPlazo: 'NO_APLICA',
+      congelado: false,
+      fechaCorte: ahora,
+      fechaInicio: ahora,
+    }
+  }
+
+  const plazoTotalDias = calcularPlazoTotalDias(p)
+  const estaCancelado = p.estado === 'CANCELADO'
+
+  // Fecha de corte para el cálculo:
+  //   - Si está CANCELADO: usar updatedAt (fecha de cancelación) → CONGELA el conteo.
+  //   - Si está ACTIVO/EN_MORA/JURIDICO: usar la fecha actual → conteo dinámico.
+  const fechaCorte = estaCancelado && p.updatedAt
+    ? new Date(p.updatedAt)
+    : ahora
+
+  // Días transcurridos = diferencia en días (sin decimales, sin hora).
+  // Usamos floor para no contar el día actual hasta que termine.
+  const diffMs = fechaCorte.getTime() - fechaInicio.getTime()
+  const diasTranscurridos = Math.max(0, Math.floor(diffMs / (1000 * 60 * 60 * 24)))
+
+  // Determinar estado del plazo
+  let estadoPlazo: EstadoPlazo
+  if (estaCancelado) {
+    estadoPlazo = 'CANCELADO'
+  } else if (diasTranscurridos < plazoTotalDias) {
+    estadoPlazo = 'DENTRO'
+  } else if (diasTranscurridos === plazoTotalDias) {
+    estadoPlazo = 'CUMPLIDO'
+  } else {
+    estadoPlazo = 'EXCEDIDO'
+  }
+
+  const diasExcedidos = Math.max(0, diasTranscurridos - plazoTotalDias)
+
+  return {
+    aplica: true,
+    diasTranscurridos,
+    plazoTotalDias,
+    diasExcedidos,
+    estadoPlazo,
+    congelado: estaCancelado,
+    fechaCorte,
+    fechaInicio,
+  }
 }
 
 // =====================================================
@@ -143,6 +276,17 @@ function PrestamosPanel({
   const [filtroEstado, setFiltroEstado] = useState<string>('all')
   const [modalAbierto, setModalAbierto] = useState(false)
   const { toast } = useToast()
+
+  // === Tick para refresco dinámico del CONTEO DE VIGENCIA ===
+  // Cada 60 segundos se actualiza `nowTick` para forzar un re-render del
+  // componente y que el conteo de días transcurridos se recalcule con la
+  // fecha/hora actual del sistema. Esto cumple el requisito de que el
+  // conteo sea dinámico y no dependa de que el usuario recargue la página.
+  const [nowTick, setNowTick] = useState(() => new Date())
+  useEffect(() => {
+    const interval = setInterval(() => setNowTick(new Date()), 60_000)
+    return () => clearInterval(interval)
+  }, [])
 
   // Estado del formulario
   const [clienteId, setClienteId] = useState('')
@@ -1455,6 +1599,10 @@ ${linkFirmaCodeudor}
                 <TableHead>Tasa</TableHead>
                 <TableHead>Cuota</TableHead>
                 <TableHead>Plazo</TableHead>
+                {/* === CONTEO DE VIGENCIA — Días transcurridos / Plazo total === */}
+                <TableHead className="text-center">Conteo</TableHead>
+                {/* === ESTADO DEL PLAZO — Dentro / Cumplido / Excedido / Cancelado === */}
+                <TableHead className="text-center">Estado del Plazo</TableHead>
                 <TableHead>Saldo</TableHead>
                 <TableHead>Progreso</TableHead>
                 <TableHead>Estado</TableHead>
@@ -1464,13 +1612,13 @@ ${linkFirmaCodeudor}
             <TableBody>
               {loading ? (
                 <TableRow>
-                  <TableCell colSpan={10} className="text-center py-8 text-muted-foreground">
+                  <TableCell colSpan={12} className="text-center py-8 text-muted-foreground">
                     Cargando...
                   </TableCell>
                 </TableRow>
               ) : prestamosFiltrados.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={10} className="text-center py-8 text-muted-foreground">
+                  <TableCell colSpan={12} className="text-center py-8 text-muted-foreground">
                     No hay préstamos registrados.
                   </TableCell>
                 </TableRow>
@@ -1494,6 +1642,73 @@ ${linkFirmaCodeudor}
                       {p.numeroCuotas} cuotas
                       <div className="text-muted-foreground">{p.frecuencia.toLowerCase()}</div>
                     </TableCell>
+                    {/* === CONTEO DE VIGENCIA + ESTADO DEL PLAZO === */}
+                    {/* Calculamos `conteo` una sola vez y renderizamos ambas celdas. */}
+                    {/* Para créditos CANCELADOS el conteo queda congelado en el valor */}
+                    {/* alcanzado al momento de la cancelación (no sigue incrementándose). */}
+                    {(() => {
+                      const conteo = calcularConteoVigencia(p, nowTick)
+                      if (!conteo.aplica) {
+                        return (
+                          <>
+                            <TableCell className="text-center text-xs text-muted-foreground">—</TableCell>
+                            <TableCell className="text-center text-xs text-muted-foreground">—</TableCell>
+                          </>
+                        )
+                      }
+                      // Mapear estado del plazo a etiqueta + emoji + clases de color
+                      const cfgPlazo: Record<EstadoPlazo, { label: string; emoji: string; className: string }> = {
+                        DENTRO: {
+                          label: 'DENTRO DEL PLAZO',
+                          emoji: '🟢',
+                          className: 'bg-emerald-500/15 text-emerald-300 border-emerald-400/30',
+                        },
+                        CUMPLIDO: {
+                          label: 'PLAZO CUMPLIDO',
+                          emoji: '🟡',
+                          className: 'bg-amber-500/15 text-amber-300 border-amber-400/30',
+                        },
+                        EXCEDIDO: {
+                          label: `EXCEDIÓ EL PLAZO — ${conteo.diasExcedidos} DÍAS`,
+                          emoji: '🔴',
+                          className: 'bg-red-500/15 text-red-300 border-red-400/30',
+                        },
+                        CANCELADO: {
+                          label: 'CANCELADO',
+                          emoji: '🔵',
+                          className: 'bg-blue-500/15 text-blue-300 border-blue-400/30',
+                        },
+                        NO_APLICA: { label: '—', emoji: '', className: '' },
+                      }
+                      const c = cfgPlazo[conteo.estadoPlazo]
+                      return (
+                        <>
+                          {/* Celda CONTEO: "DÍA TRANSCURRIDO / PLAZO TOTAL días" */}
+                          <TableCell className="text-center">
+                            <div className={`text-sm font-semibold ${conteo.congelado ? 'text-blue-400' : 'text-foreground'}`}>
+                              {conteo.diasTranscurridos} / {conteo.plazoTotalDias}
+                            </div>
+                            <div className="text-[10px] text-muted-foreground">
+                              {conteo.congelado ? 'días (congelado)' : 'días'}
+                            </div>
+                          </TableCell>
+                          {/* Celda ESTADO DEL PLAZO: badge de estado con tooltip */}
+                          <TableCell className="text-center">
+                            <span
+                              className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold border ${c.className}`}
+                              title={
+                                conteo.congelado
+                                  ? `Conteo congelado al cancelar el crédito. Último valor: ${conteo.diasTranscurridos}/${conteo.plazoTotalDias} días.`
+                                  : `Inicio: ${conteo.fechaInicio.toLocaleDateString('es-CO')} · Corte: ${conteo.fechaCorte.toLocaleDateString('es-CO')}`
+                              }
+                            >
+                              {c.emoji && <span>{c.emoji}</span>}
+                              <span>{c.label}</span>
+                            </span>
+                          </TableCell>
+                        </>
+                      )
+                    })()}
                     <TableCell className="text-sm font-semibold">{formatearMoneda(p.saldoTotal)}</TableCell>
                     <TableCell>
                       <div className="flex items-center gap-2">
