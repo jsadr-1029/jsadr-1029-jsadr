@@ -151,6 +151,9 @@ export function calcularPrestamo(parametros: ParametrosPrestamo): ResultadoCalcu
 
   const totalPagar = Math.round((montoPrincipal + totalInteres) * 100) / 100
   const fechaVencimiento = calcularFechaVencimiento(fechaInicio, numeroCuotas, frecuencia)
+  // Fondo de Garantía: 5% por defecto (legacy). La tasa real configurable
+  // se calcula en /api/prestamos/route.ts usando el parámetro tasaFondoGarantia.
+  // Este valor aquí es solo un estimado para el simulador/preview.
   const fondoGarantia = Math.round(montoPrincipal * 0.05 * 100) / 100 // 5%
 
   return {
@@ -375,17 +378,26 @@ export function calcularCargosInicialesPendientes(prestamo: {
     }
   }
 
-  // 4. Fondo de Garantía — tiene flag explícito (fondoGarantiaCargado=true
-  //    significa que el fondo ya fue cargado al préstamo, NO que ya fue cobrado).
-  //    Para detectar "ya cobrado" usamos el mismo flag (si el fondo ya está
-  //    cargado al préstamo, el cobro ya se hizo al inicio). Por eso lo
-  //    exponemos como "yaCobrado: true" cuando fondoGarantiaCargado=true.
+  // 4. Fondo de Garantía — SOLO aparece si el gestor lo activó explícitamente
+  //    al crear el préstamo (fondoGarantiaCargado=true).
+  //    Política 2026-08-15: NO todos los créditos llevan fondo de garantía.
+  //    Solo los que el gestor determine en el sistema que se les cobre.
+  //
+  //    Cuando está activado:
+  //      - Se marca yaCobrado=true (se cobra al inicio, al activar el préstamo)
+  //      - Se carga automáticamente el ingreso a CAJA-GARANTIA
+  //      - Aparece como concepto en el estado de cuenta
+  //      - NO se suma a la cuota 1 (ya se cobró por separado)
+  //
+  //    Cuando NO está activado (fondoGarantiaCargado=false):
+  //      - No aparece en ningún flujo (estado de cuenta, pagos, caja)
+  //      - El monto y la tasa quedan en 0 en la BD
   if (prestamo.fondoGarantiaCargado && Number(prestamo.fondoGarantiaMonto) > 0) {
     cargos.push({
       concepto: 'FONDO_GARANTIA',
       etiqueta: 'Fondo de Garantía',
       monto: Number(prestamo.fondoGarantiaMonto),
-      yaCobrado: true,  // se cobra al momento de cargar el préstamo
+      yaCobrado: true,  // se cobra al activar el préstamo (carga a CAJA-GARANTIA)
       flagCampo: 'fondoGarantiaCargado',
     })
   }

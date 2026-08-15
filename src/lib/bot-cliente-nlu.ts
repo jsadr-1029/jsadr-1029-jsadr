@@ -532,14 +532,14 @@ Usa el Simulador del Portal para ver opciones.`
     keywords: ['garantia', 'fondo', 'seguro'],
     responder: () => `🛡️ **Fondo de garantía**
 
-En tu primer préstamo se cobra un **5% del capital** como fondo de garantía.
+El fondo de garantía es **opcional** — lo activa el gestor al crear el crédito. No todos los préstamos lo llevan.
 
-• Se descuenta del desembolso
-• Se guarda en una caja separada (no se mezcla con otros fondos)
-• Se te devuelve al finalizar el préstamo (si pagas todas las cuotas)
-• Si renuevas, se traslada al nuevo préstamo
+• Si tu crédito lo tiene activado: se cobra por separado al iniciar (no se descuenta del desembolso)
+• Se guarda en una caja exclusiva (CAJA-GARANTIA)
+• Se te devuelve al finalizar el préstamo (previa verificación de cumplimiento)
+• Si tu crédito NO lo tiene: no se te cobra nada por este concepto
 
-💡 El fondo protege tanto al cliente como a la empresa en caso de impago.`
+💡 El fondo protege tanto al cliente como a la empresa en caso de impago. Para saber si tu préstamo lo tiene, revisa el detalle del crédito en el Portal o pregunta a tu asesor.`
   },
 
   // === MORA ===
@@ -836,7 +836,7 @@ Una vez aprobado y firmado tu préstamo:
 2. Revisa si hay retenciones en tu banco
 3. Escribe "asesor" si el problema persiste
 
-💡 El 5% del fondo de garantía se descuenta automáticamente del desembolso (solo en primer préstamo).`
+💡 Si tu crédito tiene fondo de garantía activado (lo define el gestor al crearlo), el monto se cobra por separado y se guarda en CAJA-GARANTIA. Se te devuelve al finalizar el préstamo.`
   },
   {
     id: 'CANCELAR_PRESTAMO',

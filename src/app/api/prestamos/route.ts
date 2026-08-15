@@ -615,7 +615,15 @@ export async function POST(req: NextRequest) {
           saldoCapital: parseFloat(montoPrincipal),
           saldoInteres: calculo.totalInteres,
           saldoTotal: calculo.totalPagar,
-          fondoGarantiaCargado: false,
+          // === Fondo de Garantía (condicional) ===
+          // Solo se marca como CARGADO si el gestor lo activó explícitamente.
+          // Si incluirFondoGarantia=false, el préstamo NO lleva fondo de garantía
+          // y no se muestra ni se cobra en ningún flujo (estado de cuenta, pagos, caja).
+          // Si incluirFondoGarantia=true, se marca cargado desde el inicio para que:
+          //   - Aparezca como concepto en el estado de cuenta
+          //   - Se cargue automáticamente a CAJA-GARANTIA al activar el préstamo
+          //   - Se refleje en el saldo total
+          fondoGarantiaCargado: !!incluirFondoGarantia && fondoGarantiaMonto > 0,
           fondoGarantiaMonto: fondoGarantiaMonto,
           fondoGarantiaTasa: fondoGarantiaTasaDecimal,
           // === Campos del bloque de corte (null si no hay periodo activo) ===

@@ -2456,3 +2456,168 @@ model PasaporteAuditoria {
   @@index([tipoAccion])
   @@index([prestamoId])
 }
+
+// =====================================================
+// ====== PORTAL DEL CONTADOR ======
+// Módulo contable independiente: empresas, terceros, PUC,
+// comprobantes, asientos, períodos y declaraciones.
+// Multi-empresa estricta (todas las queries filtran por empresaId).
+// =====================================================
+
+model ContEmpresa {
+  id              String   @id @default(cuid())
+  razonSocial     String
+  nit             String   @unique
+  dv              String?
+  tipoEmpresa     String   // SOCIEDAD_LIMITADA | SA | SAS | PERSONA_NATURAL | etc
+  responsabilidades String? // JSON array
+  regimen         String?  // COMUN | SIMPLIFICADO | GRAN_CONTRIBUYENTE
+  ciiu            String?
+  actividades     String?  // JSON array
+  municipio       String?
+  departamento    String?
+  representanteLegal String?
+  contadorNombre  String?
+  revisorFiscal   String?
+  marcoContable   String?  // NIIF_PYMES | NIIF_COMPLETO | etc
+  configuracionTributaria String? // JSON
+  activa          Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  terceros        ContTercero[]
+  cuentas         ContCuentaPUC[]
+  comprobantes    ContComprobante[]
+  periodos        ContPeriodo[]
+  declaraciones   ContDeclaracion[]
+}
+
+model ContTercero {
+  id              String   @id @default(cuid())
+  empresaId       String
+  empresa         ContEmpresa @relation(fields: [empresaId], references: [id])
+  tipoDocumento   String   // CC | NIT | CE | PA
+  numeroDocumento String
+  tipoTercero     String   // CLIENTE | PROVEEDOR | EMPLEADO | SOCIO | ACCIONISTA | BANCO | ENTIDAD_PUBLICA
+  nombres         String?
+  apellidos       String?
+  razonSocial     String?
+  direccion       String?
+  telefono        String?
+  email           String?
+  municipio       String?
+  departamento    String?
+  activo          Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([empresaId, tipoDocumento, numeroDocumento])
+  @@index([empresaId, tipoTercero])
+}
+
+model ContCuentaPUC {
+  id              String   @id @default(cuid())
+  empresaId       String
+  empresa         ContEmpresa @relation(fields: [empresaId], references: [id])
+  codigo          String   // ej: 1105, 2205, 4135
+  nombre          String
+  naturaleza      String   // DEBITO | CREDITO
+  tipo            String   // CLASE | GRUPO | CUENTA | SUBCUENTA | AUXILIAR
+  cuentaPadreId   String?
+  cuentaPadre     ContCuentaPUC? @relation("CuentaPUCArbol", fields: [cuentaPadreId], references: [id])
+  subcuentas      ContCuentaPUC[] @relation("CuentaPUCArbol")
+  asientos        ContAsiento[]
+  terceroRequerido Boolean @default(false)
+  centroCostoRequerido Boolean @default(false)
+  tratamientoTributario String?
+  estadoFinanciero String? // BALANCE | RESULTADOS | ORDEN
+  estado          String   @default("ACTIVA") // ACTIVA | INACTIVA
+  saldo           Float    @default(0)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([empresaId, codigo])
+  @@index([empresaId, cuentaPadreId])
+}
+
+model ContPeriodo {
+  id              String   @id @default(cuid())
+  empresaId       String
+  empresa         ContEmpresa @relation(fields: [empresaId], references: [id])
+  anio            Int
+  mes             Int      // 1-12 (0 = anual)
+  estado          String   @default("ABIERTO") // ABIERTO | EN_CIERRE | CERRADO | REABIERTO
+  fechaCierre     DateTime?
+  cerradoPor      String?
+  motivoReapertura String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  comprobantes    ContComprobante[]
+
+  @@unique([empresaId, anio, mes])
+}
+
+model ContComprobante {
+  id              String   @id @default(cuid())
+  empresaId       String
+  empresa         ContEmpresa @relation(fields: [empresaId], references: [id])
+  periodoId       String
+  periodo         ContPeriodo @relation(fields: [periodoId], references: [id])
+  numero          String   // ej: CBTE-2026-001
+  tipo            String   // INGRESO | EGRESO | DIARIO | AJUSTE | RECLASIFICACION | REVERSO | CIERRE
+  fechaDocumento  DateTime
+  fechaContable   DateTime
+  concepto        String
+  descripcion     String?
+  totalDebitos    Float    @default(0)
+  totalCreditos   Float    @default(0)
+  estado          String   @default("BORRADOR") // BORRADOR | APROBADO | ANULADO
+  creadoPorId     String?
+  creadoPorNombre String?
+  aprobadoPorId   String?
+  aprobadoPorNombre String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  asientos        ContAsiento[]
+
+  @@unique([empresaId, numero])
+  @@index([empresaId, periodoId, estado])
+}
+
+model ContAsiento {
+  id              String   @id @default(cuid())
+  comprobanteId   String
+  comprobante     ContComprobante @relation(fields: [comprobanteId], references: [id])
+  cuentaId        String
+  cuenta          ContCuentaPUC @relation(fields: [cuentaId], references: [id])
+  terceroId       String?
+  centroCosto     String?
+  debito          Float    @default(0)
+  credito         Float    @default(0)
+  descripcion     String?
+  createdAt       DateTime @default(now())
+
+  @@index([comprobanteId, cuentaId])
+}
+
+model ContDeclaracion {
+  id              String   @id @default(cuid())
+  empresaId       String
+  empresa         ContEmpresa @relation(fields: [empresaId], references: [id])
+  tipo            String   // RENTA | IVA | RETENCION | ICA | EXOGENA
+  periodoFiscal   String   // ej: "2026", "2026-01", "2026-Q1"
+  anio            Int
+  estado          String   @default("BORRADOR") // BORRADOR | EN_REVISION | APROBADA | PRESENTADA | ARCHIVADA
+  valorAPagar     Float    @default(0)
+  valorPagado     Float    @default(0)
+  fechaVencimiento DateTime?
+  fechaPresentacion DateTime?
+  presentadaPor   String?
+  observaciones   String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([empresaId, tipo, anio])
+}

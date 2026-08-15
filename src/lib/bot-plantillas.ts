@@ -279,9 +279,9 @@ export const PLANTILLAS_PLAZO: PlantillasIntent = {
 export const PLANTILLAS_FONDO_GARANTIA: PlantillasIntent = {
   intent: 'FONDO_GARANTIA',
   plantillas: [
-    'El fondo de garantía es del 5% del capital, se descuenta del desembolso solo en tu primer préstamo. Se guarda en una caja separada y se te devuelve cuando termines de pagar todas las cuotas. Si renuevas, se traslada al nuevo préstamo (no lo pierdes).',
-    '${cliente}, el 5% del fondo de garantía se descuenta del primer desembolso y se devuelve al finalizar el préstamo. Si renuevas, el fondo pasa al nuevo crédito. Es una protección tanto para ti como para la empresa.',
-    'En el primer préstamo se retiene el 5% del capital como fondo de garantía. Se devuelve al terminar de pagar todas las cuotas. Si renuevas, el fondo se traslada al nuevo crédito, no lo pierdes.',
+    'El fondo de garantía es opcional — lo activa el gestor al crear el crédito, no todos los préstamos lo llevan. Cuando aplica, se cobra por separado (no se descuenta del desembolso) y se guarda en una caja exclusiva (CAJA-GARANTIA). Se devuelve al finalizar el préstamo previa verificación de cumplimiento de tus obligaciones.',
+    '${cliente}, el fondo de garantía NO es obligatorio. Lo define el gestor crédito por crédito. Si tu préstamo lo tiene activado, el monto (habitualmente 5% del capital) se cobra aparte al iniciar el crédito y se guarda en una caja separada. Se te devuelve al terminar de pagar todas las cuotas.',
+    'El fondo de garantía es una protección opcional. No todos los créditos lo llevan: solo los que el gestor determine. Si tu crédito lo tiene, el monto se guarda en CAJA-GARANTIA y se devuelve al finalizar el préstamo. Si tu crédito no lo tiene, no se te cobra nada por este concepto.',
   ],
 }
 
@@ -446,7 +446,7 @@ export const PLANTILLAS_DESEMBOLSO: PlantillasIntent = {
   plantillas: [
     'Una vez aprobado y firmado tu préstamo, el desembolso se hace en máximo 24 horas hábiles a la cuenta que registraste. Te avisamos por WhatsApp cuando se haga. Si no recibes el dinero en 24h, verifica tus datos bancarios en el Portal o escríbeme "asesor".',
     '${cliente}, el desembolso tarda máximo 24 horas hábiles después de la firma. Va a la cuenta que registraste en la solicitud. Te mandamos confirmación por WhatsApp al hacer la transferencia. Si pasan 24h y no recibes, revisa los datos de tu cuenta en el Portal.',
-    'Tras la firma con OTP, se desembolsa en 24 horas hábiles máximo a tu cuenta registrada. Recuerda que del monto se descuenta el 5% del fondo de garantía (solo en tu primer préstamo). Te avisamos por WhatsApp al concretarse la transferencia.',
+    'Tras la firma con OTP, se desembolsa en 24 horas hábiles máximo a tu cuenta registrada. Si tu crédito tiene fondo de garantía activado (lo define el gestor al crearlo), el monto del fondo se cobra por separado y se guarda en una caja exclusiva. Te avisamos por WhatsApp al concretarse la transferencia.',
   ],
 }
 

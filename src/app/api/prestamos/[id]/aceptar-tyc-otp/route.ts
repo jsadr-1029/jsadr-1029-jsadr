@@ -18,9 +18,15 @@ import { requireRole } from '@/lib/auth-guard'
 //   • Pagaré + Carta             → CAJA-PAGARE-CARTA
 //   • Tarifa de Uso de Plataforma → CAJA-USO-PLATAFORMA
 //   • Renovación Anticipada      → CAJA-RENOVACIONES
+//   • Fondo de Garantía          → CAJA-GARANTIA  (solo si el gestor lo activó)
 // Solo registra los ingresos que apliquen al préstamo y que no se hayan
 // registrado antes (idempotente vía tarifaPlataformaCargada / flag en
 // la descripción del movimiento).
+//
+// Política 2026-08-15: El Fondo de Garantía es OPCIONAL por préstamo.
+// Solo se carga si el gestor marcó incluirFondoGarantia=true al crear el crédito.
+// Si no se activa, NO se carga nada a CAJA-GARANTIA y el préstamo no muestra
+// el concepto en el estado de cuenta.
 // =====================================================
 async function registrarIngresosCajasPorActivacion(prestamoId: string) {
   const prestamo = await db.prestamo.findUnique({
@@ -40,16 +46,47 @@ async function registrarIngresosCajasPorActivacion(prestamoId: string) {
       tarifaPlataformaCargada: true,
       renovacionAnticipada: true,
       renovacionAnticipadaCosto: true,
+      // === Fondo de Garantía (opcional por préstamo) ===
+      fondoGarantiaCargado: true,
+      fondoGarantiaMonto: true,
+      fondoGarantiaTasa: true,
       cliente: { select: { nombre: true } },
     },
   })
   if (!prestamo) return null
 
-  // Buscar las 5 cajas (deben existir — creadas por scripts/_seed-cajas-tarea-u.cjs y _seed-caja-renovaciones.cjs)
-  const codigosCajas = ['CAJA-FLEXIBILIDAD', 'CAJA-INGRESOS-CAUSADOS', 'CAJA-PAGARE-CARTA', 'CAJA-USO-PLATAFORMA', 'CAJA-RENOVACIONES']
+  // Buscar las 6 cajas (5 + CAJA-GARANTIA). CAJA-GARANTIA se crea automáticamente
+  // si no existe (seed bajo demanda) para soportar préstamos con fondo activado.
+  const codigosCajas = ['CAJA-FLEXIBILIDAD', 'CAJA-INGRESOS-CAUSADOS', 'CAJA-PAGARE-CARTA', 'CAJA-USO-PLATAFORMA', 'CAJA-RENOVACIONES', 'CAJA-GARANTIA']
   const cajas = await db.cajaMenor.findMany({ where: { codigo: { in: codigosCajas } } })
   const cajaPorCodigo: Record<string, string> = {}
   for (const c of cajas) cajaPorCodigo[c.codigo] = c.id
+
+  // === Seed bajo demanda: crear CAJA-GARANTIA si no existe ===
+  // Esto permite que los préstamos con fondo de garantía activado funcionen
+  // sin requerir un script de seed manual del administrador.
+  if (!cajaPorCodigo['CAJA-GARANTIA']) {
+    try {
+      const nuevaCaja = await db.cajaMenor.create({
+        data: {
+          codigo: 'CAJA-GARANTIA',
+          nombre: 'Fondo de Garantía',
+          descripcion: 'Caja donde se registran los ingresos por Fondo de Garantía de los préstamos que lo tienen activado. Solo se carga cuando el gestor activa el fondo al crear el crédito. El fondo se devuelve al cliente al finalizar el préstamo previa verificación de cumplimiento.',
+          saldoActual: 0,
+          totalIngresos: 0,
+          totalEgresos: 0,
+          activa: true,
+        },
+      })
+      cajaPorCodigo['CAJA-GARANTIA'] = nuevaCaja.id
+      console.log('[registrarIngresosCajasPorActivacion] CAJA-GARANTIA creada automáticamente (seed bajo demanda)')
+    } catch (err) {
+      // Si la caja ya existe (race condition), la buscamos de nuevo
+      const existente = await db.cajaMenor.findUnique({ where: { codigo: 'CAJA-GARANTIA' } })
+      if (existente) cajaPorCodigo['CAJA-GARANTIA'] = existente.id
+      else console.error('[registrarIngresosCajasPorActivacion] No se pudo crear CAJA-GARANTIA:', err)
+    }
+  }
 
   const ingresos: Array<{ cajaCodigo: string; monto: number; concepto: string; referencia: string }> = []
 
@@ -103,6 +140,21 @@ async function registrarIngresosCajasPorActivacion(prestamoId: string) {
       cajaCodigo: 'CAJA-RENOVACIONES',
       monto: prestamo.renovacionAnticipadaCosto,
       concepto: `Renovación Anticipada — Préstamo ${prestamo.codigo}`,
+      referencia: prestamo.codigo,
+    })
+  }
+
+  // 6) Fondo de Garantía (SOLO si el gestor lo activó al crear el préstamo)
+  // Política: NO todos los créditos llevan fondo de garantía. Solo los que el
+  // gestor determine en el sistema. Cuando está activado, el monto se carga
+  // automáticamente a CAJA-GARANTIA al activar el préstamo (aceptar TyC).
+  // Si no está activado, no se carga nada.
+  if (prestamo.fondoGarantiaCargado && (prestamo.fondoGarantiaMonto || 0) > 0) {
+    const tasaPct = ((prestamo.fondoGarantiaTasa || 0) * 100).toFixed(2)
+    ingresos.push({
+      cajaCodigo: 'CAJA-GARANTIA',
+      monto: prestamo.fondoGarantiaMonto,
+      concepto: `Fondo de Garantía (${tasaPct}% del capital) — Préstamo ${prestamo.codigo}`,
       referencia: prestamo.codigo,
     })
   }

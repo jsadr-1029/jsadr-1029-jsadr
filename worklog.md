@@ -502,3 +502,28 @@ Stage Summary:
 - Reporte completo entregado al agente main con: archivos encontrados, snippets de código relevantes, gaps identificados, recomendaciones de implementación.
 - NO se escribió código nuevo (research-only).
 - Próximos pasos sugeridos: (1) setear fechaCancelacion en recalcular-saldos.ts y /api/prestamos/[id] route (cerrar); (2) si se necesita crear nuevas cajas desde UI, agregar POST /api/cajas con rol ADMIN; (3) si se necesita PDF real (no HTML+print), extender pdfkit a paz-y-salvo y estado-cuenta.
+
+---
+Task ID: portal-contador-build
+Agent: full-stack-developer
+Task: Construir Portal del Contador
+
+Work Log:
+- Diagnóstico: .env tenía DATABASE_URL=sqlite pero schema usa postgresql; shell además exportaba DATABASE_URL=sqlite, rompiendo `bun run db:push` y el arranque automático del dev server.
+- Fix env: .env actualizado a Neon PostgreSQL (backup .env.portal-contador-bak); package.json db:push/db:generate modificados para leer DATABASE_URL desde .env (sobrescribe env stale); db.ts SCHEMA_TAG actualizado.
+- Schema: añadidos 7 modelos Cont* (ContEmpresa, ContTercero, ContCuentaPUC, ContPeriodo, ContComprobante, ContAsiento, ContDeclaracion) al final de prisma/schema.prisma + back-relation asientos. prisma db push + generate ejecutados contra Neon (éxito).
+- Seed: scripts/seed-contador.cjs creó usuario Js_Contador (rol CONTADOR, bcrypt('Js951029*',12), mustChangePassword=true). Añadido scripts/reset-contador.cjs para restaurar estado inicial.
+- Helper: src/lib/contador-auth.ts (requireContador con JWT+rol CONTADOR/ADMIN+rate limit, requireEmpresaId, sanitizers).
+- API Routes (17 archivos bajo /api/portal-contador/): auth/login|cambiar-password|logout|me; empresas + [id]; terceros + [id]; puc + [id]; comprobantes + [id]; periodos + [id] + [id]/cerrar; declaraciones + [id]; dashboard. Todas con auth+rol+filtro empresaId.
+- Validaciones críticas: POST comprobantes verifica sum(debitos)===sum(creditos) (tol 0.01) → 400 si descuadrado; bloquea creación en período CERRADO; transacción + actualización de saldos de cuentas; cierre de período bloqueado si hay borradores.
+- Frontend: layout.tsx + ContadorShell (gating auth/login/cambio-pwd/sidebar) + contador-auth-provider (context+apiContador) + SidebarContador (menú 7 secciones navy) + HeaderContador (selector empresa) + ui-contador (PageHeader/KpiCard/ModuloEnDesarrollo/formatCOP). Páginas: dashboard, empresas, terceros, puc, contabilidad (editor asientos con totales en vivo), periodos (abrir/cerrar/reabrir), declaraciones. 21 placeholders de módulos secundarios.
+- E2E (curl): login OK; comprobante descuadrado→400; cuadrado→201 (auto CBTE-2026-00001); cerrar período con borradores→400; aprobar→OK; cerrar→OK; comprobante en CERRADO→400; cambiar-pwd→OK; reabrir→OK. Bug corregido: endpoint cerrar bloqueaba reapertura (early-return CERRADO); reordenado.
+- Limpieza: reset-contador.cjs restauró Js_Contador/Js951029*/mustChangePassword=true. Período 2026-01 reabierto. Datos de muestra: 1 empresa + 2 cuentas + 1 período + 1 comprobante aprobado.
+- Verificación: npx tsc --noEmit → EXIT 0. npx eslint (archivos nuevos) → EXIT 0. Dev server corriendo; todas las rutas /portal-contador/* → HTTP 200.
+
+Stage Summary:
+- 47 archivos creados/editados (1 schema + 1 db.ts + 1 package.json + 2 scripts + 1 helper + 17 API routes + 7 componentes/layout + 8 páginas módulo + 21 placeholders + 2 docs).
+- DB Neon Postgres en sync (7 tablas Cont*). Usuario Js_Contador creado y restaurado a estado inicial.
+- Validaciones críticas operando: débitos=créditos, período cerrado bloquea, multi-empresa estricta, auth JWT+rol en toda API.
+- tsc 0 errores; lint 0 errores en archivos nuevos; dev server activo.
+- Limitaciones: módulos secundarios son placeholders visibles/accesibles; no se hizo commit (lo hace el agente padre). Credenciales: Js_Contador / Js951029* (cambio forzado en primer login).

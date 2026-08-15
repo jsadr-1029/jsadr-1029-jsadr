@@ -538,7 +538,7 @@ export function SimuladorView() {
                   <p>
                     <strong>Fondo de Garantía (5%):</strong>{' '}
                     {formatearMoneda(calculo.fondoGarantia)}
-                    <span className="text-xs text-muted-foreground"> (solo primer préstamo)</span>
+                    <span className="text-xs text-muted-foreground"> (opcional — se activa por préstamo)</span>
                   </p>
                   {metodo === 'FRANCES' ? (
                     <p className="text-xs text-muted-foreground">
