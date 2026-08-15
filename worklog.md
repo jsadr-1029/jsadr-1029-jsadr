@@ -527,3 +527,27 @@ Stage Summary:
 - Validaciones críticas operando: débitos=créditos, período cerrado bloquea, multi-empresa estricta, auth JWT+rol en toda API.
 - tsc 0 errores; lint 0 errores en archivos nuevos; dev server activo.
 - Limitaciones: módulos secundarios son placeholders visibles/accesibles; no se hizo commit (lo hace el agente padre). Credenciales: Js_Contador / Js951029* (cambio forzado en primer login).
+
+---
+Task ID: fix-fondo-garantia-cuota1
+Agent: main
+Task: Fix Fondo de Garantía — debe cobrarse DENTRO de las cuotas (cuota 1) cada vez que se active, igual que los demás cargos iniciales. El usuario reportó que veía el concepto pero no se cobraba en las cuotas.
+
+Work Log:
+- Creado préstamo "FONDO-GARANTIA-20260815-4766" (Johan, $500.000, 20% mensual, 2 cuotas, fondo activado) para revisión.
+- Detectada raíz del problema en `src/lib/finanzas.ts`: `calcularCargosInicialesPendientes` marcaba Fondo Garantía con `yaCobrado: true`, lo que lo excluía del filter `c => !c.yaCobrado` y por tanto no se sumaba al monto de la cuota 1.
+- Cambios aplicados:
+  1. `src/lib/finanzas.ts` (líneas ~381-407): cambiado `yaCobrado: true` → `yaCobrado: false` y `flagCampo: 'fondoGarantiaCargado'` → `flagCampo: 'cuota1Aplicada'`. Actualizado comentario de política.
+  2. `src/app/api/pagos/route.ts` (línea ~648-651): agregado caso `cargo.concepto === 'FONDO_GARANTIA'` que carga el ingreso a `CAJA-GARANTIA` cuando se aplica el pago de la cuota 1.
+  3. `src/app/api/estado-cuenta/route.ts` (líneas 111-127): extendida lógica `cuota1Aplicada` para marcar `FONDO_GARANTIA` como cobrado cuando la cuota 1 está APLICADA (igual que ya pasaba con `PAGARE_CARTA`). Actualizado texto del concepto para decir "incluido en la primera cuota".
+  4. `src/app/api/pagos/aplicar/route.ts` (líneas 131-141): misma extensión de `cuota1Aplicada` para `FONDO_GARANTIA` en el GET (vista "Aplicar Pago").
+- TypeScript: `npx tsc --noEmit` → EXIT 0.
+- Commit: `2ea978f` en main, push a GitHub exitoso. Vercel auto-deploy desencadenado.
+
+Stage Summary:
+- Comportamiento nuevo: cuando un préstamo tiene `fondoGarantiaCargado=true` y `fondoGarantiaMonto>0`, el monto del fondo se suma automáticamente al total a pagar de la cuota 1 (igual que Pagaré, Tarifa Plataforma y Flexibilidad). Al aplicar el pago de la cuota 1, el ingreso se contabiliza en `CAJA-GARANTIA`. El concepto se considera cobrado cuando la cuota 1 queda `APLICADO`.
+- Política de cobro condicional respetada: solo los préstamos donde el gestor activa el fondo lo cargan. Los demás préstamos no se ven afectados.
+- Préstamo de prueba "FONDO-GARANTIA-20260815-4766" sigue activo; al revisar el portal el usuario debería ver:
+  · Estado de cuenta → cuota 1 con $375.000 ($350.000 cuota + $25.000 fondo garantía)
+  · Aplicar Pago → cuota 1 pendiente con detalle "incluye $25.000 cargos iniciales"
+  · Al aplicar pago de cuota 1 → movimiento de ingreso a CAJA-GARANTIA
