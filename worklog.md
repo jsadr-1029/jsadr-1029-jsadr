@@ -551,3 +551,35 @@ Stage Summary:
   · Estado de cuenta → cuota 1 con $375.000 ($350.000 cuota + $25.000 fondo garantía)
   · Aplicar Pago → cuota 1 pendiente con detalle "incluye $25.000 cargos iniciales"
   · Al aplicar pago de cuota 1 → movimiento de ingreso a CAJA-GARANTIA
+
+---
+Task ID: eliminar-clientes-menos-johan
+Agent: main
+Task: Eliminar todos los clientes excepto Johan (CC 1214731649) y todos sus créditos/asociados. Johan queda como único usuario de prueba con sus 33 préstamos preservados.
+
+Work Log:
+- Revisé prisma/schema.prisma para mapear todas las tablas con FK a Cliente y Prestamo.
+- Encontré 88 modelos en total. Mapeé dependencias transitivas: TokenFirma → FirmaElectronica; MensajeChat/NotaInterna → ConversacionChat → Cliente; CronologiaCaso/AlertaLegal → CasoJuridico → Prestamo; DocumentoLegal → CasoJuridico (sin clienteId directo).
+- Creado scripts/eliminar-clientes-menos-johan.cjs con eliminación en transacciones separadas (1 por cliente) y timeout extendido (60s).
+- Orden de borrado por cliente:
+  1. Para cada préstamo del cliente: CasoJuridico hijos (CronologiaCaso, AlertaLegal) → CasoJuridico → CodigoConfirmacion → CompromisoPago → DocumentoGestor → TokenFirma (por firmaId + por prestamoId) → FirmaElectronica → NotificacionLog → OtroSiCambioFecha → Pago → PagoProgramado → PasaporteAuditoria → BitacoraPrestamo → MovimientoCaja → Refinanciacion → RenovacionPrestamo → Prestamo.
+  2. Para el cliente: ConversacionChat hijos (MensajeChat, NotaInterna) → ConversacionChat → AccesoPortal → CampañaVista → CompromisoPago → DocumentoGestor → TokenFirma (por firmaId + por clienteId) → FirmaElectronica → OtpChat → OtpRegistro → PasaporteAuditoria → SolicitudWeb → SolicitudNuevoCliente (por cédula) → Cliente.
+  3. Setear referidoPorId = null en otros clientes que apunten al cliente a borrar.
+- Ejecución final:
+  · 17 clientes eliminados (10 + 7 en dos corridas, con bug fix intermedio).
+  · 0 fallidos.
+  · Préstamos de Johan preservados: 33.
+- Verificación de integridad:
+  · Préstamos de otros clientes: 0
+  · Pagos huérfanos: 0
+  · Conversaciones de otros clientes: 0
+- Bug fixes durante la ejecución:
+  1. DocumentoLegal no tiene clienteId directo (se elimina vía CasoJuridico).
+  2. MovimientoCaja no tiene clienteId directo (se elimina vía prestamoId).
+  3. TokenFirma tiene FK a FirmaElectronica → debe borrarse PRIMERO.
+  4. Transacción default 5s timeout → extendido a 60s.
+
+Stage Summary:
+- BD Neon limpia: solo Johan (CC 1214731649) con 33 préstamos.
+- Datos preservados de Johan: 33 préstamos, 188 pagos, 55 pagos programados, 6 conversaciones, 119 accesos al portal, 57 OTPs, 24 pasaporte auditoría, 78 firmas electrónicas.
+- Script committed: 0e770b4. Reutilizable si se necesita volver a limpiar la BD.
