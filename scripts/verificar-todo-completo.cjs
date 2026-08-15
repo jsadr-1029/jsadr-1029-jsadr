@@ -34,9 +34,14 @@ async function main() {
     console.log(`Cliente: ${p.cliente.nombre} (CC ${p.cliente.cedula})`)
     console.log(`Estado: ${p.estado}`)
     console.log(`Monto: $${p.montoPrincipal.toLocaleString('es-CO')}`)
-    console.log(`Tasa anual: ${p.tasaInteresAnual}%`)
     console.log(`Cuotas: ${p.numeroCuotas} × $${p.montoCuota.toLocaleString('es-CO')}`)
     console.log(`Total a pagar: $${p.totalPagar.toLocaleString('es-CO')}`)
+    console.log(`Modalidad: ${p.modalidadAmortizacion}`)
+    if (p.modalidadAmortizacion === 'TASA_FIJA') {
+      console.log(`Tasa mensual: ${p.tasaInteresMensual}%  (anual equivalente: ${p.tasaInteresAnual}%)`)
+    } else {
+      console.log(`Tasa anual: ${p.tasaInteresAnual}%  (mensual: ${p.tasaInteresMensual}%)`)
+    }
     console.log('Cargos activados:')
     console.log(`  ✓ Fondo Garantía: ${p.fondoGarantiaMonto > 0 ? `$${p.fondoGarantiaMonto.toLocaleString('es-CO')} (${(p.fondoGarantiaTasa * 100).toFixed(0)}%)` : 'NO'}`)
     console.log(`  ✓ Flexibilidad Financiera: ${p.flexibilidadFinanciera ? `${p.flexibilidadModalidad} $${p.flexibilidadCosto.toLocaleString('es-CO')}` : 'NO'}`)

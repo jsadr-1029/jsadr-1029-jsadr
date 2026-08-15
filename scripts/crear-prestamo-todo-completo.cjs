@@ -24,65 +24,93 @@ const prisma = new PrismaClient({
   },
 })
 
-// Funciones financieras (réplica de /lib/finanzas.ts calcularPrestamo)
-const PERIODOS_POR_ANIO = {
-  MENSUAL: 12,
-  QUINCENAL: 24,
-  SEMANAL: 52,
-  DIARIO: 360,
-}
+// Función financiera — TASA FIJA MENSUAL (réplica de /lib/finanzas.ts)
+// La tasa es MENSUAL (no anual). El interés se calcula sobre el capital inicial
+// multiplicado por los meses de duración.
+// Ej: 500.000 al 15% mensual × 6 meses = 500.000 + (500.000 × 0.15 × 6) = 950.000
+function calcularPrestamoTasaFijaMensual({ montoPrincipal, tasaMensualFija, numeroCuotas, frecuencia, fechaDesembolso }) {
+  if (numeroCuotas <= 0) throw new Error('El número de cuotas debe ser mayor a 0')
+  if (montoPrincipal <= 0) throw new Error('El monto principal debe ser mayor a 0')
+  if (tasaMensualFija < 0) throw new Error('La tasa mensual no puede ser negativa')
 
-function calcularPrestamo({ montoPrincipal, tasaInteresAnual, plazoMeses, frecuencia, fechaDesembolso }) {
-  const periodosAnio = PERIODOS_POR_ANIO[frecuencia]
-  const tasaAplicada = tasaInteresAnual / 100 / periodosAnio
+  const tasaAplicada = tasaMensualFija / 100
 
-  let numeroCuotas
-  switch (frecuencia) {
-    case 'MENSUAL': numeroCuotas = plazoMeses; break
-    case 'QUINCENAL': numeroCuotas = plazoMeses * 2; break
-    case 'SEMANAL': numeroCuotas = Math.round(plazoMeses * 4.345); break
-    case 'DIARIO': numeroCuotas = plazoMeses * 30; break
-    default: numeroCuotas = plazoMeses
+  // === Meses de duración según frecuencia ===
+  let mesesDuracion = 1
+  if (frecuencia === 'MENSUAL') {
+    mesesDuracion = numeroCuotas
+  } else if (frecuencia === 'QUINCENAL') {
+    mesesDuracion = Math.max(1, Math.ceil(numeroCuotas / 2))
+  } else if (frecuencia === 'SEMANAL') {
+    mesesDuracion = Math.max(1, Math.ceil(numeroCuotas / 4))
+  } else if (frecuencia === 'DIARIO') {
+    mesesDuracion = Math.max(1, Math.ceil(numeroCuotas / 30))
   }
 
-  // Cuota fija sobre capital inicial (sistema francés simplificado):
-  // M = P * r * (1+r)^n / ((1+r)^n - 1)
-  const factor = Math.pow(1 + tasaAplicada, numeroCuotas)
-  const montoCuota = Math.round((montoPrincipal * tasaAplicada * factor) / (factor - 1))
+  // Interés TOTAL = capital × tasa% × meses de duración
+  const interesTotalFijo = Math.round(montoPrincipal * tasaAplicada * mesesDuracion * 100) / 100
 
-  // Tabla de amortización (sistema francés)
-  const tabla = []
+  // Total a pagar = capital + interés total
+  const totalPagarCalculado = Math.round((montoPrincipal + interesTotalFijo) * 100) / 100
+
+  // Cuota constante = total a pagar / número de cuotas
+  const montoCuota = Math.round((totalPagarCalculado / numeroCuotas) * 100) / 100
+
+  // Abono a capital constante por cuota
+  const abonoCapitalCuota = Math.round((montoPrincipal / numeroCuotas) * 100) / 100
+
+  // Interés por cuota (constante, dividido equitativamente)
+  const interesPorCuota = Math.round((interesTotalFijo / numeroCuotas) * 100) / 100
+
+  // Tabla de amortización
+  const fechaInicio = new Date(fechaDesembolso || Date.now())
+  const tablaAmortizacion = []
   let saldoCapital = montoPrincipal
   let acumuladoInteres = 0
   let acumuladoCapital = 0
-  const fechaBase = new Date(fechaDesembolso || Date.now())
+  let totalInteres = 0
 
   for (let i = 1; i <= numeroCuotas; i++) {
-    const interes = Math.round(montoPrincipal * tasaAplicada)
-    const capital = montoCuota - interes
-    saldoCapital -= capital
-    acumuladoInteres += interes
-    acumuladoCapital += capital
+    let capitalCuota = abonoCapitalCuota
+    let interesCuota = interesPorCuota
+    let cuotaEsta = montoCuota
 
-    // Fecha de vencimiento
-    const fechaVenc = new Date(fechaBase)
-    fechaVenc.setMonth(fechaVenc.getMonth() + i)
+    if (i === numeroCuotas) {
+      // Ajuste final: el capital restante + interés de la última cuota
+      capitalCuota = Math.round(saldoCapital * 100) / 100
+      interesCuota = Math.round((totalPagarCalculado - acumuladoCapital - acumuladoInteres - capitalCuota) * 100) / 100
+      if (interesCuota < 0) interesCuota = 0
+      cuotaEsta = Math.round((capitalCuota + interesCuota) * 100) / 100
+    }
 
-    tabla.push({
+    saldoCapital = Math.round((saldoCapital - capitalCuota) * 100) / 100
+    if (saldoCapital < 0) saldoCapital = 0
+
+    acumuladoInteres = Math.round((acumuladoInteres + interesCuota) * 100) / 100
+    acumuladoCapital = Math.round((acumuladoCapital + capitalCuota) * 100) / 100
+    totalInteres = Math.round((totalInteres + interesCuota) * 100) / 100
+
+    // Fecha de vencimiento según frecuencia
+    const fechaVenc = new Date(fechaInicio)
+    if (frecuencia === 'MENSUAL') fechaVenc.setMonth(fechaVenc.getMonth() + i)
+    else if (frecuencia === 'QUINCENAL') fechaVenc.setDate(fechaVenc.getDate() + 15 * i)
+    else if (frecuencia === 'SEMANAL') fechaVenc.setDate(fechaVenc.getDate() + 7 * i)
+    else fechaVenc.setDate(fechaVenc.getDate() + i)
+
+    tablaAmortizacion.push({
       numero: i,
       fechaVencimiento: fechaVenc,
-      montoCuota,
-      capital,
-      interes,
-      saldoCapital: Math.max(0, saldoCapital),
+      montoCuota: cuotaEsta,
+      capital: capitalCuota,
+      interes: interesCuota,
+      saldoCapital,
       acumuladoInteres,
       acumuladoCapital,
     })
   }
 
-  const totalInteres = acumuladoInteres
-  const totalPagar = montoPrincipal + totalInteres
-  const fechaVencimiento = tabla[tabla.length - 1].fechaVencimiento
+  const totalPagar = Math.round((montoPrincipal + totalInteres) * 100) / 100
+  const fechaVencimiento = tablaAmortizacion[tablaAmortizacion.length - 1].fechaVencimiento
 
   return {
     numeroCuotas,
@@ -90,9 +118,9 @@ function calcularPrestamo({ montoPrincipal, tasaInteresAnual, plazoMeses, frecue
     totalInteres,
     totalPagar,
     tasaAplicada,
-    tablaAmortizacion: tabla,
+    tablaAmortizacion,
     fechaVencimiento,
-    fondoGarantia: montoPrincipal * 0.05,
+    fondoGarantia: Math.round(montoPrincipal * 0.05 * 100) / 100,
   }
 }
 
@@ -145,24 +173,27 @@ async function main() {
   console.log(`\n✅ Usando cliente: ${cliente.nombre} (CC ${cliente.cedula})`)
 
   // === Parámetros del préstamo ===
+  // ⚠️ TASA MENSUAL (no anual) — modalidad TASA_FIJA
   const MONTO = 500000
-  const TASA_ANUAL = 15
-  const TASA_MORA_ANUAL = 36 // estándar
-  const PLAZO_MESES = 6
+  const TASA_MENSUAL = 15          // 15% mensual (no anual)
+  const TASA_ANUAL_EQUIVALENTE = TASA_MENSUAL * 12  // 180% — se guarda para coherencia
+  const TASA_MORA_ANUAL = TASA_ANUAL_EQUIVALENTE    // mora = tasa anual equivalente
+  const NUMERO_CUOTAS = 6
+  const PLAZO_MESES = 6            // 6 cuotas mensuales = 6 meses
   const FRECUENCIA = 'MENSUAL'
 
-  // Cálculo del préstamo
-  const calculo = calcularPrestamo({
+  // Cálculo del préstamo (modalidad TASA_FIJA mensual)
+  const calculo = calcularPrestamoTasaFijaMensual({
     montoPrincipal: MONTO,
-    tasaInteresAnual: TASA_ANUAL,
-    plazoMeses: PLAZO_MESES,
+    tasaMensualFija: TASA_MENSUAL,
+    numeroCuotas: NUMERO_CUOTAS,
     frecuencia: FRECUENCIA,
     fechaDesembolso: new Date(),
   })
 
-  console.log('\n📊 Cálculo del préstamo:')
+  console.log('\n📊 Cálculo del préstamo (TASA FIJA MENSUAL):')
   console.log(`  Capital: $${MONTO.toLocaleString('es-CO')}`)
-  console.log(`  Tasa anual: ${TASA_ANUAL}%`)
+  console.log(`  Tasa mensual: ${TASA_MENSUAL}%  (= ${TASA_ANUAL_EQUIVALENTE}% anual equivalente)`)
   console.log(`  Plazo: ${PLAZO_MESES} meses (${calculo.numeroCuotas} cuotas ${FRECUENCIA.toLowerCase()})`)
   console.log(`  Cuota: $${calculo.montoCuota.toLocaleString('es-CO')}`)
   console.log(`  Total interés: $${calculo.totalInteres.toLocaleString('es-CO')}`)
@@ -223,9 +254,13 @@ async function main() {
       codigo,
       clienteId: cliente.id,
       montoPrincipal: MONTO,
-      tasaInteresAnual: TASA_ANUAL,
-      tasaInteresMensual: TASA_ANUAL / 12,
-      tasaMoraDiaria: TASA_MORA_ANUAL / 365,  // 0.0986% diario
+      // === Tasa MENSUAL del 15% ===
+      // En el schema se guarda tasaInteresAnual = 180 (15 × 12) y
+      // tasaInteresMensual = 15 (la tasa real mensual). La modalidad
+      // TASA_FIJA indica a la API que use la tasa mensual para el cálculo.
+      tasaInteresAnual: TASA_ANUAL_EQUIVALENTE,    // 180
+      tasaInteresMensual: TASA_MENSUAL,            // 15 (la real)
+      tasaMoraDiaria: TASA_MORA_ANUAL / 365,       // 0.493% diario
       plazoMeses: PLAZO_MESES,
       frecuencia: FRECUENCIA,
       numeroCuotas: calculo.numeroCuotas,
@@ -233,7 +268,7 @@ async function main() {
       totalInteres: calculo.totalInteres,
       totalPagar: calculo.totalPagar,
       tasaAplicada: calculo.tasaAplicada,
-      modalidadAmortizacion: 'FRANCES',
+      modalidadAmortizacion: 'TASA_FIJA',   // ← modalidad correcta para tasa mensual
       moraCompuestaDiaria: true,
       // === Estado: ACTIVO para que sea visible en el portal del cliente ===
       // (PENDIENTE_ACEPTACION requeriría que el cliente firme TyC; ACTIVO lo muestra directamente)
@@ -278,7 +313,10 @@ async function main() {
       renovacionAnticipada: RENOVACION_ANTICIPADA,
       renovacionAnticipadaCosto: RENOVACION_ANTICIPADA_COSTO,
       // Notas
-      notas: 'PRÉSTAMO DE PRUEBA — TODO COMPLETO.\nIncluye: Fondo Garantía 5%, Flexibilidad Financiera PREMIUM, Cobro Pagaré+Carta $19.900, Tarifa Plataforma $4.900, Renovación Anticipada $9.900.\nCreado por script de prueba para verificar visualización en el Portal del Cliente.',
+      notas: `PRÉSTAMO DE PRUEBA — TODO COMPLETO (TASA MENSUAL 15%).
+Modalidad: TASA_FIJA mensual.
+Incluye: Fondo Garantía 5%, Flexibilidad Financiera PREMIUM, Cobro Pagaré+Carta $19.900, Tarifa Plataforma $4.900, Renovación Anticipada $9.900.
+Creado por script de prueba para verificar visualización en el Portal del Cliente.`,
     },
   })
 
@@ -301,7 +339,7 @@ async function main() {
         estado: 'PROGRAMADO',
       },
     })
-    console.log(`   Cuota ${cuota.numero}/${calculo.numeroCuotas}: vence ${cuota.fechaVencimiento.toISOString().slice(0, 10)} — $${cuota.montoCuota.toLocaleString('es-CO')}`)
+    console.log(`   Cuota ${cuota.numero}/${calculo.numeroCuotas}: vence ${cuota.fechaVencimiento.toISOString().slice(0, 10)} — $${cuota.montoCuota.toLocaleString('es-CO')} (capital $${cuota.capital.toLocaleString('es-CO')} + interés $${cuota.interes.toLocaleString('es-CO')})`)
   }
 
   console.log('\n' + '='.repeat(70))
@@ -310,8 +348,11 @@ async function main() {
   console.log(`\n📋 RESUMEN:`)
   console.log(`  Cliente: ${cliente.nombre} (CC ${cliente.cedula})`)
   console.log(`  Código: ${nuevoPrestamo.codigo}`)
+  console.log(`  Modalidad: TASA_FIJA MENSUAL`)
   console.log(`  Capital: $${MONTO.toLocaleString('es-CO')}`)
+  console.log(`  Tasa mensual: ${TASA_MENSUAL}%  (anual equivalente: ${TASA_ANUAL_EQUIVALENTE}%)`)
   console.log(`  Cuota: $${calculo.montoCuota.toLocaleString('es-CO')} × ${calculo.numeroCuotas}`)
+  console.log(`  Total interés: $${calculo.totalInteres.toLocaleString('es-CO')}`)
   console.log(`  Total a pagar: $${calculo.totalPagar.toLocaleString('es-CO')}`)
   console.log(`  Cargos iniciales: $${totalCargos.toLocaleString('es-CO')}`)
   console.log(`  Estado: ${nuevoPrestamo.estado}`)
