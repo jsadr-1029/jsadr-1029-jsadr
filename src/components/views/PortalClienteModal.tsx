@@ -88,9 +88,11 @@ import {
   Repeat,
   Zap,
   BadgeCheck,
+  Trophy,
 } from 'lucide-react'
 import { CentroComunicacionesPortal } from '@/components/views/CentroComunicacionesPortal'
 import { useInactivityAutoLogout } from '@/hooks/use-inactivity-auto-logout'
+import { PasaporteConfianzaView } from '@/components/views/pasaporte/PasaporteConfianzaView'
 
 // =====================================================
 // Tipos (sin cambios — preserva contrato de API)
@@ -165,7 +167,7 @@ interface PortalData {
 // =====================================================
 // Configuración visual del Hub Circular
 // =====================================================
-type HubItemId = 'prestamos' | 'proximos' | 'simulador' | 'solicitudes' | 'comunicaciones' | 'historial'
+type HubItemId = 'prestamos' | 'proximos' | 'simulador' | 'solicitudes' | 'comunicaciones' | 'historial' | 'pasaporte'
 
 interface HubItemConfig {
   id: HubItemId
@@ -366,6 +368,28 @@ export function PortalClienteModal({
       setLoading(false)
     }
   }
+
+  // === Cargar contador de novedades del Pasaporte de Confianza ===
+  // Muestra un badge en el botón "Pasaporte" del hub radial cuando hay
+  // novedades de pago (vencidos, no registrados, parciales, próximos a vencer).
+  const [novedadesPasaporteCount, setNovedadesPasaporteCount] = useState(0)
+  useEffect(() => {
+    if (!token) return
+    let cancelado = false
+    ;(async () => {
+      try {
+        const res = await fetch(`/api/portal/pasaporte?token=${encodeURIComponent(token)}`)
+        const json = await res.json()
+        if (!cancelado && json.success && Array.isArray(json.data?.novedades)) {
+          setNovedadesPasaporteCount(json.data.novedades.length)
+        }
+      } catch (e) {
+        // Silencioso: no bloquear la carga del portal si falla el pasaporte
+        console.error('[Pasaporte] Error cargando novedades:', e)
+      }
+    })()
+    return () => { cancelado = true }
+  }, [token])
 
   // === Abrir flujo TyC completo (OTP + foto cédula + selfie) — PRESERVADO ===
   const abrirFlujoTyC = async (prestamoId: string, codigo: string) => {
@@ -638,7 +662,9 @@ export function PortalClienteModal({
   const notificaciones = data.notificaciones || []
   const notifStats = data.notificacionesStats || { total: 0, noLeidas: 0, pendientes: 0 }
 
-  // Configuración del Hub (6 items alrededor del logo) — Iconos premium
+  // Configuración del Hub (7 items alrededor del logo) — Iconos premium
+  // Layout redistribuido a 7 posiciones (ángulos de ~51.43°) para incluir
+  // el "Pasaporte de Confianza" como ítem premium visible junto a los demás.
   const hubItems: HubItemConfig[] = [
     {
       id: 'prestamos',
@@ -646,6 +672,7 @@ export function PortalClienteModal({
       icon: Landmark,
       color: 'text-indigo-300',
       gradient: 'from-indigo-500 via-indigo-600 to-violet-700',
+      // Posición 1 (top, 0°)
       position: { x: 0, y: -110 },
       // Sin badge: los pendientes se muestran en Solicitudes
     },
@@ -655,7 +682,8 @@ export function PortalClienteModal({
       icon: AlarmClockCheck,
       color: 'text-cyan-300',
       gradient: 'from-cyan-400 via-cyan-600 to-blue-700',
-      position: { x: 95, y: -55 },
+      // Posición 2 (~51°, top-right)
+      position: { x: 86, y: -69 },
     },
     {
       id: 'simulador',
@@ -663,7 +691,8 @@ export function PortalClienteModal({
       icon: SlidersHorizontal,
       color: 'text-violet-300',
       gradient: 'from-violet-400 via-violet-600 to-purple-700',
-      position: { x: 95, y: 55 },
+      // Posición 3 (~103°, right)
+      position: { x: 107, y: 25 },
     },
     {
       id: 'solicitudes',
@@ -671,7 +700,8 @@ export function PortalClienteModal({
       icon: FileSignature,
       color: 'text-amber-300',
       gradient: 'from-amber-400 via-amber-600 to-orange-700',
-      position: { x: 0, y: 110 },
+      // Posición 4 (~154°, bottom-right)
+      position: { x: 48, y: 99 },
       // Badge: cuenta préstamos pendientes de aceptación ( TyC ) que requieren firma electrónica
       badge: prestamos.filter(p => p.estado === 'PENDIENTE_ACEPTACION').length || undefined,
     },
@@ -681,7 +711,8 @@ export function PortalClienteModal({
       icon: MessagesSquare,
       color: 'text-emerald-300',
       gradient: 'from-emerald-400 via-emerald-600 to-teal-700',
-      position: { x: -95, y: 55 },
+      // Posición 5 (~206°, bottom-left)
+      position: { x: -48, y: 99 },
     },
     {
       id: 'historial',
@@ -689,7 +720,19 @@ export function PortalClienteModal({
       icon: Clock3,
       color: 'text-fuchsia-300',
       gradient: 'from-fuchsia-400 via-fuchsia-600 to-pink-700',
-      position: { x: -95, y: -55 },
+      // Posición 6 (~257°, left)
+      position: { x: -107, y: 25 },
+    },
+    {
+      id: 'pasaporte',
+      label: 'Pasaporte',
+      icon: Trophy,
+      color: 'text-yellow-300',
+      gradient: 'from-amber-300 via-yellow-500 to-amber-600',
+      // Posición 7 (~309°, top-left)
+      position: { x: -86, y: -69 },
+      // Badge: cuenta novedades del pasaporte (vencidos, no registrados, etc.)
+      badge: novedadesPasaporteCount || undefined,
     },
   ]
 
@@ -873,6 +916,16 @@ export function PortalClienteModal({
 
           {vista === 'campanas' && (
             <CampanasView campanas={campanas} />
+          )}
+
+          {vista === 'pasaporte' && token && (
+            <PasaporteConfianzaView token={token} />
+          )}
+
+          {vista === 'pasaporte' && !token && (
+            <div className="p-6 text-center text-sm text-muted-foreground">
+              Sesión no disponible. Cierra e inicia sesión nuevamente para ver tu Pasaporte de Confianza.
+            </div>
           )}
         </div>
 
