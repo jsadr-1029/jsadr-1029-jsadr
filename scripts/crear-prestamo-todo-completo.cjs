@@ -101,26 +101,47 @@ async function main() {
   console.log('📦 CREAR PRÉSTAMO "TODO COMPLETO"')
   console.log('='.repeat(70))
 
-  // === Buscar cliente de prueba ===
-  // Intentamos primero con un cliente existente; si no hay, lo indicamos.
-  const clientes = await prisma.cliente.findMany({
-    take: 5,
-    orderBy: { createdAt: 'desc' },
-    select: { id: true, nombre: true, cedula: true, telefono: true },
-  })
+  // === Buscar cliente por cédula (argumento CLI) o listar los disponibles ===
+  // Uso: node scripts/crear-prestamo-todo-completo.cjs [cedula]
+  const cedulaParam = process.argv[2]
 
-  if (!clientes.length) {
-    console.error('❌ No hay clientes en la base de datos. Crea un cliente primero.')
-    process.exit(1)
+  let cliente
+  if (cedulaParam) {
+    cliente = await prisma.cliente.findFirst({
+      where: { cedula: cedulaParam },
+      select: { id: true, nombre: true, cedula: true, telefono: true },
+    })
+    if (!cliente) {
+      console.error(`❌ No se encontró cliente con cédula ${cedulaParam}`)
+      console.log('\nClientes disponibles en la base de datos:')
+      const todos = await prisma.cliente.findMany({
+        select: { nombre: true, cedula: true, telefono: true },
+        orderBy: { nombre: 'asc' },
+      })
+      todos.forEach((c, i) => console.log(`  ${i + 1}. ${c.nombre} — CC ${c.cedula} — Tel ${c.telefono}`))
+      process.exit(1)
+    }
+  } else {
+    // Sin parámetro: usar el cliente más reciente (comportamiento original)
+    const clientes = await prisma.cliente.findMany({
+      take: 5,
+      orderBy: { createdAt: 'desc' },
+      select: { id: true, nombre: true, cedula: true, telefono: true },
+    })
+
+    if (!clientes.length) {
+      console.error('❌ No hay clientes en la base de datos. Crea un cliente primero.')
+      process.exit(1)
+    }
+
+    console.log('\n👥 Clientes disponibles (primeros 5):')
+    clientes.forEach((c, i) => {
+      console.log(`  ${i + 1}. ${c.nombre} — CC ${c.cedula} — Tel ${c.telefono} — ID ${c.id}`)
+    })
+
+    cliente = clientes[0]
   }
 
-  console.log('\n👥 Clientes disponibles (primeros 5):')
-  clientes.forEach((c, i) => {
-    console.log(`  ${i + 1}. ${c.nombre} — CC ${c.cedula} — Tel ${c.telefono} — ID ${c.id}`)
-  })
-
-  // Usamos el primer cliente encontrado
-  const cliente = clientes[0]
   console.log(`\n✅ Usando cliente: ${cliente.nombre} (CC ${cliente.cedula})`)
 
   // === Parámetros del préstamo ===

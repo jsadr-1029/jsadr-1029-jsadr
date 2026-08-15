@@ -10,41 +10,46 @@ const prisma = new PrismaClient({
 })
 
 async function main() {
-  const p = await prisma.prestamo.findFirst({
+  const prestamos = await prisma.prestamo.findMany({
     where: { codigo: { startsWith: 'TODO-COMPLETO-' } },
     include: {
       cliente: { select: { nombre: true, cedula: true, telefono: true } },
       _count: { select: { pagosProgramados: true, pagos: true, compromisosPago: true } },
     },
+    orderBy: { createdAt: 'asc' },
   })
 
-  if (!p) {
+  if (!prestamos.length) {
     console.log('❌ No se encontró ningún préstamo TODO COMPLETO')
     return
   }
 
   console.log('='.repeat(70))
-  console.log('✅ PRÉSTAMO TODO COMPLETO VERIFICADO')
+  console.log(`✅ PRÉSTAMOS TODO COMPLETO VERIFICADOS (${prestamos.length})`)
   console.log('='.repeat(70))
-  console.log(`Código: ${p.codigo}`)
-  console.log(`Cliente: ${p.cliente.nombre} (CC ${p.cliente.cedula})`)
-  console.log(`Estado: ${p.estado}`)
-  console.log(`Monto: $${p.montoPrincipal.toLocaleString('es-CO')}`)
-  console.log(`Tasa anual: ${p.tasaInteresAnual}%`)
-  console.log(`Cuotas: ${p.numeroCuotas} × $${p.montoCuota.toLocaleString('es-CO')}`)
-  console.log(`Total a pagar: $${p.totalPagar.toLocaleString('es-CO')}`)
+
+  for (const p of prestamos) {
+    console.log('')
+    console.log(`Código: ${p.codigo}`)
+    console.log(`Cliente: ${p.cliente.nombre} (CC ${p.cliente.cedula})`)
+    console.log(`Estado: ${p.estado}`)
+    console.log(`Monto: $${p.montoPrincipal.toLocaleString('es-CO')}`)
+    console.log(`Tasa anual: ${p.tasaInteresAnual}%`)
+    console.log(`Cuotas: ${p.numeroCuotas} × $${p.montoCuota.toLocaleString('es-CO')}`)
+    console.log(`Total a pagar: $${p.totalPagar.toLocaleString('es-CO')}`)
+    console.log('Cargos activados:')
+    console.log(`  ✓ Fondo Garantía: ${p.fondoGarantiaMonto > 0 ? `$${p.fondoGarantiaMonto.toLocaleString('es-CO')} (${(p.fondoGarantiaTasa * 100).toFixed(0)}%)` : 'NO'}`)
+    console.log(`  ✓ Flexibilidad Financiera: ${p.flexibilidadFinanciera ? `${p.flexibilidadModalidad} $${p.flexibilidadCosto.toLocaleString('es-CO')}` : 'NO'}`)
+    console.log(`  ✓ Cobro Pagaré+Carta: ${p.cobroPagareCarta ? `$${p.valorPagareCarta.toLocaleString('es-CO')}` : 'NO'}`)
+    console.log(`  ✓ Tarifa Plataforma: ${p.cobroTarifaPlataforma ? `$${p.valorTarifaPlataforma.toLocaleString('es-CO')}` : 'NO'}`)
+    console.log(`  ✓ Renovación Anticipada: ${p.renovacionAnticipada ? `$${p.renovacionAnticipadaCosto.toLocaleString('es-CO')}` : 'NO'}`)
+    console.log(`Pagos programados: ${p._count.pagosProgramados}`)
+    console.log(`Pagos realizados: ${p._count.pagos}`)
+    console.log(`Compromisos de pago (Pasaporte): ${p._count.compromisosPago}`)
+  }
+
   console.log('')
-  console.log('Cargos activados:')
-  console.log(`  ✓ Fondo Garantía: ${p.fondoGarantiaMonto > 0 ? `$${p.fondoGarantiaMonto.toLocaleString('es-CO')} (${(p.fondoGarantiaTasa * 100).toFixed(0)}%)` : 'NO'}`)
-  console.log(`  ✓ Flexibilidad Financiera: ${p.flexibilidadFinanciera ? `${p.flexibilidadModalidad} $${p.flexibilidadCosto.toLocaleString('es-CO')}` : 'NO'}`)
-  console.log(`  ✓ Cobro Pagaré+Carta: ${p.cobroPagareCarta ? `$${p.valorPagareCarta.toLocaleString('es-CO')}` : 'NO'}`)
-  console.log(`  ✓ Tarifa Plataforma: ${p.cobroTarifaPlataforma ? `$${p.valorTarifaPlataforma.toLocaleString('es-CO')}` : 'NO'}`)
-  console.log(`  ✓ Renovación Anticipada: ${p.renovacionAnticipada ? `$${p.renovacionAnticipadaCosto.toLocaleString('es-CO')}` : 'NO'}`)
-  console.log('')
-  console.log(`Pagos programados: ${p._count.pagosProgramados}`)
-  console.log(`Pagos realizados: ${p._count.pagos}`)
-  console.log(`Compromisos de pago (Pasaporte): ${p._count.compromisosPago}`)
-  console.log('')
+  console.log('='.repeat(70))
   console.log('✅ TODO SINCRONIZADO: Neon (DB) + GitHub (código) + Vercel (deploy automático)')
 }
 
