@@ -111,11 +111,15 @@ export async function GET(req: NextRequest) {
       // Verificar si la cuota 1 ya fue pagada (APLICADO) para saber si los
       // cargos del pagaré (que no tiene flag propio) ya se consideran cobrados.
       const cuota1Aplicada = p.pagos.some(pg => pg.numeroCuota === 1 && pg.estado === 'APLICADO')
-      // Si la cuota 1 fue aplicada, los cargos del pagaré ya se cobraron (legacy)
+      // Si la cuota 1 fue aplicada, los cargos del pagaré y del fondo de garantía
+      // (que se cobran en cuota 1 y no tienen flag de "aplicado" propio) ya se cobraron.
       const cargosInicialesInfoAjustada = {
         ...cargosInicialesInfo,
         cargos: cargosInicialesInfo.cargos.map(c => {
           if (c.concepto === 'PAGARE_CARTA' && cuota1Aplicada) {
+            return { ...c, yaCobrado: true }
+          }
+          if (c.concepto === 'FONDO_GARANTIA' && cuota1Aplicada) {
             return { ...c, yaCobrado: true }
           }
           return c
@@ -685,7 +689,8 @@ function generarEstadoCuentaHTML({
         <div style="font-weight: bold; color: #0e7490; font-size: 11px; margin-bottom: 4px;">🛡️ CONCEPTO: Fondo de Garantía</div>
         <div style="font-size: 10px; color: #155e75; line-height: 1.5;">
           Se cobra un valor de <strong>${formatearMoneda(p.fondoGarantiaMonto)}</strong> correspondiente al fondo de garantía (${(p.fondoGarantiaTasa * 100).toFixed(2)}% del monto del crédito).
-          Este fondo protege al cliente en caso de imprevistos y será devuelto al finalizar el crédito, previa verificación de cumplimiento de obligaciones.
+          Este cargo se aplica una sola vez al inicio del crédito y está incluido en la primera cuota.
+          El fondo protege al cliente en caso de imprevistos y será devuelto al finalizar el crédito, previa verificación de cumplimiento de obligaciones.
         </div>
       </div>
       ` : ''}

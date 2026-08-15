@@ -128,13 +128,14 @@ export async function GET(req: NextRequest) {
       const cargosInicialesInfo = proximaCuota === 1
         ? calcularCargosInicialesPendientes(p)
         : { cargos: [], totalPendiente: 0, totalConfigurado: 0, totalYaCobrado: 0 }
-      // Si la cuota 1 ya fue aplicada (legacy), los cargos del pagaré (que no
-      // tienen flag propio) se consideran cobrados.
+      // Si la cuota 1 ya fue aplicada (legacy), los cargos del pagaré y del
+      // fondo de garantía (que no tienen flag propio de "aplicado") se consideran cobrados.
       const cuota1Aplicada = p.pagos.some(pg => pg.numeroCuota === 1 && pg.estado === 'APLICADO')
       const cargosInicialesInfoAjustada = {
         ...cargosInicialesInfo,
         cargos: cargosInicialesInfo.cargos.map(c => {
           if (c.concepto === 'PAGARE_CARTA' && cuota1Aplicada) return { ...c, yaCobrado: true }
+          if (c.concepto === 'FONDO_GARANTIA' && cuota1Aplicada) return { ...c, yaCobrado: true }
           return c
         }),
       }

@@ -645,6 +645,9 @@ async function aplicarPago(body: any, user: any) {
         } else if (cargo.concepto === 'FLEXIBILIDAD') {
           codigoCaja = 'CAJA-FLEXIBILIDAD-FINANCIERA'
           conceptoMov = `Flexibilidad Financiera (${prestamo.flexibilidadModalidad || 'BASICA'}) - Préstamo ${prestamo.codigo}`
+        } else if (cargo.concepto === 'FONDO_GARANTIA') {
+          codigoCaja = 'CAJA-GARANTIA'
+          conceptoMov = `Fondo de Garantía (${(prestamo.fondoGarantiaTasa ? (prestamo.fondoGarantiaTasa * 100).toFixed(2) : '5')}%) - Préstamo ${prestamo.codigo}`
         }
 
         const cajaCargo = await tx.cajaMenor.findUnique({ where: { codigo: codigoCaja } })

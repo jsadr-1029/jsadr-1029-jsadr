@@ -379,15 +379,19 @@ export function calcularCargosInicialesPendientes(prestamo: {
   }
 
   // 4. Fondo de Garantía — SOLO aparece si el gestor lo activó explícitamente
-  //    al crear el préstamo (fondoGarantiaCargado=true).
-  //    Política 2026-08-15: NO todos los créditos llevan fondo de garantía.
-  //    Solo los que el gestor determine en el sistema que se les cobre.
+  //    al crear el préstamo (fondoGarantiaCargado=true) y tiene monto > 0.
   //
-  //    Cuando está activado:
-  //      - Se marca yaCobrado=true (se cobra al inicio, al activar el préstamo)
-  //      - Se carga automáticamente el ingreso a CAJA-GARANTIA
-  //      - Aparece como concepto en el estado de cuenta
-  //      - NO se suma a la cuota 1 (ya se cobró por separado)
+  //    Política 2026-08-15 (corregida):
+  //      - NO todos los créditos llevan fondo de garantía. Solo los que el
+  //        gestor determine en el sistema que se les cobre.
+  //      - Cuando está activado (fondoGarantiaCargado=true), el monto se
+  //        SUMA a la PRIMERA CUOTA (igual que Pagaré, Tarifa Plataforma
+  //        y Flexibilidad Financiera) y se marca como cobrado cuando la
+  //        cuota 1 queda APLICADA.
+  //      - El ingreso se carga automáticamente a CAJA-GARANTIA cuando se
+  //        aplica el pago de la cuota 1.
+  //      - Aparece como concepto en el estado de cuenta y en el detalle
+  //        del pago de la primera cuota.
   //
   //    Cuando NO está activado (fondoGarantiaCargado=false):
   //      - No aparece en ningún flujo (estado de cuenta, pagos, caja)
@@ -397,8 +401,8 @@ export function calcularCargosInicialesPendientes(prestamo: {
       concepto: 'FONDO_GARANTIA',
       etiqueta: 'Fondo de Garantía',
       monto: Number(prestamo.fondoGarantiaMonto),
-      yaCobrado: true,  // se cobra al activar el préstamo (carga a CAJA-GARANTIA)
-      flagCampo: 'fondoGarantiaCargado',
+      yaCobrado: false,  // se cobra en cuota 1 (igual que los demás cargos iniciales)
+      flagCampo: 'cuota1Aplicada',  // se considera cobrado cuando la cuota 1 está APLICADA
     })
   }
 
