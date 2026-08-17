@@ -608,3 +608,28 @@ Stage Summary:
 - Script reutilizable scripts/limpiar-solicitudes-johan-definitivo.cjs para limpiezas futuras.
 - Código de exclusión (src/lib/cliente-prueba.ts) ya aplicado en 11 endpoints de reportes/dashboard → cualquier simulación nueva de Johan seguirá siendo excluida automáticamente.
 - Pendiente: commit+push a GitHub para sincronizar Vercel.
+
+---
+Task ID: sync-vercel-github-johan-cleanup
+Agent: main
+Task: Sincronizar la limpieza de solicitudes de Johan con Vercel, GitHub y Neon al 100%.
+
+Work Log:
+- Commit `ef63bd0` creado con los scripts de limpieza (limpiar-solicitudes-johan-definitivo.cjs, inspeccionar-johan-neon.cjs) y el worklog actualizado.
+- `git pull --rebase origin main` para integrar cambios remotos (commit fbb761c detectado como nuevo remote tip).
+- `git push origin main` exitoso: ef63bd0 → origin/main.
+- GitHub Actions workflow `Deploy to Vercel` (run #158) disparado automáticamente por el push a main.
+- Poll cada ~20s hasta que el workflow completó con `success`:
+  * Set up job → Checkout → Setup Node.js → Install dependencies → Install Vercel CLI → Verify Vercel CLI → Pull Vercel environment (production) → Generate Prisma client → QA Regression Gate (13 módulos, 624 sub-tests) → Upload QA Regression results (artifact) → Deploy to Vercel (production) → Summary
+- Verificación integral con scripts/verificar-sync-final.cjs:
+  * NEON: Johan preservado (esPrueba=true), 0 préstamos, 0 pagos, 0 firmas, 0 accesos, 0 conversaciones, 0 OTPs, 0 solicitudes web. Sistema completo: 0 préstamos activos, $0 saldos reales.
+  * GITHUB: HEAD=ef63bd0 = origin/main=ef63bd0 → SYNCED=YES.
+  * VERCEL: https://jsadr-1029-jsadr.vercel.app responde 200. /api/estado-mantenimiento → 200 (mantenimiento: false). /api/clientes → 401 (API viva, requiere token).
+- Commit `64a8eef` con scripts de verificación (get-vercel-status-johan.cjs, watch-vercel-johan-cleanup.cjs, verificar-sync-final.cjs) → push a origin/main.
+
+Stage Summary:
+- 🎉 SINCRONIZACIÓN AL 100% CONFIRMADA en las 3 plataformas:
+  * NEON PostgreSQL: BD limpia (33 préstamos + 721 registros eliminados), Johan preservado como cliente de prueba.
+  * GITHUB: 2 commits pushed (ef63bd0, 64a8eef). origin/main sincronizado.
+  * VERCEL: GitHub Actions run #158 success. Producción respondiendo 200.
+- Sistema de exclusión (src/lib/cliente-prueba.ts) sigue aplicado en 11 endpoints de reportes/dashboard → simulaciones futuras de Johan serán excluidas automáticamente.
