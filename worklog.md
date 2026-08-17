@@ -583,3 +583,28 @@ Stage Summary:
 - BD Neon limpia: solo Johan (CC 1214731649) con 33 préstamos.
 - Datos preservados de Johan: 33 préstamos, 188 pagos, 55 pagos programados, 6 conversaciones, 119 accesos al portal, 57 OTPs, 24 pasaporte auditoría, 78 firmas electrónicas.
 - Script committed: 0e770b4. Reutilizable si se necesita volver a limpiar la BD.
+
+---
+Task ID: limpiar-solicitudes-johan-definitivo
+Agent: main
+Task: Eliminar TODAS las solicitudes de simulación / préstamos del cliente 1214731649 (JOHAN SEBASTIAN ALVAREZ DEL RIO) del sistema. Sincronizar con Vercel, GitHub y Neon al 100%.
+
+Work Log:
+- Inspección previa con scripts/inspeccionar-johan-neon.cjs: detectados 33 préstamos del cliente (estados: ACTIVO, EN_MORA, JURIDICO, CANCELADO, RECHAZADO) por un saldo total de ~$76.4M COP que se estaban contabilizando como saldos reales en el sistema.
+- Detectados 721 registros relacionados que debían eliminarse en orden de dependencias: 189 pagos, 55 pagos programados, 78 firmas electrónicas, 8 tokens de firma, 5 otros sí, 19 notificaciones, 19 bitácoras, 6 movimientos de caja, 1 código de confirmación, 38 documentos del gestor, 1 caso jurídico, 126 accesos al portal, 7 conversaciones de chat, 31 mensajes de chat, 58 OTPs de registro, 9 OTPs de chat, 29 pasaporte auditoría, 7 solicitudes web.
+- Creado scripts/limpiar-solicitudes-johan-definitivo.cjs (versión robusta .cjs, sin dependencia de tsc): elimina en orden estricto de dependencias FK todos los registros por préstamo (AlertaLegal → DocumentoLegal → CronologiaCaso → CasoJuridico → TokenFirma → FirmaElectronica → OtroSiCambioFecha → NotificacionLog → Refinanciacion → PagoProgramado → Pago → BitacoraPrestamo → MovimientoCaja → CodigoConfirmacion → DocumentoGestor → CompromisoPago → PasaporteAuditoria → RenovacionPrestamo → SolicitudWeb → Prestamo) y luego a nivel cliente (MensajeChat → NotaInterna → ConversacionChat → AccesoPortal → OtpChat → OtpRegistro → SolicitudWeb → SolicitudNuevoCliente → CampañaVista → CompromisoPago → PasaporteAuditoria → FirmaElectronica → TokenFirma → DocumentoGestor). Cada bloque try/catch para no abortar si un modelo no existe.
+- Ejecución contra Neon DB exitosa:
+  * 33 préstamos eliminados (todos los del cliente)
+  * 721 registros totales eliminados
+  * Cliente preservado (esPrueba=true confirmado)
+  * Verificación final: 0 préstamos del cliente, 0 pagos, 0 firmas, 0 accesos al portal, 0 conversaciones.
+  * Total préstamos activos en el sistema: 0 (todo el saldo activo era de Johan).
+  * Suma de saldos (excluyendo Johan): $0.
+- Confirmación de la infraestructura de exclusión ya existente: src/lib/cliente-prueba.ts (CEDULA_CLIENTE_PRUEBA='1214731649', excluirPruebaCliente, excluirPruebaPrestamo, excluirPruebaPago) está importado y aplicado en los reportes clave: dashboard, reportes, cartera, balance, morosidad, morosidad-grafico, clientes-activos, mensual-informe, proyecciones, pagos/informe. Esto significa que cualquier nuevo préstamo que cree Johan a futuro (al hacer simulaciones de prueba) seguirá siendo automáticamente excluido de los reportes reales.
+- Próximo paso: commit + push a GitHub (origin/main) para disparar auto-deploy en Vercel y verificar.
+
+Stage Summary:
+- BD Neon: LIMPIA. Johan (CC 1214731649) conserva su cuenta de cliente marcada como esPrueba=true, con 0 préstamos, 0 pagos, 0 firmas, 0 conversaciones. Sistema entero con 0 préstamos activos.
+- Script reutilizable scripts/limpiar-solicitudes-johan-definitivo.cjs para limpiezas futuras.
+- Código de exclusión (src/lib/cliente-prueba.ts) ya aplicado en 11 endpoints de reportes/dashboard → cualquier simulación nueva de Johan seguirá siendo excluida automáticamente.
+- Pendiente: commit+push a GitHub para sincronizar Vercel.
