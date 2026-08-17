@@ -717,3 +717,10 @@ Stage Summary:
 - ✅ API /api/prestamos acepta y aplica fechaPrimerCuota para calcular la tabla de amortización
 - ✅ UI muestra "Sin límite" para categorías sin tope (CAT-4)
 - ⏳ Pendiente: commit + push a GitHub + verificación de deploy en Vercel
+
+Verificación final (commit 46935fd):
+- ✅ Neon DB: 4 categorías con nuevos topes (Básica $500k, Estándar $700k, Premium $1.2M, Ejecutiva sin límite; min $150k todas)
+- ✅ GitHub: commit 46935fd publicado en origin/main
+- ✅ GitHub Actions: run #163 (Deploy to Vercel) → completed/success
+- ✅ Vercel producción: https://jsadr-1029-jsadr.vercel.app/ → 200 OK
+- ✅ SINCRONIZACIÓN TOTAL: AL 100%
