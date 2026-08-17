@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { calcularPrestamo, calcularDiasMora, getTasaMoraAnual, calcularMoraCompuesta, debeIrAJuridico } from '@/lib/finanzas'
 import { sanitizeError } from '@/lib/error-handler'
+import { excluirPruebaPrestamo, excluirPruebaPago, excluirPruebaCliente } from '@/lib/cliente-prueba'
 
 export async function GET() {
   try {
@@ -24,17 +25,20 @@ export async function GET() {
       cuentas,
       totalMovimientos,
     ] = await Promise.all([
-      db.cliente.count(),
-      db.prestamo.count(),
-      db.prestamo.findMany({ where: { estado: { in: ['ACTIVO', 'EN_MORA'] } } }),
-      db.prestamo.findMany({ where: { estado: 'EN_MORA' } }),
-      db.prestamo.count({ where: { estado: 'JURIDICO' } }),
-      db.pago.findMany({ where: { fechaPago: { gte: hoy, lte: finHoy }, estado: 'APLICADO' } }),
+      // Excluye clientes de prueba de los conteos y agregados reales
+      db.cliente.count({ where: { ...excluirPruebaCliente() } }),
+      db.prestamo.count({ where: { ...excluirPruebaPrestamo() } }),
+      db.prestamo.findMany({ where: { estado: { in: ['ACTIVO', 'EN_MORA'] }, ...excluirPruebaPrestamo() } }),
+      db.prestamo.findMany({ where: { estado: 'EN_MORA', ...excluirPruebaPrestamo() } }),
+      db.prestamo.count({ where: { estado: 'JURIDICO', ...excluirPruebaPrestamo() } }),
+      db.pago.findMany({ where: { fechaPago: { gte: hoy, lte: finHoy }, estado: 'APLICADO', ...excluirPruebaPago() } }),
       db.prestamo.findMany({
-        where: { estado: 'ACTIVO' },
+        where: { estado: 'ACTIVO', ...excluirPruebaPrestamo() },
         include: { cliente: true, pagos: true },
       }),
-      db.casoJuridico.findMany({ where: { estado: { not: 'CERRADO' } } }),
+      db.casoJuridico.findMany({
+        where: { estado: { not: 'CERRADO' }, prestamo: excluirPruebaPrestamo() },
+      }),
       db.cajaMenor.findMany({
         include: {
           movimientos: { orderBy: { fechaMovimiento: 'desc' }, take: 10 },
@@ -82,12 +86,13 @@ export async function GET() {
 
     const resumenEstados = await db.prestamo.groupBy({
       by: ['estado'],
+      where: excluirPruebaPrestamo(),
       _count: true,
       _sum: { saldoTotal: true },
     })
 
     const casosJuridicosDetalle = await db.casoJuridico.findMany({
-      where: { estado: { not: 'CERRADO' } },
+      where: { estado: { not: 'CERRADO' }, prestamo: excluirPruebaPrestamo() },
       include: { prestamo: { include: { cliente: true } } },
       take: 5,
       orderBy: { createdAt: 'desc' },

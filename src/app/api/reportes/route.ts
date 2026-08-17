@@ -15,6 +15,7 @@ import {
   debeIrAJuridico,
   formatearMoneda,
 } from '@/lib/finanzas'
+import { excluirPruebaCliente, excluirPruebaPago, excluirPruebaPrestamo } from '@/lib/cliente-prueba'
 
 export async function GET(req: NextRequest) {
   try {
@@ -48,6 +49,12 @@ export async function GET(req: NextRequest) {
     }
 
     // === CARGA PARALELA DE DATOS ===
+    // Los filtros excluyen automáticamente clientes de prueba (esPrueba=true)
+    // para que no contaminen los saldos reales del sistema.
+    const filtroCliente = excluirPruebaCliente()
+    const filtroPrestamo = excluirPruebaPrestamo()
+    const filtroPago = excluirPruebaPago()
+
     const [
       totalClientes,
       totalPrestamos,
@@ -64,22 +71,22 @@ export async function GET(req: NextRequest) {
       totalMovimientos,
       casosJuridicosRecientes,
     ] = await Promise.all([
-      db.cliente.count(),
-      db.prestamo.count(),
-      db.prestamo.findMany({ where: { estado: { in: ['ACTIVO', 'EN_MORA'] } } }),
-      db.prestamo.findMany({ where: { estado: 'EN_MORA' } }),
-      db.prestamo.count({ where: { estado: 'JURIDICO' } }),
+      db.cliente.count({ where: filtroCliente }),
+      db.prestamo.count({ where: filtroPrestamo }),
+      db.prestamo.findMany({ where: { estado: { in: ['ACTIVO', 'EN_MORA'] }, ...filtroPrestamo } }),
+      db.prestamo.findMany({ where: { estado: 'EN_MORA', ...filtroPrestamo } }),
+      db.prestamo.count({ where: { estado: 'JURIDICO', ...filtroPrestamo } }),
       db.pago.findMany({
-        where: { fechaPago: { gte: hoy, lte: finHoy }, estado: 'APLICADO' },
+        where: { fechaPago: { gte: hoy, lte: finHoy }, estado: 'APLICADO', ...filtroPago },
       }),
       db.pago.findMany({
-        where: { fechaPago: { gte: fechaInicio }, estado: 'APLICADO' },
+        where: { fechaPago: { gte: fechaInicio }, estado: 'APLICADO', ...filtroPago },
       }),
       db.prestamo.findMany({
-        where: { estado: 'ACTIVO' },
+        where: { estado: 'ACTIVO', ...filtroPrestamo },
         include: { cliente: true, pagos: true, categoria: true },
       }),
-      db.casoJuridico.findMany({ where: { estado: { not: 'CERRADO' } } }),
+      db.casoJuridico.findMany({ where: { estado: { not: 'CERRADO' }, prestamo: filtroPrestamo } }),
       db.cajaMenor.findMany({
         include: {
           movimientos: { orderBy: { fechaMovimiento: 'desc' }, take: 10 },
@@ -91,7 +98,7 @@ export async function GET(req: NextRequest) {
         include: {
           _count: { select: { pagos: true, clientes: true } },
           pagos: {
-            where: { estado: 'APLICADO' },
+            where: { estado: 'APLICADO', ...filtroPago },
             select: { montoTotal: true, montoCapital: true, montoInteres: true, montoMora: true },
           },
           clientes: { select: { id: true, nombre: true, cedula: true, activo: true } },
@@ -99,7 +106,7 @@ export async function GET(req: NextRequest) {
       }),
       db.movimientoCaja.count(),
       db.casoJuridico.findMany({
-        where: { estado: { not: 'CERRADO' } },
+        where: { estado: { not: 'CERRADO' }, prestamo: filtroPrestamo },
         include: { prestamo: { include: { cliente: true } } },
         take: 5,
         orderBy: { createdAt: 'desc' },
@@ -219,6 +226,7 @@ export async function GET(req: NextRequest) {
     // === POR CATEGORÍA ===
     const porCategoriaRaw = await db.prestamo.groupBy({
       by: ['categoriaId'],
+      where: filtroPrestamo,
       _count: true,
       _sum: { montoPrincipal: true, saldoTotal: true },
     })
@@ -234,7 +242,7 @@ export async function GET(req: NextRequest) {
 
     // === POR CLIENTE (TOP 15) ===
     const prestamosConCliente = await db.prestamo.findMany({
-      where: { estado: { in: ['ACTIVO', 'EN_MORA'] } },
+      where: { estado: { in: ['ACTIVO', 'EN_MORA'] }, ...filtroPrestamo },
       include: { cliente: true },
     })
 
@@ -283,6 +291,7 @@ export async function GET(req: NextRequest) {
     // === RESUMEN POR ESTADO ===
     const resumenEstados = await db.prestamo.groupBy({
       by: ['estado'],
+      where: filtroPrestamo,
       _count: true,
       _sum: { saldoTotal: true, montoPrincipal: true },
     })

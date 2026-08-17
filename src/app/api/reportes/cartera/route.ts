@@ -17,6 +17,7 @@ import { requireRole } from '@/lib/auth-guard'
 import { errorResponse, logError } from '@/lib/error-handler'
 import ExcelJS from 'exceljs'
 import PDFDocument from 'pdfkit'
+import { excluirPruebaPago, excluirPruebaPrestamo } from '@/lib/cliente-prueba'
 
 export async function GET(req: NextRequest) {
   try {
@@ -31,7 +32,12 @@ export async function GET(req: NextRequest) {
     const hasta = searchParams.get('hasta')
 
     // Construir where dinámico
-    const where: any = { estado: { in: ['ACTIVO', 'EN_MORA', 'JURIDICO'] } }
+    // Se excluyen automáticamente los préstamos de clientes de prueba para que
+    // no contamine los saldos reales de cartera. La cédula 1214731649 es el cliente
+    // canónico de QA y tiene préstamos en ACTIVO/EN_MORA/JURIDICO que NO deben
+    // sumarse a la cartera real.
+    const filtroPrueba = excluirPruebaPrestamo()
+    const where: any = { estado: { in: ['ACTIVO', 'EN_MORA', 'JURIDICO'] }, ...filtroPrueba }
     if (gestorId) {
       where.clienteId = gestorId
     }

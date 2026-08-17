@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { requireRole } from '@/lib/auth-guard'
 import { errorResponse, logError } from '@/lib/error-handler'
+import { excluirPruebaPago, excluirPruebaPrestamo } from '@/lib/cliente-prueba'
 
 export async function GET(req: NextRequest) {
   try {
@@ -14,14 +15,14 @@ export async function GET(req: NextRequest) {
     const desde = searchParams.get('desde')
     const hasta = searchParams.get('hasta')
 
-    const wherePrestamo: any = {}
+    const wherePrestamo: any = { ...excluirPruebaPrestamo() }
     if (desde || hasta) {
       wherePrestamo.fechaDesembolso = {}
       if (desde) wherePrestamo.fechaDesembolso.gte = new Date(desde)
       if (hasta) wherePrestamo.fechaDesembolso.lte = new Date(hasta)
     }
 
-    const wherePago: any = { estado: 'APLICADO' }
+    const wherePago: any = { estado: 'APLICADO', ...excluirPruebaPago() }
     if (desde || hasta) {
       wherePago.fechaPago = {}
       if (desde) wherePago.fechaPago.gte = new Date(desde)

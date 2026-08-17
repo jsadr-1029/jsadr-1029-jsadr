@@ -1675,7 +1675,17 @@ ${linkFirmaCodeudor}
               ) : (
                 prestamosFiltrados.map((p) => (
                   <TableRow key={p.id} className="hover:bg-muted/40">
-                    <TableCell className="font-mono text-xs">{p.codigo}</TableCell>
+                    <TableCell className="font-mono text-xs">
+                      {p.codigo}
+                      {p.cliente?.esPrueba && (
+                        <span
+                          className="ml-1 inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-100 text-amber-800 border border-amber-300 align-middle"
+                          title="Préstamo de cliente de prueba: no se contabiliza en saldos reales"
+                        >
+                          PRUEBA
+                        </span>
+                      )}
+                    </TableCell>
                     <TableCell>
                       <div className="font-semibold text-sm">{p.cliente.nombre}</div>
                       <div className="text-xs text-muted-foreground">{p.cliente.cedula}</div>

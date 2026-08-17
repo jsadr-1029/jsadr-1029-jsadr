@@ -94,6 +94,19 @@ model Cliente {
   activo          Boolean  @default(true)
   // v4.12 (QA M09 TC-NOT-015): cliente desuscrito de notificaciones automáticas
   optOutNotificaciones Boolean @default(false)
+  // === Cliente de prueba (v4.14) ===
+  // Cuando esPrueba=true, el cliente y TODOS sus préstamos/pagos se excluyen
+  // automáticamente de cualquier agregado de saldos reales (dashboard, reportes,
+  // cartera, balance, morosidad, clientes-activos, mensual-informe, etc.).
+  // El cliente puede seguir haciendo todo el proceso (simular, solicitar, firmar,
+  // pagar, etc.) como si fuera real, pero sus cifras NO contaminan la contabilidad
+  // real del sistema. Sirve para QA, demostraciones y pruebas end-to-end.
+  // La cédula canónica de prueba es 1214731649 (JOHAN SEBASTIAN ALVAREZ DEL RIO).
+  // Ver src/lib/cliente-prueba.ts para la lógica centralizada.
+  esPrueba        Boolean  @default(false)
+  fechaMarcadoPrueba DateTime?
+  marcadoPruebaPorId  String?
+  motivoPrueba    String?
   // === Autenticación del portal (PIN de 4 dígitos) ===
   pinHash            String?
   pinCreatedAt       DateTime?

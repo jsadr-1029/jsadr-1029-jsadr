@@ -30,7 +30,7 @@ try {
 
 // ⚠️ Cambiar este valor cuando se actualice el schema y se quiera forzar
 // la regeneración del cliente en caliente (dev server).
-export const SCHEMA_TAG = 'portal-contador-cont-models-v1'
+export const SCHEMA_TAG = 'cliente-prueba-v1'
 
 // FIX-SEGURIDAD-CRITICA #10 (ALTO): AuditLog es inmutable.
 // Prisma 6+ depreca $use en favor de $extends. Usamos client extensions

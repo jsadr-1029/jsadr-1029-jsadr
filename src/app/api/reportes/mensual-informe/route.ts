@@ -4,6 +4,7 @@ import { sanitizeError } from '@/lib/error-handler'
 import { requireRole } from '@/lib/auth-guard'
 import { enviarEmail, haySmtpConfigurado } from '@/lib/email'
 import { formatearMoneda } from '@/lib/finanzas'
+import { excluirPruebaCliente, excluirPruebaPago, excluirPruebaPrestamo } from '@/lib/cliente-prueba'
 
 // =====================================================
 // GET /api/reportes/mensual-informe
@@ -57,10 +58,11 @@ export async function GET(req: NextRequest) {
     // 1) SECCIÓN FINANCIERA
     // =====================================================
 
-    // --- Préstamos creados en el mes ---
+    // --- Préstamos creados en el mes (excluyendo clientes de prueba) ---
     const prestamosCreadosMes = await db.prestamo.findMany({
       where: {
         createdAt: { gte: inicioMes, lt: finMes },
+        ...excluirPruebaPrestamo(),
       },
       select: {
         id: true, codigo: true, montoPrincipal: true, estado: true,
@@ -74,16 +76,18 @@ export async function GET(req: NextRequest) {
     const prestamosDesembolsadosMes = await db.prestamo.findMany({
       where: {
         fechaDesembolso: { gte: inicioMes, lt: finMes },
+        ...excluirPruebaPrestamo(),
       },
       select: { id: true, codigo: true, montoPrincipal: true, estado: true },
     })
     const totalDesembolsado = prestamosDesembolsadosMes.reduce((s, p) => s + p.montoPrincipal, 0)
 
-    // --- Pagos aplicados en el mes ---
+    // --- Pagos aplicados en el mes (excluyendo clientes de prueba) ---
     const pagosMes = await db.pago.findMany({
       where: {
         fechaPago: { gte: inicioMes, lt: finMes },
         estado: 'APLICADO',
+        ...excluirPruebaPago(),
       },
       select: {
         id: true, montoTotal: true, montoCapital: true, montoInteres: true, montoMora: true,
@@ -106,9 +110,9 @@ export async function GET(req: NextRequest) {
       pagosPorMetodo[m].monto += p.montoTotal
     }
 
-    // --- Cartera actual (snapshot al final del mes) ---
+    // --- Cartera actual (snapshot al final del mes, excluyendo clientes de prueba) ---
     const carteraActual = await db.prestamo.findMany({
-      where: { estado: { in: ['ACTIVO', 'EN_MORA', 'JURIDICO'] } },
+      where: { estado: { in: ['ACTIVO', 'EN_MORA', 'JURIDICO'] }, ...excluirPruebaPrestamo() },
       select: { estado: true, saldoTotal: true, montoMora: true, diasMora: true },
     })
     const saldoCartera = carteraActual.reduce((s, p) => s + p.saldoTotal, 0)
@@ -117,11 +121,12 @@ export async function GET(req: NextRequest) {
     const carteraJuridico = carteraActual.filter((p) => p.estado === 'JURIDICO').reduce((s, p) => s + p.saldoTotal, 0)
     const moraTotal = carteraActual.reduce((s, p) => s + (p.montoMora || 0), 0)
 
-    // --- Préstamos cancelados (liquidados) en el mes ---
+    // --- Préstamos cancelados (liquidados) en el mes (excluyendo clientes de prueba) ---
     const prestamosCanceladosMes = await db.prestamo.findMany({
       where: {
         estado: 'CANCELADO',
         updatedAt: { gte: inicioMes, lt: finMes },
+        ...excluirPruebaPrestamo(),
       },
       select: { id: true, codigo: true, montoPrincipal: true, montoPagado: true },
     })
@@ -137,13 +142,14 @@ export async function GET(req: NextRequest) {
     }
     const topClientes = Object.values(pagosPorCliente).sort((a, b) => b.monto - a.monto).slice(0, 10)
 
-    // --- Comparativa con el mes anterior ---
+    // --- Comparativa con el mes anterior (excluyendo clientes de prueba) ---
     const inicioMesAnterior = new Date(anioInforme, mesInforme - 1, 1)
     const finMesAnterior = inicioMes
     const pagosMesAnterior = await db.pago.findMany({
       where: {
         fechaPago: { gte: inicioMesAnterior, lt: finMesAnterior },
         estado: 'APLICADO',
+        ...excluirPruebaPago(),
       },
       select: { montoTotal: true },
     })
@@ -160,11 +166,11 @@ export async function GET(req: NextRequest) {
     const totalUsuarios = await db.usuario.count()
     const usuariosActivos = await db.usuario.count({ where: { activo: true } })
 
-    // --- Clientes registrados ---
-    const totalClientes = await db.cliente.count()
-    const clientesActivos = await db.cliente.count({ where: { activo: true } })
+    // --- Clientes registrados (excluyendo clientes de prueba) ---
+    const totalClientes = await db.cliente.count({ where: { ...excluirPruebaCliente() } })
+    const clientesActivos = await db.cliente.count({ where: { activo: true, ...excluirPruebaCliente() } })
     const clientesNuevosMes = await db.cliente.count({
-      where: { createdAt: { gte: inicioMes, lt: finMes } },
+      where: { createdAt: { gte: inicioMes, lt: finMes }, ...excluirPruebaCliente() },
     })
 
     // --- Accesos al portal en el mes ---
@@ -203,9 +209,9 @@ export async function GET(req: NextRequest) {
       where: { estado: { in: ['ABIERTO', 'EN_PROCESO'] } },
     })
 
-    // --- Tamaño de la base de datos (aproximado) ---
-    const totalPrestamos = await db.prestamo.count()
-    const totalPagos = await db.pago.count()
+    // --- Tamaño de la base de datos (excluyendo clientes de prueba) ---
+    const totalPrestamos = await db.prestamo.count({ where: { ...excluirPruebaPrestamo() } })
+    const totalPagos = await db.pago.count({ where: { ...excluirPruebaPago() } })
 
     // =====================================================
     // 3) GENERAR HTML DEL INFORME

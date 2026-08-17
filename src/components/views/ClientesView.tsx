@@ -124,6 +124,12 @@ interface Cliente {
   instruccionCuentaExpira: string | null
   // === Preferencia de notificación (v4.4) ===
   preferenciaNotificacion?: 'WHATSAPP' | 'EMAIL' | 'AMBOS' | 'NINGUNO' | null
+  // === Cliente de prueba (v4.14) ===
+  // Si esPrueba=true, este cliente y todos sus préstamos/pagos se excluyen
+  // automáticamente de los agregados de saldos reales del sistema.
+  esPrueba?: boolean
+  fechaMarcadoPrueba?: string | null
+  motivoPrueba?: string | null
   createdAt: string
   _count?: { prestamos: number; referidos: number }
   // FIX 2026-08-12 (Task 6): Registro fotográfico del cliente
@@ -702,6 +708,17 @@ export function ClientesView({ onChanged }: { onChanged: () => void }) {
                         </Badge>
                       ) : (
                         <Badge variant="destructive">Inactivo</Badge>
+                      )}
+                      {c.esPrueba && (
+                        <Badge
+                          className="ml-1 bg-amber-100 text-amber-800 hover:bg-amber-100 border border-amber-300"
+                          title={
+                            c.motivoPrueba ||
+                            'Cliente de prueba: sus préstamos y pagos se excluyen automáticamente de los saldos reales del sistema.'
+                          }
+                        >
+                          PRUEBA
+                        </Badge>
                       )}
                     </TableCell>
                     <TableCell>

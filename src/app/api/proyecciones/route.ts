@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { calcularPrestamo } from '@/lib/finanzas'
 import { sanitizeError } from '@/lib/error-handler'
+import { excluirPruebaPrestamo } from '@/lib/cliente-prueba'
 
 export async function GET() {
   try {
@@ -18,7 +19,7 @@ export async function GET() {
     // =====================================================
 
     const prestamosActivos = await db.prestamo.findMany({
-      where: { estado: { in: ['ACTIVO', 'EN_MORA'] } },
+      where: { estado: { in: ['ACTIVO', 'EN_MORA'] }, ...excluirPruebaPrestamo() },
       include: {
         cliente: { include: { categoria: true } },
         categoria: true,

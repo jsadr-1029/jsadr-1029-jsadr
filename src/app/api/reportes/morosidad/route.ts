@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { requireRole } from '@/lib/auth-guard'
 import { errorResponse, logError } from '@/lib/error-handler'
+import { excluirPruebaPrestamo } from '@/lib/cliente-prueba'
 
 export async function GET(req: NextRequest) {
   try {
@@ -20,10 +21,11 @@ export async function GET(req: NextRequest) {
     const fechaFin = hasta ? new Date(hasta) : new Date()
     fechaFin.setHours(23, 59, 59, 999)
 
-    // Cargar préstamos EN_MORA en el rango
+    // Cargar préstamos EN_MORA en el rango (excluyendo clientes de prueba)
     const prestamosMora = await db.prestamo.findMany({
       where: {
         estado: 'EN_MORA',
+        ...excluirPruebaPrestamo(),
         OR: [
           { fechaDesembolso: { gte: fechaInicio, lte: fechaFin } },
           { updatedAt: { gte: fechaInicio, lte: fechaFin } },

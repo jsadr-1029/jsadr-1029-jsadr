@@ -4,14 +4,16 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { requireRole } from '@/lib/auth-guard'
 import { errorResponse, logError } from '@/lib/error-handler'
+import { excluirPruebaCliente, excluirPruebaPago } from '@/lib/cliente-prueba'
 
 export async function GET(req: NextRequest) {
   try {
     const authResult = requireRole(req, ['ADMIN', 'CONSULTOR'])
     if (authResult instanceof NextResponse) return authResult
 
+    // Se excluyen automáticamente los clientes de prueba (esPrueba=true)
     const clientes = await db.cliente.findMany({
-      where: { activo: true },
+      where: { activo: true, ...excluirPruebaCliente() },
       include: {
         prestamos: {
           where: { estado: { in: ['ACTIVO', 'EN_MORA'] } },
@@ -27,12 +29,13 @@ export async function GET(req: NextRequest) {
       orderBy: { createdAt: 'desc' },
     })
 
-    // Para cada cliente, contar pagos aplicados
+    // Para cada cliente, contar pagos aplicados (excluyendo pagos de préstamos de prueba)
     const clienteIds = clientes.map((c) => c.id)
     const pagosPorCliente = await db.pago.groupBy({
       by: ['prestamoId'],
       where: {
         estado: 'APLICADO',
+        ...excluirPruebaPago(),
         prestamo: { clienteId: { in: clienteIds } },
       },
       _count: true,
