@@ -633,3 +633,40 @@ Stage Summary:
   * GITHUB: 2 commits pushed (ef63bd0, 64a8eef). origin/main sincronizado.
   * VERCEL: GitHub Actions run #158 success. Producción respondiendo 200.
 - Sistema de exclusión (src/lib/cliente-prueba.ts) sigue aplicado en 11 endpoints de reportes/dashboard → simulaciones futuras de Johan serán excluidas automáticamente.
+
+---
+Task ID: fix-buzon-crear-prestamo-modal
+Agent: main
+Task: Cuando el usuario hace clic en el botón morado "Préstamo" desde el Buzón de Solicitudes Web, el sistema no estaba abriendo el formulario/modal para terminar de crear el préstamo. Reparar.
+
+Work Log:
+- Diagnóstico con VLM (glm-5v-turbo) sobre la captura pasted_image_1787002477571.png: confirmó que el usuario estaba en el "Buzón de Solicitudes Web" con una solicitud de María Paramo visible. El botón morado "Préstamo" estaba presente pero no abría el formulario al hacer clic.
+- Trazado del flujo:
+  1. BuzonSolicitudesView.tsx (línea 873-882): botón "Préstamo" llama onClick={() => convertirSolicitud(s)} → onConvertir(s) prop.
+  2. page.tsx (línea 266): onConvertir era un placeholder `(_solicitud: any) => { setView('prestamos'); toast(...) }` que descartaba los datos de la solicitud.
+  3. PrestamosView se renderizaba al cambiar la vista, pero nunca recibía la solicitud → no había señal para abrir el modal.
+- Confirmación: PrestamosView ya tenía la lógica interna para abrir el modal (useEffect en línea 976-1000 que aplica simulacionInicial y hace setModalAbierto(true)), pero page.tsx nunca le pasaba los datos.
+
+Fix aplicado:
+1. src/components/views/PrestamosView.tsx:
+   - Exportado tipo SolicitudWebMin (era interface privada).
+   - Añadidas props opcionales: solicitudPendiente?: SolicitudWebMin | null y onSolicitudConsumida?: () => void.
+   - Añadido useEffect que detecta cambios en solicitudPendiente: construye SimulacionParams (cliente, monto, tasa, cuotas, frecuencia, flexibilidad, renovación anticipada), setSimulacionInicial(params), setTab('solicitudes'), muestra toast y llama onSolicitudConsumida() para cleanup.
+2. src/app/page.tsx:
+   - Añadido estado `solicitudPendiente` (any | null).
+   - convertirSolicitudWeb ahora captura la solicitud (en lugar de descartarla como _solicitud), la guarda en estado y cambia a vista 'prestamos'.
+   - PrestamosView recibe props solicitudPendiente={solicitudPendiente} y onSolicitudConsumida={() => setSolicitudPendiente(null)}.
+
+Verificación:
+- npx tsc --noEmit → 0 errores.
+- npx eslint src/app/page.tsx src/components/views/PrestamosView.tsx → 0 errores, 0 warnings.
+- Commit 1469ebc pushed a origin/main.
+- GitHub Actions run #161 (commit 1469ebc): completed/success.
+  * QA Regression Gate (13 módulos, 624 sub-tests) → success
+  * Deploy to Vercel (production) → success
+- Producción https://jsadr-1029-jsadr.vercel.app/api/estado-mantenimiento → HTTP 200.
+
+Stage Summary:
+- Bug fix verificado y desplegado en producción.
+- Flujo corregido: clic en "Préstamo" desde Buzón de Solicitudes → captura solicitud → cambia vista → PrestamosView detecta solicitudPendiente → precarga formulario + abre modal → usuario completa creación → solicitud marcada como CONVERTIDA.
+- Ruta interna (tab "Buzón Web" dentro de PrestamosView) no fue afectada: sigue funcionando con el flujo existente.
