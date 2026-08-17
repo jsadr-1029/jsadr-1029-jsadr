@@ -82,6 +82,13 @@ export default function Home() {
   const [portalToken, setPortalToken] = useState<string | null>(null)
   const [refreshKey, setRefreshKey] = useState(0)
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false)
+  // === Solicitud web pendiente de convertir en préstamo ===
+  // Cuando el usuario hace clic en "Préstamo" desde el Buzón de Solicitudes
+  // (vista 'buzon-solicitudes' montada directamente en page.tsx), capturamos
+  // la solicitud aquí y la inyectamos en PrestamosView al cambiar de vista.
+  // PrestamosView la procesa en un useEffect, abre el modal de creación
+  // precargado y nos avisa para limpiar el estado vía onSolicitudConsumida.
+  const [solicitudPendiente, setSolicitudPendiente] = useState<any | null>(null)
   const { toast } = useToast()
   const router = useRouter()
   // Hook reactivo: cuando el rol cambia (switch-user, refresh, login),
@@ -262,12 +269,23 @@ export default function Home() {
   }
   const refresh = () => setRefreshKey((k) => k + 1)
 
-  // Convertir una solicitud web en préstamo (placeholder: navegar a préstamos)
-  const convertirSolicitudWeb = (_solicitud: any) => {
+  // Convertir una solicitud web en préstamo: captura la solicitud en el
+  // estado `solicitudPendiente` y cambia a la vista 'prestamos'. Allí,
+  // PrestamosView detecta el cambio vía useEffect, precarga el formulario
+  // con los datos de la solicitud (cliente, monto, tasa, cuotas, frecuencia,
+  // flexibilidad, renovación anticipada) y abre el modal de creación.
+  // Una vez procesada, PrestamosView nos avisa vía onSolicitudConsumida
+  // para limpiar el estado y evitar re-procesamientos.
+  const convertirSolicitudWeb = (solicitud: any) => {
+    if (!solicitud) {
+      setView('prestamos')
+      return
+    }
+    setSolicitudPendiente(solicitud)
     setView('prestamos')
     toast({
       title: 'Solicitud cargada',
-      description: 'Completa los datos para crear el préstamo a partir de la solicitud web.',
+      description: `Se precargó el formulario con los datos de la solicitud ${solicitud.codigo || ''}. Completa la información restante para crear el préstamo.`,
     })
   }
 
@@ -442,7 +460,13 @@ export default function Home() {
                 {view === 'dashboard' && <DashboardView onAbrirPrestamo={abrirPrestamo} />}
                 {view === 'clientes' && <ClientesView onChanged={refresh} />}
                 {view === 'prestamos' && (
-                  <PrestamosView onAbrirPrestamo={abrirPrestamo} onChanged={refresh} onCambiarVista={(v) => setView(v as ViewKey)} />
+                  <PrestamosView
+                    onAbrirPrestamo={abrirPrestamo}
+                    onChanged={refresh}
+                    onCambiarVista={(v) => setView(v as ViewKey)}
+                    solicitudPendiente={solicitudPendiente}
+                    onSolicitudConsumida={() => setSolicitudPendiente(null)}
+                  />
                 )}
                 {view === 'pagos' && <PagosView onChanged={refresh} />}
                 {view === 'juridico' && <JuridicoView onChanged={refresh} />}

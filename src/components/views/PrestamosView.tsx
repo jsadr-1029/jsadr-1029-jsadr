@@ -241,7 +241,7 @@ export interface SimulacionParams {
 // Tipo mínimo estructuralmente compatible con la interfaz SolicitudWeb
 // interna de BuzonSolicitudesView (no exportada). Solo declaramos los
 // campos que necesitamos leer para construir la SimulacionParams.
-interface SolicitudWebMin {
+export interface SolicitudWebMin {
   id: string
   codigo: string
   clienteId: string
@@ -3930,14 +3930,55 @@ export function PrestamosView({
   onAbrirPrestamo,
   onChanged,
   onCambiarVista,
+  solicitudPendiente,
+  onSolicitudConsumida,
 }: {
   onAbrirPrestamo: (id: string) => void
   onChanged: () => void
   onCambiarVista?: (vista: string) => void
+  // Solicitud web inyectada desde fuera (ej: BuzonSolicitudesView montado
+  // en page.tsx) que debe convertirse en préstamo. Cuando cambia, se
+  // precarga el formulario y se abre el modal.
+  solicitudPendiente?: SolicitudWebMin | null
+  // Callback opcional para que el padre sepa que la solicitud ya fue
+  // procesada (y pueda limpiarla de su estado).
+  onSolicitudConsumida?: () => void
 }) {
   const [tab, setTab] = useState('solicitudes')
   const [simulacionInicial, setSimulacionInicial] = useState<SimulacionParams | null>(null)
   const { toast } = useToast()
+
+  // === Procesar solicitudPendiente inyectada desde page.tsx ===
+  // Esto permite que el Buzón de Solicitudes montado como vista directa
+  // en page.tsx (no como tab interno) pueda disparar la creación de
+  // préstamo al hacer clic en el botón "Préstamo".
+  useEffect(() => {
+    if (!solicitudPendiente) return
+    const solicitud = solicitudPendiente
+    const params: SimulacionParams = {
+      clienteId: solicitud.clienteId,
+      montoPrincipal: solicitud.valorSolicitado?.toString() ?? '',
+      tasaInteresAnual: solicitud.tasaUtilizada?.toString() ?? '24',
+      plazoMeses: solicitud.numeroCuotas?.toString() ?? '12',
+      frecuencia: (solicitud.frecuencia as Frecuencia) || 'MENSUAL',
+      origen: `Solicitud web ${solicitud.codigo}`,
+      solicitudWebId: solicitud.id,
+      flexibilidadFinanciera: solicitud.flexibilidadFinanciera,
+      flexibilidadModalidad: (solicitud.flexibilidadModalidad === 'PREMIUM' ? 'PREMIUM' : 'BASICA'),
+      flexibilidadCosto: solicitud.flexibilidadCosto,
+      renovacionAnticipada: solicitud.renovacionAnticipada,
+      renovacionAnticipadaCosto: solicitud.renovacionAnticipadaCosto,
+    }
+    setSimulacionInicial(params)
+    setTab('solicitudes')
+    toast({
+      title: 'Solicitud cargada',
+      description: `Se precargó el formulario con los datos de la solicitud ${solicitud.codigo}. Completa la información restante para crear el préstamo. Al crear, la solicitud se marcará como CONVERTIDA y el cliente verá el flujo de firma en su portal.`,
+      duration: 7000,
+    })
+    // Avisar al padre que ya consumió la solicitud para que limpie su estado
+    if (onSolicitudConsumida) onSolicitudConsumida()
+  }, [solicitudPendiente, onSolicitudConsumida])
 
   // Convertir una solicitud web en una simulación precargada en la pestaña
   // "Solicitudes" para que el operador complete la creación del préstamo.
