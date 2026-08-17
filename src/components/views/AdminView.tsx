@@ -721,7 +721,7 @@ function CategoriasPanel({ onChanged }: { onChanged: () => void }) {
                   <TableCell className="font-mono text-xs">{c.codigo}</TableCell>
                   <TableCell className="text-sm font-medium">{c.nombre}</TableCell>
                   <TableCell className="text-xs">{formatearMoneda(c.montoMinimo)}</TableCell>
-                  <TableCell className="text-xs">{formatearMoneda(c.montoMaximo)}</TableCell>
+                  <TableCell className="text-xs">{c.montoMaximo > 0 ? formatearMoneda(c.montoMaximo) : 'Sin límite'}</TableCell>
                   <TableCell>
                     <Badge variant="outline" className="text-blue-700">{c.tasaInteresAnual}%</Badge>
                   </TableCell>

@@ -123,6 +123,15 @@ export async function POST(req: NextRequest) {
       fechaPrimerCorte: fechaPrimerCorteRaw,
       diasCausadosAntes,
       valorDiasCausados,
+      // === Fecha de la PRIMERA CUOTA (opcional) ===
+      // Permite que el asesor defina cuándo vence la cuota #1.
+      // El cliente puede pedir una fecha específica en el simulador del portal
+      // (campo `primerPagoFecha` de SolicitudWeb); esa fecha llega al asesor
+      // al convertir la solicitud y él la confirma o modifica antes de crear.
+      // El backend calcula `fechaInicio = fechaPrimerCuota - 1 periodo` (según
+      // frecuencia) y lo usa como fecha base para la tabla de amortización.
+      // Se ignora cuando hay `periodoCorte` activo.
+      fechaPrimerCuota,
       // === Flexibilidad Financiera ===
       // Beneficio opcional que se ofrece cuando el número de cuotas >= 4.
       // DOS tarifas:
@@ -186,17 +195,43 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    // === Resolver fechaPrimerCuota (si viene del frontend, la parseamos) ===
+    // El frontend la envía como YYYY-MM-DD (input type="date").
+    // Si no se proporciona, queda null y no se aplica el override de primera cuota.
+    let fechaPrimerCuotaParsed: Date | null = null
+    if (fechaPrimerCuota && typeof fechaPrimerCuota === 'string') {
+      const [yyyy, mm, dd] = fechaPrimerCuota.split('-').map(Number)
+      if (yyyy && mm && dd) {
+        fechaPrimerCuotaParsed = new Date(yyyy, mm - 1, dd, 12, 0, 0)
+      } else {
+        const parsed = new Date(fechaPrimerCuota)
+        if (!isNaN(parsed.getTime())) fechaPrimerCuotaParsed = parsed
+      }
+    }
+
     // === Determinar la fecha base para la tabla de amortización ===
-    // Si hay periodoCorte activo y fechaPrimerCorte calculada, las cuotas
-    // se programan desde fechaPrimerCorte (no desde fechaPrestamo).
-    // Esto implementa la regla: "las fechas de pago se iniciaran desde
-    // esa fecha corte" (ej: préstamo 2/08 con corte 5-20 → cuotas desde 5/08).
+    // Prioridad (de mayor a menor):
+    //   1. periodoCorte + fechaPrimerCorte → cuotas desde la fecha de corte
+    //   2. fechaPrimerCuota → cuota #1 vence en fechaPrimerCuota
+    //      Calculamos `fechaInicio = fechaPrimerCuota - 1 periodo` (según
+    //      frecuencia: MENSUAL=1 mes, QUINCENAL=15 días, SEMANAL=7 días, DIARIO=1 día)
+    //      para que la cuota #1 caiga EXACTAMENTE en fechaPrimerCuota.
+    //   3. fechaBasePrestamo → comportamiento por defecto (cuotas desde la fecha del préstamo)
     //
     // NOTA: fechaBasePrestamo se sigue usando para fechaSolicitud, fechaDesembolso
     // y el código del préstamo (representa la fecha real en que se entregó el dinero).
     // Solo la tabla de amortización cambia su fecha base.
-    const fechaBaseParaAmortizacion: Date =
-      periodoCorte && fechaPrimerCorte ? fechaPrimerCorte : fechaBasePrestamo
+    let fechaBaseParaAmortizacion: Date = fechaBasePrestamo
+    if (periodoCorte && fechaPrimerCorte) {
+      fechaBaseParaAmortizacion = fechaPrimerCorte
+    } else if (fechaPrimerCuotaParsed) {
+      const fechaInicio = new Date(fechaPrimerCuotaParsed)
+      if (frecuencia === 'MENSUAL') fechaInicio.setMonth(fechaInicio.getMonth() - 1)
+      else if (frecuencia === 'QUINCENAL') fechaInicio.setDate(fechaInicio.getDate() - 15)
+      else if (frecuencia === 'SEMANAL') fechaInicio.setDate(fechaInicio.getDate() - 7)
+      else if (frecuencia === 'DIARIO') fechaInicio.setDate(fechaInicio.getDate() - 1)
+      fechaBaseParaAmortizacion = fechaInicio
+    }
 
     // === Validar coherencia del bloque de corte ===
     // Si viene periodoCorte pero no fechaPrimerCorte, o diasCausadosAntes sin

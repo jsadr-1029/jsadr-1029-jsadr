@@ -57,7 +57,7 @@ function CategoriasPanel() {
                 <Badge variant={c.activa ? 'success' : 'neutral'}>{c.activa ? 'Activa' : 'Inactiva'}</Badge>
               </div>
               <div className="grid grid-cols-2 gap-2 text-xs">
-                <div><p className="text-slate-500">Monto</p><p className="font-semibold">{formatCOP(c.montoMinimo)} - {formatCOP(c.montoMaximo)}</p></div>
+                <div><p className="text-slate-500">Monto</p><p className="font-semibold">{formatCOP(c.montoMinimo)} - {c.montoMaximo > 0 ? formatCOP(c.montoMaximo) : 'Sin límite'}</p></div>
                 <div><p className="text-slate-500">Tasa anual</p><p className="font-semibold">{c.tasaInteresAnual}%</p></div>
                 <div><p className="text-slate-500">Mora anual</p><p className="font-semibold">{c.tasaMoraAnual}%</p></div>
                 <div><p className="text-slate-500">Clientes</p><p className="font-semibold">{c._count?.clientes || 0}</p></div>

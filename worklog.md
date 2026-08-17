@@ -670,3 +670,50 @@ Stage Summary:
 - Bug fix verificado y desplegado en producción.
 - Flujo corregido: clic en "Préstamo" desde Buzón de Solicitudes → captura solicitud → cambia vista → PrestamosView detecta solicitudPendiente → precarga formulario + abre modal → usuario completa creación → solicitud marcada como CONVERTIDA.
 - Ruta interna (tab "Buzón Web" dentro de PrestamosView) no fue afectada: sigue funcionando con el flujo existente.
+
+---
+Task ID: fecha-primer-cuota-y-categorias
+Agent: Super Z (main)
+Task: (1) Añadir opción editable "Fecha de la primera cuota" al formulario de creación de préstamo (precargada desde la solicitud web del buzón cuando el cliente pidió una fecha específica en el simulador). (2) Actualizar las 4 categorías de cliente a los nuevos topes: Básica $500k, Estándar $700k, Premium $1.2M, Ejecutiva sin límite; mínimo $150k para todas. (3) Sincronizar todo a GitHub, Vercel y Neon al 100%.
+
+Work Log:
+- VLM analizó screenshot: solicitud SQL-20260817-211513-C86E de María Paramo (CAT-3 Premium, tasa 15% mensual, $500k, primer pago 25/08/2026). Confirmó que `primerPagoFecha` ya existe en el modelo SolicitudWeb.
+- Inspeccioné la cadena de conversión buzón → préstamo:
+  * `BuzonSolicitudesView.convertirSolicitud → onConvertir(s)` (línea 348)
+  * `page.tsx` (línea 279): `convertirSolicitudWeb` captura `solicitudPendiente` y cambia a vista 'prestamos'
+  * `PrestamosView.useEffect[solicitudPendiente]` construye `SimulacionParams` y los inyecta en `PrestamosPanel` (línea 1021)
+  * `PrestamosPanel.useEffect[simulacionInicial]` precarga el formulario y abre el modal (línea 1024)
+- Cambios en `src/components/views/PrestamosView.tsx`:
+  * Añadido `fechaPrimerCuota?: string | null` a `SimulacionParams` (línea 237)
+  * Añadido `primerPagoFecha?: string | null` a `SolicitudWebMin` (línea 263)
+  * Añadido estado `fechaPrimerCuota` (string YYYY-MM-DD) en PrestamosPanel
+  * useMemo `calculo` ahora resuelve `fechaBaseParaAmortizacion` con prioridad: (1) periodoCorte+fechaPrimerCorte, (2) fechaPrimerCuota → calcula fechaInicio = fechaPrimerCuota - 1 periodo según frecuencia, (3) fechaPrestamo
+  * useEffect[simulacionInicial] precarga `fechaPrimerCuota` desde `simulacionInicial.fechaPrimerCuota` (parseando YYYY-MM-DD)
+  * handleSubmit envía `body.fechaPrimerCuota` al backend cuando está seteada y no hay periodoCorte
+  * UI: nuevo bloque <div> con Input type="date" para `fechaPrimerCuota`, con botón "Usar fecha del préstamo" para limpiar, con helper text dinámico (vacío / seteada / disabled por corte)
+  * `convertirSolicitudWeb` y `useEffect[solicitudPendiente]` propagan `solicitud.primerPagoFecha` a `SimulacionParams.fechaPrimerCuota`
+- Cambios en `src/app/api/prestamos/route.ts`:
+  * Añadido `fechaPrimerCuota` al destructuring del body (línea 134)
+  * Añadido parseo `fechaPrimerCuotaParsed` (YYYY-MM-DD → Date local mediodía)
+  * `fechaBaseParaAmortizacion` ahora usa prioridad: periodoCorte+fechaPrimerCorte > fechaPrimerCuota > fechaBasePrestamo
+  * Cálculo de fechaInicio = fechaPrimerCuota - 1 periodo (MENSUAL=1 mes, QUINCENAL=15 días, SEMANAL=7 días, DIARIO=1 día)
+- Cambios en DB (Neon): Script `scripts/actualizar-categorias.cjs` ejecutado:
+  * CAT-1 Básica:    min $150k → max $500k
+  * CAT-2 Estándar:  min $150k → max $700k
+  * CAT-3 Premium:   min $150k → max $1.2M
+  * CAT-4 Ejecutiva: min $150k → max $0 (0 = sin límite)
+  * Tasa anual y mora conservadas (no solicitadas por el usuario)
+- Cambios en frontend display para "Sin límite" (montoMaximo = 0):
+  * `src/components/views/ClientesView.tsx`: Select dropdown + resumen categoría
+  * `src/components/views/clientes.tsx`: Select dropdown + resumen categoría
+  * `src/components/views/configuracion.tsx`: Card de categoría
+  * `src/components/views/AdminView.tsx`: Tabla de categorías
+- TypeScript: `npx tsc --noEmit --skipLibCheck` pasa sin errores.
+
+Stage Summary:
+- ✅ Categorías actualizadas en Neon: 4 categorías con nuevos topes
+- ✅ Formulario de creación de préstamo ahora tiene campo "Fecha de la primera cuota" editable
+- ✅ Al convertir una solicitud web del buzón, la fecha pedida por el cliente se precarga automáticamente
+- ✅ API /api/prestamos acepta y aplica fechaPrimerCuota para calcular la tabla de amortización
+- ✅ UI muestra "Sin límite" para categorías sin tope (CAT-4)
+- ⏳ Pendiente: commit + push a GitHub + verificación de deploy en Vercel

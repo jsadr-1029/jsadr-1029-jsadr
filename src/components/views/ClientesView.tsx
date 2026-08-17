@@ -1182,12 +1182,17 @@ export function ClientesView({ onChanged }: { onChanged: () => void }) {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="none">— Sin categoría —</SelectItem>
-                    {categorias.map((c) => (
+                    {categorias.map((c) => {
+                      const fmtCOP = (n: number) =>
+                        new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 }).format(n)
+                      const maxStr = c.montoMaximo > 0 ? fmtCOP(c.montoMaximo) : 'Sin límite'
+                      return (
                       <SelectItem key={c.id} value={c.id}>
                         {c.codigo} — {c.nombre} ·{' '}
-                        {new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 }).format(c.montoMinimo)}–{new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 }).format(c.montoMaximo)} · {c.tasaInteresAnual}% anual
+                        {fmtCOP(c.montoMinimo)}–{maxStr} · {c.tasaInteresAnual}% anual
                       </SelectItem>
-                    ))}
+                      )
+                    })}
                   </SelectContent>
                 </Select>
                 {/* === Resumen de la categoría seleccionada === */}
@@ -1209,7 +1214,7 @@ export function ClientesView({ onChanged }: { onChanged: () => void }) {
                         </div>
                         <div>
                           <p className="text-slate-500">Monto máx.</p>
-                          <p className="font-semibold text-slate-900">{fmtCOP(cat.montoMaximo)}</p>
+                          <p className="font-semibold text-slate-900">{cat.montoMaximo > 0 ? fmtCOP(cat.montoMaximo) : 'Sin límite'}</p>
                         </div>
                         <div>
                           <p className="text-slate-500">Tasa anual</p>

@@ -229,6 +229,12 @@ export interface SimulacionParams {
   origen?: string
   // === ID de la solicitud web origen (para auto-marcarla como CONVERTIDA) ===
   solicitudWebId?: string
+  // === Fecha de la primera cuota (opcional) ===
+  // Cuando el cliente simula en el portal, puede elegir una fecha
+  // preferida para su primer pago. Esa fecha llega en
+  // `solicitud.primerPagoFecha` y se inyecta acá para que el asesor la
+  // vea precargada en el formulario (y pueda modificarla si lo desea).
+  fechaPrimerCuota?: string | null
   // === Flexibilidad financiera elegida por el cliente en la simulación ===
   flexibilidadFinanciera?: boolean
   flexibilidadModalidad?: 'BASICA' | 'PREMIUM'
@@ -250,6 +256,11 @@ export interface SolicitudWebMin {
   numeroCuotas: number
   frecuencia: string
   tasaUtilizada: number
+  // === Fecha de primer pago elegida por el cliente en la simulación ===
+  // Se guarda como ISO string en la BD; se reenvía al formulario para
+  // que el asesor vea la fecha que pidió el cliente y pueda confirmarla
+  // o cambiarla antes de crear el préstamo.
+  primerPagoFecha?: string | null
   // === Campos opcionales para preservar la flexibilidad elegida por el cliente ===
   flexibilidadFinanciera?: boolean
   flexibilidadModalidad?: string | null
@@ -342,6 +353,26 @@ function PrestamosPanel({
     const dd = String(hoy.getDate()).padStart(2, '0')
     return `${yyyy}-${mm}-${dd}`
   })
+
+  // === Fecha de la PRIMERA CUOTA (opcional, modificable por el asesor) ===
+  // El cliente puede pedir en el simulador del portal una fecha específica
+  // para su primer pago (campo `primerPagoFecha` de la SolicitudWeb).
+  // Esa fecha se precarga acá cuando se convierte una solicitud del buzón,
+  // y el asesor puede confirmarla, cambiarla o dejarla vacía.
+  //
+  // - Si está vacía: las cuotas se programan desde `fechaPrestamo` (o desde
+  //   `fechaPrimerCorte` si hay periodo de corte activo) — comportamiento
+  //   por defecto del sistema.
+  // - Si está seteada: se usa como fecha de vencimiento de la cuota #1.
+  //   El sistema calcula `fechaInicio = fechaPrimerCuota - 1 periodo`
+  //   (MENSUAL=1 mes, QUINCENAL=15 días, SEMANAL=7 días, DIARIO=1 día) y lo
+  //   pasa como `fechaDesembolso` a la función de amortización, de modo que
+  //   la primera cuota cae EXACTAMENTE en `fechaPrimerCuota` y las demás
+  //   cuotas siguen la periodicidad normal a partir de ahí.
+  //
+  // Se ignora cuando hay `periodoCorte` activo, porque en ese caso las
+  // cuotas se programan desde `fechaPrimerCorte`.
+  const [fechaPrimerCuota, setFechaPrimerCuota] = useState<string>('')
 
   // === Periodo de corte + días causados antes del corte ===
   // Caso de uso: cliente solicita crédito ANTES de la fecha de corte.
@@ -744,14 +775,30 @@ function PrestamosPanel({
   // Cálculo según modalidad
   const calculo = useMemo(() => {
     // === Resolución de fecha base para la tabla de amortización ===
-    // Si hay periodoCorte activo y fechaPrimerCorte calculada, las cuotas
-    // se programan desde fechaPrimerCorte (no desde fechaPrestamo).
-    // Esto implementa la regla: "las fechas de pago se iniciaran desde
-    // esa fecha corte" (ej: préstamo 2/08 con corte 5-20 → primera cuota
-    // se programa desde el 5/08).
+    // Prioridad (de mayor a menor):
+    //   1. periodoCorte + fechaPrimerCorte → cuotas desde la fecha de corte
+    //   2. fechaPrimerCuota (editable por asesor / pedida por cliente) →
+    //      cuota #1 cae en fechaPrimerCuota, las demás siguen periodicidad.
+    //      Para lograrlo, calculamos `fechaInicio = fechaPrimerCuota - 1 periodo`
+    //      y lo pasamos como `fechaDesembolso` a la función de amortización.
+    //   3. fechaPrestamo → comportamiento por defecto (cuotas desde hoy/fecha préstamo)
     let fechaBaseParaAmortizacion: Date | undefined = undefined
     if (periodoCorte && fechaPrimerCorte) {
       fechaBaseParaAmortizacion = fechaPrimerCorte
+    } else if (fechaPrimerCuota) {
+      // Parsear YYYY-MM-DD como fecha local (sin zona horaria)
+      const [yyyy, mm, dd] = fechaPrimerCuota.split('-').map(Number)
+      if (yyyy && mm && dd) {
+        const fechaPrimera = new Date(yyyy, mm - 1, dd, 12, 0, 0)
+        // Calcular fechaInicio = fechaPrimera - 1 periodo según frecuencia
+        // (asumiendo que la primera cuota vence 1 periodo después de fechaInicio)
+        const fechaInicio = new Date(fechaPrimera)
+        if (frecuencia === 'MENSUAL') fechaInicio.setMonth(fechaInicio.getMonth() - 1)
+        else if (frecuencia === 'QUINCENAL') fechaInicio.setDate(fechaInicio.getDate() - 15)
+        else if (frecuencia === 'SEMANAL') fechaInicio.setDate(fechaInicio.getDate() - 7)
+        else if (frecuencia === 'DIARIO') fechaInicio.setDate(fechaInicio.getDate() - 1)
+        fechaBaseParaAmortizacion = fechaInicio
+      }
     } else if (fechaPrestamo) {
       const [yyyy, mm, dd] = fechaPrestamo.split('-').map(Number)
       if (yyyy && mm && dd) {
@@ -888,6 +935,7 @@ function PrestamosPanel({
     tasaMensualFija, numeroCuotasFija, fechaPrestamo,
     periodoCorte, fechaPrimerCorte, valorDiasCausados, diasCausadosAntes,
     incluirFondoGarantia, tasaFondoGarantia,
+    fechaPrimerCuota,
   ])
 
   const prestamosFiltrados = prestamos.filter((p) => {
@@ -986,6 +1034,24 @@ function PrestamosPanel({
     if (simulacionInicial.frecuencia) setFrecuencia(simulacionInicial.frecuencia)
     // === Preservar ID de la solicitud web origen ===
     setSolicitudWebOrigenId(simulacionInicial.solicitudWebId || null)
+    // === Precargar fecha de primera cuota (la que pidió el cliente en el simulador) ===
+    // El asesor puede confirmarla, cambiarla o borrarla antes de crear el préstamo.
+    if (simulacionInicial.fechaPrimerCuota) {
+      try {
+        const d = new Date(simulacionInicial.fechaPrimerCuota)
+        if (!isNaN(d.getTime())) {
+          const yyyy = d.getFullYear()
+          const mm = String(d.getMonth() + 1).padStart(2, '0')
+          const dd = String(d.getDate()).padStart(2, '0')
+          setFechaPrimerCuota(`${yyyy}-${mm}-${dd}`)
+        }
+      } catch {
+        // Si la fecha no es parseable, dejamos el campo vacío para que el
+        // asesor lo complete manualmente.
+      }
+    } else {
+      setFechaPrimerCuota('')
+    }
     // === Preservar flexibilidad financiera elegida por el cliente ===
     if (simulacionInicial.flexibilidadFinanciera) {
       setFlexibilidadFinanciera(true)
@@ -1178,6 +1244,18 @@ function PrestamosPanel({
         body.fechaPrimerCorte = fechaPrimerCorte.toISOString()
         body.diasCausadosAntes = diasCausadosAntes
         body.valorDiasCausados = valorDiasCausados
+      }
+
+      // === Fecha de la PRIMERA CUOTA (opcional, modificable por el asesor) ===
+      // Si el asesor define una fecha de primera cuota (o la confirmó desde
+      // una solicitud web del buzón), se envía al backend para que las cuotas
+      // se programen de manera que la cuota #1 venza EXACTAMENTE en esta fecha.
+      // El backend calcula `fechaInicio = fechaPrimerCuota - 1 periodo` y lo
+      // usa como fecha base para la tabla de amortización.
+      // Se ignora cuando hay `periodoCorte` activo (las cuotas se programan
+      // desde `fechaPrimerCorte` en ese caso).
+      if (fechaPrimerCuota && !(periodoCorte && fechaPrimerCorte)) {
+        body.fechaPrimerCuota = fechaPrimerCuota
       }
 
       // === Flexibilidad Financiera (beneficio opcional, cuotas >= 4) ===
@@ -2100,6 +2178,60 @@ ${linkFirmaCodeudor}
                   ⚠️ Estás registrando un préstamo con fecha retroactiva ({fechaPrestamo}). Verifica que sea correcto.
                 </p>
               )}
+            </div>
+
+            {/* === FECHA DE LA PRIMERA CUOTA (opcional, modificable por el asesor) ===
+                Permite definir cuándo vence la PRIMERA cuota del préstamo.
+                Casos de uso:
+                - El cliente pidió una fecha específica en el simulador del portal
+                  (campo `primerPagoFecha` de la SolicitudWeb). Esa fecha se
+                  precarga acá cuando el asesor convierte una solicitud del buzón.
+                - El asesor quiere manualmente definir el primer vencimiento
+                  (ej: préstamo el 17/08 pero primer pago el 25/08 en lugar
+                  del 17/09 que sería el cálculo estándar de "hoy + 1 mes").
+
+                Comportamiento:
+                - Si está vacía: las cuotas se programan desde `fechaPrestamo`
+                  (o desde `fechaPrimerCorte` si hay periodo de corte).
+                - Si está seteada: la cuota #1 vence en esta fecha. El sistema
+                  calcula `fechaInicio = fechaPrimerCuota - 1 periodo` y las
+                  cuotas siguen la periodicidad normal desde ahí.
+                - Se ignora cuando hay `periodoCorte` activo (en ese caso las
+                  cuotas se programan desde `fechaPrimerCorte`).
+            */}
+            <div className="space-y-2 p-3 rounded-md bg-sky-50 dark:bg-sky-900/60 border-2 border-sky-300 dark:border-sky-500 shadow-sm">
+              <div className="flex items-center justify-between gap-2">
+                <Label htmlFor="fechaPrimerCuota" className="text-sm font-semibold flex items-center gap-1.5 text-sky-900 dark:text-sky-100">
+                  <Calendar className="w-3.5 h-3.5 text-sky-700 dark:text-sky-300" />
+                  Fecha de la primera cuota (opcional)
+                </Label>
+                {fechaPrimerCuota && (
+                  <button
+                    type="button"
+                    onClick={() => setFechaPrimerCuota('')}
+                    className="text-xs text-sky-800 dark:text-sky-200 hover:underline font-medium"
+                  >
+                    Usar fecha del préstamo
+                  </button>
+                )}
+              </div>
+              <Input
+                id="fechaPrimerCuota"
+                type="date"
+                value={fechaPrimerCuota}
+                onChange={(e) => setFechaPrimerCuota(e.target.value)}
+                min={fechaPrestamo || undefined}
+                disabled={!!(periodoCorte && fechaPrimerCorte)}
+              />
+              <p className="text-xs text-sky-900 dark:text-sky-100 font-medium">
+                {periodoCorte && fechaPrimerCorte ? (
+                  <>🔒 Deshabilitado porque hay <strong>periodo de corte</strong> activo. Las cuotas se programan desde la fecha de corte.</>
+                ) : fechaPrimerCuota ? (
+                  <>📅 La <strong>primera cuota</strong> vencerá el <strong>{formatearFecha(new Date(fechaPrimerCuota + 'T12:00:00'))}</strong>. Las demás cuotas seguirán la periodicidad ({frecuencia.toLowerCase()}) desde esa fecha.</>
+                ) : (
+                  <>💡 Por defecto, la primera cuota vence <strong>1 periodo</strong> después de la fecha del préstamo. Si el cliente pidió una fecha específica en el simulador del portal, aparecerá acá automáticamente — puedes confirmarla, cambiarla o dejarla vacía.</>
+                )}
+              </p>
             </div>
 
             {/* === PERIODO DE CORTE + DÍAS CAUSADOS ANTES DEL CORTE ===
@@ -3963,6 +4095,8 @@ export function PrestamosView({
       frecuencia: (solicitud.frecuencia as Frecuencia) || 'MENSUAL',
       origen: `Solicitud web ${solicitud.codigo}`,
       solicitudWebId: solicitud.id,
+      // === Preservar fecha de primera cuota pedida por el cliente ===
+      fechaPrimerCuota: solicitud.primerPagoFecha ?? null,
       flexibilidadFinanciera: solicitud.flexibilidadFinanciera,
       flexibilidadModalidad: (solicitud.flexibilidadModalidad === 'PREMIUM' ? 'PREMIUM' : 'BASICA'),
       flexibilidadCosto: solicitud.flexibilidadCosto,
@@ -3992,6 +4126,8 @@ export function PrestamosView({
       origen: `Solicitud web ${solicitud.codigo}`,
       // === Preservar ID de la solicitud web para auto-marcarla como CONVERTIDA ===
       solicitudWebId: solicitud.id,
+      // === Preservar fecha de primera cuota pedida por el cliente ===
+      fechaPrimerCuota: solicitud.primerPagoFecha ?? null,
       // === Preservar flexibilidad financiera elegida por el cliente ===
       flexibilidadFinanciera: solicitud.flexibilidadFinanciera,
       flexibilidadModalidad: (solicitud.flexibilidadModalidad === 'PREMIUM' ? 'PREMIUM' : 'BASICA'),
