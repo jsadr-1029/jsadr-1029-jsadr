@@ -1083,7 +1083,15 @@ function SimuladorPrestamo({ token }: { token: string }) {
             <Select value={form.categoriaId} onValueChange={(v) => setForm({ ...form, categoriaId: v })}>
               <SelectTrigger><SelectValue placeholder="Sin categoría..." /></SelectTrigger>
               <SelectContent>
-                {categorias.map((c) => <SelectItem key={c.id} value={c.id}>{c.nombre}</SelectItem>)}
+                {categorias.map((c) => {
+                  const max = Number(c.montoMaximo)
+                  const rango = `$${Number(c.montoMinimo).toLocaleString('es-CO')} – ${max > 0 ? '$' + max.toLocaleString('es-CO') : 'Sin límite'}`
+                  return (
+                    <SelectItem key={c.id} value={c.id}>
+                      {c.nombre} <span className="text-xs text-slate-500 ml-1">({rango})</span>
+                    </SelectItem>
+                  )
+                })}
               </SelectContent>
             </Select>
           </div>

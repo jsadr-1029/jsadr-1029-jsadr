@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import dynamic from 'next/dynamic'
 import { Sidebar } from '@/components/Sidebar'
@@ -289,6 +289,15 @@ export default function Home() {
     })
   }
 
+  // v4.16 — Estabilizamos onSolicitudConsumida con useCallback para evitar
+  // re-disparos del useEffect[solicitudPendiente, onSolicitudConsumida] en
+  // PrestamosView. Antes, la arrow inline se recreaba en cada render del
+  // padre, lo que podía limpiar solicitudPendiente prematuramente y
+  // provocar que el modal de creación de préstamo no se abriera.
+  const handleSolicitudConsumida = useCallback(() => {
+    setSolicitudPendiente(null)
+  }, [])
+
   // Si aún no se verificó la auth, no renderizar nada (evita flash)
   if (!authChecked) {
     return (
@@ -465,7 +474,7 @@ export default function Home() {
                     onChanged={refresh}
                     onCambiarVista={(v) => setView(v as ViewKey)}
                     solicitudPendiente={solicitudPendiente}
-                    onSolicitudConsumida={() => setSolicitudPendiente(null)}
+                    onSolicitudConsumida={handleSolicitudConsumida}
                   />
                 )}
                 {view === 'pagos' && <PagosView onChanged={refresh} />}
