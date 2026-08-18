@@ -852,3 +852,52 @@ Stage Summary:
 - ✅ Hint de ayuda visible debajo del video
 - ✅ Deploy verificado en producción (Vercel + GitHub Actions success)
 - ✅ Compatible con iOS Safari, Android Chrome, y desktop (fallback graceful)
+
+---
+Task ID: sync-full-github-vercel-neon
+Agent: Super Z (main)
+Task: Sincronizar el proyecto completo en GitHub, Vercel y Neon, reflejando todos los cambios recientes en jsadr.com.co.
+
+Work Log:
+- Estado inicial:
+  * Local HEAD: 58d688f (no empujado a GitHub)
+  * Remote origin/main: 6999c1e (1 commit atrás)
+  * Archivos modificados sin commitear: public/guia-registro-cliente.docx, public/guia-registro-cliente.pdf, scripts/verify-email-events.cjs (solo cambios de modo/permisos)
+- Commit local cae8cc6 con los cambios pendientes (mode changes + worklog).
+- Push a origin/main exitoso: 6999c1e → cae8cc6.
+- GitHub Actions run #32135170720 (Deploy to Vercel) disparado automáticamente:
+  * Set up job → Checkout → Setup Node.js → Install dependencies → Install Vercel CLI → Verify Vercel CLI → Pull Vercel environment → Generate Prisma client → QA Regression Gate (13 módulos, 624 sub-tests) → Upload QA Regression results → Deploy to Vercel (production) → Summary
+  * Resultado final: completed/success
+- Verificación Neon DB (scripts/sync-check-neon.cjs):
+  * 4 categorías de cliente con topes actualizados correctamente:
+    - Básica: min $150.000 → max $500.000
+    - Estándar: min $150.000 → max $700.000
+    - Premium: min $150.000 → max $1.200.000
+    - Ejecutiva: min $150.000 → max Sin límite
+  * 2 conexiones críticas activas: EMAIL_SMTP (Brevo) y BANCOLOMBIA_BOTON_PAGO
+  * Cliente Johan (esPrueba=true) preservado
+  * 4 clientes no-prueba en el sistema
+  * Solicitudes web: 3 CONVERTIDA + 1 PENDIENTE
+- Verificación de dominios (ambos respondiendo HTTP 200 en todas las rutas):
+  * https://jsadr.com.co/ → 200
+  * https://jsadr.com.co/login → 200
+  * https://jsadr.com.co/register → 200
+  * https://jsadr.com.co/api/estado-mantenimiento → 200 (mantenimiento: false)
+  * https://jsadr.com.co/guia-registro-cliente.pdf → 200
+  * https://jsadr-1029-jsadr.vercel.app/* → 200 en todas las rutas equivalentes
+- Verificación visual del formulario de registro con agent-browser (viewport móvil 390x844):
+  * Confirmadas las 3 descripciones nuevas en paso 5:
+    - "Asegúrate de que se lean todos los datos. Usa el botón 🔄 para cambiar entre cámara frontal y trasera."
+    - "La cara donde aparece la firma y la huella. Usa el botón 🔄 para cambiar entre cámara frontal y trasera."
+    - "Tu rostro completo y la cédula deben verse nítidos. Usa el botón 🔄 para cambiar entre cámara frontal y trasera."
+  * Captura: /home/z/my-project/download/verify-sync-register-step5.png
+  * El botón circular de SwitchCamera solo aparece cuando la cámara está activa (en este entorno headless no hay cámara real, pero el código nuevo está desplegado).
+
+Stage Summary:
+- ✅ GITHUB: cae8cc6 publicado en origin/main, sincronizado al 100%
+- ✅ VERCEL: GitHub Actions run #32135170720 → completed/success, deploy a producción
+- ✅ NEON: 4 categorías con topes actualizados, 2 conexiones activas, Johan preservado
+- ✅ jsadr.com.co: respondiendo HTTP 200 en /, /login, /register, /api/estado-mantenimiento, /guia-registro-cliente.pdf
+- ✅ jsadr-1029-jsadr.vercel.app: respondiendo HTTP 200 en todas las rutas equivalentes
+- ✅ Código nuevo del giro de cámara visible en producción (descripciones actualizadas)
+- ✅ Documentación de guía pública accesible en ambos dominios
