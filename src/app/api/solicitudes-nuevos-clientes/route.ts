@@ -93,6 +93,9 @@ export async function GET(req: NextRequest) {
         numeroCuenta: true,
         estado: true,
         observaciones: true,
+        motivoDevolucion: true,
+        fechaDevolucion: true,
+        vecesDevuelta: true,
         createdAt: true,
         fechaRevision: true,
         revisadoPorNombre: true,
@@ -108,6 +111,7 @@ export async function GET(req: NextRequest) {
       aprobadas: solicitudes.filter(s => s.estado === 'APROBADA').length,
       rechazadas: solicitudes.filter(s => s.estado === 'RECHAZADA').length,
       convertidas: solicitudes.filter(s => s.estado === 'CONVERTIDA').length,
+      devueltas: solicitudes.filter(s => s.estado === 'DEVUELTA').length,
     }
 
     return NextResponse.json({ success: true, data: solicitudes, resumen })
@@ -168,6 +172,100 @@ export async function POST(req: NextRequest) {
 
     // Generar código único
     const codigo = `SNC-${Date.now().toString(36).toUpperCase()}`
+
+    // Verificar si existe una solicitud DEVUELTA para esta cédula
+    // Si existe, actualizarla en lugar de crear una nueva (flujo de corrección)
+    const solicitudDevuelta = await db.solicitudNuevoCliente.findFirst({
+      where: { cedula: data.cedula, estado: 'DEVUELTA' },
+      orderBy: { fechaDevolucion: 'desc' },
+    })
+
+    // Si hay una solicitud DEVUELTA, permitir re-envío como actualización
+    if (solicitudDevuelta) {
+      const actualizada = await db.solicitudNuevoCliente.update({
+        where: { id: solicitudDevuelta.id },
+        data: {
+          // Mantener el código original para trazabilidad
+          codigo: solicitudDevuelta.codigo,
+          nombre: data.nombre,
+          apellido: data.apellido,
+          tipoDocumento: data.tipoDocumento,
+          cedula: data.cedula,
+          fechaNacimiento: data.fechaNacimiento ? new Date(data.fechaNacimiento) : null,
+          telefono: data.telefono,
+          email: data.email || null,
+          ciudad: data.ciudad || null,
+          municipio: data.municipio || null,
+          direccion: data.direccion || null,
+          ocupacion: data.ocupacion || null,
+          ingresoMensual: data.ingresoMensual || null,
+          banco: data.banco,
+          tipoCuenta: data.tipoCuenta,
+          numeroCuenta: data.numeroCuenta,
+          // Resetear campos del crédito (se manejan en el portal)
+          valorSolicitado: null,
+          plazoDeseado: null,
+          destinoCredito: null,
+          referidoPorNombre: data.referidoPorNombre || null,
+          referidoPorApellido: data.referidoPorApellido || null,
+          referidoPorTelefono: data.referidoPorTelefono || null,
+          referidoPorParentesco: data.referidoPorParentesco || null,
+          // Re-aceptar TyC
+          aceptaTyC: data.aceptaTyC,
+          aceptaTratamientoDatos: data.aceptaTratamientoDatos,
+          aceptaConsultaCentrales: data.aceptaConsultaCentrales,
+          aceptaReportarCentral: data.aceptaReportarCentral,
+          fechaAceptacion: new Date(),
+          // Actualizar fotos
+          fotoCedulaFrente: data.fotoCedulaFrente,
+          fotoCedulaReverso: data.fotoCedulaReverso,
+          fotoSelfie: data.fotoSelfie,
+          fotoCedulaFrenteNombre: data.fotoCedulaFrenteNombre || 'cedula-frente.jpg',
+          fotoCedulaReversoNombre: data.fotoCedulaReversoNombre || 'cedula-reverso.jpg',
+          fotoSelfieNombre: data.fotoSelfieNombre || 'selfie.jpg',
+          // Resetear estado a PENDIENTE (elimina la devolución previa)
+          estado: 'PENDIENTE',
+          observaciones: null,
+          motivoDevolucion: null,
+          fechaDevolucion: null,
+          // Mantener revisadoPor para histórico
+          revisadoPorId: null,
+          revisadoPorNombre: null,
+          fechaRevision: null,
+          // Trazabilidad del re-envío
+          ipOrigen: clientInfo.ip,
+          userAgent: clientInfo.userAgent,
+        },
+        select: {
+          id: true,
+          codigo: true,
+          nombre: true,
+          apellido: true,
+          cedula: true,
+          estado: true,
+          createdAt: true,
+        },
+      })
+
+      await registrarAuditLog({
+        usuarioId: null,
+        usuarioNombre: `Cliente: ${data.nombre} ${data.apellido}`,
+        accion: 'SOLICITUD_CORREGIDA_REENVIADA',
+        modulo: 'solicitudes-nuevos-clientes',
+        entidadId: actualizada.id,
+        entidadNombre: `${data.nombre} ${data.apellido} - ${actualizada.codigo}`,
+        detalles: `Solicitud corregida y reenviada por el cliente. Vez devuelta previa: ${solicitudDevuelta.vecesDevuelta || 1}`,
+        ipOrigen: clientInfo.ip,
+        userAgent: clientInfo.userAgent,
+        exito: true,
+      })
+
+      return NextResponse.json({
+        success: true,
+        data: actualizada,
+        mensaje: `Solicitud ${actualizada.codigo} corregida y reenviada. Nos pondremos en contacto contigo pronto.`,
+      })
+    }
 
     // Verificar que no exista ya una solicitud pendiente con esa cédula
     const existente = await db.solicitudNuevoCliente.findFirst({

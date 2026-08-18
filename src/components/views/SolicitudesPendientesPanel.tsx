@@ -25,7 +25,7 @@ import { formatearMoneda } from '@/lib/finanzas'
 import {
   Inbox, RefreshCw, CheckCircle2, XCircle, Eye, Clock, UserPlus,
   Phone, Mail, MapPin, Briefcase, DollarSign, FileText, Camera,
-  Calendar, AlertCircle, Copy, ShieldCheck,
+  Calendar, AlertCircle, Copy, ShieldCheck, Undo2, RotateCcw,
 } from 'lucide-react'
 
 interface Solicitud {
@@ -46,6 +46,9 @@ interface Solicitud {
   destinoCredito: string | null
   estado: string
   observaciones: string | null
+  motivoDevolucion: string | null
+  fechaDevolucion: string | null
+  vecesDevuelta: number | null
   createdAt: string
   fechaRevision: string | null
   revisadoPorNombre: string | null
@@ -84,6 +87,7 @@ const ESTADO_COLOR: Record<string, string> = {
   APROBADA: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30',
   RECHAZADA: 'bg-red-500/15 text-red-300 border-red-500/30',
   CONVERTIDA: 'bg-purple-500/15 text-purple-300 border-purple-500/30',
+  DEVUELTA: 'bg-orange-500/15 text-orange-300 border-orange-500/30',
 }
 
 export function SolicitudesPendientesPanel({
@@ -105,6 +109,8 @@ export function SolicitudesPendientesPanel({
   const [abrirDetalle, setAbrirDetalle] = useState(false)
   const [abrirConvertir, setAbrirConvertir] = useState(false)
   const [abrirRechazar, setAbrirRechazar] = useState(false)
+  const [abrirDevolver, setAbrirDevolver] = useState(false)
+  const [motivoDevolucion, setMotivoDevolucion] = useState('')
   const [categoriaSel, setCategoriaSel] = useState<string>('')
   const [cuentaSel, setCuentaSel] = useState<string>('')
   const [observaciones, setObservaciones] = useState('')
@@ -170,6 +176,54 @@ export function SolicitudesPendientesPanel({
           setAbrirRechazar(true)
         }
       })
+  }
+
+  function abrirDevolverModal(s: Solicitud) {
+    setDetalle(null)
+    fetch(`/api/solicitudes-nuevos-clientes/${s.id}`)
+      .then((r) => r.json())
+      .then((json) => {
+        if (json.success) {
+          setDetalle(json.data)
+          setMotivoDevolucion('')
+          setObservaciones('')
+          setAbrirDevolver(true)
+        }
+      })
+  }
+
+  async function devolver() {
+    if (!detalle) return
+    if (!motivoDevolucion.trim()) {
+      toast({ title: 'Falta motivo', description: 'Indica el motivo de la devolución', variant: 'destructive' })
+      return
+    }
+    setProcesando(true)
+    try {
+      const res = await fetch(`/api/solicitudes-nuevos-clientes/${detalle.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ accion: 'devolver', motivoDevolucion, observaciones }),
+      })
+      const json = await res.json()
+      if (!json.success) {
+        toast({ title: 'Error', description: json.error, variant: 'destructive' })
+        return
+      }
+      toast({
+        title: 'Solicitud devuelta',
+        description: json.mensaje || 'Se notificó al cliente.',
+        className: 'bg-orange-500/10 border-orange-500/30',
+      })
+      setAbrirDevolver(false)
+      setMotivoDevolucion('')
+      setObservaciones('')
+      cargar()
+    } catch (e: any) {
+      toast({ title: 'Error', description: e.message, variant: 'destructive' })
+    } finally {
+      setProcesando(false)
+    }
   }
 
   async function convertir() {
@@ -292,11 +346,12 @@ export function SolicitudesPendientesPanel({
         </div>
 
         {/* KPIs */}
-        <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 mb-4">
+        <div className="grid grid-cols-2 sm:grid-cols-6 gap-2 mb-4">
           <MiniStat label="Total" value={resumen.total} color="text-slate-200" />
           <MiniStat label="Pendientes" value={resumen.pendientes} color="text-amber-300" />
           <MiniStat label="Aprobadas" value={resumen.aprobadas} color="text-emerald-300" />
           <MiniStat label="Rechazadas" value={resumen.rechazadas} color="text-red-300" />
+          <MiniStat label="Devueltas" value={(resumen as any).devueltas || 0} color="text-orange-300" />
           <MiniStat label="Convertidas" value={resumen.convertidas} color="text-purple-300" />
         </div>
 
@@ -319,6 +374,7 @@ export function SolicitudesPendientesPanel({
               <SelectItem value="REVISADA">Revisadas</SelectItem>
               <SelectItem value="APROBADA">Aprobadas</SelectItem>
               <SelectItem value="RECHAZADA">Rechazadas</SelectItem>
+              <SelectItem value="DEVUELTA">Devueltas</SelectItem>
               <SelectItem value="CONVERTIDA">Convertidas</SelectItem>
               <SelectItem value="all">Todas</SelectItem>
             </SelectContent>
@@ -379,6 +435,17 @@ export function SolicitudesPendientesPanel({
                             <UserPlus className="h-3.5 w-3.5 mr-1" /> Crear cliente
                           </Button>
                         )}
+                        {(s.estado === 'PENDIENTE' || s.estado === 'REVISADA' || s.estado === 'DEVUELTA') && (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => abrirDevolverModal(s)}
+                            className="text-orange-400 hover:text-orange-300"
+                            title="Devolver al cliente para corrección"
+                          >
+                            <Undo2 className="h-3.5 w-3.5" />
+                          </Button>
+                        )}
                         {(s.estado === 'PENDIENTE' || s.estado === 'REVISADA') && (
                           <Button
                             size="sm"
@@ -415,7 +482,7 @@ export function SolicitudesPendientesPanel({
                 <DetalleCuerpo s={detalle} />
 
                 {/* Acciones */}
-                {(detalle.estado === 'PENDIENTE' || detalle.estado === 'REVISADA') && (
+                {(detalle.estado === 'PENDIENTE' || detalle.estado === 'REVISADA' || detalle.estado === 'DEVUELTA') && (
                   <div className="flex flex-wrap gap-2 pt-3 border-t">
                     <Button
                       onClick={() => {
@@ -441,6 +508,16 @@ export function SolicitudesPendientesPanel({
                       }}
                     >
                       <CheckCircle2 className="h-4 w-4 mr-2" /> Marcar como revisada
+                    </Button>
+                    <Button
+                      variant="outline"
+                      onClick={() => {
+                        setAbrirDetalle(false)
+                        abrirDevolverModal(detalle)
+                      }}
+                      className="border-orange-500/40 text-orange-400 hover:bg-orange-500/10"
+                    >
+                      <Undo2 className="h-4 w-4 mr-2" /> Devolver al cliente
                     </Button>
                     <Button
                       variant="outline"
@@ -481,6 +558,30 @@ export function SolicitudesPendientesPanel({
                       <AlertDescription>
                         Rechazada por {detalle.revisadoPorNombre || 'gestor'}
                         {detalle.observaciones && <span className="block text-xs mt-1">Motivo: {detalle.observaciones}</span>}
+                      </AlertDescription>
+                    </Alert>
+                  </div>
+                )}
+                {detalle.estado === 'DEVUELTA' && (
+                  <div className="pt-3 border-t">
+                    <Alert className="bg-orange-500/10 border-orange-500/30 text-orange-200">
+                      <Undo2 className="h-4 w-4 text-orange-400" />
+                      <AlertDescription>
+                        <div className="font-semibold text-orange-300 mb-1">
+                          Devuelta al cliente para corrección{detalle.vecesDevuelta ? ` (vez #${detalle.vecesDevuelta})` : ''}
+                        </div>
+                        {detalle.revisadoPorNombre && (
+                          <div className="text-xs mb-1">Por {detalle.revisadoPorNombre}</div>
+                        )}
+                        {detalle.fechaDevolucion && (
+                          <div className="text-xs mb-2">Fecha: {new Date(detalle.fechaDevolucion).toLocaleString('es-CO')}</div>
+                        )}
+                        {detalle.motivoDevolucion && (
+                          <div className="text-xs mt-2">
+                            <span className="font-semibold">Motivo:</span>
+                            <p className="mt-1 whitespace-pre-wrap bg-orange-500/5 border border-orange-500/20 rounded p-2">{detalle.motivoDevolucion}</p>
+                          </div>
+                        )}
                       </AlertDescription>
                     </Alert>
                   </div>
@@ -633,6 +734,79 @@ export function SolicitudesPendientesPanel({
               <Button variant="outline" onClick={() => setAbrirRechazar(false)} disabled={procesando}>Cancelar</Button>
               <Button variant="destructive" onClick={rechazar} disabled={procesando}>
                 {procesando ? <><RefreshCw className="h-4 w-4 mr-2 animate-spin" /> Procesando…</> : <><XCircle className="h-4 w-4 mr-2" /> Confirmar rechazo</>}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* === Modal DEVOLVER === */}
+        <Dialog open={abrirDevolver} onOpenChange={(v) => { if (!procesando) setAbrirDevolver(v) }}>
+          <DialogContent className="max-w-lg">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Undo2 className="h-5 w-5 text-orange-400" /> Devolver solicitud al cliente
+              </DialogTitle>
+              <DialogDescription>
+                {detalle?.nombre} {detalle?.apellido} · CC {detalle?.cedula}
+                {detalle?.vecesDevuelta ? ` · Ya devuelta ${detalle.vecesDevuelta} vez${detalle.vecesDevuelta > 1 ? 'es' : ''} antes` : ''}
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-3">
+              <Alert className="bg-orange-500/10 border-orange-500/30 text-orange-200">
+                <AlertCircle className="h-4 w-4 text-orange-400" />
+                <AlertDescription className="text-xs">
+                  La solicitud quedará marcada como <strong>DEVUELTA</strong>. El cliente recibirá un correo (si tiene email) con el motivo y un enlace para corregir y reenviar.
+                </AlertDescription>
+              </Alert>
+              <div>
+                <Label className="text-xs">Motivo de la devolución *</Label>
+                <Textarea
+                  value={motivoDevolucion}
+                  onChange={(e) => setMotivoDevolucion(e.target.value)}
+                  placeholder="Ej: La foto de la cédula se ve borrosa, por favor tómala de nuevo con mejor iluminación."
+                  className="min-h-[100px]"
+                />
+                <p className="text-[10px] text-muted-foreground mt-1">
+                  Sé específico para que el cliente sepa exactamente qué corregir.
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-1">
+                <span className="text-[10px] text-muted-foreground mr-1">Plantillas:</span>
+                {[
+                  'La foto de la cédula (frente) se ve borrosa. Por favor tómala de nuevo con mejor iluminación.',
+                  'La foto de la cédula (reverso) no se lee claramente. Tómala de nuevo, asegurándote de que toda la información sea legible.',
+                  'La selfie no permite verificar tu identidad claramente. Tómate una foto sosteniendo tu cédula junto a tu rostro, con buena iluminación.',
+                  'El número de cuenta bancaria parece estar incompleto. Verifica y completa los datos bancarios.',
+                  'Los datos personales no coinciden con el documento. Revisa y corrige la información registrada.',
+                ].map((plantilla, i) => (
+                  <button
+                    key={i}
+                    type="button"
+                    onClick={() => setMotivoDevolucion(plantilla)}
+                    className="text-[10px] px-2 py-0.5 rounded-full bg-orange-500/10 border border-orange-500/30 text-orange-300 hover:bg-orange-500/20"
+                  >
+                    {plantilla.split('.')[0]}…
+                  </button>
+                ))}
+              </div>
+              <div>
+                <Label className="text-xs">Notas internas (opcional)</Label>
+                <Textarea
+                  value={observaciones}
+                  onChange={(e) => setObservaciones(e.target.value)}
+                  placeholder="Notas internas para el equipo (no se envían al cliente)…"
+                  className="min-h-[50px]"
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setAbrirDevolver(false)} disabled={procesando}>Cancelar</Button>
+              <Button
+                onClick={devolver}
+                disabled={procesando || !motivoDevolucion.trim()}
+                className="bg-orange-600 hover:bg-orange-500 text-white"
+              >
+                {procesando ? <><RefreshCw className="h-4 w-4 mr-2 animate-spin" /> Procesando…</> : <><Undo2 className="h-4 w-4 mr-2" /> Devolver al cliente</>}
               </Button>
             </DialogFooter>
           </DialogContent>

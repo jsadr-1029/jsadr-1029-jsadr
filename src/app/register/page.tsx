@@ -1,13 +1,13 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { useRouter } from 'next/navigation'
+import { useState, useEffect, Suspense } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import {
   User, Mail, Phone, MapPin, CreditCard, Calendar, Briefcase, DollarSign,
   CheckCircle2, AlertCircle, ArrowLeft, ArrowRight, Send, Shield, Camera,
   FileText, Lock, Eye, EyeOff, Home, UserPlus, Clock, BadgeCheck, RefreshCw,
-  Landmark, Wallet
+  Landmark, Wallet, Undo2, Info,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -101,13 +101,37 @@ const BANCOS_COLOMBIA = [
 ]
 
 export default function RegisterPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center p-4">
+        <div className="flex items-center gap-3 text-slate-400">
+          <RefreshCw className="h-5 w-5 animate-spin" />
+          <span className="text-sm">Cargando formulario…</span>
+        </div>
+      </div>
+    }>
+      <RegisterPageContent />
+    </Suspense>
+  )
+}
+
+function RegisterPageContent() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const [paso, setPaso] = useState(1)
   const [form, setForm] = useState<FormData>(INITIAL)
   const [error, setError] = useState('')
   const [enviando, setEnviando] = useState(false)
-  const [ok, setOk] = useState<{ codigo: string; nombre: string } | null>(null)
+  const [ok, setOk] = useState<{ codigo: string; nombre: string; corregida?: boolean } | null>(null)
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
+  // Estado para manejar la devolución de solicitud
+  const [solicitudDevuelta, setSolicitudDevuelta] = useState<{
+    codigo: string
+    motivoDevolucion: string
+    fechaDevolucion: string
+    vecesDevuelta: number
+  } | null>(null)
+  const [cargandoDevolucion, setCargandoDevolucion] = useState(false)
 
   const set = (k: keyof FormData, v: any) => {
     setForm((f) => ({ ...f, [k]: v }))
@@ -118,6 +142,66 @@ export default function RegisterPage() {
       return n
     })
   }
+
+  // === Detección de solicitud DEVUELTA al cargar la página ===
+  // Si la URL trae ?cedula=...&corregir=1, busca la solicitud devuelta y precarga el form
+  useEffect(() => {
+    const cedulaParam = searchParams.get('cedula')
+    const corregir = searchParams.get('corregir')
+    if (cedulaParam && corregir === '1') {
+      setCargandoDevolucion(true)
+      fetch(`/api/solicitudes-nuevos-clientes/consulta-publica?cedula=${encodeURIComponent(cedulaParam)}`)
+        .then((r) => r.json())
+        .then((json) => {
+          if (json.success && json.data) {
+            const s = json.data
+            setSolicitudDevuelta({
+              codigo: s.codigo,
+              motivoDevolucion: s.motivoDevolucion || '',
+              fechaDevolucion: s.fechaDevolucion,
+              vecesDevuelta: s.vecesDevuelta || 1,
+            })
+            // Pre-cargar el formulario con los datos existentes
+            setForm({
+              nombre: s.nombre || '',
+              apellido: s.apellido || '',
+              tipoDocumento: s.tipoDocumento || 'CC',
+              cedula: s.cedula || cedulaParam,
+              fechaNacimiento: s.fechaNacimiento ? new Date(s.fechaNacimiento).toISOString().split('T')[0] : '',
+              telefono: s.telefono || '',
+              email: s.email || '',
+              ciudad: s.ciudad || '',
+              municipio: s.municipio || '',
+              direccion: s.direccion || '',
+              ocupacion: s.ocupacion || '',
+              ingresoMensual: s.ingresoMensual ? String(s.ingresoMensual) : '',
+              banco: s.banco || '',
+              tipoCuenta: s.tipoCuenta || '',
+              numeroCuenta: s.numeroCuenta || '',
+              referidoPorNombre: s.referidoPorNombre || '',
+              referidoPorApellido: s.referidoPorApellido || '',
+              referidoPorTelefono: s.referidoPorTelefono || '',
+              referidoPorParentesco: s.referidoPorParentesco || '',
+              // Las fotos NO se pre-cargan — el cliente debe volver a capturarlas
+              fotoCedulaFrente: null,
+              fotoCedulaReverso: null,
+              fotoSelfie: null,
+              fotoCedulaFrenteNombre: null,
+              fotoCedulaReversoNombre: null,
+              fotoSelfieNombre: null,
+              aceptaTyC: false, // Re-aceptar TyC
+              aceptaTratamientoDatos: false,
+              aceptaConsultaCentrales: false,
+              aceptaReportarCentral: false,
+            })
+          }
+        })
+        .catch((e) => {
+          console.error('Error consultando solicitud devuelta:', e)
+        })
+        .finally(() => setCargandoDevolucion(false))
+    }
+  }, [searchParams])
 
   function validarPaso(p: number): boolean {
     const errs: Record<string, string> = {}
@@ -187,7 +271,11 @@ export default function RegisterPage() {
         setError(data.error || 'No se pudo enviar la solicitud.')
         return
       }
-      setOk({ codigo: data.data.codigo, nombre: `${form.nombre} ${form.apellido}` })
+      setOk({
+        codigo: data.data.codigo,
+        nombre: `${form.nombre} ${form.apellido}`,
+        corregida: !!solicitudDevuelta,
+      })
       window.scrollTo({ top: 0, behavior: 'smooth' })
     } catch (e: any) {
       setError(e?.message || 'Error de red. Intenta de nuevo.')
@@ -210,10 +298,14 @@ export default function RegisterPage() {
           <div className="h-20 w-20 rounded-full bg-emerald-500/20 flex items-center justify-center mx-auto mb-6">
             <BadgeCheck className="h-12 w-12 text-emerald-400" />
           </div>
-          <h1 className="text-2xl font-bold mb-2">¡Solicitud enviada!</h1>
+          <h1 className="text-2xl font-bold mb-2">
+            {ok.corregida ? '¡Solicitud corregida!' : '¡Solicitud enviada!'}
+          </h1>
           <p className="text-slate-300 mb-1">Gracias, <span className="font-semibold text-white">{ok.nombre}</span>.</p>
           <p className="text-sm text-slate-400 mb-6">
-            Hemos recibido tu solicitud de registro. Nuestro equipo revisará tu información y se pondrá en contacto contigo en menos de 24 horas hábiles al teléfono y correo que registraste.
+            {ok.corregida
+              ? 'Hemos recibido tu solicitud corregida. Nuestro equipo la revisará nuevamente y se pondrá en contacto contigo en menos de 24 horas hábiles.'
+              : 'Hemos recibido tu solicitud de registro. Nuestro equipo revisará tu información y se pondrá en contacto contigo en menos de 24 horas hábiles al teléfono y correo que registraste.'}
           </p>
           <div className="bg-slate-950/60 rounded-2xl p-4 mb-6 border border-slate-700/60">
             <p className="text-xs text-slate-400 uppercase tracking-wider mb-1">Código de seguimiento</p>
@@ -230,7 +322,7 @@ export default function RegisterPage() {
             <Button onClick={() => router.push('/login')} className="flex-1 bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-400 hover:to-purple-500">
               Ir al inicio de sesión
             </Button>
-            <Button variant="outline" onClick={() => { setOk(null); setForm(INITIAL); setPaso(1) }} className="border-slate-600 text-slate-200">
+            <Button variant="outline" onClick={() => { setOk(null); setForm(INITIAL); setPaso(1); setSolicitudDevuelta(null) }} className="border-slate-600 text-slate-200">
               Registrar a otra persona
             </Button>
           </div>
@@ -312,6 +404,39 @@ export default function RegisterPage() {
               <Alert className="bg-red-500/10 border-red-500/30 text-red-200">
                 <AlertCircle className="h-4 w-4" />
                 <AlertDescription>{error}</AlertDescription>
+              </Alert>
+            )}
+
+            {/* Banner de solicitud devuelta */}
+            {solicitudDevuelta && paso === 1 && (
+              <Alert className="bg-orange-500/10 border-orange-500/40 text-orange-100">
+                <Undo2 className="h-4 w-4 text-orange-400 flex-shrink-0 mt-0.5" />
+                <AlertDescription>
+                  <div className="text-sm">
+                    <p className="font-bold text-orange-300 mb-1">
+                      Tu solicitud fue devuelta para corrección{solicitudDevuelta.vecesDevuelta > 1 ? ` (vez #${solicitudDevuelta.vecesDevuelta})` : ''}
+                    </p>
+                    <p className="text-xs text-orange-200 mb-2">
+                      Solicitud <span className="font-mono">{solicitudDevuelta.codigo}</span> · Devuelta el {new Date(solicitudDevuelta.fechaDevolucion).toLocaleString('es-CO')}
+                    </p>
+                    <p className="text-xs text-orange-100 mb-2 font-semibold">Motivo:</p>
+                    <p className="text-xs text-orange-50 whitespace-pre-wrap bg-orange-500/10 border border-orange-500/20 rounded p-2 mb-2">
+                      {solicitudDevuelta.motivoDevolucion}
+                    </p>
+                    <p className="text-[11px] text-orange-200">
+                      Hemos precargado tus datos. Por favor revisa la información, corrige lo solicitado y vuelve a tomar las fotos. Al finalizar, tu solicitud quedará nuevamente en estado pendiente.
+                    </p>
+                  </div>
+                </AlertDescription>
+              </Alert>
+            )}
+
+            {cargandoDevolucion && (
+              <Alert className="bg-blue-500/10 border-blue-500/30 text-blue-100">
+                <RefreshCw className="h-4 w-4 text-blue-400 animate-spin" />
+                <AlertDescription className="text-sm">
+                  Cargando los datos de tu solicitud previa…
+                </AlertDescription>
               </Alert>
             )}
 
@@ -468,6 +593,15 @@ export default function RegisterPage() {
             {paso === 5 && (
               <div className="space-y-4">
                 <SectionTitle icon={Camera} title="Verificación de identidad" subtitle="Necesitamos verificar que eres tú. Puedes usar la cámara o subir un archivo." />
+                {solicitudDevuelta && (
+                  <Alert className="bg-orange-500/10 border-orange-500/40 text-orange-100">
+                    <Info className="h-4 w-4 text-orange-400 flex-shrink-0 mt-0.5" />
+                    <AlertDescription className="text-xs">
+                      Por seguridad y porque tu solicitud fue devuelta para corrección, debes volver a tomar las 3 fotos.
+                      Asegúrate de que las imágenes sean nítidas y legibles.
+                    </AlertDescription>
+                  </Alert>
+                )}
                 <div className="space-y-3">
                   <FotoCapture
                     label="Foto de la cédula (frente)"

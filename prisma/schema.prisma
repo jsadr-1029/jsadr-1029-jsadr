@@ -1843,8 +1843,13 @@ model SolicitudNuevoCliente {
   fotoSelfieNombre       String?
 
   // Estado
-  estado            String   @default("PENDIENTE") // PENDIENTE | REVISADA | APROBADA | RECHAZADA | CONVERTIDA
+  estado            String   @default("PENDIENTE") // PENDIENTE | REVISADA | APROBADA | RECHAZADA | CONVERTIDA | DEVUELTA
   observaciones     String?
+  // === Motivo de devolución (cuando el gestor devuelve la solicitud al cliente
+  // para que corrija fotos, datos, etc.) ===
+  motivoDevolucion  String?
+  fechaDevolucion   DateTime?
+  vecesDevuelta     Int      @default(0)
   revisadoPorId     String?
   revisadoPorNombre String?
   fechaRevision     DateTime?

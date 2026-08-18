@@ -1,8 +1,9 @@
 // =====================================================
 // /api/solicitudes-nuevos-clientes/[id] — Operaciones por ID
 // GET: ver solicitud completa CON fotos (GESTOR+)
-// PATCH: cambiar estado (aprobar/rechazar/convertir)
+// PATCH: cambiar estado (aprobar/rechazar/convertir/devolver/revisar)
 //       accion='convertir' → crea Cliente + clave temporal + Categoria opcional
+//       accion='devolver' → marca DEVUELTA, guarda motivo, notifica al cliente
 //       v4.13: ahora genera una clave temporal alfanumérica (10 chars), la
 //       hashea con bcrypt, marca debeCambiarClave=true, y la envía al correo
 //       del cliente si tiene email.
@@ -60,7 +61,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     if (auth instanceof NextResponse) return auth
     const { id } = await params
     const body = await req.json()
-    const { accion, observaciones, categoriaId, cuentaRecaudoId } = body
+    const { accion, observaciones, motivoDevolucion, categoriaId, cuentaRecaudoId } = body
     const clientInfo = getClientInfo(req)
 
     const solicitud = await db.solicitudNuevoCliente.findUnique({ where: { id } })
@@ -79,6 +80,121 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     } else if (accion === 'revisar') {
       nuevoEstado = 'REVISADA'
       mensaje = 'Solicitud marcada como revisada'
+    } else if (accion === 'devolver') {
+      // === DEVOLVER AL CLIENTE PARA CORRECCIÓN ===
+      const motivo = (motivoDevolucion || observaciones || '').trim()
+      if (!motivo) {
+        return NextResponse.json(
+          { success: false, error: 'El motivo de devolución es obligatorio' },
+          { status: 400 }
+        )
+      }
+      if (motivo.length > 2000) {
+        return NextResponse.json(
+          { success: false, error: 'El motivo no puede exceder 2000 caracteres' },
+          { status: 400 }
+        )
+      }
+      nuevoEstado = 'DEVUELTA'
+      mensaje = 'Solicitud devuelta al cliente para corrección'
+
+      // Actualizar solicitud con estado, motivo, fecha y contador
+      const actualizada = await db.solicitudNuevoCliente.update({
+        where: { id },
+        data: {
+          estado: nuevoEstado,
+          motivoDevolucion: motivo,
+          fechaDevolucion: new Date(),
+          vecesDevuelta: (solicitud.vecesDevuelta || 0) + 1,
+          observaciones: observaciones || solicitud.observaciones,
+          revisadoPorId: auth.id,
+          revisadoPorNombre: auth.nombre,
+          fechaRevision: new Date(),
+        },
+      })
+
+      // Enviar email al cliente si tiene correo
+      let emailEnviadoDevolucion = false
+      if (solicitud.email) {
+        const nombreCompleto = `${solicitud.nombre} ${solicitud.apellido}`.trim()
+        const urlRegistro = `${process.env.NEXT_PUBLIC_APP_URL || 'https://jsadr.com.co'}/register?cedula=${encodeURIComponent(solicitud.cedula)}&corregir=1`
+        const html = `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto; padding: 24px;">
+            <div style="background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); padding: 24px; border-radius: 12px 12px 0 0; text-align: center;">
+              <h1 style="color: #fff; margin: 0; font-size: 22px;">Tu solicitud requiere correcciones</h1>
+              <p style="color: #fef3c7; margin: 6px 0 0; font-size: 13px;">JSADR — Registro de cliente</p>
+            </div>
+            <div style="padding: 24px; background: #f9fafb; border-radius: 0 0 12px 12px; border: 1px solid #e5e7eb;">
+              <p style="margin: 0 0 12px; color: #111827; font-size: 15px;">
+                Hola <strong>${escapeHtml(nombreCompleto)}</strong>,
+              </p>
+              <p style="margin: 0 0 12px; color: #374151; font-size: 14px; line-height: 1.5;">
+                Revisamos tu solicitud de registro <strong>${solicitud.codigo}</strong> y necesitamos que
+                realices algunas correcciones antes de poder aprobarla.
+              </p>
+              <div style="padding: 14px 16px; background: #fef3c7; border-left: 4px solid #f59e0b; margin: 16px 0; border-radius: 4px;">
+                <p style="margin: 0 0 6px; color: #92400e; font-size: 13px; font-weight: 600;">Motivo de la devolución:</p>
+                <p style="margin: 0; color: #78350f; font-size: 14px; line-height: 1.6; white-space: pre-wrap;">${escapeHtml(motivo)}</p>
+              </div>
+              <p style="margin: 16px 0 8px; color: #374151; font-size: 14px;">
+                Para corregir y reenviar tu solicitud, ingresa al siguiente enlace y usa tu cédula:
+              </p>
+              <p style="margin: 0 0 16px;">
+                <a href="${urlRegistro}" style="display: inline-block; padding: 12px 24px; background: #4f46e5; color: #fff; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 14px;">
+                  Corregir mi solicitud
+                </a>
+              </p>
+              <p style="margin: 0 0 12px; color: #6b7280; font-size: 12px; line-height: 1.5;">
+                Si el botón no funciona, copia y pega este enlace en tu navegador:<br/>
+                <span style="color: #4f46e5; word-break: break-all;">${urlRegistro}</span>
+              </p>
+              <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 20px 0;" />
+              <p style="margin: 0; color: #9ca3af; font-size: 11px; text-align: center;">
+                Este es un mensaje automático. No respondas a este correo.<br/>
+                © ${new Date().getFullYear()} JSADR — Sistema de Préstamos
+              </p>
+            </div>
+          </div>
+        `
+        const text = `Hola ${nombreCompleto},\n\nTu solicitud ${solicitud.codigo} fue devuelta para corrección.\n\nMotivo: ${motivo}\n\nPara corregir, ingresa a: ${urlRegistro}\n\nSaludos,\nJSADR`
+        try {
+          const resultado = await enviarEmail({
+            to: solicitud.email,
+            subject: `[JSADR] Tu solicitud ${solicitud.codigo} requiere correcciones`,
+            text,
+            html,
+          })
+          emailEnviadoDevolucion = resultado.success
+          if (!resultado.success) {
+            console.warn('[solicitudes PATCH devolver] Email no enviado:', resultado.error)
+          }
+        } catch (e) {
+          console.error('[solicitudes PATCH devolver] Error enviando email:', e)
+        }
+      }
+
+      await registrarAuditLog({
+        usuarioId: auth.id,
+        usuarioNombre: auth.nombre,
+        accion: 'SOLICITUD_DEVUELTA',
+        modulo: 'solicitudes-nuevos-clientes',
+        entidadId: id,
+        entidadNombre: `${solicitud.nombre} ${solicitud.apellido} - ${solicitud.codigo}`,
+        detalles: `Motivo: ${motivo}${solicitud.email ? ` | Email enviado: ${emailEnviadoDevolucion ? 'sí' : 'no'}` : ' | Sin email'}`,
+        ipOrigen: clientInfo.ip,
+        userAgent: clientInfo.userAgent,
+        exito: true,
+      })
+
+      return NextResponse.json({
+        success: true,
+        data: actualizada,
+        mensaje: solicitud.email
+          ? (emailEnviadoDevolucion
+              ? 'Solicitud devuelta. Se envió un correo al cliente con las instrucciones.'
+              : 'Solicitud devuelta. No se pudo enviar el correo al cliente (comunícale el motivo por WhatsApp o llamada).')
+          : 'Solicitud devuelta. El cliente no tiene email registrado (comunícale el motivo por WhatsApp o llamada).',
+      })
     } else if (accion === 'convertir') {
       // === CONVERTIR EN CLIENTE ===
       // Validar que no exista ya un cliente con la misma cédula
