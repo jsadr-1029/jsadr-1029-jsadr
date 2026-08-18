@@ -142,6 +142,18 @@ async function sendViaBrevo({ apiKey, fromEmail, fromName, to }) {
     <p style="margin: 0 0 14px; color: #374151; font-size: 14px; line-height: 1.55;">
       Se adjunta la guía en formato <strong>PDF</strong> (lista para reenviar al cliente) y en formato <strong>Word editable</strong> (por si necesitas personalizarla).
     </p>
+    <div style="padding: 16px 18px; background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 6px; margin: 18px 0;">
+      <p style="margin: 0 0 6px; color: #1e40af; font-size: 13px; font-weight: 700;">Descarga directa</p>
+      <p style="margin: 0 0 10px; color: #1e3a8a; font-size: 13px; line-height: 1.5;">
+        Si el adjunto no aparece o prefieres descargar directamente, usa estos enlaces públicos:
+      </p>
+      <p style="margin: 0 0 6px; color: #1e3a8a; font-size: 13px; line-height: 1.5;">
+        📄 <a href="https://jsadr-1029-jsadr.vercel.app/guia-registro-cliente.pdf" style="color: #4f46e5; font-weight: 600;">Descargar PDF (770 KB, 17 páginas)</a>
+      </p>
+      <p style="margin: 0; color: #1e3a8a; font-size: 13px; line-height: 1.5;">
+        📝 <a href="https://jsadr-1029-jsadr.vercel.app/guia-registro-cliente.docx" style="color: #4f46e5; font-weight: 600;">Descargar Word editable (1 MB)</a>
+      </p>
+    </div>
     <div style="padding: 14px 18px; background: #fef3c7; border-left: 4px solid #f59e0b; margin: 18px 0; border-radius: 4px;">
       <p style="margin: 0 0 4px; color: #92400e; font-size: 13px; font-weight: 700;">Recordatorio importante</p>
       <p style="margin: 0; color: #78350f; font-size: 12.5px; line-height: 1.55;">
