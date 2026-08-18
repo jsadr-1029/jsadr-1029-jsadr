@@ -76,6 +76,7 @@
     "exceljs": "^4.4.0",
     "framer-motion": "^12.23.2",
     "highlight.js": "^11.11.1",
+    "image-size": "^2.0.2",
     "input-otp": "^1.4.2",
     "jsonwebtoken": "^9.0.3",
     "jsqr": "^1.4.0",
