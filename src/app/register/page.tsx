@@ -471,24 +471,27 @@ export default function RegisterPage() {
                 <div className="space-y-3">
                   <FotoCapture
                     label="Foto de la cédula (frente)"
-                    descripcion="Asegúrate de que se lean todos los datos."
+                    descripcion="Asegúrate de que se lean todos los datos. Usa el botón 🔄 para cambiar entre cámara frontal y trasera."
                     valor={form.fotoCedulaFrente}
                     nombreArchivo={form.fotoCedulaFrenteNombre}
                     onChange={(v, n) => { set('fotoCedulaFrente', v); set('fotoCedulaFrenteNombre', n) }}
+                    defaultFacing="environment"
                   />
                   <FotoCapture
                     label="Foto de la cédula (reverso)"
-                    descripcion="La cara donde aparece la firma y la huella."
+                    descripcion="La cara donde aparece la firma y la huella. Usa el botón 🔄 para cambiar entre cámara frontal y trasera."
                     valor={form.fotoCedulaReverso}
                     nombreArchivo={form.fotoCedulaReversoNombre}
                     onChange={(v, n) => { set('fotoCedulaReverso', v); set('fotoCedulaReversoNombre', n) }}
+                    defaultFacing="environment"
                   />
                   <FotoCapture
                     label="Selfie sosteniendo tu cédula"
-                    descripcion="Tu rostro completo y la cédula deben verse nítidos."
+                    descripcion="Tu rostro completo y la cédula deben verse nítidos. Usa el botón 🔄 para cambiar entre cámara frontal y trasera."
                     valor={form.fotoSelfie}
                     nombreArchivo={form.fotoSelfieNombre}
                     onChange={(v, n) => { set('fotoSelfie', v); set('fotoSelfieNombre', n) }}
+                    defaultFacing="user"
                     mirror
                   />
                 </div>
