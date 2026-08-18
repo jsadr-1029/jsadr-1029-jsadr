@@ -988,3 +988,36 @@ Stage Summary:
 - ✅ TypeScript + ESLint + Build limpios
 - ✅ Producción (jsadr.com.co) respondiendo correctamente
 - ✅ GitHub Actions completados con éxito (2 runs)
+
+---
+Task ID: sync-3
+Agent: main (Super Z)
+Task: Sincronizar todos los cambios con Vercel, GitHub y Neon — todo debe verse reflejado en jsadr.com.co
+
+Work Log:
+- Verificado estado del repositorio local: `main` 1 commit adelante de `origin/main`.
+- Commit pendiente: `81545bf` (añade scripts/verify-devolucion-schema.cjs y entrada en worklog.md).
+- Ejecutado `git push origin main` → push exitoso.
+- HEAD y origin/main ahora idénticos: `81545bf6f184716cef8fc0b699dcc4799e0832ce`.
+- Verificación de schema Neon mediante scripts/verify-devolucion-schema.cjs:
+  * fechaDevolucion (timestamp without time zone) ✓
+  * motivoDevolucion (text) ✓
+  * vecesDevuelta (integer) ✓
+  * Estados actuales en BD: CONVERTIDA=9, PENDIENTE=1.
+- GitHub Actions workflow `.github/workflows/deploy-vercel.yml` dispara deploy automático a Vercel en cada push a `main` (concurrency group `vercel-production`, cancel-in-progress).
+- Verificación de producción en https://jsadr.com.co:
+  * GET / → HTTP 200 (10.1 KB, 0.1s) ✓
+  * GET /register → HTTP 200 (11.0 KB) ✓
+  * GET /api/solicitudes-nuevos-clientes/consulta-publica?cedula=99999999 → HTTP 200 {"success":true,"data":null,"mensaje":"No tienes solicitudes pendientes de corrección."} ✓
+  * GET /api/solicitudes-nuevos-clientes/consulta-publica (sin cédula) → HTTP 400 {"success":false,"error":"Cédula requerida"} ✓
+- Los 3 commits anteriores (2b3c22e, 9ecfe46, 81545bf) están todos en origin/main y deployados:
+  * 2b3c22e → feature devolución + 5 archivos nuevos/modificados
+  * 9ecfe46 → proxy fix para /consulta-publica
+  * 81545bf → script de verificación + worklog (no afectan build Next.js)
+
+Stage Summary:
+- ✅ Repositorio GitHub sincronizado: HEAD = origin/main = `81545bf`.
+- ✅ Base de datos Neon PostgreSQL: 3 campos de devolución presentes y validados.
+- ✅ Producción Vercel (jsadr.com.co): endpoints nuevos respondiendo, /register accesible.
+- ✅ Pipeline GitHub Actions → Vercel activo (auto-deploy en cada push a main).
+- ✅ Feature "Devolver solicitud al cliente" operativo en producción: admin puede devolver con motivo, cliente recibe email con link /register?cedula=X&corregir=1, formulario se precarga con datos previos + banner naranja mostrando el motivo.
