@@ -86,6 +86,7 @@ function isPublicEndpoint(pathname: string): boolean {
     pathname.startsWith('/api/chat/otp') || // solicitud/verificación OTP del chat
     pathname === '/api/simulador' || // simulador público
     pathname === '/api/solicitudes-nuevos-clientes' || // POST público: registro de nuevos clientes desde /register
+    pathname.startsWith('/api/solicitudes-nuevos-clientes/consulta-publica') || // GET público: consulta de solicitud DEVUELTA por cédula (para que el cliente pueda corregir y reenviar desde /register?cedula=X&corregir=1)
     // === Buzón de solicitudes web desde el portal del cliente ===
     // El cliente envía su token de sesión en el body; el handler valida
     // internamente contra cliente.tokenSesion con safeCompare.
