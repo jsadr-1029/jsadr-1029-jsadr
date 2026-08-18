@@ -798,3 +798,57 @@ Stage Summary:
 - ✅ Correo entregado a jsa@jsadr.com.co a las 22:10:30 (hora Colombia)
 - ✅ Cuerpo del correo incluye botones de descarga directa como backup
 - ✅ Script scripts/verify-email-events.cjs para verificar entregas futuras vía Brevo API
+
+---
+Task ID: habilitar-giro-camara-registro
+Agent: Super Z (main)
+Task: El cliente móvil no podía girar/cambiar la cámara durante la captura de fotos en el formulario de registro (siempre usaba facingMode 'user'). Habilitar el cambio entre cámara frontal y trasera para que el cliente pueda elegir la mejor cámara según el tipo de foto.
+
+Work Log:
+- Análisis del código existente:
+  * src/app/register/useCamera.ts: hook que llama getUserMedia con facingMode 'user' fijo, sin soporte para cambio
+  * src/app/register/FotoCapture.tsx: componente que muestra video y botones de captura, sin botón de cambio de cámara
+  * src/app/register/page.tsx: 3 instancias de FotoCapture (cédula frente, cédula reverso, selfie) sin configuración de cámara preferida
+- Cambios en src/app/register/useCamera.ts:
+  * Añadido tipo FacingMode = 'user' | 'environment'
+  * Añadido parámetro UseCameraOptions.defaultFacing (default: 'user')
+  * Añadido estado facingMode, hasMultipleCameras, switching
+  * Añadida detección de múltiples cámaras vía navigator.mediaDevices.enumerateDevices() en useEffect
+  * Refactorizado start() → startStream(facingMode) reutilizable para cambio dinámico
+  * Añadido switchCamera() que detiene el stream actual e inicia uno nuevo con facingMode opuesto
+  * Trackea la cámara real devuelta por el navegador en getSettings().facingMode (por si 'ideal' no fue respetado)
+  * capture() ahora solo espeja cuando facingMode === 'user' (no en cámara trasera)
+  * Manejo de errores robusto en switchCamera: si falla el cambio, reintenta con la cámara original
+- Cambios en src/app/register/FotoCapture.tsx:
+  * Importado icono SwitchCamera de lucide-react
+  * Añadido prop defaultFacing (default: 'user')
+  * Pasado defaultFacing al hook useCamera()
+  * shouldMirror ahora = mirror && cam.facingMode === 'user' (no espejar en cámara trasera)
+  * Añadido botón circular con SwitchCamera abajo a la derecha del video, visible cuando cam.status === 'active'
+    - Spinner animado cuando cam.switching === true
+    - Color indigo-600, sombra sutil, animación active:scale-95
+  * Añadido badge "Frontal"/"Trasera" arriba a la derecha indicando cámara activa
+  * Añadido hint de texto debajo del video: "¿Cámara equivocada? Usa el botón circular abajo a la derecha..."
+  * El botón se muestra SIEMPRE cuando la cámara está activa (no solo si hasMultipleCameras=true),
+    porque iOS Safari a veces no reporta labels hasta tener permiso y la detección puede fallar
+- Cambios en src/app/register/page.tsx:
+  * FotoCedulaFrente: defaultFacing="environment" (cámara trasera — mejor para documentos)
+  * FotoCedulaReverso: defaultFacing="environment" (cámara trasera)
+  * FotoSelfie: defaultFacing="user" (cámara frontal) con mirror (sin cambios)
+  * Descripciones actualizadas con mención del botón 🔄
+- Verificación:
+  * npx tsc --noEmit → 0 errores
+  * Commit 6999c1e pushed a origin/main
+  * GitHub Actions run #32095415217 (Deploy to Vercel) → completed/success
+  * Producción https://jsadr-1029-jsadr.vercel.app/register → HTTP 200
+
+Stage Summary:
+- ✅ Cliente móvil puede cambiar entre cámara frontal y trasera durante captura de fotos
+- ✅ Botón circular visible abajo a la derecha del video con icono SwitchCamera
+- ✅ Cédula (frente y reverso): cámara trasera por defecto (mejor nitidez para documentos)
+- ✅ Selfie: cámara frontal por defecto con mirror (sin cambios de UX)
+- ✅ Mirror condicional: solo espeja si mirror=true Y facingMode='user' (no espejar en trasera)
+- ✅ Badge indicador "Frontal/Trasera" arriba a la derecha del video
+- ✅ Hint de ayuda visible debajo del video
+- ✅ Deploy verificado en producción (Vercel + GitHub Actions success)
+- ✅ Compatible con iOS Safari, Android Chrome, y desktop (fallback graceful)
