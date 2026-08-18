@@ -1,41 +1,40 @@
 // Guía para el cliente: Cómo registrarse en la plataforma JSADR
-// Documento Word profesional con portada + pasos detallados
+// Documento Word profesional con portada + pasos detallados + imágenes embebidas
+// v2 — Incluye nuevo paso de datos bancarios y omite paso de crédito solicitado
 
 const {
   Document, Packer, Paragraph, TextRun, Header, Footer,
   AlignmentType, HeadingLevel, PageNumber, PageBreak,
   Table, TableRow, TableCell, TableLayoutType, WidthType,
   BorderStyle, ShadingType, SectionType, NumberFormat,
-  LevelFormat, convertInchesToTwip
+  ImageRun
 } = require("docx");
 const fs = require("fs");
+const path = require("path");
 
 // ─────────────────────────────────────────────────────────────
 // 1. Paleta de colores — Warm + Heavy + Calm (Legal Wood)
-//    Refleja seriedad, confianza, formalidad financiera
 // ─────────────────────────────────────────────────────────────
 const P = {
-  primary:    "#28201C",   // Headings, títulos
-  body:       "#36302C",   // Texto del cuerpo
-  secondary:  "#6E6560",   // Captions, notas
-  accent:     "#7A1F2B",   // Color de marca JSADR (rojo bordeaux)
-  surface:    "#F7F2EE",   // Filas alternas de tablas
-  bg:         "#1F1A17",   // Fondo de portada
+  primary:    "#28201C",
+  body:       "#36302C",
+  secondary:  "#6E6560",
+  accent:     "#7A1F2B",
+  surface:    "#F7F2EE",
+  bg:         "#1F1A17",
   titleColor: "#FFFFFF",
   subtitleColor: "#E8DCD3",
   metaColor:  "#D4C5BC",
   footerColor:"#9C9089",
 };
-
 const c = (hex) => hex.replace("#", "");
 
-// Borders
 const NB = { style: BorderStyle.NONE, size: 0, color: "FFFFFF" };
 const noBorders = { top: NB, bottom: NB, left: NB, right: NB };
 const allNoBorders = { top: NB, bottom: NB, left: NB, right: NB, insideHorizontal: NB, insideVertical: NB };
 
 // ─────────────────────────────────────────────────────────────
-// 2. Helpers — calcTitleLayout + calcCoverSpacing (del design-system)
+// 2. Helpers — calcTitleLayout + calcCoverSpacing
 // ─────────────────────────────────────────────────────────────
 function splitTitleLines(title, charsPerLine) {
   if (title.length <= charsPerLine) return [title];
@@ -66,7 +65,7 @@ function splitTitleLines(title, charsPerLine) {
 }
 
 function calcTitleLayout(title, maxWidthTwips, preferredPt = 40, minPt = 24) {
-  const charWidth = (pt) => pt * 11; // ~11 twips por carácter en fuente latina
+  const charWidth = (pt) => pt * 11;
   const charsPerLine = (pt) => Math.floor(maxWidthTwips / charWidth(pt));
   let titlePt = preferredPt;
   let lines;
@@ -112,7 +111,7 @@ function calcCoverSpacing(params) {
 }
 
 // ─────────────────────────────────────────────────────────────
-// 3. Cover Recipe R1 — Pure Paragraph (Left-Aligned) sobre fondo oscuro
+// 3. Cover Recipe R1
 // ─────────────────────────────────────────────────────────────
 function buildCoverR1(config) {
   const P = config.palette;
@@ -131,10 +130,8 @@ function buildCoverR1(config) {
   const accentLeft = { style: BorderStyle.SINGLE, size: 8, color: P.accent, space: 12 };
   const children = [];
 
-  // 1. Top whitespace
   children.push(new Paragraph({ spacing: { before: spacing.topSpacing } }));
 
-  // 2. English label
   if (config.englishLabel) {
     children.push(new Paragraph({
       indent: { left: padL, right: padR }, spacing: { after: 500 },
@@ -144,7 +141,6 @@ function buildCoverR1(config) {
     }));
   }
 
-  // 3. Main title
   for (let i = 0; i < titleLines.length; i++) {
     children.push(new Paragraph({
       indent: { left: padL },
@@ -154,7 +150,6 @@ function buildCoverR1(config) {
     }));
   }
 
-  // 4. Subtitle
   if (config.subtitle) {
     children.push(new Paragraph({
       indent: { left: padL }, spacing: { after: 800, line: 360, lineRule: "atLeast" },
@@ -163,7 +158,6 @@ function buildCoverR1(config) {
     }));
   }
 
-  // 5. Meta lines
   for (const line of (config.metaLines || [])) {
     children.push(new Paragraph({
       indent: { left: padL + 200 }, spacing: { after: 80 },
@@ -173,10 +167,8 @@ function buildCoverR1(config) {
     }));
   }
 
-  // 6. Bottom whitespace
   children.push(new Paragraph({ spacing: { before: spacing.bottomSpacing } }));
 
-  // 7. Footer
   children.push(new Paragraph({
     indent: { left: padL, right: padR },
     border: { top: { style: BorderStyle.SINGLE, size: 2, color: P.accent, space: 8 } },
@@ -203,7 +195,7 @@ function buildCoverR1(config) {
 }
 
 // ─────────────────────────────────────────────────────────────
-// 4. Component builders para el cuerpo
+// 4. Body component builders
 // ─────────────────────────────────────────────────────────────
 function h1(text) {
   return new Paragraph({
@@ -233,24 +225,12 @@ function h3(text) {
   });
 }
 
-function body(text, opts = {}) {
+function body(text) {
   return new Paragraph({
     alignment: AlignmentType.JUSTIFIED,
     spacing: { line: 312, after: 120 },
     children: [new TextRun({ text, size: 22, color: c(P.body),
-      font: { ascii: "Calibri" }, ...opts })],
-  });
-}
-
-function bodyRich(runs, opts = {}) {
-  return new Paragraph({
-    alignment: AlignmentType.JUSTIFIED,
-    spacing: { line: 312, after: 120 },
-    children: runs.map(r => new TextRun({
-      text: r.text, size: 22, color: c(P.body), font: { ascii: "Calibri" },
-      bold: r.bold || false, italics: r.italics || false, color: r.color || c(P.body)
-    })),
-    ...opts,
+      font: { ascii: "Calibri" } })],
   });
 }
 
@@ -292,7 +272,6 @@ function numbered(num, text) {
   });
 }
 
-// Caja destacada (callout / nota)
 function callout(title, text, color = P.accent) {
   const cell = new TableCell({
     shading: { type: ShadingType.CLEAR, fill: c(P.surface) },
@@ -323,35 +302,27 @@ function callout(title, text, color = P.accent) {
   });
 }
 
-// Tabla de campos de formulario
 function fieldTable(rows) {
   const headerRow = new TableRow({
-    tableHeader: true,
-    cantSplit: true,
+    tableHeader: true, cantSplit: true,
     children: [
       new TableCell({
         width: { size: 32, type: WidthType.PERCENTAGE },
         shading: { type: ShadingType.CLEAR, fill: c(P.primary) },
         margins: { top: 120, bottom: 120, left: 160, right: 160 },
-        children: [new Paragraph({
-          children: [new TextRun({ text: "Campo", bold: true, size: 22, color: "FFFFFF", font: { ascii: "Calibri" } })],
-        })],
+        children: [new Paragraph({ children: [new TextRun({ text: "Campo", bold: true, size: 22, color: "FFFFFF", font: { ascii: "Calibri" } })] })],
       }),
       new TableCell({
         width: { size: 38, type: WidthType.PERCENTAGE },
         shading: { type: ShadingType.CLEAR, fill: c(P.primary) },
         margins: { top: 120, bottom: 120, left: 160, right: 160 },
-        children: [new Paragraph({
-          children: [new TextRun({ text: "Qué debes ingresar", bold: true, size: 22, color: "FFFFFF", font: { ascii: "Calibri" } })],
-        })],
+        children: [new Paragraph({ children: [new TextRun({ text: "Qué debes ingresar", bold: true, size: 22, color: "FFFFFF", font: { ascii: "Calibri" } })] })],
       }),
       new TableCell({
         width: { size: 30, type: WidthType.PERCENTAGE },
         shading: { type: ShadingType.CLEAR, fill: c(P.primary) },
         margins: { top: 120, bottom: 120, left: 160, right: 160 },
-        children: [new Paragraph({
-          children: [new TextRun({ text: "Obligatorio", bold: true, size: 22, color: "FFFFFF", font: { ascii: "Calibri" } })],
-        })],
+        children: [new Paragraph({ children: [new TextRun({ text: "Obligatorio", bold: true, size: 22, color: "FFFFFF", font: { ascii: "Calibri" } })] })],
       }),
     ],
   });
@@ -363,25 +334,19 @@ function fieldTable(rows) {
         width: { size: 32, type: WidthType.PERCENTAGE },
         shading: { type: ShadingType.CLEAR, fill: i % 2 === 0 ? "FFFFFF" : c(P.surface) },
         margins: { top: 100, bottom: 100, left: 160, right: 160 },
-        children: [new Paragraph({
-          children: [new TextRun({ text: r[0], bold: true, size: 22, color: c(P.primary), font: { ascii: "Calibri" } })],
-        })],
+        children: [new Paragraph({ children: [new TextRun({ text: r[0], bold: true, size: 22, color: c(P.primary), font: { ascii: "Calibri" } })] })],
       }),
       new TableCell({
         width: { size: 38, type: WidthType.PERCENTAGE },
         shading: { type: ShadingType.CLEAR, fill: i % 2 === 0 ? "FFFFFF" : c(P.surface) },
         margins: { top: 100, bottom: 100, left: 160, right: 160 },
-        children: [new Paragraph({
-          children: [new TextRun({ text: r[1], size: 22, color: c(P.body), font: { ascii: "Calibri" } })],
-        })],
+        children: [new Paragraph({ children: [new TextRun({ text: r[1], size: 22, color: c(P.body), font: { ascii: "Calibri" } })] })],
       }),
       new TableCell({
         width: { size: 30, type: WidthType.PERCENTAGE },
         shading: { type: ShadingType.CLEAR, fill: i % 2 === 0 ? "FFFFFF" : c(P.surface) },
         margins: { top: 100, bottom: 100, left: 160, right: 160 },
-        children: [new Paragraph({
-          children: [new TextRun({ text: r[2], size: 22, color: c(P.body), font: { ascii: "Calibri" } })],
-        })],
+        children: [new Paragraph({ children: [new TextRun({ text: r[2], size: 22, color: c(P.body), font: { ascii: "Calibri" } })] })],
       }),
     ],
   }));
@@ -394,13 +359,66 @@ function fieldTable(rows) {
   });
 }
 
-function spacer(twips = 200) {
-  return new Paragraph({ spacing: { before: twwips, after: 0 }, children: [] });
+// ─────────────────────────────────────────────────────────────
+// 5. Image embedding helper
+//    Usa la librería image-size para soportar PNG, JPEG, WEBP
+// ─────────────────────────────────────────────────────────────
+const { imageSize } = require("image-size");
+
+function readImageSize(filePath) {
+  try {
+    const buf = fs.readFileSync(filePath);
+    const dims = imageSize(buf);
+    return { width: dims.width, height: dims.height };
+  } catch (e) {
+    console.warn("No se pudo leer dimensiones de", filePath, "—", e.message);
+    return { width: 800, height: 600 };
+  }
+}
+
+function imageParagraph(filePath, caption, maxWidthPx = 580) {
+  const buf = fs.readFileSync(filePath);
+  let dims;
+  try {
+    dims = imageSize(buf);
+  } catch (e) {
+    console.warn("No se pudo leer dimensiones de", filePath, "—", e.message);
+    dims = { width: 800, height: 600, type: "png" };
+  }
+  const scale = Math.min(1, maxWidthPx / dims.width);
+  const w = Math.round(dims.width * scale);
+  const h = Math.round(dims.height * scale);
+
+  // image-size devuelve type en {png, jpg, webp, ...}
+  // docx espera "png" | "jpeg" | "webp" | "gif" | "bmp"
+  let type = (dims.type || "png").toLowerCase();
+  if (type === "jpg") type = "jpeg";
+
+  return [
+    new Paragraph({
+      alignment: AlignmentType.CENTER,
+      spacing: { before: 200, after: 80 },
+      children: [new ImageRun({
+        data: buf,
+        transformation: { width: w, height: h },
+        type: type,
+      })],
+    }),
+    new Paragraph({
+      alignment: AlignmentType.CENTER,
+      spacing: { after: 200 },
+      children: [new TextRun({
+        text: caption, italics: true, size: 20, color: c(P.secondary),
+        font: { ascii: "Calibri" }
+      })],
+    }),
+  ];
 }
 
 // ─────────────────────────────────────────────────────────────
-// 5. Contenido del cuerpo
+// 6. Contenido del cuerpo
 // ─────────────────────────────────────────────────────────────
+const IMG_DIR = "/home/z/my-project/download/guia-img";
 const bodyChildren = [];
 
 // Bienvenida
@@ -425,7 +443,7 @@ bodyChildren.push(callout(
   P.accent
 ));
 
-// Sección 1: Acceder al formulario
+// Sección 1
 bodyChildren.push(h1("1. Cómo acceder al formulario de registro"));
 
 bodyChildren.push(h2("1.1 Ingrese al sitio web oficial"));
@@ -435,8 +453,15 @@ bodyChildren.push(body(
   "Por seguridad, no utilice enlaces recibidos por correo electrónico o mensajes de texto que no provengan de nuestros canales oficiales."
 ));
 bodyChildren.push(body(
-  "En la página de inicio encontrará el botón de inicio de sesión. " +
-  "Allí verá la opción para registrarse como nuevo cliente, la cual lo llevará directamente al formulario de registro seguro."
+  "En la página de inicio de sesión encontrará el botón para registrarse como nuevo cliente, " +
+  "el cual lo llevará directamente al formulario de registro seguro. " +
+  "A continuación le mostramos cómo se ve esta pantalla."
+));
+
+// Imagen paso 0 — login
+bodyChildren.push(...imageParagraph(
+  path.join(IMG_DIR, "paso-0-login.png"),
+  "Pantalla de inicio de sesión. El botón verde \"Regístrate como nuevo cliente\" lo lleva al formulario de registro."
 ));
 
 bodyChildren.push(h2("1.2 Ubique el botón de registro"));
@@ -450,7 +475,7 @@ bodyChildren.push(bullet("Conexión a internet estable (se suben fotografías, p
 bodyChildren.push(bullet("Navegador web actualizado (Chrome, Edge, Firefox o Safari versión reciente)."));
 bodyChildren.push(bullet("Cámara funcional o un archivo de imagen de su cédula previamente tomado (JPG, PNG o WEBP, máximo 10 MB por foto)."));
 bodyChildren.push(bullet("Tener a mano su cédula de ciudadanía, extranjería o tarjeta de identidad original."));
-bodyChildren.push(bullet("Buena iluminación para las fotografías (especialmente la selfie con documento)."));
+bodyChildren.push(bullet("Datos de su cuenta bancaria: banco, tipo de cuenta (ahorros o corriente) y número de cuenta."));
 
 bodyChildren.push(callout(
   "Conexión cifrada",
@@ -459,7 +484,7 @@ bodyChildren.push(callout(
   P.secondary
 ));
 
-// Sección 2: Los 6 pasos del formulario
+// Sección 2 — Los 6 pasos
 bodyChildren.push(h1("2. Los seis pasos del formulario de registro"));
 
 bodyChildren.push(body(
@@ -469,7 +494,7 @@ bodyChildren.push(body(
   "Los datos que ingrese en cada paso se conservan mientras navega por el formulario."
 ));
 
-// Paso 1
+// PASO 1
 bodyChildren.push(h2("Paso 1. Datos personales"));
 bodyChildren.push(body(
   "En este primer paso debe ingresar la información básica que lo identifica. " +
@@ -494,7 +519,12 @@ bodyChildren.push(body(
   "lo cual puede demorar un poco más y le impide recuperar su cuenta por sí mismo en caso de olvidar la contraseña."
 ));
 
-// Paso 2
+bodyChildren.push(...imageParagraph(
+  path.join(IMG_DIR, "paso-1-datos-personales.png"),
+  "Paso 1. Datos personales: nombre, documento, fecha de nacimiento, teléfono y correo."
+));
+
+// PASO 2
 bodyChildren.push(h2("Paso 2. Ubicación y ocupación"));
 bodyChildren.push(body(
   "Este paso recoge información sobre su lugar de residencia y su actividad laboral. " +
@@ -516,29 +546,46 @@ bodyChildren.push(body(
   "y ofrecerle un producto adecuado a su perfil."
 ));
 
-// Paso 3
-bodyChildren.push(h2("Paso 3. Crédito solicitado"));
+bodyChildren.push(...imageParagraph(
+  path.join(IMG_DIR, "paso-2-ubicacion.png"),
+  "Paso 2. Ubicación y ocupación: ciudad, municipio, dirección, ocupación e ingreso mensual."
+));
+
+// PASO 3 — Datos bancarios (NUEVO)
+bodyChildren.push(h2("Paso 3. Datos bancarios (obligatorio)"));
 bodyChildren.push(body(
-  "Aquí nos indica cuánto dinero necesita y para qué. " +
-  "Esta es su solicitud inicial de crédito; podrá modificarla posteriormente desde el portal del cliente o conversarla con su asesor."
+  "En este paso debe registrar los datos de la cuenta bancaria donde recibirá el dinero de sus préstamos una vez sean aprobados. " +
+  "Estos tres campos son obligatorios porque sin una cuenta válida no es posible realizar el desembolso del crédito. " +
+  "La cuenta debe estar a su nombre y coincidir con el número de documento de identidad que registró en el paso 1."
 ));
 
 bodyChildren.push(h3("Campos a diligenciar"));
 bodyChildren.push(fieldTable([
-  ["Valor solicitado (COP)", "Monto que desea solicitar, mínimo $10.000 pesos. Use el formato con puntos (ej: 1.000.000).", "Sí"],
-  ["Plazo deseado (meses)", "Número de meses en los que le gustaría pagar el crédito. Solo dígitos.", "Opcional"],
-  ["¿Para qué necesita el crédito?", "Describa brevemente el destino de los fondos (negocio, vivienda, libre inversión, etc.).", "Opcional"],
+  ["Banco", "Seleccione su banco de la lista desplegable. Incluye todos los bancos colombianos (Bancolombia, Davivienda, BBVA, Nequi, Daviplata, etc.).", "Sí"],
+  ["Tipo de cuenta", "Seleccione: Cuenta de Ahorros o Cuenta Corriente.", "Sí"],
+  ["Número de cuenta", "Solo dígitos, sin puntos ni espacios. Mínimo 5 caracteres. Verifique dos veces antes de enviar.", "Sí"],
 ]));
 
-bodyChildren.push(body(
-  "El monto y plazo que indique en este paso son una referencia inicial. " +
-  "El monto definitivo que se le apruebe dependerá de su categoría de cliente, " +
-  "su capacidad de pago y las políticas vigentes al momento del análisis. " +
-  "Las categorías de cliente (Básica, Estándar, Premium y Ejecutiva) definen el monto máximo que se puede prestar, " +
-  "siendo el monto mínimo de $150.000 para todas las categorías."
+bodyChildren.push(callout(
+  "Verifique muy bien el número de cuenta",
+  "Si el préstamo se disbursa a una cuenta incorrecta por error de digitación, " +
+  "el proceso de reversión con el banco puede demorar varios días hábiles. " +
+  "Le recomendamos tener a la mano un extracto o chequera de su cuenta para verificar el número exacto antes de ingresarlo.",
+  P.accent
 ));
 
-// Paso 4
+bodyChildren.push(body(
+  "Esta información se transmite por conexión cifrada y se almacena de forma segura. " +
+  "Solo el equipo autorizado de JSADR tiene acceso para validar la solicitud, " +
+  "y una vez aprobada, los datos bancarios se copian automáticamente al perfil de cliente para que el desembolso sea inmediato al aprobarse un préstamo."
+));
+
+bodyChildren.push(...imageParagraph(
+  path.join(IMG_DIR, "paso-3-datos-bancarios.png"),
+  "Paso 3. Datos bancarios: banco (lista desplegable), tipo de cuenta y número de cuenta. Los tres campos son obligatorios."
+));
+
+// PASO 4
 bodyChildren.push(h2("Paso 4. Referido (opcional)"));
 bodyChildren.push(body(
   "Este paso es completamente opcional. Si un cliente actual de JSADR lo recomendó, puede ingresar sus datos aquí. " +
@@ -554,7 +601,12 @@ bodyChildren.push(fieldTable([
   ["Parentesco / Relación", "Vínculo con el referido (familiar, amigo, laboral, etc.).", "Opcional"],
 ]));
 
-// Paso 5
+bodyChildren.push(...imageParagraph(
+  path.join(IMG_DIR, "paso-4-referido.png"),
+  "Paso 4. Referido (opcional). Si nadie lo recomendó puede dejar todos los campos en blanco y continuar."
+));
+
+// PASO 5
 bodyChildren.push(h2("Paso 5. Verificación de identidad (fotos)"));
 bodyChildren.push(body(
   "Este paso es obligatorio y el más importante para validar su identidad. " +
@@ -577,6 +629,16 @@ bodyChildren.push(bullet("Use luz natural o una lámpara frontal. Evite contralu
 bodyChildren.push(bullet("Para la selfie, sostenga la cédula al lado de su cara, no delante de ella, para que ambos se vean claramente."));
 bodyChildren.push(bullet("Si la cámara de su computador no tiene buena resolución, le recomendamos tomar las fotos con su celular y subirlas como archivo."));
 
+bodyChildren.push(...imageParagraph(
+  path.join(IMG_DIR, "paso-5-fotos-guia.png"),
+  "Las tres fotos obligatorias: cédula frente, cédula reverso y selfie sosteniendo la cédula."
+));
+
+bodyChildren.push(...imageParagraph(
+  path.join(IMG_DIR, "paso-5-fotos.png"),
+  "Paso 5. Pantalla de verificación de identidad. Para cada foto puede usar la cámara del dispositivo o subir un archivo."
+));
+
 bodyChildren.push(callout(
   "Tamaños y formatos admitidos",
   "Formatos aceptados: JPG, PNG y WEBP. Tamaño máximo por archivo: 10 MB. " +
@@ -585,7 +647,7 @@ bodyChildren.push(callout(
   P.secondary
 ));
 
-// Paso 6
+// PASO 6
 bodyChildren.push(h2("Paso 6. Autorizaciones finales"));
 bodyChildren.push(body(
   "En el último paso debe aceptar cuatro autorizaciones obligatorias. " +
@@ -608,12 +670,12 @@ bodyChildren.push(body(
 bodyChildren.push(callout(
   "Antes de enviar",
   "Revise el resumen completo que aparece al final del paso 6. " +
-  "Verifique que su nombre, documento, teléfono, correo y las tres fotografías estén correctos. " +
+  "Verifique que su nombre, documento, teléfono, correo, banco y las tres fotografías estén correctos. " +
   "Una vez enviada la solicitud, no podrá modificarla desde el formulario; cualquier corrección deberá solicitarla a su asesor una vez sea contactado.",
   P.accent
 ));
 
-// Sección 3: Envío y código de seguimiento
+// Sección 3 — Envío y código
 bodyChildren.push(h1("3. Envío de la solicitud y código de seguimiento"));
 
 bodyChildren.push(h2("3.1 Botón \"Enviar solicitud\""));
@@ -631,6 +693,11 @@ bodyChildren.push(body(
   "código de seguimiento, el cual tiene el formato SNC-XXXXX (por ejemplo: SNC-L8KA3F)."
 ));
 
+bodyChildren.push(...imageParagraph(
+  path.join(IMG_DIR, "paso-6-exito.png"),
+  "Pantalla de éxito al enviar la solicitud. Anote o tome captura de su código de seguimiento SNC-XXXXX."
+));
+
 bodyChildren.push(callout(
   "Guarde su código de seguimiento",
   "El código que aparece en la pantalla de éxito es su comprobante de registro. " +
@@ -640,9 +707,7 @@ bodyChildren.push(callout(
 ));
 
 bodyChildren.push(h2("3.3 Qué hacer después del envío"));
-bodyChildren.push(body(
-  "Una vez enviada la solicitud, el flujo continúa así:"
-));
+bodyChildren.push(body("Una vez enviada la solicitud, el flujo continúa así:"));
 bodyChildren.push(numbered(1, "Nuestro equipo revisa su información y las fotografías en un plazo máximo de 24 horas hábiles."));
 bodyChildren.push(numbered(2, "Si su solicitud es aprobada, se crea su cuenta de cliente con una contraseña temporal."));
 bodyChildren.push(numbered(3, "Si registró correo electrónico, le llega un mensaje con el asunto \"Bienvenido a JSADR — Tu clave de acceso al Portal\", que contiene su contraseña temporal."));
@@ -650,7 +715,7 @@ bodyChildren.push(numbered(4, "Si no registró correo, uno de nuestros asesores 
 bodyChildren.push(numbered(5, "Con su cédula y la contraseña temporal, ingrese a jsadr.com.co/login para iniciar sesión por primera vez."));
 bodyChildren.push(numbered(6, "El sistema le pedirá cambiar su contraseña en ese primer ingreso (la temporal expira en 24 horas)."));
 
-// Sección 4: Primer ingreso al portal
+// Sección 4 — Primer ingreso
 bodyChildren.push(h1("4. Primer ingreso al portal del cliente"));
 
 bodyChildren.push(h2("4.1 Iniciar sesión"));
@@ -669,7 +734,24 @@ bodyChildren.push(body(
   "Le recomendamos usar una contraseña que combine mayúsculas, minúsculas, números y un símbolo especial, y que no haya utilizado en otros servicios."
 ));
 
-bodyChildren.push(h2("4.3 Recuperar contraseña"));
+bodyChildren.push(h2("4.3 Simulación y solicitud de crédito"));
+bodyChildren.push(body(
+  "Una vez dentro del portal, vaya a la pestaña \"Simular\". Allí podrá ingresar el monto que necesita, " +
+  "el plazo en meses, la frecuencia de pago (mensual, quincenal o semanal) y seleccionar su categoría. " +
+  "El sistema le mostrará la cuota estimada, el total a pagar y los intereses. " +
+  "Si los valores le parecen adecuados, podrá radicar la solicitud formal directamente desde el simulador."
+));
+
+bodyChildren.push(callout(
+  "Categorías de cliente",
+  "Cada cliente se asigna a una categoría al momento del registro, la cual define el monto máximo que puede solicitar: " +
+  "Básica (hasta $500.000), Estándar (hasta $700.000), Premium (hasta $1.200.000) y Ejecutiva (sin límite). " +
+  "El monto mínimo para todas las categorías es de $150.000. " +
+  "La categoría le es asignada por el asesor al aprobar su registro, según su perfil financiero.",
+  P.secondary
+));
+
+bodyChildren.push(h2("4.4 Recuperar contraseña"));
 bodyChildren.push(body(
   "Si en algún momento olvida su contraseña, en la página de login encontrará el enlace \"¿Olvidaste tu contraseña?\". " +
   "Al hacer clic se abrirá un formulario donde debe ingresar su usuario, cédula o correo. " +
@@ -678,7 +760,7 @@ bodyChildren.push(body(
   "Este enlace es temporal y de un solo uso, por lo que debe usarlo apenas lo reciba."
 ));
 
-// Sección 5: Preguntas frecuentes
+// Sección 5 — FAQ
 bodyChildren.push(h1("5. Preguntas frecuentes"));
 
 bodyChildren.push(h2("¿Cuánto demora la aprobación del registro?"));
@@ -697,12 +779,21 @@ bodyChildren.push(body(
   "su clave temporal le será entregada por WhatsApp o llamada telefónica."
 ));
 
-bodyChildren.push(h2("¿Qué pasa si ya envié una solicitud y quiero corregir un dato?"));
+bodyChildren.push(h2("¿Por qué se piden los datos bancarios en el registro?"));
+bodyChildren.push(body(
+  "Los datos bancarios son obligatorios porque se usan para disbursar el dinero de los préstamos una vez sean aprobados. " +
+  "Si no registra una cuenta válida, el sistema no podría transferirle los fondos. " +
+  "La cuenta debe estar a su nombre y coincidir con el documento de identidad que registró. " +
+  "Tener los datos bancarios cargados desde el registro permite que el desembolso sea inmediato al aprobarse un préstamo, " +
+  "sin necesidad de hacer trámites adicionales en ese momento."
+));
+
+bodyChildren.push(h2("¿Qué pasa si envié una solicitud y quiero corregir un dato?"));
 bodyChildren.push(body(
   "Una vez enviada, no puede modificar la solicitud desde el formulario. " +
   "Espere a ser contactado por nuestro equipo en las próximas 24 horas hábiles; " +
   "informe al asesor el dato correcto y él actualizará la información antes de aprobar su cuenta. " +
-  "Si cometió un error en la cédula o el teléfono, escríbanos indicando su código de seguimiento (SNC-XXXXX)."
+  "Si cometió un error en la cédula, el teléfono o el número de cuenta bancaria, escríbanos indicando su código de seguimiento (SNC-XXXXX)."
 ));
 
 bodyChildren.push(h2("¿Por qué me aparece \"Ya tienes una solicitud pendiente\"?"));
@@ -736,7 +827,7 @@ bodyChildren.push(body(
   "Sus datos personales se tratan conforme a la Ley 1581 de 2012 de Protección de Datos Personales de Colombia."
 ));
 
-// Sección 6: Contacto
+// Sección 6 — Contacto
 bodyChildren.push(h1("6. Canales de contacto"));
 
 bodyChildren.push(body(
@@ -746,22 +837,10 @@ bodyChildren.push(body(
   "su código de seguimiento SNC-XXXXX para una atención más ágil."
 ));
 
-bodyChildren.push(bulletRich([
-  { text: "Sitio web: ", bold: true },
-  { text: "jsadr.com.co" }
-]));
-bodyChildren.push(bulletRich([
-  { text: "Correo de soporte: ", bold: true },
-  { text: "disponible a través del portal del cliente una vez aprobado su registro" }
-]));
-bodyChildren.push(bulletRich([
-  { text: "WhatsApp: ", bold: true },
-  { text: "el número que aparece en la página oficial; nuestro equipo lo contactará por este canal una vez aprobado el registro" }
-]));
-bodyChildren.push(bulletRich([
-  { text: "Horario de atención: ", bold: true },
-  { text: "lunes a viernes de 8:00 a.m. a 6:00 p.m. y sábados de 9:00 a.m. a 1:00 p.m. (hora Colombia)" }
-]));
+bodyChildren.push(bulletRich([{ text: "Sitio web: ", bold: true }, { text: "jsadr.com.co" }]));
+bodyChildren.push(bulletRich([{ text: "Correo de contacto: ", bold: true }, { text: "jsa@jsadr.com.co" }]));
+bodyChildren.push(bulletRich([{ text: "WhatsApp: ", bold: true }, { text: "el número que aparece en la página oficial; nuestro equipo lo contactará por este canal una vez aprobado el registro" }]));
+bodyChildren.push(bulletRich([{ text: "Horario de atención: ", bold: true }, { text: "lunes a viernes de 8:00 a.m. a 6:00 p.m. y sábados de 9:00 a.m. a 1:00 p.m. (hora Colombia)" }]));
 
 bodyChildren.push(callout(
   "Gracias por confiar en JSADR",
@@ -772,7 +851,7 @@ bodyChildren.push(callout(
 ));
 
 // ─────────────────────────────────────────────────────────────
-// 6. Footer del cuerpo
+// 7. Footer del cuerpo
 // ─────────────────────────────────────────────────────────────
 function bodyFooter() {
   return new Footer({
@@ -803,12 +882,12 @@ function bodyHeader() {
 }
 
 // ─────────────────────────────────────────────────────────────
-// 7. Ensamblado final
+// 8. Ensamblado final
 // ─────────────────────────────────────────────────────────────
 const doc = new Document({
   creator: "JSADR",
   title: "Guía de Registro de Cliente",
-  description: "Guía paso a paso para que un cliente nuevo se registre en la plataforma JSADR",
+  description: "Guía paso a paso con imágenes para que un cliente nuevo se registre en la plataforma JSADR",
   styles: {
     default: {
       document: {
@@ -821,7 +900,6 @@ const doc = new Document({
     },
   },
   sections: [
-    // Sección 1: Portada
     {
       properties: {
         page: {
@@ -831,20 +909,19 @@ const doc = new Document({
       },
       children: buildCoverR1({
         title: "Guía de Registro de Cliente Nuevo",
-        subtitle: "Paso a paso para crear tu cuenta en la plataforma JSADR",
+        subtitle: "Paso a paso con imágenes para crear tu cuenta en la plataforma JSADR",
         englishLabel: "CLIENT ONBOARDING GUIDE",
         metaLines: [
           "Portal web: jsadr.com.co",
           "Página de registro: jsadr.com.co/register",
           "Vigencia: 2026",
-          "Versión: 1.0",
+          "Versión: 2.0",
         ],
         footerLeft: "JSADR — Soluciones financieras",
         footerRight: "Documento para clientes",
         palette: P,
       }),
     },
-    // Sección 2: Cuerpo
     {
       properties: {
         type: SectionType.NEXT_PAGE,
