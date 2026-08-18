@@ -130,6 +130,10 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
           ciudad: solicitud.ciudad || null,
           municipio: solicitud.municipio || null,
           direccion: solicitud.direccion || null,
+          // Datos bancarios (copiados de la solicitud — obligatorios desde v4.15)
+          bancoCliente: solicitud.banco || null,
+          tipoCuentaCliente: solicitud.tipoCuenta || null,
+          numeroCuentaCliente: solicitud.numeroCuenta || null,
           // v4.13: usar clave alfanumérica + flag de cambio obligatorio
           claveHash,
           claveCreatedAt: ahora,

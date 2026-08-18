@@ -1810,9 +1810,16 @@ model SolicitudNuevoCliente {
   // Datos financieros
   ocupacion         String?
   ingresoMensual    Float?
-  valorSolicitado   Float
+  // Crédito solicitado — campos eliminados del formulario (lo maneja el portal del cliente)
+  // Se mantienen en DB por compatibilidad histórica pero son opcionales y se cargan en null
+  valorSolicitado   Float?
   plazoDeseado      Int?     // meses
   destinoCredito    String?  // para qué necesita el crédito
+  
+  // Datos bancarios (obligatorios para disbursar préstamos)
+  banco             String?
+  tipoCuenta        String?  // AHORROS | CORRIENTE
+  numeroCuenta      String?
   
   // Referido
   referidoPorNombre String?

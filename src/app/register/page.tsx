@@ -6,7 +6,8 @@ import Link from 'next/link'
 import {
   User, Mail, Phone, MapPin, CreditCard, Calendar, Briefcase, DollarSign,
   CheckCircle2, AlertCircle, ArrowLeft, ArrowRight, Send, Shield, Camera,
-  FileText, Lock, Eye, EyeOff, Home, UserPlus, Clock, BadgeCheck, RefreshCw
+  FileText, Lock, Eye, EyeOff, Home, UserPlus, Clock, BadgeCheck, RefreshCw,
+  Landmark, Wallet
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -32,11 +33,11 @@ type FormData = {
   direccion: string
   ocupacion: string
   ingresoMensual: string
-  // Paso 3: crédito solicitado
-  valorSolicitado: string
-  plazoDeseado: string
-  destinoCredito: string
-  // Paso 4: referido
+  // Paso 3: datos bancarios (NUEVO — obligatorio)
+  banco: string
+  tipoCuenta: 'AHORROS' | 'CORRIENTE' | ''
+  numeroCuenta: string
+  // Paso 4: referido (opcional)
   referidoPorNombre: string
   referidoPorApellido: string
   referidoPorTelefono: string
@@ -59,7 +60,7 @@ const INITIAL: FormData = {
   nombre: '', apellido: '', tipoDocumento: 'CC', cedula: '',
   fechaNacimiento: '', telefono: '', email: '',
   ciudad: '', municipio: '', direccion: '', ocupacion: '', ingresoMensual: '',
-  valorSolicitado: '', plazoDeseado: '', destinoCredito: '',
+  banco: '', tipoCuenta: '', numeroCuenta: '',
   referidoPorNombre: '', referidoPorApellido: '', referidoPorTelefono: '', referidoPorParentesco: '',
   fotoCedulaFrente: null, fotoCedulaReverso: null, fotoSelfie: null,
   fotoCedulaFrenteNombre: null, fotoCedulaReversoNombre: null, fotoSelfieNombre: null,
@@ -69,10 +70,34 @@ const INITIAL: FormData = {
 const PASOS = [
   { n: 1, label: 'Datos personales', icon: User },
   { n: 2, label: 'Ubicación y ocupación', icon: MapPin },
-  { n: 3, label: 'Crédito solicitado', icon: DollarSign },
+  { n: 3, label: 'Datos bancarios', icon: Landmark },
   { n: 4, label: 'Referido (opcional)', icon: UserPlus },
   { n: 5, label: 'Verificación', icon: Camera },
   { n: 6, label: 'Confirmación', icon: Shield },
+]
+
+const BANCOS_COLOMBIA = [
+  'Banco de Bogotá',
+  'Banco de Occidente',
+  'Banco Davivienda',
+  'Banco de Colombia (Bancolombia)',
+  'BBVA Colombia',
+  'Banco Scotiabank Colpatria',
+  'Banco GNB Sudameris',
+  'Banco AV Villas',
+  'Banco BBVA',
+  'Banco Popular',
+  'Banco Agrario',
+  'Banco Caja Social',
+  'Banco Itaú',
+  'Banco Pichincha',
+  'Nequi',
+  'Daviplata',
+  'Movii',
+  'Banco Cooperativo Coopcentral',
+  'Lulo Bank',
+  'Banco Serfinanza',
+  'Otros',
 ]
 
 export default function RegisterPage() {
@@ -108,8 +133,10 @@ export default function RegisterPage() {
       if (form.direccion.trim().length < 5) errs.direccion = 'Dirección requerida'
     }
     if (p === 3) {
-      const v = Number(form.valorSolicitado)
-      if (!form.valorSolicitado || isNaN(v) || v < 10000) errs.valorSolicitado = 'Valor mínimo $10.000'
+      // Datos bancarios — obligatorios
+      if (form.banco.trim().length < 2) errs.banco = 'Selecciona tu banco'
+      if (!form.tipoCuenta) errs.tipoCuenta = 'Selecciona el tipo de cuenta'
+      if (form.numeroCuenta.trim().length < 5) errs.numeroCuenta = 'Número de cuenta requerido (mínimo 5 dígitos)'
     }
     if (p === 5) {
       if (!form.fotoCedulaFrente) errs.fotoCedulaFrente = 'Toma la foto frontal de tu cédula'
@@ -196,7 +223,7 @@ export default function RegisterPage() {
           <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-3 mb-6 text-left">
             <p className="text-xs text-amber-200 flex items-start gap-2">
               <Clock className="h-4 w-4 mt-0.5 flex-shrink-0" />
-              <span>Una vez aprobado tu registro, recibirás por WhatsApp o llamada tus credenciales para ingresar al portal del cliente.</span>
+              <span>Una vez aprobado tu registro, recibirás por WhatsApp o llamada tus credenciales para ingresar al portal del cliente, donde podrás simular créditos y radicar solicitudes.</span>
             </p>
           </div>
           <div className="flex gap-3">
@@ -356,25 +383,60 @@ export default function RegisterPage() {
               </div>
             )}
 
-            {/* PASO 3 — Crédito solicitado */}
+            {/* PASO 3 — Datos bancarios (NUEVO) */}
             {paso === 3 && (
               <div className="space-y-4">
-                <SectionTitle icon={DollarSign} title="¿Cuánto necesitas y para qué?" subtitle="Esta es tu solicitud de crédito inicial. Podrás modificarla después." />
-                <Field label="Valor solicitado (COP)" error={fieldErrors.valorSolicitado} icon={DollarSign}>
-                  <Input
-                    value={form.valorSolicitado ? Number(form.valorSolicitado).toLocaleString('es-CO') : ''}
-                    onChange={(e) => set('valorSolicitado', e.target.value.replace(/[^\d]/g, ''))}
-                    placeholder="1.000.000"
-                    inputMode="numeric"
-                    className="bg-slate-950/50 border-slate-700"
-                  />
+                <SectionTitle
+                  icon={Landmark}
+                  title="Datos de tu cuenta bancaria"
+                  subtitle="Esta cuenta se usará para disbursar tus préstamos una vez sean aprobados."
+                />
+                <Alert className="bg-indigo-500/10 border-indigo-500/30 text-indigo-200">
+                  <Wallet className="h-4 w-4" />
+                  <AlertDescription>
+                    Los datos bancarios son <strong>obligatorios</strong>. La cuenta debe estar a tu nombre y coincidir con el documento de identidad registrado.
+                  </AlertDescription>
+                </Alert>
+                <Field label="Banco" error={fieldErrors.banco} icon={Landmark}>
+                  <select
+                    value={form.banco}
+                    onChange={(e) => set('banco', e.target.value)}
+                    className="w-full h-10 rounded-md bg-slate-950/50 border border-slate-700 px-3 text-sm"
+                  >
+                    <option value="">Selecciona tu banco…</option>
+                    {BANCOS_COLOMBIA.map((b) => (
+                      <option key={b} value={b}>{b}</option>
+                    ))}
+                  </select>
                 </Field>
-                <Field label="Plazo deseado (meses)" error={fieldErrors.plazoDeseado} icon={Calendar}>
-                  <Input value={form.plazoDeseado} onChange={(e) => set('plazoDeseado', e.target.value.replace(/[^\d]/g, ''))} placeholder="12" inputMode="numeric" className="bg-slate-950/50 border-slate-700" />
-                </Field>
-                <Field label="¿Para qué necesitas el crédito?" error={fieldErrors.destinoCredito} icon={FileText}>
-                  <Textarea value={form.destinoCredito} onChange={(e) => set('destinoCredito', e.target.value)} placeholder="Ej: capital para mi negocio, compra de equipo, pago de deudas…" className="bg-slate-950/50 border-slate-700 min-h-[80px]" />
-                </Field>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <Field label="Tipo de cuenta" error={fieldErrors.tipoCuenta} icon={CreditCard}>
+                    <select
+                      value={form.tipoCuenta}
+                      onChange={(e) => set('tipoCuenta', e.target.value as any)}
+                      className="w-full h-10 rounded-md bg-slate-950/50 border border-slate-700 px-3 text-sm"
+                    >
+                      <option value="">Selecciona…</option>
+                      <option value="AHORROS">Cuenta de Ahorros</option>
+                      <option value="CORRIENTE">Cuenta Corriente</option>
+                    </select>
+                  </Field>
+                  <Field label="Número de cuenta" error={fieldErrors.numeroCuenta} icon={CreditCard}>
+                    <Input
+                      value={form.numeroCuenta}
+                      onChange={(e) => set('numeroCuenta', e.target.value.replace(/[^\d]/g, ''))}
+                      placeholder="000123456789"
+                      inputMode="numeric"
+                      className="bg-slate-950/50 border-slate-700 font-mono"
+                    />
+                  </Field>
+                </div>
+                <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-3">
+                  <p className="text-xs text-amber-200 flex items-start gap-2">
+                    <Lock className="h-4 w-4 mt-0.5 flex-shrink-0" />
+                    <span>Verifica muy bien el número de cuenta. Si el préstamo se disbursa a una cuenta incorrecta por error de digitación, el proceso de reversión puede demorar varios días hábiles.</span>
+                  </p>
+                </div>
               </div>
             )}
 
@@ -482,8 +544,8 @@ export default function RegisterPage() {
                     <ResumenItem label="Email" value={form.email || '—'} />
                     <ResumenItem label="Ciudad" value={form.ciudad || '—'} />
                     <ResumenItem label="Ocupación" value={form.ocupacion || '—'} />
-                    <ResumenItem label="Valor solicitado" value={form.valorSolicitado ? `$${Number(form.valorSolicitado).toLocaleString('es-CO')}` : '—'} />
-                    <ResumenItem label="Plazo" value={form.plazoDeseado ? `${form.plazoDeseado} meses` : '—'} />
+                    <ResumenItem label="Banco" value={form.banco || '—'} />
+                    <ResumenItem label="Cuenta" value={form.tipoCuenta ? `${form.tipoCuenta} ${form.numeroCuenta}` : '—'} />
                     <ResumenItem label="Fotos" value={`${[form.fotoCedulaFrente, form.fotoCedulaReverso, form.fotoSelfie].filter(Boolean).length}/3 cargadas`} />
                   </dl>
                 </div>
@@ -579,4 +641,3 @@ function ResumenItem({ label, value }: { label: string; value: string }) {
     </>
   )
 }
-
