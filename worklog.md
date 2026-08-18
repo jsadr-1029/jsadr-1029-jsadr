@@ -901,3 +901,90 @@ Stage Summary:
 - ✅ jsadr-1029-jsadr.vercel.app: respondiendo HTTP 200 en todas las rutas equivalentes
 - ✅ Código nuevo del giro de cámara visible en producción (descripciones actualizadas)
 - ✅ Documentación de guía pública accesible en ambos dominios
+
+---
+Task ID: devolucion-solicitudes
+Agent: main (Super Z)
+Task: Implementar funcionalidad de "Devolver solicitud" al cliente para corrección cuando se detecten inconsistencias (foto borrosa, datos incompletos, etc.)
+
+Work Log:
+- Explorado el código existente:
+  * SolicitudesPendientesPanel.tsx (UI admin con modales aprobar/rechazar/convertir)
+  * /api/solicitudes-nuevos-clientes/route.ts (POST público, GET con auth)
+  * /api/solicitudes-nuevos-clientes/[id]/route.ts (PATCH aprobar/rechazar/revisar/convertir)
+  * /register/page.tsx (formulario público de registro, 6 pasos)
+- Schema Prisma SolicitudNuevoCliente: añadidos 3 campos nuevos
+  * motivoDevolucion (String?)
+  * fechaDevolucion (DateTime?)
+  * vecesDevuelta (Int @default(0))
+  * Estado DEVUELTA añadido al comentario del enum
+- prisma db push --accept-data-loss ejecutado contra Neon (9.00s)
+- API PATCH [id]: nueva acción 'devolver'
+  * Valida motivo obligatorio (máx 2000 chars)
+  * Marca estado=DEVUELTA, guarda motivo + fecha + contador
+  * Envía email al cliente (si tiene correo) con motivo + enlace de corrección
+  * Registra audit log con acción SOLICITUD_DEVUELTA
+- API POST: si existe solicitud DEVUELTA para la cédula, actualiza en lugar de crear nueva
+  * Mantiene código original para trazabilidad
+  * Resetea observaciones, motivoDevolucion, fechaDevolucion
+  * Cambia estado a PENDIENTE
+  * Audit log con acción SOLICITUD_CORREGIDA_REENVIADA
+- API GET lista: incluye campos motivoDevolucion, fechaDevolucion, vecesDevuelta en select
+- API GET lista: agrega conteo 'devueltas' al resumen
+- Nuevo endpoint /api/solicitudes-nuevos-clientes/consulta-publica (GET público)
+  * Búsqueda por cédula
+  * Solo devuelve solicitudes DEVUELTA (privacidad: no expone pendientes/aprobadas/etc.)
+  * Rate limit: 10/min por IP
+  * NO devuelve fotos (pesan ~5MB c/u) — el cliente las debe volver a capturar
+- UI admin (SolicitudesPendientesPanel.tsx):
+  * Icono Undo2 importado de lucide-react
+  * Badge color naranja para estado DEVUELTA
+  * Estado 'DEVUELTA' agregado al dropdown de filtros
+  * KPI 'Devueltas' agregado al resumen (grid de 6 columnas)
+  * Botón Undo2 (naranja) en la fila de la tabla para PENDIENTE/REVISADA/DEVUELTA
+  * Botón 'Devolver al cliente' agregado al modal de detalle
+  * Nuevo modal 'Devolver solicitud al cliente':
+    - Motivo obligatorio (textarea)
+    - 5 plantillas rápidas (foto borrosa, datos incompletos, etc.)
+    - Notas internas opcionales
+    - Muestra contador de veces devuelta
+  * Sección DEVUELTA en detalle con motivo + fecha + # veces
+- UI registro (/register/page.tsx):
+  * useSearchParams envuelto en Suspense (requerido por Next.js)
+  * Detección de ?cedula=X&corregir=1 al cargar la página
+  * Llamada a /consulta-publica y precarga del formulario con datos existentes
+  * Banner naranja con motivo de devolución (código + fecha + # veces + motivo)
+  * Banner azul de carga mientras consulta la API
+  * Recordatorio en paso 5: "debes volver a tomar las 3 fotos"
+  * Pantalla de éxito diferenciada: "¡Solicitud corregida!" en lugar de "¡Solicitud enviada!"
+- Proxy (src/proxy.ts):
+  * Añadido /api/solicitudes-nuevos-clientes/consulta-publica a isPublicEndpoint
+- TypeScript check: ✓ clean (sin errores)
+- ESLint: ✓ clean (solo 2 warnings pre-existentes sobre unused eslint-disable directives)
+- Build producción: ✓ success, /register prerendered como static
+- Migración Neon verificada:
+  * fechaDevolucion (timestamp without time zone) ✓
+  * motivoDevolucion (text) ✓
+  * vecesDevuelta (integer) ✓
+- Smoke tests en producción (https://jsadr.com.co):
+  * GET /api/solicitudes-nuevos-clientes/consulta-publica?cedula=test123 → 200 {"success":true,"data":null,"mensaje":"No tienes solicitudes pendientes de corrección."}
+  * GET /register → 200
+  * GET /register?cedula=0000000000&corregir=1 → 200
+- Commits:
+  * 2b3c22e — feat(solicitudes): permite devolver solicitud al cliente para corrección
+  * 9ecfe46 — fix(proxy): permite acceso público al endpoint consulta-publica
+- GitHub Actions:
+  * Run #32187361341 (commit 2b3c22e) → completed/success
+  * Run #32187892412 (commit 9ecfe46) → completed/success
+
+Stage Summary:
+- ✅ Schema Neon actualizado con 3 campos nuevos (motivoDevolucion, fechaDevolucion, vecesDevuelta)
+- ✅ API PATCH soporta acción 'devolver' con email al cliente + audit log
+- ✅ API POST detecta DEVUELTA previa y actualiza registro en lugar de crear nuevo
+- ✅ Nuevo endpoint público /consulta-publica para lookup por cédula
+- ✅ UI admin: botón + modal + badge + KPI + filtro + sección detalle
+- ✅ UI registro: detección de devolución + precarga + banner + recordatorio
+- ✅ Proxy actualizado para permitir acceso público
+- ✅ TypeScript + ESLint + Build limpios
+- ✅ Producción (jsadr.com.co) respondiendo correctamente
+- ✅ GitHub Actions completados con éxito (2 runs)
