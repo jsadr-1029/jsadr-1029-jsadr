@@ -118,7 +118,11 @@ function isPublicEndpoint(pathname: string): boolean {
     pathname === '/api/firma' ||
     // === Cron endpoints (v4.4) — autenticados por X-Cron-Secret ===
     pathname.startsWith('/api/recordatorios/cron') ||
-    pathname.startsWith('/api/pagos/cron')
+    pathname.startsWith('/api/pagos/cron') ||
+    // === TEMP v4.16 — envío de guía de registro a jsa@jsadr.com.co ===
+    // Endpoint temporal con token en query string para envío one-shot.
+    // Eliminar después de usar (commit 96b7160 → siguiente commit lo remueve).
+    pathname === '/api/_internal-enviar-guia'
   )
 }
 
