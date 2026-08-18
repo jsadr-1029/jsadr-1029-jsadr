@@ -724,3 +724,32 @@ Verificación final (commit 46935fd):
 - ✅ GitHub Actions: run #163 (Deploy to Vercel) → completed/success
 - ✅ Vercel producción: https://jsadr-1029-jsadr.vercel.app/ → 200 OK
 - ✅ SINCRONIZACIÓN TOTAL: AL 100%
+
+---
+Task ID: enviar-guia-registro-email
+Agent: Super Z (main)
+Task: Enviar la guía de registro del cliente (PDF + DOCX) al correo jsa@jsadr.com.co. El intento anterior fallaba con "Invalid login: 535 5.7.8 Authentication failed" porque el BACKUP_KEY_SEED en scripts/enviar-guia-correo.js tenía 4 líneas en lugar de 3 (no coincidía con src/lib/security.ts).
+
+Work Log:
+- Diagnóstico: el script anterior intentaba desencriptar la password SMTP con BACKUP_KEY_SEED pero tenía una línea extra (`c7b0a3e6d9b2a5f8e1d4c7b0a3`) que no existe en el seed original de security.ts. Esto causaba que decryptSensitive() fallara silenciosamente y devolviera el string cifrado, el cual Brevo rechazaba como password.
+- Confirmado mediante scripts/_diag-brevo-keys-v2.cjs que la password y la apiKey en ConexionAPI.EMAIL_SMTP sí son descifrables con el BACKUP_KEY_SEED correcto (3 líneas):
+  * apiKey (xkeysib-...): 89 chars, desencripta vía BACKUP_KEY_SEED ✓
+  * password (xsmtpsib-...): 90 chars, desencripta vía BACKUP_KEY_SEED ✓
+- Reescrito scripts/enviar-guia-correo.js:
+  * BACKUP_KEY_SEED con 3 líneas exactas (coincide con security.ts)
+  * Cambio de SMTP relay a Brevo HTTPS API (https://api.brevo.com/v3/smtp/email) — más confiable desde contenedores, soporta attachments base64 nativamente
+  * Lee la API key (xkeysib-) desde ConexionAPI.apiKey en Neon
+  * Adjunta el PDF (895.9 KB) y el DOCX (1122.1 KB) como base64
+  * HTML del correo con header gradient morado, lista de contenido de la guía, callout amarillo sobre la eliminación del paso de crédito solicitado
+- Ejecución exitosa:
+  * messageId: <202608180219.55093186820@smtp-relay.mailin.fr>
+  * Destinatario: jsa@jsadr.com.co
+  * From: "Jsadr" <jsa@jsadr.com.co>
+  * Subject: "Guía de Registro de Cliente — Plataforma JSADR"
+
+Stage Summary:
+- ✅ Correo enviado exitosamente a jsa@jsadr.com.co vía Brevo HTTPS API
+- ✅ Adjuntos: PDF (895.9 KB) + DOCX (1122.1 KB) de la guía actualizada
+- ✅ La guía refleja los cambios: eliminación del paso "Crédito solicitado" + nuevo paso de datos bancarios obligatorios
+- ✅ Script reutilizable scripts/enviar-guia-correo.js para futuros re-envíos
+- Bug original era un typo en BACKUP_KEY_SEED (línea extra) — fix definitivo
