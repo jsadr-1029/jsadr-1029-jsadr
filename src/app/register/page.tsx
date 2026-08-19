@@ -206,28 +206,65 @@ function RegisterPageContent() {
   function validarPaso(p: number): boolean {
     const errs: Record<string, string> = {}
     if (p === 1) {
-      if (form.nombre.trim().length < 2) errs.nombre = 'Nombre requerido'
-      if (form.apellido.trim().length < 2) errs.apellido = 'Apellido requerido'
-      if (form.cedula.trim().length < 5) errs.cedula = 'Documento requerido'
-      if (form.telefono.trim().length < 7) errs.telefono = 'Teléfono requerido'
-      if (form.email && !/^\S+@\S+\.\S+$/.test(form.email)) errs.email = 'Email inválido'
+      // === Paso 1: Datos personales — TODOS OBLIGATORIOS ===
+      if (form.nombre.trim().length < 2) errs.nombre = 'El nombre es obligatorio'
+      if (form.apellido.trim().length < 2) errs.apellido = 'El apellido es obligatorio'
+      // Cédula: entre 6 y 12 dígitos numéricos (cédula colombiana típica)
+      if (!form.cedula.trim()) errs.cedula = 'El número de documento es obligatorio'
+      else if (form.cedula.trim().length < 6) errs.cedula = 'Mínimo 6 dígitos'
+      else if (form.cedula.trim().length > 12) errs.cedula = 'Máximo 12 dígitos'
+      else if (!/^\d+$/.test(form.cedula.trim())) errs.cedula = 'Solo se permiten números'
+      // Fecha de nacimiento — obligatoria y debe ser mayor de 18 años
+      if (!form.fechaNacimiento) errs.fechaNacimiento = 'La fecha de nacimiento es obligatoria'
+      else {
+        const fechaNac = new Date(form.fechaNacimiento + 'T12:00:00')
+        const hoy = new Date()
+        let edad = hoy.getFullYear() - fechaNac.getFullYear()
+        const mes = hoy.getMonth() - fechaNac.getMonth()
+        if (mes < 0 || (mes === 0 && hoy.getDate() < fechaNac.getDate())) edad--
+        if (edad < 18) errs.fechaNacimiento = 'Debes ser mayor de 18 años'
+        else if (edad > 100) errs.fechaNacimiento = 'Fecha inválida'
+      }
+      // Teléfono — obligatorio, formato celular colombiano (10 dígitos) o fijo (7-8)
+      if (!form.telefono.trim()) errs.telefono = 'El teléfono es obligatorio'
+      else if (form.telefono.trim().length < 7) errs.telefono = 'Mínimo 7 dígitos'
+      else if (form.telefono.trim().length > 13) errs.telefono = 'Máximo 13 caracteres'
+      else if (!/^\+?\d+$/.test(form.telefono.trim())) errs.telefono = 'Solo se permiten números y el signo +'
+      // Email — OBLIGATORIO (antes era opcional)
+      if (!form.email.trim()) errs.email = 'El correo electrónico es obligatorio'
+      else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) errs.email = 'Correo electrónico inválido'
     }
     if (p === 2) {
-      if (form.ciudad.trim().length < 2) errs.ciudad = 'Ciudad requerida'
-      if (form.direccion.trim().length < 5) errs.direccion = 'Dirección requerida'
+      // === Paso 2: Ubicación y ocupación — TODOS OBLIGATORIOS ===
+      if (form.ciudad.trim().length < 3) errs.ciudad = 'La ciudad es obligatoria'
+      if (form.municipio.trim().length < 2) errs.municipio = 'El municipio o localidad es obligatorio'
+      if (form.direccion.trim().length < 5) errs.direccion = 'La dirección es obligatoria (mínimo 5 caracteres)'
+      if (form.ocupacion.trim().length < 3) errs.ocupacion = 'La ocupación es obligatoria'
+      // Ingreso mensual — obligatorio y debe ser un valor numérico positivo
+      if (!form.ingresoMensual.trim()) errs.ingresoMensual = 'El ingreso mensual es obligatorio'
+      else {
+        const ingreso = parseInt(form.ingresoMensual.replace(/[^\d]/g, ''))
+        if (isNaN(ingreso) || ingreso <= 0) errs.ingresoMensual = 'Ingresa un valor válido'
+        else if (ingreso < 100000) errs.ingresoMensual = 'El ingreso mensual mínimo es $100.000 COP'
+      }
     }
     if (p === 3) {
-      // Datos bancarios — obligatorios
+      // === Paso 3: Datos bancarios — TODOS OBLIGATORIOS ===
       if (form.banco.trim().length < 2) errs.banco = 'Selecciona tu banco'
       if (!form.tipoCuenta) errs.tipoCuenta = 'Selecciona el tipo de cuenta'
-      if (form.numeroCuenta.trim().length < 5) errs.numeroCuenta = 'Número de cuenta requerido (mínimo 5 dígitos)'
+      if (!form.numeroCuenta.trim()) errs.numeroCuenta = 'El número de cuenta es obligatorio'
+      else if (form.numeroCuenta.trim().length < 5) errs.numeroCuenta = 'Mínimo 5 dígitos'
+      else if (form.numeroCuenta.trim().length > 20) errs.numeroCuenta = 'Máximo 20 dígitos'
+      else if (!/^\d+$/.test(form.numeroCuenta.trim())) errs.numeroCuenta = 'Solo se permiten números'
     }
     if (p === 5) {
+      // === Paso 5: Fotos — TODAS OBLIGATORIAS ===
       if (!form.fotoCedulaFrente) errs.fotoCedulaFrente = 'Toma la foto frontal de tu cédula'
       if (!form.fotoCedulaReverso) errs.fotoCedulaReverso = 'Toma la foto del reverso de tu cédula'
       if (!form.fotoSelfie) errs.fotoSelfie = 'Toma la selfie sosteniendo tu cédula'
     }
     if (p === 6) {
+      // === Paso 6: TyC — TODOS OBLIGATORIOS ===
       if (!form.aceptaTyC) errs.aceptaTyC = 'Debes aceptar los Términos y Condiciones'
       if (!form.aceptaTratamientoDatos) errs.aceptaTratamientoDatos = 'Debes aceptar la Política de Tratamiento de Datos'
       if (!form.aceptaConsultaCentrales) errs.aceptaConsultaCentrales = 'Debes autorizar la consulta en centrales'
@@ -443,20 +480,21 @@ function RegisterPageContent() {
             {/* PASO 1 — Datos personales */}
             {paso === 1 && (
               <div className="space-y-4">
-                <SectionTitle icon={User} title="Cuéntanos sobre ti" subtitle="Estos datos serán verificados contra tu cédula." />
+                <SectionTitle icon={User} title="Cuéntanos sobre ti" subtitle="Todos los campos son obligatorios. Serán verificados contra tu cédula." />
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <Field label="Nombre" error={fieldErrors.nombre} icon={User}>
-                    <Input value={form.nombre} onChange={(e) => set('nombre', e.target.value)} placeholder="Juan" className="bg-slate-950/50 border-slate-700" />
+                  <Field label="Nombre" error={fieldErrors.nombre} icon={User} obligatorio>
+                    <Input value={form.nombre} onChange={(e) => set('nombre', e.target.value)} placeholder="Juan" required className="bg-slate-950/50 border-slate-700" />
                   </Field>
-                  <Field label="Apellido" error={fieldErrors.apellido} icon={User}>
-                    <Input value={form.apellido} onChange={(e) => set('apellido', e.target.value)} placeholder="Pérez" className="bg-slate-950/50 border-slate-700" />
+                  <Field label="Apellido" error={fieldErrors.apellido} icon={User} obligatorio>
+                    <Input value={form.apellido} onChange={(e) => set('apellido', e.target.value)} placeholder="Pérez" required className="bg-slate-950/50 border-slate-700" />
                   </Field>
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                  <Field label="Tipo documento" error={fieldErrors.tipoDocumento}>
+                  <Field label="Tipo documento" error={fieldErrors.tipoDocumento} obligatorio>
                     <select
                       value={form.tipoDocumento}
                       onChange={(e) => set('tipoDocumento', e.target.value as any)}
+                      required
                       className="w-full h-10 rounded-md bg-slate-950/50 border border-slate-700 px-3 text-sm"
                     >
                       <option value="CC">C.C. — Cédula ciudadanía</option>
@@ -464,47 +502,55 @@ function RegisterPageContent() {
                       <option value="TI">T.I. — Tarjeta identidad</option>
                     </select>
                   </Field>
-                  <Field label="Número de documento" error={fieldErrors.cedula} icon={CreditCard}>
-                    <Input value={form.cedula} onChange={(e) => set('cedula', e.target.value.replace(/[^\d]/g, ''))} placeholder="1234567890" inputMode="numeric" className="bg-slate-950/50 border-slate-700" />
+                  <Field label="Número de documento" error={fieldErrors.cedula} icon={CreditCard} obligatorio>
+                    <Input value={form.cedula} onChange={(e) => set('cedula', e.target.value.replace(/[^\d]/g, ''))} placeholder="1234567890" inputMode="numeric" required maxLength={12} className="bg-slate-950/50 border-slate-700" />
                   </Field>
-                  <Field label="Fecha de nacimiento" error={fieldErrors.fechaNacimiento} icon={Calendar}>
-                    <Input type="date" value={form.fechaNacimiento} onChange={(e) => set('fechaNacimiento', e.target.value)} className="bg-slate-950/50 border-slate-700" />
+                  <Field label="Fecha de nacimiento" error={fieldErrors.fechaNacimiento} icon={Calendar} obligatorio>
+                    <Input type="date" value={form.fechaNacimiento} onChange={(e) => set('fechaNacimiento', e.target.value)} required className="bg-slate-950/50 border-slate-700" />
                   </Field>
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <Field label="Teléfono / WhatsApp" error={fieldErrors.telefono} icon={Phone}>
-                    <Input value={form.telefono} onChange={(e) => set('telefono', e.target.value.replace(/[^\d+]/g, ''))} placeholder="3001234567" inputMode="tel" className="bg-slate-950/50 border-slate-700" />
+                  <Field label="Teléfono / WhatsApp" error={fieldErrors.telefono} icon={Phone} obligatorio>
+                    <Input value={form.telefono} onChange={(e) => set('telefono', e.target.value.replace(/[^\d+]/g, ''))} placeholder="3001234567" inputMode="tel" required maxLength={13} className="bg-slate-950/50 border-slate-700" />
                   </Field>
-                  <Field label="Correo electrónico (opcional)" error={fieldErrors.email} icon={Mail}>
-                    <Input type="email" value={form.email} onChange={(e) => set('email', e.target.value)} placeholder="tu@correo.com" className="bg-slate-950/50 border-slate-700" />
+                  <Field label="Correo electrónico" error={fieldErrors.email} icon={Mail} obligatorio>
+                    <Input type="email" value={form.email} onChange={(e) => set('email', e.target.value)} placeholder="tu@correo.com" required className="bg-slate-950/50 border-slate-700" />
                   </Field>
                 </div>
+                <p className="text-[11px] text-slate-500 flex items-center gap-1">
+                  <span className="text-red-400 font-bold">*</span>
+                  <span>Estos campos son obligatorios para procesar tu solicitud.</span>
+                </p>
               </div>
             )}
 
             {/* PASO 2 — Ubicación y ocupación */}
             {paso === 2 && (
               <div className="space-y-4">
-                <SectionTitle icon={MapPin} title="¿Dónde vives y a qué te dedicas?" subtitle="Esta información nos ayuda a evaluar tu solicitud." />
+                <SectionTitle icon={MapPin} title="¿Dónde vives y a qué te dedicas?" subtitle="Todos los campos son obligatorios. Esta información nos ayuda a evaluar tu solicitud." />
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <Field label="Ciudad" error={fieldErrors.ciudad} icon={Home}>
-                    <Input value={form.ciudad} onChange={(e) => set('ciudad', e.target.value)} placeholder="Bogotá" className="bg-slate-950/50 border-slate-700" />
+                  <Field label="Ciudad" error={fieldErrors.ciudad} icon={Home} obligatorio>
+                    <Input value={form.ciudad} onChange={(e) => set('ciudad', e.target.value)} placeholder="Bogotá" required className="bg-slate-950/50 border-slate-700" />
                   </Field>
-                  <Field label="Municipio / Localidad" error={fieldErrors.municipio}>
-                    <Input value={form.municipio} onChange={(e) => set('municipio', e.target.value)} placeholder="Chapinero" className="bg-slate-950/50 border-slate-700" />
+                  <Field label="Municipio / Localidad" error={fieldErrors.municipio} icon={MapPin} obligatorio>
+                    <Input value={form.municipio} onChange={(e) => set('municipio', e.target.value)} placeholder="Chapinero" required className="bg-slate-950/50 border-slate-700" />
                   </Field>
                 </div>
-                <Field label="Dirección de residencia" error={fieldErrors.direccion} icon={MapPin}>
-                  <Input value={form.direccion} onChange={(e) => set('direccion', e.target.value)} placeholder="Calle 123 # 45-67, Apto 501" className="bg-slate-950/50 border-slate-700" />
+                <Field label="Dirección de residencia" error={fieldErrors.direccion} icon={MapPin} obligatorio>
+                  <Input value={form.direccion} onChange={(e) => set('direccion', e.target.value)} placeholder="Calle 123 # 45-67, Apto 501" required className="bg-slate-950/50 border-slate-700" />
                 </Field>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <Field label="Ocupación" error={fieldErrors.ocupacion} icon={Briefcase}>
-                    <Input value={form.ocupacion} onChange={(e) => set('ocupacion', e.target.value)} placeholder="Empleado, comerciante, independiente…" className="bg-slate-950/50 border-slate-700" />
+                  <Field label="Ocupación" error={fieldErrors.ocupacion} icon={Briefcase} obligatorio>
+                    <Input value={form.ocupacion} onChange={(e) => set('ocupacion', e.target.value)} placeholder="Empleado, comerciante, independiente…" required className="bg-slate-950/50 border-slate-700" />
                   </Field>
-                  <Field label="Ingreso mensual (COP)" error={fieldErrors.ingresoMensual} icon={DollarSign}>
-                    <Input value={form.ingresoMensual} onChange={(e) => set('ingresoMensual', e.target.value.replace(/[^\d]/g, ''))} placeholder="2500000" inputMode="numeric" className="bg-slate-950/50 border-slate-700" />
+                  <Field label="Ingreso mensual (COP)" error={fieldErrors.ingresoMensual} icon={DollarSign} obligatorio>
+                    <Input value={form.ingresoMensual} onChange={(e) => set('ingresoMensual', e.target.value.replace(/[^\d]/g, ''))} placeholder="2500000" inputMode="numeric" required className="bg-slate-950/50 border-slate-700" />
                   </Field>
                 </div>
+                <p className="text-[11px] text-slate-500 flex items-center gap-1">
+                  <span className="text-red-400 font-bold">*</span>
+                  <span>Estos campos son obligatorios para procesar tu solicitud.</span>
+                </p>
               </div>
             )}
 
@@ -514,7 +560,7 @@ function RegisterPageContent() {
                 <SectionTitle
                   icon={Landmark}
                   title="Datos de tu cuenta bancaria"
-                  subtitle="Esta cuenta se usará para disbursar tus préstamos una vez sean aprobados."
+                  subtitle="Todos los campos son obligatorios. Esta cuenta se usará para disbursar tus préstamos."
                 />
                 <Alert className="bg-indigo-500/10 border-indigo-500/30 text-indigo-200">
                   <Wallet className="h-4 w-4" />
@@ -522,10 +568,11 @@ function RegisterPageContent() {
                     Los datos bancarios son <strong>obligatorios</strong>. La cuenta debe estar a tu nombre y coincidir con el documento de identidad registrado.
                   </AlertDescription>
                 </Alert>
-                <Field label="Banco" error={fieldErrors.banco} icon={Landmark}>
+                <Field label="Banco" error={fieldErrors.banco} icon={Landmark} obligatorio>
                   <select
                     value={form.banco}
                     onChange={(e) => set('banco', e.target.value)}
+                    required
                     className="w-full h-10 rounded-md bg-slate-950/50 border border-slate-700 px-3 text-sm"
                   >
                     <option value="">Selecciona tu banco…</option>
@@ -535,10 +582,11 @@ function RegisterPageContent() {
                   </select>
                 </Field>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <Field label="Tipo de cuenta" error={fieldErrors.tipoCuenta} icon={CreditCard}>
+                  <Field label="Tipo de cuenta" error={fieldErrors.tipoCuenta} icon={CreditCard} obligatorio>
                     <select
                       value={form.tipoCuenta}
                       onChange={(e) => set('tipoCuenta', e.target.value as any)}
+                      required
                       className="w-full h-10 rounded-md bg-slate-950/50 border border-slate-700 px-3 text-sm"
                     >
                       <option value="">Selecciona…</option>
@@ -546,12 +594,14 @@ function RegisterPageContent() {
                       <option value="CORRIENTE">Cuenta Corriente</option>
                     </select>
                   </Field>
-                  <Field label="Número de cuenta" error={fieldErrors.numeroCuenta} icon={CreditCard}>
+                  <Field label="Número de cuenta" error={fieldErrors.numeroCuenta} icon={CreditCard} obligatorio>
                     <Input
                       value={form.numeroCuenta}
                       onChange={(e) => set('numeroCuenta', e.target.value.replace(/[^\d]/g, ''))}
                       placeholder="000123456789"
                       inputMode="numeric"
+                      required
+                      maxLength={20}
                       className="bg-slate-950/50 border-slate-700 font-mono"
                     />
                   </Field>
@@ -745,15 +795,19 @@ function SectionTitle({ icon: Icon, title, subtitle }: { icon: any; title: strin
   )
 }
 
-function Field({ label, error, icon: Icon, children }: { label: string; error?: string; icon?: any; children: React.ReactNode }) {
+function Field({ label, error, icon: Icon, children, obligatorio = false }: { label: string; error?: string; icon?: any; children: React.ReactNode; obligatorio?: boolean }) {
   return (
     <div className="space-y-1.5">
       <Label className="text-xs text-slate-300 flex items-center gap-1.5">
         {Icon && <Icon className="h-3.5 w-3.5 text-slate-500" />}
         {label}
+        {obligatorio && <span className="text-red-400 font-bold" title="Campo obligatorio">*</span>}
       </Label>
       {children}
-      {error && <p className="text-[11px] text-red-400">{error}</p>}
+      {error && <p className="text-[11px] text-red-400 flex items-center gap-1">
+        <AlertCircle className="h-3 w-3" />
+        {error}
+      </p>}
     </div>
   )
 }

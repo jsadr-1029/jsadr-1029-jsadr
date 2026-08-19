@@ -22,35 +22,69 @@ const fotoSchema = z
   )
 
 const schema = z.object({
-  nombre: z.string().min(2, 'Nombre requerido').max(80),
-  apellido: z.string().min(2, 'Apellido requerido').max(80),
+  // === Datos personales — TODOS OBLIGATORIOS ===
+  nombre: z.string().min(2, 'El nombre es obligatorio (mínimo 2 caracteres)').max(80),
+  apellido: z.string().min(2, 'El apellido es obligatorio (mínimo 2 caracteres)').max(80),
   tipoDocumento: z.enum(['CC', 'CE', 'TI']).default('CC'),
-  cedula: z.string().min(5, 'Documento requerido').max(20),
-  fechaNacimiento: z.string().optional(),
-  telefono: z.string().min(7, 'Teléfono requerido').max(20),
-  email: z.string().email().optional().or(z.literal('')),
-  ciudad: z.string().optional(),
-  municipio: z.string().optional(),
-  direccion: z.string().optional(),
-  ocupacion: z.string().optional(),
-  ingresoMensual: z.union([z.number(), z.string()]).transform(v => Number(v)).optional(),
-  // Campos bancarios OBLIGATORIOS (nuevos)
-  banco: z.string().min(2, 'Banco requerido').max(80),
+  cedula: z
+    .string()
+    .min(6, 'El número de documento es obligatorio (mínimo 6 dígitos)')
+    .max(12, 'Máximo 12 dígitos')
+    .regex(/^\d+$/, 'El documento solo puede contener números'),
+  fechaNacimiento: z
+    .string()
+    .min(1, 'La fecha de nacimiento es obligatoria')
+    .refine((val) => {
+      const fecha = new Date(val + 'T12:00:00')
+      if (isNaN(fecha.getTime())) return false
+      const hoy = new Date()
+      let edad = hoy.getFullYear() - fecha.getFullYear()
+      const mes = hoy.getMonth() - fecha.getMonth()
+      if (mes < 0 || (mes === 0 && hoy.getDate() < fecha.getDate())) edad--
+      return edad >= 18 && edad <= 100
+    }, 'Debes ser mayor de 18 años'),
+  telefono: z
+    .string()
+    .min(7, 'El teléfono es obligatorio (mínimo 7 dígitos)')
+    .max(13, 'Máximo 13 caracteres')
+    .regex(/^\+?\d+$/, 'Teléfono solo puede contener números y el signo +'),
+  email: z
+    .string()
+    .min(1, 'El correo electrónico es obligatorio')
+    .email('Correo electrónico inválido'),
+  // === Ubicación y ocupación — TODOS OBLIGATORIOS ===
+  ciudad: z.string().min(3, 'La ciudad es obligatoria').max(80),
+  municipio: z.string().min(2, 'El municipio o localidad es obligatorio').max(80),
+  direccion: z.string().min(5, 'La dirección es obligatoria (mínimo 5 caracteres)').max(200),
+  ocupacion: z.string().min(3, 'La ocupación es obligatoria').max(100),
+  ingresoMensual: z
+    .union([z.number(), z.string()])
+    .transform((v) => Number(v))
+    .refine((v) => !isNaN(v) && v > 0, 'El ingreso mensual es obligatorio')
+    .refine((v) => v >= 100000, 'El ingreso mensual mínimo es $100.000 COP'),
+  // === Datos bancarios — TODOS OBLIGATORIOS ===
+  banco: z.string().min(2, 'Selecciona tu banco').max(80),
   tipoCuenta: z.enum(['AHORROS', 'CORRIENTE'], { message: 'Selecciona un tipo de cuenta válido' }),
-  numeroCuenta: z.string().min(5, 'Número de cuenta requerido').max(30),
-  // Crédito solicitado — eliminado del formulario, queda opcional en DB
-  valorSolicitado: z.union([z.number(), z.string()]).transform(v => Number(v)).optional(),
-  plazoDeseado: z.union([z.number(), z.string()]).transform(v => Number(v)).optional(),
+  numeroCuenta: z
+    .string()
+    .min(5, 'El número de cuenta es obligatorio (mínimo 5 dígitos)')
+    .max(20, 'Máximo 20 dígitos')
+    .regex(/^\d+$/, 'El número de cuenta solo puede contener números'),
+  // === Crédito solicitado — opcional (no está en el formulario) ===
+  valorSolicitado: z.union([z.number(), z.string()]).transform((v) => Number(v)).optional(),
+  plazoDeseado: z.union([z.number(), z.string()]).transform((v) => Number(v)).optional(),
   destinoCredito: z.string().optional(),
+  // === Referido — opcional ===
   referidoPorNombre: z.string().optional(),
   referidoPorApellido: z.string().optional(),
   referidoPorTelefono: z.string().optional(),
   referidoPorParentesco: z.string().optional(),
-  aceptaTyC: z.boolean(),
-  aceptaTratamientoDatos: z.boolean(),
-  aceptaConsultaCentrales: z.boolean().default(false),
-  aceptaReportarCentral: z.boolean().default(false),
-  // Fotos obligatorias
+  // === TyC — TODOS OBLIGATORIOS (true literal, pero serializado como boolean para Prisma) ===
+  aceptaTyC: z.boolean().refine((v) => v === true, 'Debes aceptar los Términos y Condiciones'),
+  aceptaTratamientoDatos: z.boolean().refine((v) => v === true, 'Debes aceptar la Política de Tratamiento de Datos'),
+  aceptaConsultaCentrales: z.boolean().refine((v) => v === true, 'Debes autorizar la consulta en centrales'),
+  aceptaReportarCentral: z.boolean().refine((v) => v === true, 'Debes autorizar el reporte a centrales'),
+  // === Fotos — TODAS OBLIGATORIAS ===
   fotoCedulaFrente: fotoSchema,
   fotoCedulaReverso: fotoSchema,
   fotoSelfie: fotoSchema,
