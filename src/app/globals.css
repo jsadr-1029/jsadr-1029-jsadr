@@ -985,3 +985,212 @@ html {
   white-space: nowrap;
   border: 0;
 }
+
+/* =====================================================
+   RESPONSIVE ADMIN MOBILE (2026-08-19)
+   -----------------------------------------------------
+   El layout del admin se ve bien en desktop pero en móvil
+   tablet (<1024px) hay problemas:
+     - Tablas anchas se desbordan
+     - Tabs horizontales no se pueden leer completos
+     - Padding excesivo del contenido
+     - Botones de acción se cortan
+     - Header con reloj colisiona con botones flotantes
+   Estas reglas SOLO aplican cuando NO estamos en el portal
+   cliente (que tiene su propia lógica responsiva) y cuando
+   el main-container está dentro del layout del admin.
+   Se detecta vía el atributo [data-responsive-mode] que
+   page.tsx pone en el div raíz del admin.
+   ===================================================== */
+
+@media (max-width: 1023px) {
+  /* === Reducir padding del contenedor principal del admin === */
+  /* No aplica cuando el usuario forzó modo 'desktop' — en ese caso respeta el
+     padding normal del Sidebar (sidebar visible, sin MobileNav bottom). */
+  [data-responsive-mode]:not([data-responsive-mode="desktop"]) .main-container {
+    padding: 12px !important;
+    padding-top: 64px !important; /* espacio para botones flotantes top */
+    padding-bottom: 80px !important; /* espacio para MobileNav bottom */
+    max-width: 100% !important;
+  }
+
+  /* === Tabs horizontales: scroll horizontal con scroll snap === */
+  [data-responsive-mode]:not([data-responsive-mode="desktop"]) [role="tablist"] {
+    overflow-x: auto !important;
+    overflow-y: hidden !important;
+    -webkit-overflow-scrolling: touch;
+    scroll-snap-type: x mandatory;
+    scrollbar-width: thin;
+    scrollbar-color: oklch(0.45 0.10 280 / 50%) transparent;
+    max-width: 100% !important;
+  }
+  [data-responsive-mode]:not([data-responsive-mode="desktop"]) [role="tablist"]::-webkit-scrollbar {
+    height: 4px;
+  }
+  [data-responsive-mode]:not([data-responsive-mode="desktop"]) [role="tablist"]::-webkit-scrollbar-thumb {
+    background: oklch(0.45 0.10 280 / 50%);
+    border-radius: 4px;
+  }
+  [data-responsive-mode]:not([data-responsive-mode="desktop"]) [role="tab"] {
+    scroll-snap-align: start;
+    flex-shrink: 0 !important;
+    white-space: nowrap !important;
+    padding-left: 14px !important;
+    padding-right: 14px !important;
+    font-size: 13px !important;
+  }
+
+  /* === Tablas: scroll horizontal === */
+  [data-responsive-mode]:not([data-responsive-mode="desktop"]) .table-container,
+  [data-responsive-mode]:not([data-responsive-mode="desktop"]) [class*="overflow-x-auto"] {
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch;
+    max-width: 100% !important;
+  }
+  [data-responsive-mode]:not([data-responsive-mode="desktop"]) table {
+    display: block;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    max-width: 100% !important;
+    white-space: nowrap;
+  }
+  [data-responsive-mode]:not([data-responsive-mode="desktop"]) table thead,
+  [data-responsive-mode]:not([data-responsive-mode="desktop"]) table tbody {
+    display: table;
+    width: max-content;
+  }
+
+  /* === Grids: forzar 1 columna en móvil (excepto en modo desktop forzado) === */
+  [data-responsive-mode]:not([data-responsive-mode="desktop"])
+    .grid-cols-2:not(.keep-cols),
+  [data-responsive-mode]:not([data-responsive-mode="desktop"])
+    .grid-cols-3:not(.keep-cols),
+  [data-responsive-mode]:not([data-responsive-mode="desktop"])
+    .grid-cols-4:not(.keep-cols),
+  [data-responsive-mode]:not([data-responsive-mode="desktop"])
+    .grid-cols-5:not(.keep-cols),
+  [data-responsive-mode]:not([data-responsive-mode="desktop"])
+    .grid-cols-6:not(.keep-cols) {
+    grid-template-columns: 1fr !important;
+  }
+  /* Excepción: grids pequeños como badges / KPIs compactos → 2 cols */
+  [data-responsive-mode]:not([data-responsive-mode="desktop"])
+    .grid-cols-2.text-xs:not(.keep-cols),
+  [data-responsive-mode]:not([data-responsive-mode="desktop"])
+    .grid-cols-2.text-sm:not(.keep-cols),
+  [data-responsive-mode]:not([data-responsive-mode="desktop"])
+    .grid-cols-3.text-xs:not(.keep-cols),
+  [data-responsive-mode]:not([data-responsive-mode="desktop"])
+    .grid-cols-3.text-sm:not(.keep-cols),
+  [data-responsive-mode]:not([data-responsive-mode="desktop"])
+    .grid-cols-4.text-xs:not(.keep-cols),
+  [data-responsive-mode]:not([data-responsive-mode="desktop"])
+    .grid-cols-4.text-sm:not(.keep-cols) {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+
+  /* === Botones de acción en header: más compactos === */
+  [data-responsive-mode]:not([data-responsive-mode="desktop"]) .flex.items-center.gap-2 > button {
+    padding-left: 8px !important;
+    padding-right: 8px !important;
+    font-size: 11px !important;
+  }
+  [data-responsive-mode]:not([data-responsive-mode="desktop"]) .flex.items-center.gap-2 > button > span {
+    display: inline-block;
+    max-width: 90px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  /* === Reloj Colombia: ocultar en móvil === */
+  [data-responsive-mode]:not([data-responsive-mode="desktop"]) .fixed.top-3.left-1\/2 {
+    display: none !important;
+  }
+
+  /* === Inputs y selects: tamaño táctil mínimo (44px) === */
+  [data-responsive-mode]:not([data-responsive-mode="desktop"]) input[type="text"],
+  [data-responsive-mode]:not([data-responsive-mode="desktop"]) input[type="email"],
+  [data-responsive-mode]:not([data-responsive-mode="desktop"]) input[type="number"],
+  [data-responsive-mode]:not([data-responsive-mode="desktop"]) input[type="tel"],
+  [data-responsive-mode]:not([data-responsive-mode="desktop"]) input[type="password"],
+  [data-responsive-mode]:not([data-responsive-mode="desktop"]) input[type="date"],
+  [data-responsive-mode]:not([data-responsive-mode="desktop"]) input[type="search"],
+  [data-responsive-mode]:not([data-responsive-mode="desktop"]) select,
+  [data-responsive-mode]:not([data-responsive-mode="desktop"]) textarea {
+    min-height: 44px;
+    font-size: 16px !important; /* evita zoom en iOS */
+  }
+
+  /* === Headers de página (PageHeader): apilar verticalmente === */
+  [data-responsive-mode]:not([data-responsive-mode="desktop"]) .flex.items-center.justify-between {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  [data-responsive-mode]:not([data-responsive-mode="desktop"]) .flex.items-center.justify-between > * {
+    flex-shrink: 0;
+  }
+
+  /* === Flex row con muchos hijos: apilar en móvil === */
+  [data-responsive-mode]:not([data-responsive-mode="desktop"]) .flex.items-center.gap-3:not(.flex-wrap):not(.keep-flex-row) {
+    flex-wrap: wrap;
+  }
+
+  /* === Cards: padding más pequeño en móvil === */
+  [data-responsive-mode]:not([data-responsive-mode="desktop"]) .p-6 {
+    padding: 12px !important;
+  }
+  [data-responsive-mode]:not([data-responsive-mode="desktop"]) .p-4 {
+    padding: 10px !important;
+  }
+
+  /* === Headers h1, h2, h3: más pequeños en móvil === */
+  [data-responsive-mode]:not([data-responsive-mode="desktop"]) h1 {
+    font-size: 1.5rem !important;
+    line-height: 1.25 !important;
+  }
+  [data-responsive-mode]:not([data-responsive-mode="desktop"]) h2 {
+    font-size: 1.25rem !important;
+    line-height: 1.3 !important;
+  }
+  [data-responsive-mode]:not([data-responsive-mode="desktop"]) h3 {
+    font-size: 1.1rem !important;
+    line-height: 1.35 !important;
+  }
+}
+
+/* === Mobile muy pequeño (< 380px, ej: iPhone SE) === */
+@media (max-width: 379px) {
+  [data-responsive-mode] .main-container {
+    padding: 8px !important;
+  }
+  [data-responsive-mode]:not([data-responsive-mode="desktop"])
+    .grid-cols-2.text-xs:not(.keep-cols),
+  [data-responsive-mode]:not([data-responsive-mode="desktop"])
+    .grid-cols-2.text-sm:not(.keep-cols),
+  [data-responsive-mode]:not([data-responsive-mode="desktop"])
+    .grid-cols-3.text-xs:not(.keep-cols),
+  [data-responsive-mode]:not([data-responsive-mode="desktop"])
+    .grid-cols-3.text-sm:not(.keep-cols),
+  [data-responsive-mode]:not([data-responsive-mode="desktop"])
+    .grid-cols-4.text-xs:not(.keep-cols),
+  [data-responsive-mode]:not([data-responsive-mode="desktop"])
+    .grid-cols-4.text-sm:not(.keep-cols) {
+    grid-template-columns: 1fr !important;
+  }
+  [data-responsive-mode] [role="tab"] {
+    padding-left: 10px !important;
+    padding-right: 10px !important;
+    font-size: 12px !important;
+  }
+}
+
+/* === Modo landscape móvil (altura < 500px) === */
+@media (max-width: 1023px) and (max-height: 500px) {
+  [data-responsive-mode] .main-container {
+    padding-top: 56px !important;
+    padding-bottom: 56px !important;
+  }
+}
+
+

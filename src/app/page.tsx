@@ -112,6 +112,25 @@ export default function Home() {
   // redirigir de vuelta a la URL original post-login.
   const [authChecked, setAuthChecked] = useState(false)
   const [esPortalCliente, setEsPortalCliente] = useState(false)
+
+  // === Propagar responsiveMode al <html> ===
+  // Necesario para que el CSS en globals.css (reglas responsivas admin) pueda
+  // alcanzar elementos renderizados fuera del div data-responsive-mode,
+  // incluyendo:
+  //   - Modales (Radix UI Dialog/Sheet usan createPortal → al final del <body>)
+  //   - Tooltips, popovers, dropdowns
+  //   - Notificaciones (toast)
+  // Sin esto, los modales en móvil heredarían el layout desktop y se verían
+  // cortados o con tablas/grid no responsivos.
+  useEffect(() => {
+    if (typeof document === 'undefined') return
+    if (esPortalCliente) {
+      document.documentElement.removeAttribute('data-responsive-mode')
+    } else {
+      document.documentElement.setAttribute('data-responsive-mode', responsiveMode)
+    }
+  }, [responsiveMode, esPortalCliente])
+
   useEffect(() => {
     // === Timeout de seguridad ===
     // Si por cualquier motivo el flujo de auth queda bloqueado (token corrupto,
