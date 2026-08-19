@@ -50,6 +50,7 @@ import { DashboardPrestamos } from '@/components/views/DashboardPrestamos'
 import { BotIcons } from '@/components/views/BotIcons'
 import { OtroSiAccionesDropdown } from '@/components/views/OtroSiAccionesDropdown'
 import { QueCambioModal } from '@/components/views/QueCambioModal'
+import { PlanAmortizacionPreview } from '@/components/views/PlanAmortizacionPreview'
 
 interface Prestamo {
   id: string
@@ -1094,6 +1095,64 @@ function PrestamosPanel({
       setFlexibilidadFinanciera(false)
     }
   }, [cuotasActuales, flexibilidadFinanciera])
+
+  // === Cargos iniciales que se cargan a la PRIMERA cuota ===
+  // (Pagaré + Carta, Tarifa Plataforma, Flexibilidad Financiera, Fondo de Garantía,
+  //  Días causados antes del corte) — se muestran en la fila de la cuota #1 del preview.
+  const cargosInicialesCuota1 = useMemo(() => {
+    const items: Array<{ etiqueta: string; monto: number; color: string }> = []
+    const monto = parseFloat(montoPrincipal) || 0
+
+    // 1. Pagaré + Carta
+    if (cobroPagareCarta && requiereDocumentos && (generarPagare || generarCarta)) {
+      items.push({
+        etiqueta: 'Pagaré + Carta',
+        monto: Number(valorPagareCarta) || 19900,
+        color: 'text-amber-700 dark:text-amber-300',
+      })
+    }
+    // 2. Tarifa Plataforma
+    if (cobroTarifaPlataforma) {
+      items.push({
+        etiqueta: 'Tarifa Plataforma',
+        monto: Number(valorTarifaPlataforma) || 4900,
+        color: 'text-blue-700 dark:text-blue-300',
+      })
+    }
+    // 3. Flexibilidad Financiera
+    if (flexibilidadFinanciera && cuotasActuales >= 4) {
+      items.push({
+        etiqueta: `Flexibilidad ${flexibilidadModalidad}`,
+        monto: flexibilidadCosto,
+        color: 'text-emerald-700 dark:text-emerald-300',
+      })
+    }
+    // 4. Fondo de Garantía
+    if (incluirFondoGarantia && monto > 0) {
+      items.push({
+        etiqueta: `Fondo Garantía (${tasaFondoGarantia}%)`,
+        monto: Math.round(monto * (tasaFondoGarantia / 100) * 100) / 100,
+        color: 'text-indigo-700 dark:text-indigo-300',
+      })
+    }
+    // 5. Días causados (periodo de corte)
+    if (periodoCorte && valorDiasCausados > 0) {
+      items.push({
+        etiqueta: `${diasCausadosAntes} día${diasCausadosAntes === 1 ? '' : 's'} causados`,
+        monto: valorDiasCausados,
+        color: 'text-rose-700 dark:text-rose-300',
+      })
+    }
+    const total = items.reduce((s, c) => s + c.monto, 0)
+    return { items, total: Math.round(total * 100) / 100 }
+  }, [
+    cobroPagareCarta, requiereDocumentos, generarPagare, generarCarta, valorPagareCarta,
+    cobroTarifaPlataforma, valorTarifaPlataforma,
+    flexibilidadFinanciera, flexibilidadModalidad, flexibilidadCosto, cuotasActuales,
+    incluirFondoGarantia, tasaFondoGarantia, montoPrincipal,
+    periodoCorte, valorDiasCausados, diasCausadosAntes,
+  ])
+
   useEffect(() => {
     if (!fechaPrestamo || !periodoCorte) {
       setFechaPrimerCorte(null)
@@ -2233,6 +2292,26 @@ ${linkFirmaCodeudor}
                 )}
               </p>
             </div>
+
+            {/* === PLAN DE AMORTIZACIÓN (vista previa dinámica) ===
+                Se actualiza automáticamente al cambiar:
+                - Monto, tasa, plazo, frecuencia, modalidad
+                - Fecha del préstamo, fecha primera cuota, periodo de corte
+                - Cargos iniciales (pagaré, tarifa plataforma, flexibilidad, fondo garantía)
+
+                Muestra tabla completa de cuotas con fechas, capital, interés y saldo,
+                más los cargos iniciales cargados a la cuota #1.
+            */}
+            {calculo && calculo.tablaAmortizacion && calculo.tablaAmortizacion.length > 0 && (
+              <PlanAmortizacionPreview
+                calculo={calculo}
+                frecuencia={frecuencia}
+                cargosIniciales={cargosInicialesCuota1}
+                fechaPrimerCuota={fechaPrimerCuota || null}
+                fechaPrimerCorte={fechaPrimerCorte}
+                periodoCorte={periodoCorte || null}
+              />
+            )}
 
             {/* === PERIODO DE CORTE + DÍAS CAUSADOS ANTES DEL CORTE ===
                 Caso de uso: cliente solicita crédito ANTES de la fecha de corte.
