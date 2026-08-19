@@ -1259,3 +1259,73 @@ Stage Summary:
 - ✅ Validación de edad: fecha de nacimiento debe dar 18+ años.
 - ✅ Asterisco rojo * visible junto a cada campo obligatorio.
 - ✅ Producción (jsadr.com.co/register) desplegado y funcionando.
+
+---
+Task ID: fix-cliente-clave-temporal-login
+Agent: main (Super Z)
+Task: Reparar bug donde la clave temporal enviada al cliente nuevo por correo no le permitía ingresar al portal
+
+Work Log:
+- Diagnóstico del flujo completo:
+  1. Admin crea cliente vía /api/clientes POST → se genera clave temporal (10 chars, alfanumérica + símbolos), se hashea con bcrypt, se persiste en claveHash, se marca debeCambiarClave=true, se envía al correo del cliente.
+  2. Cliente entra a /login, ingresa cédula + clave temporal del correo.
+  3. Frontend llama /api/portal/login con {cedula, clave}.
+  4. Backend valida bcrypt.compare(clave, claveHash) → ✓ válido.
+  5. Backend ve debeCambiarClave=true y responde:
+     { success: false, codigo: 'CAMBIO_CLAVE_OBLIGATORIO', claveTempToken, clienteId, nombre, mensaje }
+  6. ❌ Frontend solo verificaba if (r.ok && data.success) → success era false → trataba la clave temporal como incorrecta → el cliente nunca podía ingresar.
+
+- Implementación del fix en src/app/login/page.tsx:
+  * Estado nuevo: cambioClaveObligatorio {claveTempToken, clienteId, nombre, cedula} + nuevaClave + confirmarClave + loading + error + showNuevaClave/showConfirmarClave.
+  * Detección: en submitUnificado, al recibir respuesta de /api/portal/login, verificar si data.codigo === 'CAMBIO_CLAVE_OBLIGATORIO' && data.claveTempToken. Si es así, guardar el token y mostrar la pantalla de cambio de clave.
+  * Pantalla de "Cambio de Clave Obligatorio":
+    - Header con icono KeyRound + saludo "Hola, {nombre}".
+    - Alerta ámbar informativa: "Tu clave temporal fue validada ✓".
+    - Formulario con dos inputs password (nuevaClave, confirmarClave) con toggle de visibilidad (Eye/EyeOff).
+    - Checklist visual de requisitos (mín 6 chars, al menos una letra, al menos un número, claves coinciden) — se va coloreando de verde en tiempo real.
+    - Botón "Cancelar" que limpia el estado.
+    - Botón "Guardar y continuar" que llama a /api/portal/cambiar-clave-primer-login.
+  * Handler confirmarCambioClave:
+    - Valida en cliente: mín 6 chars, máx 64, al menos una letra y un número, claves coinciden.
+    - Llama /api/portal/cambiar-clave-primer-login con {claveTempToken, nuevaClave, confirmarClave}.
+    - Si éxito: establece sesión (localStorage + setTokens + setUserData), redirige a /?portal=cliente.
+    - Si error: muestra el mensaje al usuario.
+  * Pantalla responsiva (móvil/desktop) con aurora animada de fondo.
+- Validación:
+  * TypeScript: ✓ sin errores.
+  * Next.js build: ✓ Compiled successfully in 36.0s, 225/225 static pages.
+  * Pruebas con agent-browser (iPhone 14 emulation) en producción (jsadr.com.co):
+    - Test 1: Login con cédula 99999999 + clave 'Temporal2024!' (cliente nuevo con debeCambiarClave=true).
+      → Frontend mostró pantalla "Hola, Cliente — Por seguridad, debes crear una nueva clave".
+      → Inputs Nueva clave + Confirmar clave aparecen con toggle de visibilidad.
+      → Checklist de requisitos aparece.
+    - Test 2: Completar formulario con 'MiClave2024' (cumple requisitos).
+      → Botón "Guardar y continuar" habilitado.
+      → Click → backend responde success:true + token + clienteId + nombre.
+      → Frontend establece sesión en localStorage y redirige a /?portal=cliente.
+      → URL final: https://jsadr.com.co/?portal=cliente ✓
+      → localStorage con portal_cliente_token, portal_cliente_id, portal_cliente_nombre, portal_cliente_cedula ✓
+    - Test 3: Login subsecuente con la nueva clave 'MiClave2024' (debeCambiarClave=false).
+      → curl directo a /api/portal/login responde success:true + token ✓
+- Verificación en BD (Neon):
+  * Después del cambio de clave:
+    - debeCambiarClave: false ✓
+    - claveIntentos: 0 ✓
+    - claveBloqueadoHasta: null ✓
+    - claveTempToken: null (limpiado) ✓
+    - tieneClaveHash: true (nueva clave hasheada) ✓
+    - tieneSesion (tokenSesion): true ✓
+- Sincronización:
+  * Commit 9b85bcd push a GitHub.
+  * HEAD = origin/main = 9b85bcd.
+  * GitHub Actions auto-deploy disparado.
+  * Producción (jsadr.com.co): HTTP 200 respondiendo correctamente.
+
+Stage Summary:
+- ✅ Causa identificada: el frontend no manejaba la respuesta CAMBIO_CLAVE_OBLIGATORIO del backend.
+- ✅ Frontend actualizado para detectar el código y mostrar pantalla de cambio de clave.
+- ✅ Validación client-side (mín 6 chars, letra+número, claves coinciden) + checklist visual.
+- ✅ Llamada a /api/portal/cambiar-clave-primer-login con el claveTempToken.
+- ✅ En éxito, sesión establecida y redirección al portal del cliente.
+- ✅ Flujo end-to-end verificado en producción (jsadr.com.co) con cliente de prueba.
+- ✅ Login subsecuente con la nueva clave funciona sin requerir cambio (debeCambiarClave=false).
