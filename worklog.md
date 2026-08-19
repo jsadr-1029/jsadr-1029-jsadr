@@ -1077,3 +1077,63 @@ Stage Summary:
 - ✅ Cuota #1 muestra el valor total incluyendo cargos iniciales (Pagaré, Tarifa, Flexibilidad, Fondo, Días causados).
 - ✅ Botón "Imprimir" genera plan imprimible en HTML.
 - ✅ Producción (jsadr.com.co) desplegado y respondiendo correctamente.
+
+---
+Task ID: fix-admin-responsive-mobile
+Agent: main (Super Z)
+Task: Reorganizar el diseño del admin para que se vea claro y completo en móvil (celular). Solo pasa con el usuario administrador cuando se abre desde un celular — desde PC sí se ve completo.
+
+Work Log:
+- Análisis del layout del admin (src/app/page.tsx, src/components/Sidebar.tsx, src/components/mobile-nav.tsx, src/components/UserMenu.tsx, src/components/ResponsiveViewToggle.tsx):
+  * Layout: Sidebar (desktop lg+) o MobileNav (bottom móvil) o drawer (hamburguesa).
+  * ResponsiveViewToggle permite forzar modo Auto/Móvil/Tablet/PC.
+  * UserMenu inyecta CSS responsive inline (líneas 300-368 de UserMenu.tsx) pero solo afectaba grids específicos.
+- Pruebas con agent-browser (iPhone 14 emulation):
+  * Antes del fix:
+    - Tabs horizontales "Solicitudes, Clientes, Simulador, Cajas, Campañas, Notificaciones, Documentos, Buzón Web, Plan Cliente, Línea de Tiempo" se cortaban y no se podían leer todas.
+    - Tabla de préstamos (11 columnas: CÓDIGO, CLIENTE, PRINCIPAL, TASA, CUOTA, PLAZO, CONTEO, ESTADO DEL PLAZO, SALDO, PROGRESO, ESTADO, ACCIONES) se desbordaba horizontalmente sin scroll.
+    - Padding excesivo del contenedor (24px en lugar de 12px).
+    - Botones del header (Actualizar, Enviar notificaciones, Clientes 💬, Asistente Personal, Experto Financiero, Asistente Préstamos) se cortaban.
+    - Reloj Colombia (fixed top-1/2) colisionaba con botones flotantes.
+- Implementación:
+  * globals.css: nuevo bloque "RESPONSIVE ADMIN MOBILE" con reglas scoped a [data-responsive-mode]:not([data-responsive-mode="desktop"]) para que apliquen solo a pantallas <1024px y NO cuando el usuario fuerza modo 'PC'. Incluye:
+    - .main-container: padding 12px, pt-64px (botones top), pb-80px (MobileNav bottom).
+    - [role="tablist"]: overflow-x auto, scroll snap, tabs nowrap (no se cortan).
+    - table: display block + overflow-x auto (cualquier tabla se vuelve scrolleable).
+    - .grid-cols-N: 1 columna por defecto, 2 para grids pequeños (text-xs/text-sm). Excepción con clase .keep-cols.
+    - Botones del header: padding compacto, font 11px, texto truncate.
+    - Reloj Colombia: oculto en móvil (display none).
+    - Inputs/selects: min-height 44px táctil, font-size 16px (evita zoom en iOS).
+    - .flex.items-center.justify-between: wrap (apila header verticalmente).
+    - .flex.items-center.gap-3: wrap (apila filas de botones).
+    - .p-6 / .p-4: padding reducido.
+    - h1/h2/h3: tamaños más pequeños.
+  * page.tsx: useEffect propaga 'data-responsive-mode' al <html> (no solo al div raíz). Esto es crítico porque los modales de Radix UI (Dialog/Sheet) usan createPortal y se renderizan al final del <body>, fuera del div [data-responsive-mode]. Sin esto, los modales en móvil no recibían las reglas responsivas y se veían cortados.
+  * Media query adicional para pantallas muy pequeñas (<380px, iPhone SE): padding 8px, grids 1fr, tabs 12px font.
+  * Media query landscape móvil (altura <500px): padding reducido verticalmente.
+- Validación:
+  * TypeScript: ✓ sin errores.
+  * Next.js build: ✓ Compiled successfully in 37.9s, 225/225 static pages.
+  * Pruebas con agent-browser (iPhone 14 emulation):
+    - Tablist ahora permite scroll horizontal (4px scrollbar, scroll snap).
+    - Tabla de préstamos: width 364px visible, scrollWidth 1814px, overflowX='auto' ✓ scroll horizontal funciona.
+    - Modal "Nueva Solicitud": width 390px (full viewport), maxWidth 768px, se adapta a la pantalla.
+    - Botones del header: compactos, no se cortan.
+    - Reloj: oculto en móvil (no colisiona).
+- Sincronización:
+  * Commit bfdce14 push a GitHub.
+  * HEAD = origin/main = bfdce14.
+  * GitHub Actions auto-deploy disparado.
+  * Producción (jsadr.com.co): HTTP 200 respondiendo correctamente.
+
+Stage Summary:
+- ✅ Tabs horizontales del admin ahora permiten scroll horizontal en móvil (no se cortan, scroll snap activo).
+- ✅ Tablas anchas (11 columnas en préstamos, 8 en buzón web, etc.) ahora permiten scroll horizontal en móvil.
+- ✅ Padding del contenedor reducido en móvil (12px en lugar de 24px) con espacio para botones flotantes top y MobileNav bottom.
+- ✅ Botones del header compactos (font 11px, padding reducido, texto truncate).
+- ✅ Reloj Colombia oculto en móvil (ya no colisiona con botones flotantes).
+- ✅ Inputs/selects con tamaño táctil mínimo (44px) y font-size 16px (evita zoom en iOS).
+- ✅ Headers h1/h2/h3 más pequeños en móvil.
+- ✅ Modales (Radix Dialog/Sheet) ahora heredan las reglas responsivas vía atributo data-responsive-mode en <html>.
+- ✅ Respeta el modo 'PC' forzado por el usuario (no aplica reducciones si data-responsive-mode="desktop").
+- ✅ Excepciones para pantallas muy pequeñas (iPhone SE <380px) y landscape móvil (altura <500px).
