@@ -1021,3 +1021,59 @@ Stage Summary:
 - ✅ Producción Vercel (jsadr.com.co): endpoints nuevos respondiendo, /register accesible.
 - ✅ Pipeline GitHub Actions → Vercel activo (auto-deploy en cada push a main).
 - ✅ Feature "Devolver solicitud al cliente" operativo en producción: admin puede devolver con motivo, cliente recibe email con link /register?cedula=X&corregir=1, formulario se precarga con datos previos + banner naranja mostrando el motivo.
+
+---
+Task ID: feature-plan-amortizacion-preview
+Agent: main (Super Z)
+Task: Mostrar plan de amortización (con fechas, cuotas, condiciones) al elegir fecha de primera cuota en la solicitud de préstamo
+
+Work Log:
+- Análisis del formulario de creación de préstamo (src/components/views/PrestamosView.tsx, 4220 líneas):
+  * Localizado campo "Fecha de la primera cuota" (línea 2202).
+  * Identificadas 3 modalidades: FRANCÉS, TASA_FIJA, CUOTA_PERSONALIZADA.
+  * Encontrado useMemo `calculo` (línea 776) que ya genera `tablaAmortizacion` con fechas correctas basadas en `fechaPrimerCuota`, `periodoCorte`, `fechaPrimerCorte`.
+  * Confirmado que `calculo` se recalcula automáticamente al cambiar cualquier condición.
+- Cargos iniciales identificados (sumados a la cuota #1):
+  * Pagaré + Carta (valorPagareCarta, default $19.900)
+  * Tarifa Plataforma (valorTarifaPlataforma, default $4.900)
+  * Flexibilidad Financiera ($15.000 BASICA / $34.900 PREMIUM)
+  * Fondo de Garantía (tasaFondoGarantia% del monto)
+  * Días causados por periodo de corte (valorDiasCausados)
+- Implementación:
+  * Creado src/components/views/PlanAmortizacionPreview.tsx (341 líneas).
+    - Tabla con N°, Fecha Vencimiento, Cuota Total, Capital, Interés, Saldo.
+    - Cuota #1 destacada en ámbar (incluye cargos iniciales).
+    - Cuotas siguientes en violeta (cuota base).
+    - Botón "Imprimir" → abre ventana HTML con plan imprimible.
+    - Botón "Ver las N cuotas restantes" si hay más de 12.
+    - Resumen superior: cuota base, 1ª cuota con cargos, total interés, total a pagar.
+    - Sección detallada de cargos iniciales con desglose por concepto.
+    - Nota informativa con fecha primera cuota y/o periodo de corte.
+    - Collapsible (expandir/contraer con clic en header).
+  * Editado src/components/views/PrestamosView.tsx:
+    - Import de PlanAmortizacionPreview.
+    - Nuevo useMemo `cargosInicialesCuota1` (línea 1101) que computa la lista de cargos y su total.
+    - JSX del preview insertado entre "Fecha de la primera cuota" y "Periodo de corte" (línea 2295).
+- Validación:
+  * TypeScript: ✓ sin errores (npx tsc --noEmit)
+  * ESLint: ✓ sin errores en los 2 archivos modificados
+  * Next.js build: ✓ Compiled successfully in 33.5s, 225/225 static pages
+- Sincronización:
+  * Commit a5e2d61 push a GitHub.
+  * HEAD = origin/main = a5e2d61.
+  * GitHub Actions auto-deploy disparado (.github/workflows/deploy-vercel.yml).
+  * Verificación producción:
+    - https://jsadr.com.co → HTTP 200 (0.8s)
+    - https://jsadr.com.co/register → HTTP 200
+    - https://jsadr.com.co/login → HTTP 200
+    - https://jsadr.com.co/api/solicitudes-nuevos-clientes/consulta-publica?cedula=X → HTTP 200
+
+Stage Summary:
+- ✅ Plan de amortización visible en el formulario de creación de préstamo, justo debajo del campo "Fecha de la primera cuota".
+- ✅ Se actualiza en tiempo real al cambiar: monto, tasa, plazo, frecuencia, modalidad, fecha primera cuota, periodo de corte, cargos iniciales.
+- ✅ Respeta las 3 modalidades (FRANCÉS, TASA_FIJA, CUOTA_PERSONALIZADA).
+- ✅ Respeta fecha primera cuota (fechaInicio = primera cuota - 1 periodo según frecuencia).
+- ✅ Respeta periodo de corte (cuotas se programan desde fechaPrimerCorte).
+- ✅ Cuota #1 muestra el valor total incluyendo cargos iniciales (Pagaré, Tarifa, Flexibilidad, Fondo, Días causados).
+- ✅ Botón "Imprimir" genera plan imprimible en HTML.
+- ✅ Producción (jsadr.com.co) desplegado y respondiendo correctamente.
