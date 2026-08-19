@@ -114,6 +114,28 @@ export default function LoginPage() {
     { tipo: 'exito' | 'error' | 'info'; texto: string } | null
   >(null)
 
+  // === ESTADO CAMBIO DE CLAVE OBLIGATORIO (primer login del cliente) ===
+  // Cuando un admin crea un cliente, el backend le envía una clave temporal
+  // al correo y marca `debeCambiarClave=true`. Al hacer login con la clave
+  // temporal, el backend responde:
+  //   { success: false, codigo: 'CAMBIO_CLAVE_OBLIGATORIO', claveTempToken, ... }
+  // Aquí capturamos ese token y mostramos un formulario para que el cliente
+  // defina su nueva clave personal. Al confirmar, llamamos a
+  // /api/portal/cambiar-clave-primer-login que valida el token, hashea la
+  // nueva clave, apaga debeCambiarClave y genera la sesión completa.
+  const [cambioClaveObligatorio, setCambioClaveObligatorio] = useState<{
+    claveTempToken: string
+    clienteId: string
+    nombre: string
+    cedula: string
+  } | null>(null)
+  const [nuevaClave, setNuevaClave] = useState('')
+  const [confirmarClave, setConfirmarClave] = useState('')
+  const [cambioClaveLoading, setCambioClaveLoading] = useState(false)
+  const [cambioClaveError, setCambioClaveError] = useState('')
+  const [showNuevaClave, setShowNuevaClave] = useState(false)
+  const [showConfirmarClave, setShowConfirmarClave] = useState(false)
+
   // === ESTADO PARA VALIDACIÓN DE QR / DOCUMENTO ===
   // Modal público que permite a cualquier persona (juez, notario, tercero) verificar
   // la autenticidad de un documento Jsadr (pagaré, carta de instrucciones, certificado
@@ -279,7 +301,28 @@ export default function LoginPage() {
             }),
           })
           const data = await r.json()
-          if (r.ok && data.success) {
+
+          // === FIX (2026-08-19): Detectar CAMBIO_CLAVE_OBLIGATORIO ===
+          // Cuando un cliente nuevo hace login con la clave temporal enviada
+          // por correo, el backend responde con:
+          //   { success: false, codigo: 'CAMBIO_CLAVE_OBLIGATORIO',
+          //     claveTempToken, clienteId, nombre, mensaje }
+          // (no success:true). Antes este caso se trataba como "clave
+          // incorrecta", pero la clave SÍ es correcta — solo hay que forzar
+          // el cambio. Aquí interceptamos ese código y mostramos el
+          // formulario de cambio de clave antes de completar el login.
+          if (data?.codigo === 'CAMBIO_CLAVE_OBLIGATORIO' && data?.claveTempToken) {
+            setCambioClaveObligatorio({
+              claveTempToken: data.claveTempToken,
+              clienteId: data.clienteId,
+              nombre: data.nombre,
+              cedula: idTrim,
+            })
+            setNuevaClave('')
+            setConfirmarClave('')
+            setCambioClaveError('')
+            loginExitoso = true  // Salir del flujo de login normal
+          } else if (r.ok && data.success) {
             try {
               localStorage.setItem('portal_cliente_token', data.token)
               localStorage.setItem('portal_cliente_id', data.clienteId)
@@ -423,6 +466,101 @@ export default function LoginPage() {
     } finally {
       setRecuperarLoading(false)
     }
+  }
+
+  // =====================================================
+  // CONFIRMAR CAMBIO DE CLAVE (primer login del cliente)
+  // -----------------------------------------------------
+  // Llama a /api/portal/cambiar-clave-primer-login con el
+  // claveTempToken recibido del backend y la nueva clave
+  // que el cliente definió. Si todo está OK, el backend
+  // genera la sesión completa (token + clienteId + nombre)
+  // y redirige al portal del cliente.
+  // =====================================================
+  const confirmarCambioClave = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!cambioClaveObligatorio) return
+    setCambioClaveError('')
+
+    // Validaciones de cliente (también se validan en el backend)
+    if (!nuevaClave) {
+      setCambioClaveError('Ingresa tu nueva clave')
+      return
+    }
+    if (nuevaClave.length < 6) {
+      setCambioClaveError('La clave debe tener al menos 6 caracteres')
+      return
+    }
+    if (nuevaClave.length > 64) {
+      setCambioClaveError('La clave no puede tener más de 64 caracteres')
+      return
+    }
+    if (nuevaClave !== confirmarClave) {
+      setCambioClaveError('Las claves no coinciden')
+      return
+    }
+    // Política mínima: al menos una letra y un número
+    if (!/[a-zA-Z]/.test(nuevaClave) || !/\d/.test(nuevaClave)) {
+      setCambioClaveError('La clave debe contener al menos una letra y un número')
+      return
+    }
+
+    setCambioClaveLoading(true)
+    try {
+      const r = await fetch('/api/portal/cambiar-clave-primer-login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          claveTempToken: cambioClaveObligatorio.claveTempToken,
+          nuevaClave,
+          confirmarClave,
+        }),
+      })
+      const data = await r.json()
+      if (!r.ok || !data.success) {
+        setCambioClaveError(data.error || 'No se pudo cambiar la clave. Intenta de nuevo.')
+        return
+      }
+      // === Cambio exitoso — establecer sesión y redirigir ===
+      try {
+        localStorage.setItem('portal_cliente_token', data.token)
+        localStorage.setItem('portal_cliente_id', data.clienteId)
+        localStorage.setItem('portal_cliente_nombre', data.nombre)
+        localStorage.setItem('portal_cliente_cedula', cambioClaveObligatorio.cedula)
+      } catch {}
+      setTokens('portal_cliente_' + data.token, 'portal_cliente_' + data.token)
+      setUserData({
+        id: data.clienteId,
+        nombre: data.nombre,
+        username: cambioClaveObligatorio.cedula,
+        cedula: cambioClaveObligatorio.cedula,
+        rol: 'CLIENTE',
+        esPortalCliente: true,
+      })
+      // Limpiar el estado de cambio de clave
+      setCambioClaveObligatorio(null)
+      setNuevaClave('')
+      setConfirmarClave('')
+      // Mostrar pantalla de éxito (mismo flujo que login normal)
+      setSuccess({ nombre: data.nombre })
+      setTimeout(() => {
+        const pending = consumirPendingRedirect()
+        router.replace(pending || '/?portal=cliente')
+        router.refresh()
+      }, 1100)
+    } catch (err: any) {
+      setCambioClaveError(err.message || 'Error de conexión. Intenta de nuevo.')
+    } finally {
+      setCambioClaveLoading(false)
+    }
+  }
+
+  const cancelarCambioClave = () => {
+    setCambioClaveObligatorio(null)
+    setNuevaClave('')
+    setConfirmarClave('')
+    setCambioClaveError('')
+    setPassword('')  // Limpiar la clave temporal del formulario principal
   }
 
   // =====================================================
@@ -609,6 +747,170 @@ export default function LoginPage() {
           <div className="flex items-center justify-center gap-2 text-slate-400 text-sm mt-6">
             <Loader2 className="w-4 h-4 animate-spin" />
             <span>Cargando tu panel...</span>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // =====================================================
+  // PANTALLA DE CAMBIO DE CLAVE OBLIGATORIO (primer login)
+  // -----------------------------------------------------
+  // Se muestra cuando el backend responde con codigo='CAMBIO_CLAVE_OBLIGATORIO'.
+  // El cliente ya autenticó con la clave temporal recibida por correo,
+  // pero debe definir una nueva clave personal antes de acceder al portal.
+  // =====================================================
+  if (cambioClaveObligatorio) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-950 via-indigo-950 to-purple-950 p-4 overflow-hidden relative">
+        {/* Aurora animada de fondo */}
+        <div className="absolute inset-0 overflow-hidden pointer-events-none">
+          <div className="absolute top-1/4 -left-1/4 w-[600px] h-[600px] bg-indigo-500/20 rounded-full blur-3xl animate-pulse" />
+          <div
+            className="absolute bottom-1/4 -right-1/4 w-[600px] h-[600px] bg-purple-500/20 rounded-full blur-3xl animate-pulse"
+            style={{ animationDelay: '1s' }}
+          />
+        </div>
+
+        <div className="relative z-10 max-w-md w-full">
+          <div className="bg-slate-900/70 backdrop-blur-xl border border-slate-700/60 rounded-3xl p-8 shadow-2xl">
+            {/* Header */}
+            <div className="text-center mb-6">
+              <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-br from-amber-500 to-orange-600 mb-4 shadow-lg shadow-amber-500/30">
+                <KeyRound className="w-8 h-8 text-white" />
+              </div>
+              <h2 className="text-2xl font-bold text-white mb-1">
+                Hola, {cambioClaveObligatorio.nombre.split(' ')[0]}
+              </h2>
+              <p className="text-sm text-slate-400">
+                Por seguridad, debes crear una nueva clave para acceder al portal.
+              </p>
+            </div>
+
+            {/* Alerta informativa */}
+            <div className="mb-6 p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-start gap-3">
+              <AlertCircle className="w-5 h-5 text-amber-400 flex-shrink-0 mt-0.5" />
+              <div className="text-xs text-amber-100">
+                <p className="font-semibold mb-1">Tu clave temporal fue validada ✓</p>
+                <p className="text-amber-200/80 leading-relaxed">
+                  Ahora define una clave personal que solo tú conozcas. Esta clave se usará para
+                  tus próximos ingresos al portal.
+                </p>
+              </div>
+            </div>
+
+            {/* Formulario */}
+            <form onSubmit={confirmarCambioClave} className="space-y-4">
+              <div className="space-y-1.5">
+                <Label htmlFor="nuevaClave" className="text-xs text-slate-300 flex items-center gap-1.5">
+                  <Lock className="w-3.5 h-3.5 text-slate-500" />
+                  Nueva clave
+                  <span className="text-red-400 font-bold">*</span>
+                </Label>
+                <div className="relative">
+                  <Input
+                    id="nuevaClave"
+                    type={showNuevaClave ? 'text' : 'password'}
+                    value={nuevaClave}
+                    onChange={(e) => setNuevaClave(e.target.value)}
+                    placeholder="Mínimo 6 caracteres, una letra y un número"
+                    autoComplete="new-password"
+                    required
+                    autoFocus
+                    className="bg-slate-950/50 border-slate-700 text-white pr-10"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowNuevaClave(!showNuevaClave)}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white"
+                    tabIndex={-1}
+                  >
+                    {showNuevaClave ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="confirmarClave" className="text-xs text-slate-300 flex items-center gap-1.5">
+                  <Lock className="w-3.5 h-3.5 text-slate-500" />
+                  Confirma tu nueva clave
+                  <span className="text-red-400 font-bold">*</span>
+                </Label>
+                <div className="relative">
+                  <Input
+                    id="confirmarClave"
+                    type={showConfirmarClave ? 'text' : 'password'}
+                    value={confirmarClave}
+                    onChange={(e) => setConfirmarClave(e.target.value)}
+                    placeholder="Repite la nueva clave"
+                    autoComplete="new-password"
+                    required
+                    className="bg-slate-950/50 border-slate-700 text-white pr-10"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowConfirmarClave(!showConfirmarClave)}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white"
+                    tabIndex={-1}
+                  >
+                    {showConfirmarClave ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+              </div>
+
+              {/* Requisitos de la clave */}
+              <div className="text-[11px] text-slate-400 bg-slate-950/40 rounded-lg p-3 border border-slate-800">
+                <p className="font-semibold text-slate-300 mb-1">La clave debe tener:</p>
+                <ul className="space-y-0.5 ml-3">
+                  <li className={nuevaClave.length >= 6 ? 'text-emerald-400' : ''}>• Mínimo 6 caracteres</li>
+                  <li className={/[a-zA-Z]/.test(nuevaClave) ? 'text-emerald-400' : ''}>• Al menos una letra</li>
+                  <li className={/\d/.test(nuevaClave) ? 'text-emerald-400' : ''}>• Al menos un número</li>
+                  <li className={nuevaClave === confirmarClave && nuevaClave ? 'text-emerald-400' : ''}>• Las claves coinciden</li>
+                </ul>
+              </div>
+
+              {/* Error */}
+              {cambioClaveError && (
+                <Alert className="bg-red-500/10 border-red-500/30 text-red-200">
+                  <AlertCircle className="h-4 w-4" />
+                  <AlertDescription>{cambioClaveError}</AlertDescription>
+                </Alert>
+              )}
+
+              {/* Botones */}
+              <div className="flex gap-2 pt-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={cancelarCambioClave}
+                  disabled={cambioClaveLoading}
+                  className="flex-1 border-slate-700 text-slate-300 hover:bg-slate-800"
+                >
+                  Cancelar
+                </Button>
+                <Button
+                  type="submit"
+                  disabled={cambioClaveLoading || !nuevaClave || !confirmarClave}
+                  className="flex-[2] bg-gradient-to-r from-indigo-500 to-purple-500 hover:from-indigo-600 hover:to-purple-600 text-white"
+                >
+                  {cambioClaveLoading ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Guardando...
+                    </>
+                  ) : (
+                    <>
+                      <ShieldCheck className="w-4 h-4 mr-2" />
+                      Guardar y continuar
+                    </>
+                  )}
+                </Button>
+              </div>
+            </form>
+
+            <p className="text-[11px] text-slate-500 text-center mt-6">
+              Esta acción es obligatoria por seguridad. Tu clave temporal expira en 24 horas.
+            </p>
           </div>
         </div>
       </div>
