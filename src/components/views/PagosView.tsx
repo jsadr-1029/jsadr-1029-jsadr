@@ -79,6 +79,7 @@ interface PrestamoAplicar {
   id: string
   codigo: string
   cliente: { id: string; nombre: string; cedula: string; telefono: string }
+  montoPrincipal?: number
   montoCuota: number
   numeroCuotas: number
   cuotasPagadas: number
@@ -120,6 +121,12 @@ interface PrestamoAplicar {
   flexibilidadCosto?: number
   flexibilidadElegible?: boolean
   flexibilidadRazonInelegible?: string | null
+  // === Modalidad INTERES_FIJO_SIN_CAPITAL ===
+  modalidadAmortizacion?: string
+  interesFijoMensual?: number
+  capitalPagadoExtra?: number
+  saldoReal?: number
+  proximaCuotaInteresFecha?: string | null
 }
 
 interface ProximoPago {
@@ -234,6 +241,9 @@ export function PagosView({ onChanged }: { onChanged: () => void }) {
   const [montoRecibido, setMontoRecibido] = useState('')
   const [cuentaRecaudoId, setCuentaRecaudoId] = useState('')
   const [aplicandoPago, setAplicandoPago] = useState(false)
+  // === Abono extraordinario al capital (modalidad INTERES_FIJO_SIN_CAPITAL) ===
+  const [abonarAlCapital, setAbonarAlCapital] = useState(false)
+  const [montoAbonoCapital, setMontoAbonoCapital] = useState('')
 
   // === Modal renegociar / anular mora ===
   const [modalRenegociarMora, setModalRenegociarMora] = useState(false)
@@ -370,6 +380,8 @@ export function PagosView({ onChanged }: { onChanged: () => void }) {
     setReferencia('')
     setMontoRecibido('')
     setCuentaRecaudoId('')
+    setAbonarAlCapital(false)
+    setMontoAbonoCapital('')
     await buscarPrestamosAplicar('')
   }
 
@@ -462,6 +474,70 @@ export function PagosView({ onChanged }: { onChanged: () => void }) {
 
   const confirmarAplicarPago = async () => {
     if (!prestamoSeleccionadoAplicar) return
+
+    // === Caso especial: Abono extraordinario al capital ===
+    // Si el préstamo es INTERES_FIJO_SIN_CAPITAL y el gestor marcó "Abonar al capital",
+    // enviamos una acción diferente al backend (accion: 'abonar_capital') que registra
+    // el pago como abono extraordinario y actualiza el saldo real sin tocar la cuota mensual.
+    if (abonarAlCapital) {
+      const montoAbono = parseFloat(montoAbonoCapital)
+      if (!montoAbonoCapital || isNaN(montoAbono) || montoAbono <= 0) {
+        toast({ title: 'Error', description: 'Ingresa un monto de abono válido', variant: 'destructive' })
+        return
+      }
+      const saldoRealMax = prestamoSeleccionadoAplicar.saldoReal || prestamoSeleccionadoAplicar.montoPrincipal || 0
+      if (montoAbono > saldoRealMax) {
+        toast({
+          title: 'Error',
+          description: `El monto del abono (${formatearMoneda(montoAbono)}) no puede exceder el saldo real del capital (${formatearMoneda(saldoRealMax)}).`,
+          variant: 'destructive',
+        })
+        return
+      }
+      setAplicandoPago(true)
+      try {
+        const body: any = {
+          accion: 'abonar_capital',
+          prestamoId: prestamoSeleccionadoAplicar.id,
+          montoAbono: montoAbono,
+          metodoPago,
+          referencia: referencia || `Abono al capital - ${prestamoSeleccionadoAplicar.codigo}`,
+          cuentaRecaudoId: cuentaRecaudoId || null,
+        }
+        const res = await fetch('/api/pagos', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        })
+        const json = await res.json()
+        if (json.success) {
+          toast({
+            title: '✅ Abono al capital aplicado',
+            description: json.mensaje || `Abono de ${formatearMoneda(montoAbono)} registrado. Nuevo saldo: ${formatearMoneda(json.nuevoSaldoReal)}.`,
+          })
+          setModalAplicar(false)
+          setPrestamoSeleccionadoAplicar(null)
+          setMontoAbonoCapital('')
+          setAbonarAlCapital(false)
+          setReferencia('')
+          setMontoRecibido('')
+          cargarPagos()
+          onChanged()
+          if (json.data?.id) {
+            setTimeout(() => setReciboPagoId(json.data.id), 400)
+          }
+        } else {
+          toast({ title: 'Error', description: json.error, variant: 'destructive' })
+        }
+      } catch (e: any) {
+        toast({ title: 'Error', description: e.message, variant: 'destructive' })
+      } finally {
+        setAplicandoPago(false)
+      }
+      return
+    }
+
+    // === Flujo normal de pago de cuota ===
     if (!montoRecibido) {
       toast({ title: 'Error', description: 'Ingresa el monto recibido', variant: 'destructive' })
       return
@@ -2116,16 +2192,109 @@ Si ya realizaste el pago, ignora este mensaje.`
                 )}
               </div>
 
+              {/* === Opción Abonar al Capital (solo para modalidad INTERES_FIJO_SIN_CAPITAL) === */}
+              {prestamoSeleccionadoAplicar.modalidadAmortizacion === 'INTERES_FIJO_SIN_CAPITAL' && (
+                <div className="p-3 rounded-md bg-purple-50 dark:bg-purple-900/20 border-2 border-purple-300 dark:border-purple-700 space-y-3">
+                  <div className="flex items-start gap-3">
+                    <input
+                      type="checkbox"
+                      id="abonarAlCapital"
+                      checked={abonarAlCapital}
+                      onChange={(e) => {
+                        setAbonarAlCapital(e.target.checked)
+                        if (e.target.checked) {
+                          setMontoRecibido('')
+                        } else {
+                          setMontoAbonoCapital('')
+                        }
+                      }}
+                      className="w-4 h-4 rounded border-purple-400 text-purple-600 focus:ring-purple-500 mt-0.5"
+                    />
+                    <Label htmlFor="abonarAlCapital" className="text-sm font-semibold cursor-pointer flex-1 text-purple-900 dark:text-purple-100">
+                      💰 Abonar al capital (pago extraordinario)
+                    </Label>
+                  </div>
+                  {abonarAlCapital ? (
+                    <div className="pl-7 space-y-2">
+                      <p className="text-xs text-purple-700 dark:text-purple-300">
+                        Ingresa el valor del abono al capital. Este pago reducirá el saldo real del préstamo
+                        sin modificar la cuota mensual de intereses ({formatearMoneda(prestamoSeleccionadoAplicar.interesFijoMensual || 0)}).
+                      </p>
+                      <div className="space-y-1">
+                        <Label className="text-xs text-purple-900 dark:text-purple-100">
+                          Valor del abono (COP) *
+                        </Label>
+                        <Input
+                          type="number"
+                          step="0.01"
+                          min="1"
+                          max={prestamoSeleccionadoAplicar.saldoReal || prestamoSeleccionadoAplicar.montoPrincipal}
+                          value={montoAbonoCapital}
+                          onChange={(e) => setMontoAbonoCapital(e.target.value)}
+                          placeholder="Ej: 500000"
+                          className="bg-white dark:bg-slate-800 dark:text-white border-purple-300 dark:border-purple-600"
+                          autoFocus
+                        />
+                      </div>
+                      <div className="grid grid-cols-2 gap-2 text-xs text-purple-900 dark:text-purple-100">
+                        <div>
+                          Saldo real actual:{' '}
+                          <strong>{formatearMoneda(prestamoSeleccionadoAplicar.saldoReal || prestamoSeleccionadoAplicar.montoPrincipal || 0)}</strong>
+                        </div>
+                        <div>
+                          Capital abonado acumulado:{' '}
+                          <strong>{formatearMoneda(prestamoSeleccionadoAplicar.capitalPagadoExtra || 0)}</strong>
+                        </div>
+                      </div>
+                      {montoAbonoCapital && parseFloat(montoAbonoCapital) > 0 && (
+                        <div className="text-xs p-2 rounded bg-white/60 dark:bg-purple-950/40 border border-purple-200 dark:border-purple-700">
+                          {parseFloat(montoAbonoCapital) >= (prestamoSeleccionadoAplicar.saldoReal || prestamoSeleccionadoAplicar.montoPrincipal || 0) ? (
+                            <span className="text-emerald-700 dark:text-emerald-300 font-semibold">
+                              ✅ Este abono saldará el préstamo por completo. El préstamo pasará a estado CANCELADO.
+                            </span>
+                          ) : (
+                            <span className="text-purple-900 dark:text-purple-100">
+                              Nuevo saldo real después del abono:{' '}
+                              <strong>
+                                {formatearMoneda(
+                                  (prestamoSeleccionadoAplicar.saldoReal || prestamoSeleccionadoAplicar.montoPrincipal || 0) - parseFloat(montoAbonoCapital)
+                                )}
+                              </strong>
+                              {' '}· La cuota mensual de {formatearMoneda(prestamoSeleccionadoAplicar.interesFijoMensual || 0)} se mantiene igual.
+                            </span>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <p className="text-xs text-purple-700 dark:text-purple-300 pl-7">
+                      Marca esta casilla si el cliente va a abonar al capital (pago extraordinario).
+                      Si no la marcas, el pago se aplicará normalmente a la cuota mensual de intereses.
+                    </p>
+                  )}
+                </div>
+              )}
+
               {/* Formulario */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label>Monto recibido (COP) *</Label>
+                  <Label>
+                    {abonarAlCapital
+                      ? 'Monto del abono (COP) *'
+                      : 'Monto recibido (COP) *'}
+                  </Label>
                   <Input
                     type="number"
                     step="0.01"
-                    value={montoRecibido}
-                    onChange={(e) => setMontoRecibido(e.target.value)}
+                    value={abonarAlCapital ? montoAbonoCapital : montoRecibido}
+                    onChange={(e) => abonarAlCapital ? setMontoAbonoCapital(e.target.value) : setMontoRecibido(e.target.value)}
+                    disabled={abonarAlCapital && !prestamoSeleccionadoAplicar.modalidadAmortizacion?.includes('INTERES_FIJO')}
                   />
+                  {abonarAlCapital && (
+                    <p className="text-[11px] text-purple-700 dark:text-purple-300">
+                      💡 El abono al capital NO cambia la cuota mensual de intereses. Solo reduce el saldo real del préstamo.
+                    </p>
+                  )}
                 </div>
                 <div className="space-y-2">
                   <Label>Método de pago</Label>

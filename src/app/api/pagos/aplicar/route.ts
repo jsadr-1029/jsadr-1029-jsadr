@@ -225,6 +225,15 @@ export async function GET(req: NextRequest) {
         instruccionCuentaNota: instruccionActiva ? p.cliente.instruccionCuentaNota : null,
         instruccionCuentaExpira: instruccionActiva ? p.cliente.instruccionCuentaExpira : null,
         frecuencia: p.frecuencia,
+        // === Modalidad INTERES_FIJO_SIN_CAPITAL ===
+        // Datos específicos para mostrar la opción de abono al capital en la UI.
+        modalidadAmortizacion: p.modalidadAmortizacion || 'FRANCES',
+        interesFijoMensual: p.interesFijoMensual || 0,
+        capitalPagadoExtra: p.capitalPagadoExtra || 0,
+        saldoReal: p.modalidadAmortizacion === 'INTERES_FIJO_SIN_CAPITAL'
+          ? p.montoPrincipal - (p.capitalPagadoExtra || 0)
+          : p.saldoTotal,
+        proximaCuotaInteresFecha: p.proximaCuotaInteresFecha || null,
         // === Tarea Q: Flexibilidad Financiera — info para habilitar el botón de uso ===
         flexibilidadFinanciera: p.flexibilidadFinanciera,
         flexibilidadActivada: p.flexibilidadActivada,

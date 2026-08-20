@@ -98,6 +98,7 @@ export async function POST(req: NextRequest) {
     if (accion === 'generar_link') return await generarLinkPago(body, user)
     if (accion === 'solo_intereses') return await aplicarSoloIntereses(body, user)
     if (accion === 'usar_flexibilidad') return await usarFlexibilidadFinanciera(body, user)
+    if (accion === 'abonar_capital') return await abonarCapitalExtraordinario(body, user)
     return await aplicarPago(body, user)
   } catch (error: any) {
     return NextResponse.json({ success: false, error: sanitizeError(error).message }, { status: 500 })
@@ -1384,5 +1385,250 @@ async function usarFlexibilidadFinanciera(body: any, user: any) {
       `(nuevo vencimiento: ${formatearFecha(resultado.fechaVencimientoNueva)}). ` +
       `Intereses moratorios de ${formatearMoneda(resultado.interesesCausados)} incluidos en la cuota trasladada (no se cobran aparte). ` +
       `Usos restantes: ${prestamo.flexibilidadUsosDisponibles - 1}.`,
+  })
+}
+
+// =====================================================
+// ACCIÓN: Abono extraordinario al capital
+// -----------------------------------------------------
+// Para préstamos con modalidad INTERES_FIJO_SIN_CAPITAL.
+// El gestor ingresa manualmente el valor del abono al capital.
+// Esto reduce el saldo real del préstamo (montoPrincipal - capitalPagadoExtra)
+// pero NO cambia la cuota mensual fija de intereses (sigue siendo la misma).
+//
+// El pago se registra como un Pago con estado APLICADO, numeroCuota=0
+// (no corresponde a una cuota programada), y se actualiza el capitalPagadoExtra
+// del préstamo. El saldoTotal se recalcula como montoPrincipal - capitalPagadoExtra.
+//
+// Si el abono cubre todo el capital restante, el préstamo se cancela
+// (estado = CANCELADO, fechaCancelacion = hoy).
+// =====================================================
+async function abonarCapitalExtraordinario(body: any, user: any) {
+  const { prestamoId, montoAbono, metodoPago, referencia, cuentaRecaudoId, fechaPago } = body
+
+  // === Validaciones ===
+  if (!prestamoId) {
+    return NextResponse.json(
+      { success: false, error: 'prestamoId es obligatorio' },
+      { status: 400 }
+    )
+  }
+  const montoAbonoNum = parseFloat(montoAbono)
+  if (isNaN(montoAbonoNum) || montoAbonoNum <= 0) {
+    return NextResponse.json(
+      { success: false, error: `El monto del abono debe ser mayor a 0. Recibido: ${montoAbono}`, codigo: 'MONTO_INVALIDO' },
+      { status: 400 }
+    )
+  }
+
+  // Validar fechaPago (si viene)
+  if (fechaPago) {
+    const fechaRecibida = new Date(fechaPago)
+    if (!isNaN(fechaRecibida.getTime()) && fechaRecibida > new Date()) {
+      return NextResponse.json(
+        { success: false, error: `Fecha no puede ser futura. Recibido: ${fechaPago}`, codigo: 'FECHA_FUTURA_INVALIDA' },
+        { status: 400 }
+      )
+    }
+  }
+
+  const prestamo = await db.prestamo.findUnique({
+    where: { id: prestamoId },
+    include: {
+      cliente: {
+        include: {
+          cuentaRecaudo: true,
+          categoria: { include: { cuentaRecaudo: true } },
+        },
+      },
+    },
+  })
+  if (!prestamo) {
+    return NextResponse.json({ success: false, error: 'Préstamo no encontrado' }, { status: 404 })
+  }
+
+  // === Solo aplica para préstamos con modalidad INTERES_FIJO_SIN_CAPITAL ===
+  if (prestamo.modalidadAmortizacion !== 'INTERES_FIJO_SIN_CAPITAL') {
+    return NextResponse.json(
+      {
+        success: false,
+        error: `Este tipo de abono solo aplica para préstamos con modalidad INTERES_FIJO_SIN_CAPITAL. Este préstamo tiene modalidad ${prestamo.modalidadAmortizacion}.`,
+        codigo: 'MODALIDAD_NO_APLICA',
+      },
+      { status: 400 }
+    )
+  }
+
+  // === Validar estado del préstamo ===
+  const ESTADOS_NO_ACEPTAN_PAGOS = ['ANULADO', 'RECHAZADO', 'CANCELADO']
+  if (ESTADOS_NO_ACEPTAN_PAGOS.includes(prestamo.estado)) {
+    return NextResponse.json(
+      {
+        success: false,
+        error: `No se pueden registrar abonos a un préstamo en estado ${prestamo.estado}.`,
+        codigo: 'PRESTAMO_NO_APLICA_PAGOS',
+        estadoPrestamo: prestamo.estado,
+      },
+      { status: 409 }
+    )
+  }
+
+  // === Validar que el abono no exceda el saldo real del capital ===
+  const saldoReal = prestamo.montoPrincipal - (prestamo.capitalPagadoExtra || 0)
+  if (montoAbonoNum > saldoReal) {
+    return NextResponse.json(
+      {
+        success: false,
+        error: `El monto del abono (${formatearMoneda(montoAbonoNum)}) excede el saldo real del capital (${formatearMoneda(saldoReal)}). Si deseas saldar el préstamo por completo, ingresa exactamente ${formatearMoneda(saldoReal)}.`,
+        codigo: 'ABONO_EXCEDE_SALDO',
+        saldoReal,
+        montoAbono: montoAbonoNum,
+      },
+      { status: 400 }
+    )
+  }
+
+  // === Resolver cuenta de recaudo (igual que en aplicarPago) ===
+  const cliente = prestamo.cliente
+  const instruccionActiva = cliente.instruccionCuentaId &&
+    (!cliente.instruccionCuentaExpira || new Date(cliente.instruccionCuentaExpira) > new Date())
+  const cuentaAsignada = instruccionActiva
+    ? cliente.instruccionCuentaId
+    : (cliente.cuentaRecaudoId || cliente.categoria?.cuentaRecaudoId || null)
+  let cuentaFinalPago: string | null
+  if (cuentaAsignada && cuentaRecaudoId && cuentaRecaudoId !== cuentaAsignada) {
+    cuentaFinalPago = cuentaAsignada
+  } else {
+    cuentaFinalPago = cuentaRecaudoId || cuentaAsignada || null
+  }
+
+  // === Calcular nuevos valores ===
+  const nuevoCapitalPagadoExtra = (prestamo.capitalPagadoExtra || 0) + montoAbonoNum
+  const nuevoSaldoReal = prestamo.montoPrincipal - nuevoCapitalPagadoExtra
+  const prestamoSaldado = nuevoSaldoReal <= 0
+
+  // === Generar código del pago ===
+  const codigoPago = generarCodigoPago()
+
+  // === Transacción atómica: crear pago + actualizar préstamo + registrar en caja ===
+  const fechaPagoFinal = fechaPago ? new Date(fechaPago) : new Date()
+
+  const resultado = await db.$transaction(async (tx) => {
+    // 1. Crear el registro de Pago
+    const pago = await tx.pago.create({
+      data: {
+        codigo: codigoPago,
+        prestamoId,
+        numeroCuota: 0,  // 0 = abono extraordinario (no es cuota programada)
+        montoCapital: montoAbonoNum,  // 100% del abono va a capital
+        montoInteres: 0,  // No hay interés en este abono
+        montoMora: 0,  // No hay mora en este abono
+        montoTotal: montoAbonoNum,
+        fechaPago: fechaPagoFinal,
+        fechaVencimiento: fechaPagoFinal,  // Requerido por el schema; usa la fecha del pago
+        metodoPago: metodoPago || 'MANUAL',
+        referencia: referencia || `Abono extraordinario al capital`,
+        cuentaRecaudoId: cuentaFinalPago,
+        estado: 'APLICADO',
+        notas: `ABONO_EXTRAORDINARIO_CAPITAL: ${formatearMoneda(montoAbonoNum)}. Saldo real anterior: ${formatearMoneda(saldoReal)}. Nuevo saldo real: ${formatearMoneda(nuevoSaldoReal)}. Modalidad: INTERES_FIJO_SIN_CAPITAL. La cuota mensual de intereses (${formatearMoneda(prestamo.interesFijoMensual)}) NO se modifica.`,
+      },
+    })
+
+    // 2. Actualizar el préstamo
+    const prestamoActualizado = await tx.prestamo.update({
+      where: { id: prestamoId },
+      data: {
+        capitalPagadoExtra: nuevoCapitalPagadoExtra,
+        // Saldo real = capital - abonos extraordinarios
+        saldoCapital: nuevoSaldoReal,
+        saldoTotal: nuevoSaldoReal,  // Saldo real mostrado en informes
+        montoPagado: prestamo.montoPagado + montoAbonoNum,
+        // Si el saldo queda en 0, cancelar el préstamo
+        ...(prestamoSaldado ? {
+          estado: 'CANCELADO',
+          fechaCancelacion: new Date(),
+        } : {}),
+      },
+    })
+
+    // 3. Registrar ingreso en caja (CAJA-INGRESOS-VARIOS o CAJA-CAPITAL si existe)
+    try {
+      const cajaCapital = await tx.cajaMenor.findFirst({
+        where: { OR: [{ codigo: 'CAJA-CAPITAL' }, { codigo: 'CAJA-INGRESOS-VARIOS' }] },
+      })
+      if (cajaCapital) {
+        await tx.movimientoCaja.create({
+          data: {
+            cajaId: cajaCapital.id,
+            tipo: 'INGRESO',
+            monto: montoAbonoNum,
+            concepto: `Abono extraordinario al capital - Préstamo ${prestamo.codigo}`,
+            referencia: prestamo.codigo,
+            prestamoId,
+            usuarioId: user.id === 'system' ? null : user.id,
+          },
+        })
+        await tx.cajaMenor.update({
+          where: { id: cajaCapital.id },
+          data: {
+            saldoActual: { increment: montoAbonoNum },
+            totalIngresos: { increment: montoAbonoNum },
+          },
+        })
+      }
+    } catch (e) {
+      console.error('[pagos abonar_capital] No se pudo registrar movimiento de caja:', e)
+      // No bloquear el pago si falla el movimiento de caja
+    }
+
+    return { pago, prestamoActualizado }
+  })
+
+  // === Audit log ===
+  try {
+    await db.auditLog.create({
+      data: {
+        usuarioId: user.id === 'system' ? null : user.id,
+        usuarioNombre: user.nombre,
+        accion: 'ABONO_CAPITAL_EXTRAORDINARIO',
+        modulo: 'pagos',
+        entidadId: prestamo.id,
+        entidadNombre: `Préstamo ${prestamo.codigo} - Pago ${codigoPago}`,
+        detalles: JSON.stringify({
+          prestamoId,
+          codigoPrestamo: prestamo.codigo,
+          clienteCedula: cliente.cedula,
+          clienteNombre: cliente.nombre,
+          montoAbono: montoAbonoNum,
+          saldoRealAnterior: saldoReal,
+          nuevoSaldoReal,
+          capitalPagadoExtraAcumulado: nuevoCapitalPagadoExtra,
+          prestamoSaldado,
+          modalidadAmortizacion: prestamo.modalidadAmortizacion,
+          metodoPago: metodoPago || 'MANUAL',
+          referencia: referencia || '',
+        }),
+        ipOrigen: '',
+        userAgent: '',
+        exito: true,
+      },
+    })
+  } catch (auditErr) {
+    console.error('[pagos abonar_capital] Audit log falló:', auditErr)
+  }
+
+  return NextResponse.json({
+    success: true,
+    data: resultado.pago,
+    prestamo: resultado.prestamoActualizado,
+    esAbonoExtraordinario: true,
+    montoAbono: montoAbonoNum,
+    saldoRealAnterior: saldoReal,
+    nuevoSaldoReal,
+    capitalPagadoExtraAcumulado: nuevoCapitalPagadoExtra,
+    prestamoSaldado,
+    mensaje: prestamoSaldado
+      ? `✅ Abono de ${formatearMoneda(montoAbonoNum)} aplicado al capital. El préstamo ha sido saldado completamente (saldo real: $0). Estado: CANCELADO.`
+      : `✅ Abono de ${formatearMoneda(montoAbonoNum)} aplicado al capital. Nuevo saldo real: ${formatearMoneda(nuevoSaldoReal)}. La cuota mensual de intereses (${formatearMoneda(prestamo.interesFijoMensual)}) se mantiene sin cambios.`,
   })
 }
