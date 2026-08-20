@@ -127,6 +127,19 @@ interface PrestamoAplicar {
   capitalPagadoExtra?: number
   saldoReal?: number
   proximaCuotaInteresFecha?: string | null
+  // === Detalle de la cuota pendiente (de calcularPrestamo/ calcularPrestamoTasaFijaMensual) ===
+  cuotaPendiente?: {
+    numero: number
+    fechaVencimiento: string
+    montoCuota: number
+    capital: number
+    interes: number
+    saldoCapital: number
+  }
+  // === Cargos iniciales (pagare+carta, tarifa plataforma, flexibilidad, fondo garantía) ===
+  cargosInicialesPendientes?: Array<{ concepto: string; etiqueta: string; monto: number; yaCobrado: boolean }>
+  cargosInicialesPendientesMonto?: number
+  totalCuotaConCargos?: number  // cuota base + mora + cargos iniciales
 }
 
 interface ProximoPago {
@@ -409,6 +422,10 @@ export function PagosView({ onChanged }: { onChanged: () => void }) {
 
   // === Cálculo de desglose en tiempo real (para preview del pago parcial) ===
   // Usa los datos del API: cuota base, mora pendiente, ya pagado
+  // FIX (2026-08-20): usar los valores REALES de capital e interés de la cuota
+  // pendiente (devueltos por el API en `cuotaPendiente`), en lugar de las
+  // aproximaciones anteriores (30% interés / 70% capital) que eran incorrectas
+  // para préstamos TASA_FIJA (donde el interés es constante del 20% mensual).
   const desglosePago = (() => {
     if (!prestamoSeleccionadoAplicar || !montoRecibido) return null
     const monto = parseFloat(montoRecibido)
@@ -425,12 +442,16 @@ export function PagosView({ onChanged }: { onChanged: () => void }) {
     // Distribución del nuevo pago (mora → interés → capital)
     // Solo sobre lo pendiente
     const moraPendienteCuota = p.moraPendiente
-    const interesPendienteCuota = Math.max(0, (p.cuotaBase - p.capitalPagadoCuota) - (p.cuotaBase - p.interesPagadoCuota - p.capitalPagadoCuota))
+    // === FIX (2026-08-20): usar los valores reales de la cuota pendiente ===
+    // El API devuelve cuotaPendiente con capital e interés exactos según la
+    // modalidad del préstamo (TASA_FIJA: constantes; FRANCES: variables).
+    // Antes se usaba p.cuotaBase * 0.3 (interés) y p.cuotaBase * 0.7 (capital)
+    // como aproximación, lo que era incorrecto para préstamos TASA_FIJA.
+    const interesCuota = p.cuotaPendiente?.interes ?? (p.cuotaBase * 0.3)
+    const capitalCuota = p.cuotaPendiente?.capital ?? (p.cuotaBase * 0.7)
     // Interés pendiente = interés de la cuota - ya pagado
-    const interesCuotaTotal = p.cuotaBase - (p.montoCuota - (p.montoCuota * 0.3)) // aproximado
-    // Mejor: usar el cuotaPendiente si está disponible
-    const interesBasePendiente = Math.max(0, p.cuotaBase * 0.3 - p.interesPagadoCuota) // ~30% interés
-    const capitalBasePendiente = Math.max(0, p.cuotaBase * 0.7 - p.capitalPagadoCuota)
+    const interesBasePendiente = Math.max(0, interesCuota - p.interesPagadoCuota)
+    const capitalBasePendiente = Math.max(0, capitalCuota - p.capitalPagadoCuota)
 
     let resto = monto
     let moraPagada = 0
@@ -2088,8 +2109,16 @@ Si ya realizaste el pago, ignora este mensaje.`
                   )}
                   <div className="border-t pt-1.5 flex justify-between">
                     <span className="font-semibold text-emerald-700">Total a pagar HOY:</span>
-                    <strong className="text-emerald-700 text-lg">{formatearMoneda(prestamoSeleccionadoAplicar.totalCuotaConMora)}</strong>
+                    <strong className="text-emerald-700 text-lg">
+                      {formatearMoneda(prestamoSeleccionadoAplicar.totalCuotaConCargos || prestamoSeleccionadoAplicar.totalCuotaConMora)}
+                    </strong>
                   </div>
+                  {prestamoSeleccionadoAplicar.cargosInicialesPendientesMonto && prestamoSeleccionadoAplicar.cargosInicialesPendientesMonto > 0 && (
+                    <div className="mt-1 text-xs text-purple-700 bg-purple-50 px-2 py-1 rounded">
+                      Incluye <strong>{formatearMoneda(prestamoSeleccionadoAplicar.cargosInicialesPendientesMonto)}</strong> en cargos iniciales
+                      (pagaré + carta, tarifa plataforma, flexibilidad financiera, fondo de garantía)
+                    </div>
+                  )}
                   {prestamoSeleccionadoAplicar.totalPagadoCuota > 0 && (
                     <div className="flex justify-between text-amber-700 bg-amber-50 px-2 py-1 rounded">
                       <span>💰 Pendiente después de pagos parciales:</span>
