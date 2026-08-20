@@ -3,6 +3,7 @@ import { db } from '@/lib/db'
 import { recalcularSaldosPrestamo } from '@/lib/recalcular-saldos'
 import {
   calcularPrestamo,
+  calcularPrestamoTasaFijaMensual,
   calcularMoraCompuesta,
   calcularDiasMora, getTasaMoraDiaria,
   calcularFechaVencimiento,
@@ -16,6 +17,55 @@ import { sanitizeError } from '@/lib/error-handler'
 import { requireRole, getAuthUser } from '@/lib/auth-guard'
 import { buildAbsoluteUrl } from '@/lib/url'
 import { registrarAuditLog, getClientInfo } from '@/lib/security'
+
+// =====================================================
+// Helper: calcular préstamo según modalidad
+// -----------------------------------------------------
+// Centraliza el cálculo para que TODAS las funciones de pagos usen la misma
+// función según la modalidad del préstamo. Esto garantiza que el monto de
+// la cuota mostrado en "Aplicar Pago", "Generar Link", "Solo Intereses" y
+// "Usar Flexibilidad" coincida exactamente con el monto mostrado en el
+// estado de cuenta.
+//
+// Antes, todas las funciones usaban calcularPrestamo (Sistema Francés)
+// sin importar la modalidad, lo que causaba que para préstamos TASA_FIJA
+// el capital e interés por cuota fueran inconsistentes entre vistas.
+// =====================================================
+function calcularPrestamoSegunModalidad(prestamo: any) {
+  if (prestamo.modalidadAmortizacion === 'TASA_FIJA') {
+    return calcularPrestamoTasaFijaMensual({
+      montoPrincipal: prestamo.montoPrincipal,
+      tasaMensualFija: prestamo.tasaInteresMensual || prestamo.tasaInteresAnual / 12,
+      numeroCuotas: prestamo.numeroCuotas,
+      frecuencia: prestamo.frecuencia as any,
+      fechaDesembolso: prestamo.fechaDesembolso || undefined,
+    })
+  }
+  if (prestamo.modalidadAmortizacion === 'INTERES_FIJO_SIN_CAPITAL') {
+    // No hay tabla de amortización tradicional — el cliente paga intereses
+    // fijos mensuales. Devolvemos un objeto compatible con la interfaz
+    // ResultadoCalculo pero con tabla vacía.
+    return {
+      numeroCuotas: 0,
+      montoCuota: prestamo.interesFijoMensual || 0,
+      totalInteres: 0,
+      totalPagar: prestamo.montoPrincipal,
+      tasaAplicada: 0,
+      tablaAmortizacion: [],
+      fechaVencimiento: null,
+      fondoGarantia: 0,
+    }
+  }
+  // Default: Sistema Francés
+  return calcularPrestamo({
+    montoPrincipal: prestamo.montoPrincipal,
+    tasaInteresAnual: prestamo.tasaInteresAnual,
+    tasaMoraAnual: getTasaMoraDiaria(prestamo),
+    plazoMeses: prestamo.plazoMeses,
+    frecuencia: prestamo.frecuencia as any,
+    fechaDesembolso: prestamo.fechaDesembolso || undefined,
+  })
+}
 
 // =====================================================
 // /api/pagos v4.0 — OLA 1 + Solo Intereses + Flexibilidad Financiera
@@ -125,14 +175,8 @@ async function generarLinkPago(body: any, user: any) {
     return NextResponse.json({ success: false, error: 'Préstamo no encontrado' }, { status: 404 })
   }
 
-  const calculo = calcularPrestamo({
-    montoPrincipal: prestamo.montoPrincipal,
-    tasaInteresAnual: prestamo.tasaInteresAnual,
-    tasaMoraAnual: getTasaMoraDiaria(prestamo),
-    plazoMeses: prestamo.plazoMeses,
-    frecuencia: prestamo.frecuencia as any,
-    fechaDesembolso: prestamo.fechaDesembolso || undefined,
-  })
+  // === FIX (2026-08-20): usar helper que selecciona la función correcta según modalidad ===
+  const calculo = calcularPrestamoSegunModalidad(prestamo)
 
   const cuota = calculo.tablaAmortizacion.find((c) => c.numero === parseInt(numeroCuota))
   if (!cuota) {
@@ -297,14 +341,8 @@ async function aplicarPago(body: any, user: any) {
     }
   }
 
-  const calculo = calcularPrestamo({
-    montoPrincipal: prestamo.montoPrincipal,
-    tasaInteresAnual: prestamo.tasaInteresAnual,
-    tasaMoraAnual: getTasaMoraDiaria(prestamo),
-    plazoMeses: prestamo.plazoMeses,
-    frecuencia: prestamo.frecuencia as any,
-    fechaDesembolso: prestamo.fechaDesembolso || undefined,
-  })
+  // === FIX (2026-08-20): usar helper que selecciona la función correcta según modalidad ===
+  const calculo = calcularPrestamoSegunModalidad(prestamo)
 
   const cuota = calculo.tablaAmortizacion.find((c) => c.numero === parseInt(numeroCuota))
   if (!cuota) return NextResponse.json({ success: false, error: 'Cuota no encontrada' }, { status: 400 })
@@ -839,14 +877,8 @@ async function aplicarSoloIntereses(body: any, user: any) {
       : (cuentaRecaudoId || cuentaAsignada || null)
 
   // === Calcular tabla de amortización ===
-  const calculo = calcularPrestamo({
-    montoPrincipal: prestamo.montoPrincipal,
-    tasaInteresAnual: prestamo.tasaInteresAnual,
-    tasaMoraAnual: getTasaMoraDiaria(prestamo),
-    plazoMeses: prestamo.plazoMeses,
-    frecuencia: prestamo.frecuencia as any,
-    fechaDesembolso: prestamo.fechaDesembolso || undefined,
-  })
+  // === FIX (2026-08-20): usar helper que selecciona la función correcta según modalidad ===
+  const calculo = calcularPrestamoSegunModalidad(prestamo)
 
   // === Identificar la cuota pendiente actual ===
   const cuotasPagadasCompletamente = new Set(
@@ -1092,14 +1124,8 @@ async function usarFlexibilidadFinanciera(body: any, user: any) {
   }
 
   // === Calcular tabla de amortización ===
-  const calculo = calcularPrestamo({
-    montoPrincipal: prestamo.montoPrincipal,
-    tasaInteresAnual: prestamo.tasaInteresAnual,
-    tasaMoraAnual: getTasaMoraDiaria(prestamo),
-    plazoMeses: prestamo.plazoMeses,
-    frecuencia: prestamo.frecuencia as any,
-    fechaDesembolso: prestamo.fechaDesembolso || undefined,
-  })
+  // === FIX (2026-08-20): usar helper que selecciona la función correcta según modalidad ===
+  const calculo = calcularPrestamoSegunModalidad(prestamo)
 
   // === Identificar la cuota pendiente actual ===
   const cuotasPagadasCompletamenteSet = new Set(

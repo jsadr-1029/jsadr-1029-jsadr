@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import {
   calcularPrestamo,
+  calcularPrestamoTasaFijaMensual,
   calcularMoraCompuesta,
   calcularDiasMora, getTasaMoraAnual,
   calcularCargosInicialesPendientes,
@@ -72,14 +73,59 @@ export async function GET(req: NextRequest) {
       const proximaCuota = cuotasPagadasCompletamente + 1
 
       // Calcular fecha de vencimiento de la próxima cuota
-      const calculo = calcularPrestamo({
-        montoPrincipal: p.montoPrincipal,
-        tasaInteresAnual: p.tasaInteresAnual,
-        tasaMoraAnual: getTasaMoraAnual(p),
-        plazoMeses: p.plazoMeses,
-        frecuencia: p.frecuencia as any,
-        fechaDesembolso: p.fechaDesembolso || p.fechaSolicitud,
-      })
+      // === FIX (2026-08-20): Usar la función de cálculo correcta según la modalidad ===
+      // Antes siempre se usaba calcularPrestamo (Sistema Francés) sin importar la
+      // modalidad del préstamo. Eso causaba que para préstamos TASA_FIJA, la cuota
+      // mostrada en "Aplicar Pago" tuviera un capital creciente e interés decreciente
+      // (Sistema Francés) en lugar de capital e interés constantes (Tasa Fija).
+      // El monto total NO coincidía con el estado de cuenta (que sí usaba la función
+      // correcta). Ahora ambas vistas usan la misma función según la modalidad.
+      let calculo: any
+      if (p.modalidadAmortizacion === 'TASA_FIJA') {
+        calculo = calcularPrestamoTasaFijaMensual({
+          montoPrincipal: p.montoPrincipal,
+          tasaMensualFija: p.tasaInteresMensual || p.tasaInteresAnual / 12,
+          numeroCuotas: p.numeroCuotas,
+          frecuencia: p.frecuencia as any,
+          fechaDesembolso: p.fechaDesembolso || p.fechaSolicitud,
+        })
+      } else if (p.modalidadAmortizacion === 'INTERES_FIJO_SIN_CAPITAL') {
+        // Modalidad especial: no hay tabla de amortización tradicional.
+        // El cliente paga intereses fijos mensuales mientras mantenga deuda de capital.
+        // Construir una "tabla" con una sola entrada para la próxima cuota de interés.
+        const fechaBase = p.fechaDesembolso || p.fechaSolicitud
+        const fechaVenc = new Date(fechaBase)
+        fechaVenc.setMonth(fechaVenc.getMonth() + proximaCuota)
+        calculo = {
+          numeroCuotas: 0,
+          montoCuota: p.interesFijoMensual || 0,
+          totalInteres: 0,
+          totalPagar: p.montoPrincipal,
+          tasaAplicada: 0,
+          tablaAmortizacion: [{
+            numero: proximaCuota,
+            fechaVencimiento: fechaVenc,
+            montoCuota: p.interesFijoMensual || 0,
+            capital: 0,
+            interes: p.interesFijoMensual || 0,
+            saldoCapital: p.montoPrincipal - (p.capitalPagadoExtra || 0),
+            acumuladoInteres: 0,
+            acumuladoCapital: 0,
+          }],
+          fechaVencimiento: fechaVenc,
+          fondoGarantia: 0,
+        }
+      } else {
+        // Modalidad FRANCÉS (default) — Sistema francés tradicional
+        calculo = calcularPrestamo({
+          montoPrincipal: p.montoPrincipal,
+          tasaInteresAnual: p.tasaInteresAnual,
+          tasaMoraAnual: getTasaMoraAnual(p),
+          plazoMeses: p.plazoMeses,
+          frecuencia: p.frecuencia as any,
+          fechaDesembolso: p.fechaDesembolso || p.fechaSolicitud,
+        })
+      }
 
       const cuotaPendiente = calculo.tablaAmortizacion.find((c) => c.numero === proximaCuota)
       const fechaVencimiento = cuotaPendiente?.fechaVencimiento
