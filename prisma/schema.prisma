@@ -170,6 +170,7 @@ model Cliente {
 
   prestamos       Prestamo[]
   campañasVistas  CampañaVista[]
+  campañasAsignadas CampañaCliente[]
   firmas          FirmaElectronica[]
   tokensFirma     TokenFirma[] @relation("ClienteTokenFirma")
   documentosGestor DocumentoGestor[] @relation("DocumentosCliente")
@@ -970,10 +971,36 @@ model Campaña {
   fechaFin        DateTime?
   activa          Boolean  @default(true)
   destinatarios   String   @default("TODOS") // TODOS | CATEGORIA-1 | CATEGORIA-2...
+  // === Selección manual de clientes (2026-08-20) ===
+  // Si destinatarios="SELECCIONADOS", la campaña solo se muestra a los
+  // clientes que estén en la tabla intermedia CampañaCliente.
+  // Si destinatarios="TODOS", se muestra a todos los clientes (ignora la tabla).
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
   vistas          CampañaVista[]
+  clientesSeleccionados CampañaCliente[]
+}
+
+// === Tabla intermedia: Campaña ↔ Cliente (2026-08-20) ===
+// Permite seleccionar manualmente a qué clientes se les activa una campaña.
+// Solo aplica cuando Campaña.destinatarios = "SELECCIONADOS".
+// Si destinatarios = "TODOS", todos los clientes ven la campaña (ignora esta tabla).
+model CampañaCliente {
+  id          String   @id @default(cuid())
+  campañaId   String
+  clienteId   String
+  fechaAsignacion DateTime @default(now())
+  // === Notificación al cliente ===
+  // marca si el cliente ya vio la campaña en el portal (para no volver a notificar).
+  vistaEnPortal   Boolean  @default(false)
+  fechaVistaPortal DateTime?
+
+  campaña     Campaña  @relation(fields: [campañaId], references: [id], onDelete: Cascade)
+  cliente     Cliente  @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+
+  @@unique([campañaId, clienteId])  // evita duplicados
+  @@index([clienteId])  // optimiza la consulta "campañas de este cliente"
 }
 
 model CampañaVista {

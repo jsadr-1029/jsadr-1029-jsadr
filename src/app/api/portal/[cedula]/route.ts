@@ -132,11 +132,45 @@ export async function GET(
     const cuentaPrincipal = cliente.categoria?.cuentaRecaudo || null
 
     // === Campañas activas ===
+    // Mostrar:
+    //   1. Campañas con destinatarios='TODOS' (todos los clientes las ven).
+    //   2. Campañas con destinatarios='SELECCIONADOS' que estén asignadas a este cliente
+    //      (tabla CampañaCliente).
+    // Orden: por fecha de creación descendente (más recientes primero).
     const campanas = await db.campaña.findMany({
-      where: { activa: true },
+      where: {
+        activa: true,
+        OR: [
+          { destinatarios: 'TODOS' },
+          {
+            destinatarios: 'SELECCIONADOS',
+            clientesSeleccionados: { some: { clienteId: clienteAutenticado.id } }
+          }
+        ],
+      },
       orderBy: { createdAt: 'desc' },
-      take: 5,
+      take: 10,
     })
+
+    // === Contar campañas NO VISTAS por el cliente (para mostrar badge de notificación) ===
+    // Una campaña "no vista" es aquella con destinatarios='SELECCIONADOS' asignada a
+    // este cliente donde vistaEnPortal=false. Para las de destinatarios='TODOS',
+    // usamos la tabla CampañaVista (registro existente).
+    const campanasAsignadasNoVistas = await db.campañaCliente.count({
+      where: {
+        clienteId: clienteAutenticado.id,
+        vistaEnPortal: false,
+        campaña: { activa: true, destinatarios: 'SELECCIONADOS' }
+      }
+    })
+    const campanasTodasNoVistas = await db.campaña.count({
+      where: {
+        activa: true,
+        destinatarios: 'TODOS',
+        vistas: { none: { clienteId: clienteAutenticado.id } }
+      }
+    })
+    const campanasNoVistas = campanasAsignadasNoVistas + campanasTodasNoVistas
 
     // === KEEP-ALIVE: extender la sesión 8h desde ahora ===
     // Cada vez que el cliente abre/refresca su portal, renovamos tokenExpira
@@ -169,6 +203,7 @@ export async function GET(
         },
         prestamos: prestamosConCuenta,
         campanas,
+        campanasNoVistas,
         cuentaRecaudoPrincipal: cuentaPrincipal
           ? {
               banco: cuentaPrincipal.banco,

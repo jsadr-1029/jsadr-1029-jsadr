@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Badge } from '@/components/ui/badge'
+import { Checkbox } from '@/components/ui/checkbox'
 import {
   Select,
   SelectContent,
@@ -24,7 +25,7 @@ import {
 } from '@/components/ui/dialog'
 import { useToast } from '@/hooks/use-toast'
 import { formatearFecha } from '@/lib/finanzas'
-import { Megaphone, Plus, Eye, Bell, Trash2, Send } from 'lucide-react'
+import { Megaphone, Plus, Eye, Bell, Trash2, Send, Search, Users, UserCheck } from 'lucide-react'
 
 interface Campana {
   id: string
@@ -38,6 +39,19 @@ interface Campana {
   destinatarios: string
   createdAt: string
   _count: { vistas: number }
+  clientesSeleccionados?: Array<{
+    id: string
+    cliente: { id: string; nombre: string; cedula: string; telefono: string; email: string | null }
+  }>
+}
+
+interface ClienteLista {
+  id: string
+  nombre: string
+  cedula: string
+  telefono: string
+  email: string | null
+  activo: boolean
 }
 
 export function CampanasView({ onChanged }: { onChanged: () => void }) {
@@ -56,6 +70,13 @@ export function CampanasView({ onChanged }: { onChanged: () => void }) {
   const [tipo, setTipo] = useState('INFORMATIVO')
   const [destinatarios, setDestinatarios] = useState('TODOS')
   const [enviarWhatsapp, setEnviarWhatsapp] = useState(false)
+  // === Selección manual de clientes (2026-08-20) ===
+  // Cuando destinatarios='SELECCIONADOS', el admin puede elegir a qué
+  // clientes específicos se les activa la campaña.
+  const [clientes, setClientes] = useState<ClienteLista[]>([])
+  const [clientesSeleccionados, setClientesSeleccionados] = useState<Set<string>>(new Set())
+  const [busquedaCliente, setBusquedaCliente] = useState('')
+  const [cargandoClientes, setCargandoClientes] = useState(false)
 
   useEffect(() => {
     cargar()
@@ -64,7 +85,8 @@ export function CampanasView({ onChanged }: { onChanged: () => void }) {
   const cargar = async () => {
     try {
       setLoading(true)
-      const res = await fetch('/api/campanas?activas=false')
+      // === Incluir clientes seleccionados en la respuesta ===
+      const res = await fetch('/api/campanas?activas=false&conClientes=true')
       const json = await res.json()
       if (json.success) setCampanas(json.data)
     } catch (e) {
@@ -74,20 +96,89 @@ export function CampanasView({ onChanged }: { onChanged: () => void }) {
     }
   }
 
+  // === Cargar lista de clientes para el selector (al abrir modal crear) ===
+  const cargarClientes = async () => {
+    if (clientes.length > 0) return  // ya cargados
+    setCargandoClientes(true)
+    try {
+      const res = await fetch('/api/clientes?take=500')
+      const json = await res.json()
+      if (json.success && Array.isArray(json.data)) {
+        setClientes(json.data)
+      }
+    } catch (e) {
+      console.error(e)
+    } finally {
+      setCargandoClientes(false)
+    }
+  }
+
+  const abrirModalCrear = () => {
+    setModalCrear(true)
+    limpiarForm()
+    cargarClientes()
+  }
+
+  const toggleCliente = (clienteId: string) => {
+    setClientesSeleccionados((prev) => {
+      const next = new Set(prev)
+      if (next.has(clienteId)) {
+        next.delete(clienteId)
+      } else {
+        next.add(clienteId)
+      }
+      return next
+    })
+  }
+
+  const toggleTodosClientes = () => {
+    if (clientesSeleccionados.size === clientes.length) {
+      // Si todos están seleccionados, deseleccionar todos
+      setClientesSeleccionados(new Set())
+    } else {
+      // Si no todos están seleccionados, seleccionar todos
+      setClientesSeleccionados(new Set(clientes.map((c) => c.id)))
+    }
+  }
+
+  const clientesFiltrados = clientes.filter((c) => {
+    if (!busquedaCliente) return true
+    const q = busquedaCliente.toLowerCase()
+    return (
+      c.nombre.toLowerCase().includes(q) ||
+      c.cedula.includes(q) ||
+      c.telefono.includes(q)
+    )
+  })
+
   const crear = async (e: React.FormEvent) => {
     e.preventDefault()
+    // === Validar selección de clientes cuando destinatarios='SELECCIONADOS' ===
+    if (destinatarios === 'SELECCIONADOS' && clientesSeleccionados.size === 0) {
+      toast({
+        title: 'Error',
+        description: 'Debes seleccionar al menos un cliente cuando destinatarios = "Seleccionados".',
+        variant: 'destructive',
+      })
+      return
+    }
     try {
+      const body: any = {
+        titulo,
+        descripcion,
+        contenido,
+        tipo,
+        destinatarios,
+        enviarWhatsapp,
+      }
+      // === Enviar clienteIds solo cuando destinatarios='SELECCIONADOS' ===
+      if (destinatarios === 'SELECCIONADOS') {
+        body.clienteIds = Array.from(clientesSeleccionados)
+      }
       const res = await fetch('/api/campanas', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          titulo,
-          descripcion,
-          contenido,
-          tipo,
-          destinatarios,
-          enviarWhatsapp,
-        }),
+        body: JSON.stringify(body),
       })
       const json = await res.json()
       if (json.success) {
@@ -95,15 +186,15 @@ export function CampanasView({ onChanged }: { onChanged: () => void }) {
           title: 'Campaña creada',
           description: enviarWhatsapp
             ? `Enviada por WhatsApp a ${json.whatsappEnviados}/${json.totalClientes} clientes`
-            : 'Campaña publicada',
+            : destinatarios === 'SELECCIONADOS'
+              ? `Campaña asignada a ${clientesSeleccionados.size} cliente(s).`
+              : 'Campaña publicada para todos los clientes',
         })
         setModalCrear(false)
         limpiarForm()
         cargar()
         onChanged()
         // === ORDEN OBLIGATORIA 3: Abrir vista previa siempre que se termina un proceso ===
-        // Tras crear la campaña, abrir el modal de vista previa para que el usuario
-        // verifique cómo la verán los clientes (título, contenido, destinatarios).
         if (json.data) {
           setTimeout(() => {
             setCampanaPreview(json.data)
@@ -124,6 +215,8 @@ export function CampanasView({ onChanged }: { onChanged: () => void }) {
     setTipo('INFORMATIVO')
     setDestinatarios('TODOS')
     setEnviarWhatsapp(false)
+    setClientesSeleccionados(new Set())
+    setBusquedaCliente('')
   }
 
   const toggleActiva = async (c: Campana) => {
@@ -164,7 +257,7 @@ export function CampanasView({ onChanged }: { onChanged: () => void }) {
         subtitle="Publica campañas que los clientes verán en el portal de consulta"
         icon={<Megaphone className="w-5 h-5" />}
         actions={
-          <Button onClick={() => setModalCrear(true)}>
+          <Button onClick={abrirModalCrear}>
             <Plus className="w-4 h-4 mr-2" />
             Nueva Campaña
           </Button>
@@ -218,6 +311,12 @@ export function CampanasView({ onChanged }: { onChanged: () => void }) {
                       {c._count.vistas} vistas
                     </span>
                     <span>{formatearFecha(c.createdAt)}</span>
+                    {c.destinatarios === 'SELECCIONADOS' && c.clientesSeleccionados && (
+                      <span className="flex items-center gap-1 text-purple-700">
+                        <Users className="w-3 h-3" />
+                        {c.clientesSeleccionados.length} cliente(s)
+                      </span>
+                    )}
                   </div>
                   <div className="flex gap-1">
                     <Button size="sm" variant="outline" className="flex-1" onClick={() => toggleActiva(c)}>
@@ -295,6 +394,7 @@ export function CampanasView({ onChanged }: { onChanged: () => void }) {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="TODOS">Todos los clientes</SelectItem>
+                    <SelectItem value="SELECCIONADOS">Clientes seleccionados (manual)</SelectItem>
                     <SelectItem value="CATEGORIA-1">Solo Categoría 1</SelectItem>
                     <SelectItem value="CATEGORIA-2">Solo Categoría 2</SelectItem>
                     <SelectItem value="CATEGORIA-3">Solo Categoría 3</SelectItem>
@@ -303,6 +403,76 @@ export function CampanasView({ onChanged }: { onChanged: () => void }) {
                 </Select>
               </div>
             </div>
+
+            {/* === Selector de clientes cuando destinatarios = 'SELECCIONADOS' === */}
+            {destinatarios === 'SELECCIONADOS' && (
+              <div className="space-y-3 p-3 rounded-md bg-purple-50 dark:bg-purple-900/20 border-2 border-purple-200 dark:border-purple-700">
+                <div className="flex items-center justify-between gap-2">
+                  <Label className="text-sm font-semibold text-purple-900 dark:text-purple-100 flex items-center gap-1.5">
+                    <UserCheck className="w-4 h-4" />
+                    Seleccionar clientes ({clientesSeleccionados.size} seleccionados)
+                  </Label>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={toggleTodosClientes}
+                    className="text-xs h-7"
+                  >
+                    {clientesSeleccionados.size === clientes.length && clientes.length > 0
+                      ? 'Quitar todos'
+                      : 'Seleccionar todos'}
+                  </Button>
+                </div>
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                  <Input
+                    placeholder="Buscar por nombre, cédula o teléfono..."
+                    value={busquedaCliente}
+                    onChange={(e) => setBusquedaCliente(e.target.value)}
+                    className="pl-9 bg-white dark:bg-slate-800"
+                  />
+                </div>
+                <div className="max-h-64 overflow-y-auto space-y-1 bg-white dark:bg-slate-900 rounded-md border border-purple-100 dark:border-purple-800 p-2">
+                  {cargandoClientes ? (
+                    <div className="text-center py-4 text-sm text-muted-foreground">
+                      Cargando clientes...
+                    </div>
+                  ) : clientesFiltrados.length === 0 ? (
+                    <div className="text-center py-4 text-sm text-muted-foreground">
+                      {busquedaCliente ? 'No se encontraron clientes.' : 'No hay clientes registrados.'}
+                    </div>
+                  ) : (
+                    clientesFiltrados.map((c) => (
+                      <label
+                        key={c.id}
+                        className={`flex items-center gap-3 p-2 rounded-md cursor-pointer transition-colors ${
+                          clientesSeleccionados.has(c.id)
+                            ? 'bg-purple-100 dark:bg-purple-900/40'
+                            : 'hover:bg-purple-50 dark:hover:bg-purple-900/20'
+                        }`}
+                      >
+                        <Checkbox
+                          checked={clientesSeleccionados.has(c.id)}
+                          onCheckedChange={() => toggleCliente(c.id)}
+                        />
+                        <div className="flex-1 min-w-0">
+                          <div className="text-sm font-medium truncate">{c.nombre}</div>
+                          <div className="text-xs text-muted-foreground truncate">
+                            CC {c.cedula} · {c.telefono}
+                          </div>
+                        </div>
+                        {!c.activo && (
+                          <Badge variant="outline" className="text-xs text-red-700 border-red-300">
+                            Inactivo
+                          </Badge>
+                        )}
+                      </label>
+                    ))
+                  )}
+                </div>
+              </div>
+            )}
             <div className="flex items-center gap-2 p-3 bg-amber-50 rounded-md border border-amber-200">
               <input
                 type="checkbox"

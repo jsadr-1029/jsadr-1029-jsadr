@@ -159,6 +159,7 @@ interface PortalData {
   kpis?: PortalKPIS
   prestamos: any[]
   campanas: any[]
+  campanasNoVistas?: number  // campañas no vistas por el cliente (para badge de notificación)
   notificaciones?: NotificacionItem[]
   notificacionesStats?: NotificacionesStats
   cuentaRecaudoPrincipal?: CuentaRecaudoInfo | null
@@ -649,7 +650,7 @@ export function PortalClienteModal({
     )
   }
 
-  const { cliente, resumen, prestamos, campanas } = data
+  const { cliente, resumen, prestamos, campanas, campanasNoVistas } = data
   const kpis = data.kpis || {
     scorePago: 0,
     estadoSalud: 'N/D',
@@ -915,7 +916,7 @@ export function PortalClienteModal({
           )}
 
           {vista === 'campanas' && (
-            <CampanasView campanas={campanas} />
+            <CampanasView campanas={campanas} clienteCedula={cliente.cedula} />
           )}
 
           {vista === 'pasaporte' && token && (
@@ -959,7 +960,14 @@ export function PortalClienteModal({
               onClick={() => navegarA('campanas')}
               className={`bottom-nav-item ${vista === 'campanas' ? 'active' : ''}`}
             >
-              <Megaphone className="w-5 h-5" />
+              <div className="relative">
+                <Megaphone className="w-5 h-5" />
+                {campanasNoVistas && campanasNoVistas > 0 && (
+                  <span className="absolute -top-1.5 -right-2 bg-purple-500 text-white text-[9px] rounded-full min-w-[15px] h-[15px] px-1 flex items-center justify-center font-bold pulse-glow">
+                    {campanasNoVistas > 9 ? '9+' : campanasNoVistas}
+                  </span>
+                )}
+              </div>
               <span className="text-[10px] font-medium">Campañas</span>
             </button>
 
@@ -2137,7 +2145,23 @@ function AvisosView({
 // =====================================================
 // VISTA: CAMPAÑAS
 // =====================================================
-function CampanasView({ campanas }: { campanas: any[] }) {
+function CampanasView({ campanas, clienteCedula }: { campanas: any[]; clienteCedula?: string }) {
+  // === Marcar campaña como vista al hacer clic en ella ===
+  // Llama al endpoint /api/portal/marcar-campana-vista para que el badge
+  // de notificación desaparezca después de que el cliente vea la campaña.
+  const marcarVista = async (campañaId: string) => {
+    if (!clienteCedula) return
+    try {
+      await fetch('/api/portal/marcar-campana-vista', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ cedula: clienteCedula, campañaId }),
+      })
+    } catch (e) {
+      // Silencioso: no bloquear la visualización si falla el marcado
+    }
+  }
+
   if (campanas.length === 0) {
     return (
       <EmptyStatePremium
@@ -2151,7 +2175,11 @@ function CampanasView({ campanas }: { campanas: any[] }) {
   return (
     <div className="space-y-3 fade-scale">
       {campanas.map((c) => (
-        <Card key={c.id} className="premium-card premium-card-hover rounded-2xl overflow-hidden">
+        <Card
+          key={c.id}
+          className="premium-card premium-card-hover rounded-2xl overflow-hidden cursor-pointer"
+          onClick={() => marcarVista(c.id)}
+        >
           <CardContent className="p-0">
             <div className="h-1.5 bg-gradient-to-r from-indigo-500 via-violet-500 to-fuchsia-500"></div>
             <div className="p-3.5">
@@ -2162,6 +2190,11 @@ function CampanasView({ campanas }: { campanas: any[] }) {
                 <span className="chip-premium !text-[9px] !py-0.5">
                   {c.tipo}
                 </span>
+                {c.destinatarios === 'SELECCIONADOS' && (
+                  <span className="chip-premium !text-[9px] !py-0.5 bg-purple-500/20 text-purple-300">
+                    Exclusiva para ti
+                  </span>
+                )}
               </div>
               <h4 className="font-bold text-sm">{c.titulo}</h4>
               <p className="text-xs text-muted-foreground mt-1">{c.descripcion}</p>
