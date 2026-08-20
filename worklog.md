@@ -1658,3 +1658,64 @@ Stage Summary:
 - ✅ Préstamo NV-CC-1193239937-20260819-01 actualizado con fechas correctas (19 de agosto).
 - ✅ Pagaré y carta ahora muestran "19 de agosto de 2026" (coincide con la firma electrónica).
 - ✅ Producción (jsadr.com.co) desplegado y verificado.
+
+---
+Task ID: fix-valores-aplicar-pago-vs-estado-cuenta
+Agent: main (Super Z)
+Task: Corregir discrepancia entre el total de la cuota #1 en 'Aplicar Pago' ($114.541,24) vs el estado de cuenta ($124.900) para el préstamo NV-CC-1193239937-20260819-01
+
+Work Log:
+- Diagnóstico:
+  * Préstamo NV-CC-1193239937-20260819-01 (Naschla Vergara, modalidad TASA_FIJA).
+  * Estado de cuenta mostraba: cuota #1 = $124.900 (correcto, ya estaba fixeado).
+  * Modal 'Aplicar Pago' mostraba: cuota #1 = $114.541,24 (incorrecto).
+  * Causa raíz: 2 problemas separados.
+
+- Problema 1: Backend /api/pagos/aplicar y /api/pagos usaban calcularPrestamo (Sistema Francés):
+  * Para préstamos TASA_FIJA, calcularPrestamo genera tabla con capital creciente e interés decreciente.
+  * CalcularPrestamoTasaFijaMensual genera tabla con capital e interés constantes.
+  * El estado de cuenta ya usaba la función correcta (fix anterior), pero los endpoints de pagos NO.
+  * Fix:
+    - /api/pagos/aplicar/route.ts: cambié el bloque calcularPrestamo por una rama condicional según modalidadAmortizacion.
+    - /api/pagos/route.ts: creé función helper calcularPrestamoSegunModalidad(prestamo) y la apliqué a las 4 funciones (generarLinkPago, aplicarPago, aplicarSoloIntereses, usarFlexibilidadFinanciera).
+
+- Problema 2: Frontend PagosView.tsx usaba aproximaciones 30%/70%:
+  * El desglosePago calculaba interesBasePendiente = cuotaBase * 0.3 - yaPagado.
+  * Y capitalBasePendiente = cuotaBase * 0.7 - yaPagado.
+  * Para TASA_FIJA (20% mensual), la proporción correcta es interés = 28.57% y capital = 71.43% de la cuota base.
+  * El cálculo mostraba: Interés $31.500, Capital $73.500 (incorrecto).
+  * Valores correctos: Interés $30.000, Capital $75.000.
+  * Fix:
+    - Interface PrestamoAplicar ampliada con cuotaPendiente {capital, interes, ...}, cargosInicialesPendientes, cargosInicialesPendientesMonto, totalCuotaConCargos.
+    - desglosePago ahora usa p.cuotaPendiente.interes y p.cuotaPendiente.capital (valores reales del API) en lugar de las aproximaciones 0.3/0.7.
+    - Fallback: si cuotaPendiente no está disponible, usa la aproximación vieja.
+
+- Problema 3: 'Total a pagar HOY' no incluía cargos iniciales:
+  * Antes: mostraba totalCuotaConMora ($105.000, sin pagare+carta).
+  * Ahora: muestra totalCuotaConCargos ($124.900, con $19.900 pagare+carta).
+  * Aparece una nota morada indicando cuánto del total son cargos iniciales.
+
+- Verificación en producción (jsadr.com.co) con agent-browser:
+  * Modal 'Aplicar Pago' después del fix muestra:
+    - Cuota base (capital + interés): $105.000 ✓
+    - → Mora: $0 ✓
+    - → Interés: $30.000 ✓ (antes $31.500)
+    - → Capital: $75.000 ✓ (antes $73.500)
+    - Total a pagar HOY: $124.900 ✓ (antes $105.000)
+    - Incluye $19.900 en cargos iniciales (pagaré + carta) ✓
+    - Input monto recibido: $124.900 pre-cargado ✓
+  * Estado de cuenta muestra los mismos valores:
+    - Cuota #1: capital $75.000 + interés $30.000 + $19.900 pagare = $124.900 ✓
+
+- Sincronización:
+  * Commit f2f0fd0 (fix backend pagos) + fcb4148 (fix frontend pagos-view) push a GitHub.
+  * HEAD = origin/main = fcb4148.
+  * GitHub Actions auto-deploy disparado.
+  * Producción (jsadr.com.co): HTTP 200 respondiendo correctamente.
+
+Stage Summary:
+- ✅ Modal 'Aplicar Pago' ahora muestra $124.900 (igual que el estado de cuenta).
+- ✅ Desglose correcto: Interés $30.000, Capital $75.000 (no más aproximaciones 30%/70%).
+- ✅ 'Total a pagar HOY' incluye cargos iniciales (pagare+carta $19.900).
+- ✅ Helper calcularPrestamoSegunModalidad centraliza el cálculo en los 4 flujos de pagos.
+- ✅ Producción (jsadr.com.co) desplegado y verificado end-to-end.
