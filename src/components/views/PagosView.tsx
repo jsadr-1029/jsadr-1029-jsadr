@@ -2404,7 +2404,7 @@ Si ya realizaste el pago, ignora este mensaje.`
                 <Button
                   className="bg-emerald-600 hover:bg-emerald-700"
                   onClick={confirmarAplicarPago}
-                  disabled={!montoRecibido || aplicandoPago}
+                  disabled={abonarAlCapital ? (!montoAbonoCapital || aplicandoPago) : (!montoRecibido || aplicandoPago)}
                 >
                   {aplicandoPago ? (
                     <>
