@@ -1719,3 +1719,76 @@ Stage Summary:
 - ✅ 'Total a pagar HOY' incluye cargos iniciales (pagare+carta $19.900).
 - ✅ Helper calcularPrestamoSegunModalidad centraliza el cálculo en los 4 flujos de pagos.
 - ✅ Producción (jsadr.com.co) desplegado y verificado end-to-end.
+
+---
+Task ID: feat-campanas-seleccion-clientes-notificacion-portal
+Agent: main (Super Z)
+Task: En las campañas (módulo Préstamos - Campañas), poder seleccionar para qué clientes se activa cada campaña, crear la lista desde los clientes registrados, y mostrar la notificación de campaña al cliente en el portal cliente.
+
+Work Log:
+- Prisma schema:
+  * Nuevo modelo CampañaCliente (tabla intermedia Campaña ↔ Cliente).
+    Campos: id, campañaId, clienteId, fechaAsignacion, vistaEnPortal, fechaVistaPortal.
+    Constraint @@unique([campañaId, clienteId]) evita duplicados.
+    Index en clienteId optimiza 'campañas de este cliente'.
+  * Campaña: añadida relación clientesSeleccionados CampañaCliente[].
+  * Cliente: añadida relación campañasAsignadas CampañaCliente[].
+- Migración Neon: tabla CampañaCliente creada y verificada.
+- Backend /api/campanas/route.ts:
+  * GET: parámetro conClientes=true incluye clientes seleccionados.
+  * POST: acepta clienteIds[]. Si destinatarios='SELECCIONADOS', crea
+    asignaciones en CampañaCliente (transacción atómica). Si enviarWhatsapp,
+    solo envía a los clientes destinatarios (no a todos).
+  * PATCH: acepta clienteIds[] para reemplazar asignaciones al editar.
+  * Validación: destinatarios='SELECCIONADOS' exige al menos 1 cliente.
+- Backend /api/portal/[cedula]/route.ts:
+  * Campañas activas ahora filtra por: destinatarios='TODOS' O
+    destinatarios='SELECCIONADOS' Y asignadas a este cliente.
+  * Nuevo campo campanasNoVistas: cuenta campañas no vistas (para badge).
+- Nuevo endpoint /api/portal/marcar-campana-vista/route.ts:
+  * POST { cedula, campañaId } marca campaña como vista.
+  * Para SELECCIONADOS: actualiza CampañaCliente.vistaEnPortal=true.
+  * Para TODOS: crea registro en CampañaVista (tabla existente).
+  * Idempotente: no falla si ya está marcada.
+- Frontend admin CampanasView.tsx:
+  * Selector destinatarios: añadida opción 'SELECCIONADOS'.
+  * Panel morado con buscador + lista de clientes con checkbox.
+  * Botón 'Seleccionar todos' / 'Quitar todos'.
+  * Tarjetas de campaña muestran '# cliente(s)' cuando es SELECCIONADOS.
+  * Toast confirma 'Campaña asignada a N cliente(s)'.
+- Frontend portal PortalClienteModal.tsx:
+  * Interface PortalData: añadido campanasNoVistas.
+  * Badge morado en botón 'Campañas' del bottom nav cuando hay no vistas.
+  * CampanasView del portal: al hacer clic en una campaña, la marca como
+    vista (API call silencioso). Badge 'Exclusiva para ti' si es SELECCIONADOS.
+- Validación:
+  * TypeScript: ✓ sin errores.
+  * Next.js build: ✓ Compiled successfully in 41s, 226/226 static pages.
+  * Pruebas con agent-browser (iPhone 14 emulation) en producción:
+    - Login como admin Js1214731649 ✓
+    - Préstamos → Campañas → 'Nueva Campaña' ✓
+    - Selector 'Destinatarios' muestra 'Clientes seleccionados (manual)' ✓
+    - Al seleccionarlo, aparece panel morado con buscador ✓
+    - Buscar '1193239937' → encuentra a Naschla Vergara ✓
+    - Seleccionar Naschla (checkbox) ✓
+    - Llenar título y descripción ✓
+    - Click 'Publicar Campaña' → campaña creada ✓
+    - Tarjeta muestra '1 cliente(s)' ✓
+    - Campaña de prueba eliminada después ✓
+- Sincronización:
+  * Commit c31a3b6 push a GitHub.
+  * HEAD = origin/main = c31a3b6.
+  * GitHub Actions auto-deploy disparado.
+  * Producción (jsadr.com.co): HTTP 200 respondiendo correctamente.
+
+Stage Summary:
+- ✅ Admin puede seleccionar clientes específicos al crear campaña (destinatarios='SELECCIONADOS').
+- ✅ Lista de clientes cargada desde /api/clientes con buscador por nombre/cédula/teléfono.
+- ✅ Botón 'Seleccionar todos' / 'Quitar todos'.
+- ✅ Tarjetas de campaña muestran cuántos clientes están asignados.
+- ✅ Portal del cliente: campañas SELECCIONADOS solo las ven los clientes asignados.
+- ✅ Badge morado de notificación en el botón 'Campañas' del portal.
+- ✅ Badge 'Exclusiva para ti' en campañas SELECCIONADOS del portal.
+- ✅ Al hacer clic en una campaña, se marca como vista (badge desaparece).
+- ✅ WhatsApp opcional solo se envía a los clientes destinatarios.
+- ✅ Producción (jsadr.com.co) desplegado y verificado.
