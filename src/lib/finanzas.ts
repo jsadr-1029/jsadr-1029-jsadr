@@ -36,8 +36,14 @@ export interface ResultadoCalculo {
   totalPagar: number
   tasaAplicada: number
   tablaAmortizacion: CuotaAmortizacion[]
-  fechaVencimiento: Date
+  fechaVencimiento: Date | null  // null para modalidades sin vencimiento definido
   fondoGarantia: number // 5% del primer préstamo
+  // Campos opcionales para la modalidad INTERES_FIJO_SIN_CAPITAL
+  esInteresFijoSinCapital?: boolean
+  interesFijoMensual?: number
+  proximaCuotaInteresFecha?: Date
+  tasaAnualCalculada?: number
+  tasaMensualCalculada?: number
 }
 
 const PERIODOS_POR_ANIO: Record<Frecuencia, number> = {

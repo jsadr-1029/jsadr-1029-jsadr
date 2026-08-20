@@ -9,6 +9,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Switch } from '@/components/ui/switch'
+import { Alert, AlertDescription } from '@/components/ui/alert'
 import {
   Select,
   SelectContent,
@@ -35,7 +36,7 @@ import { useToast } from '@/hooks/use-toast'
 import { formatearMoneda, formatearFecha, calcularPrestamo, calcularPrestamoTasaFijaMensual, Frecuencia } from '@/lib/finanzas'
 import { calcularBloqueCorte, calcularFechaPrimerCorte, calcularDiasCausadosAntes, calcularValorDiasCausados, PeriodoCorte } from '@/lib/corte-fechas'
 import { abrirHtmlImprimible } from '@/lib/auth-docs'
-import { FileText, Plus, Search, Eye, Check, X, ArrowRight, RefreshCw, PenTool, Shield, Trash2, Calendar, Scissors, Sparkles, MonitorSmartphone } from 'lucide-react'
+import { FileText, Plus, Search, Eye, Check, X, ArrowRight, RefreshCw, PenTool, Shield, Trash2, Calendar, Scissors, Sparkles, MonitorSmartphone, Info } from 'lucide-react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { ClientesView } from '@/components/views/ClientesView'
 import { CajasView } from '@/components/views/CajasView'
@@ -314,7 +315,12 @@ function PrestamosPanel({
 
   // Estado del formulario
   const [clienteId, setClienteId] = useState('')
-  const [modalidad, setModalidad] = useState<'FRANCES' | 'TASA_FIJA' | 'CUOTA_PERSONALIZADA'>('FRANCES')
+  const [modalidad, setModalidad] = useState<'FRANCES' | 'TASA_FIJA' | 'CUOTA_PERSONALIZADA' | 'INTERES_FIJO_SIN_CAPITAL'>('FRANCES')
+  // === Modalidad INTERES_FIJO_SIN_CAPITAL ===
+  // El cliente paga SOLO intereses fijos mensuales mientras mantiene la deuda
+  // de capital. El capital se paga aparte en abonos extraordinarios.
+  // Ej: deuda $6.000.000, paga $370.000 mensuales de interés fijo.
+  const [interesFijoMensual, setInteresFijoMensual] = useState('370000')
   const [montoPrincipal, setMontoPrincipal] = useState('')
   const [tasaInteresAnual, setTasaInteresAnual] = useState('24')
   const [tasaMoraAnual, setTasaMoraAnual] = useState('1')
@@ -904,6 +910,41 @@ function PrestamosPanel({
       }
     }
 
+    // === Modalidad INTERES_FIJO_SIN_CAPITAL ===
+    // El cliente paga SOLO intereses fijos mensuales mientras mantiene la deuda
+    // de capital. No hay tabla de amortización tradicional — el "saldo real"
+    // es montoPrincipal - capitalPagadoExtra (que empieza en 0).
+    if (modalidad === 'INTERES_FIJO_SIN_CAPITAL') {
+      const monto = parseFloat(montoPrincipal)
+      const interesFijo = parseFloat(interesFijoMensual)
+      if (!monto || !interesFijo) return null
+
+      // Calcular tasa anual equivalente (informativa)
+      const tasaAnualEquiv = monto > 0 ? (interesFijo / monto) * 12 * 100 : 0
+      const tasaMensualEquiv = monto > 0 ? (interesFijo / monto) * 100 : 0
+
+      // Próxima fecha de cuota de interés (un mes después de la fecha base)
+      const fechaBase = fechaBaseParaAmortizacion || new Date()
+      const proximaCuota = new Date(fechaBase.getTime())
+      proximaCuota.setMonth(proximaCuota.getMonth() + 1)
+
+      return {
+        numeroCuotas: 0,  // Sin cuotas programadas
+        montoCuota: interesFijo,  // La cuota mensual fija de interés
+        totalInteres: 0,  // No se conoce — se paga mes a mes
+        totalPagar: monto,  // Solo capital; intereses se cobran aparte
+        tasaAplicada: tasaAnualEquiv / 100 / 12,
+        tablaAmortizacion: [],  // Sin tabla (no aplica amortización tradicional)
+        fechaVencimiento: null,  // Sin vencimiento definido
+        fondoGarantia: 0,
+        esInteresFijoSinCapital: true,
+        interesFijoMensual: interesFijo,
+        proximaCuotaInteresFecha: proximaCuota,
+        tasaAnualCalculada: Math.round(tasaAnualEquiv * 100) / 100,
+        tasaMensualCalculada: Math.round(tasaMensualEquiv * 100) / 100,
+      }
+    }
+
     // Modalidad FRANCÉS (sistema tradicional)
     const monto = parseFloat(montoPrincipal)
     const tasa = parseFloat(tasaInteresAnual)
@@ -937,6 +978,7 @@ function PrestamosPanel({
     periodoCorte, fechaPrimerCorte, valorDiasCausados, diasCausadosAntes,
     incluirFondoGarantia, tasaFondoGarantia,
     fechaPrimerCuota,
+    interesFijoMensual,
   ])
 
   const prestamosFiltrados = prestamos.filter((p) => {
@@ -1400,6 +1442,11 @@ function PrestamosPanel({
         body.tasaMensualFija = tasaMensualFija
         body.numeroCuotasFija = numeroCuotasFija
         body.frecuencia = frecuencia
+        body.tasaMoraAnual = tasaMoraAnual
+      } else if (modalidad === 'INTERES_FIJO_SIN_CAPITAL') {
+        body.modalidad = 'INTERES_FIJO_SIN_CAPITAL'
+        body.interesFijoMensual = interesFijoMensual
+        body.frecuencia = 'MENSUAL'  // Forzada: solo soporta mensual
         body.tasaMoraAnual = tasaMoraAnual
       } else {
         body.tasaInteresAnual = tasaInteresAnual
@@ -2887,7 +2934,7 @@ ${linkFirmaCodeudor}
             {/* Selección de modalidad */}
             <div className="space-y-2">
               <Label>Modalidad del Crédito *</Label>
-              <Select value={modalidad} onValueChange={(v) => setModalidad(v as 'FRANCES' | 'TASA_FIJA' | 'CUOTA_PERSONALIZADA')}>
+              <Select value={modalidad} onValueChange={(v) => setModalidad(v as 'FRANCES' | 'TASA_FIJA' | 'CUOTA_PERSONALIZADA' | 'INTERES_FIJO_SIN_CAPITAL')}>
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
@@ -2895,8 +2942,20 @@ ${linkFirmaCodeudor}
                   <SelectItem value="FRANCES">📊 Sistema Francés (tasa anual, cuota calculada automáticamente)</SelectItem>
                   <SelectItem value="TASA_FIJA">💰 Tasa Fija Mensual (tasa mensual sobre capital inicial)</SelectItem>
                   <SelectItem value="CUOTA_PERSONALIZADA">✏️ Cuota Personalizada / Checa (tú defines la cuota y la tasa mensual)</SelectItem>
+                  <SelectItem value="INTERES_FIJO_SIN_CAPITAL">🎯 Interés Fijo sin Capital (solo intereses mensuales, capital se paga aparte)</SelectItem>
                 </SelectContent>
               </Select>
+              {modalidad === 'INTERES_FIJO_SIN_CAPITAL' && (
+                <Alert className="bg-purple-500/10 border-purple-500/30 text-purple-200">
+                  <Info className="h-4 w-4" />
+                  <AlertDescription className="text-xs">
+                    <strong>Modalidad especial:</strong> El cliente paga SOLO intereses fijos mensuales
+                    mientras mantenga deuda de capital. El capital se abona aparte mediante pagos
+                    extraordinarios acordados. El saldo real del préstamo = capital − abonos extraordinarios.
+                    Los intereses se generan mes a mes hasta que el capital quede en $0.
+                  </AlertDescription>
+                </Alert>
+              )}
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -3058,7 +3117,7 @@ ${linkFirmaCodeudor}
                     </div>
                   </div>
                 </>
-              ) : (
+              ) : modalidad === 'CUOTA_PERSONALIZADA' ? (
                 <>
                   {/* Modalidad Cuota Personalizada / Checa */}
                   <div className="space-y-2">
@@ -3200,7 +3259,93 @@ ${linkFirmaCodeudor}
                     )}
                   </div>
                 </>
-              )}
+              ) : modalidad === 'INTERES_FIJO_SIN_CAPITAL' ? (
+                <>
+                  {/* Modalidad Interés Fijo sin Capital */}
+                  <div className="space-y-2">
+                    <Label htmlFor="interesFijoMensual">Interés Fijo Mensual (COP) *</Label>
+                    <Input
+                      id="interesFijoMensual"
+                      type="number"
+                      step="0.01"
+                      value={interesFijoMensual}
+                      onChange={(e) => setInteresFijoMensual(e.target.value)}
+                      required
+                      placeholder="370000"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      El cliente paga este valor fijo cada mes mientras tenga saldo de capital.
+                      No incluye abono a capital — solo intereses.
+                    </p>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="tasaMoraInteresFijo">Tasa Moratoria Diaria (%) *</Label>
+                    <Input
+                      id="tasaMoraInteresFijo"
+                      type="number"
+                      step="0.0001"
+                      value={tasaMoraAnual}
+                      onChange={(e) => setTasaMoraAnual(e.target.value)}
+                      required
+                    />
+                    <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs">
+                      <p className="text-muted-foreground">
+                        Mora compuesta diaria. Ej: 1 = 1% diario sobre capital pendiente.
+                      </p>
+                      <p className="text-amber-700 font-medium">
+                        ≡ Mensual: <strong>{((parseFloat(tasaMoraAnual) || 0) * 30).toFixed(4)}%</strong>
+                      </p>
+                    </div>
+                  </div>
+                  {/* Cálculo informativo de tasa equivalente */}
+                  {montoPrincipal && interesFijoMensual && (
+                    <div className="mt-2 p-3 rounded-md bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-700 text-xs space-y-1">
+                      <p className="font-semibold text-purple-900 dark:text-purple-100">
+                        💡 Resumen de la modalidad
+                      </p>
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs">
+                        <div>
+                          <span className="text-muted-foreground">Capital prestado:</span>{' '}
+                          <strong className="text-purple-900 dark:text-purple-100">{formatearMoneda(parseFloat(montoPrincipal) || 0)}</strong>
+                        </div>
+                        <div>
+                          <span className="text-muted-foreground">Cuota mensual fija:</span>{' '}
+                          <strong className="text-purple-900 dark:text-purple-100">{formatearMoneda(parseFloat(interesFijoMensual) || 0)}</strong>
+                        </div>
+                        <div>
+                          <span className="text-muted-foreground">Tasa mensual equiv.:</span>{' '}
+                          <strong className="text-purple-900 dark:text-purple-100">
+                            {parseFloat(montoPrincipal) > 0
+                              ? ((parseFloat(interesFijoMensual) / parseFloat(montoPrincipal)) * 100).toFixed(4)
+                              : '0'}%
+                          </strong>
+                        </div>
+                        <div>
+                          <span className="text-muted-foreground">Tasa anual equiv.:</span>{' '}
+                          <strong className="text-purple-900 dark:text-purple-100">
+                            {parseFloat(montoPrincipal) > 0
+                              ? ((parseFloat(interesFijoMensual) / parseFloat(montoPrincipal)) * 12 * 100).toFixed(2)
+                              : '0'}%
+                          </strong>
+                        </div>
+                        <div>
+                          <span className="text-muted-foreground">Duración estimada:</span>{' '}
+                          <strong className="text-purple-900 dark:text-purple-100">Indefinida</strong>
+                        </div>
+                        <div>
+                          <span className="text-muted-foreground">Capital se abona:</span>{' '}
+                          <strong className="text-purple-900 dark:text-purple-100">Aparte</strong>
+                        </div>
+                      </div>
+                      <p className="text-[11px] text-purple-700 dark:text-purple-300 mt-2">
+                        El cliente paga la cuota mensual fija de intereses hasta que el capital quede en $0.
+                        El capital se abona aparte mediante pagos extraordinarios acordados con el gestor.
+                        El saldo real del préstamo = capital − abonos extraordinarios.
+                      </p>
+                    </div>
+                  )}
+                </>
+              ) : null}
               <div className="space-y-2">
                 <Label htmlFor="frecuencia">Frecuencia de Pagos *</Label>
                 <Select value={frecuencia} onValueChange={(v) => setFrecuencia(v as Frecuencia)}>
@@ -3226,40 +3371,88 @@ ${linkFirmaCodeudor}
                       Cuota Personalizada / Checa
                     </span>
                   )}
+                  {modalidad === 'INTERES_FIJO_SIN_CAPITAL' && (
+                    <span className="text-xs px-2 py-0.5 rounded bg-purple-100 text-purple-800">
+                      🎯 Interés Fijo sin Capital
+                    </span>
+                  )}
                 </h4>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
-                  <div>
-                    <div className="text-xs text-muted-foreground">N° Cuotas</div>
-                    <div className="font-bold">{calculo.numeroCuotas}</div>
-                  </div>
-                  <div>
-                    <div className="text-xs text-muted-foreground">Cuota Fija</div>
-                    <div className="font-bold">{formatearMoneda(calculo.montoCuota)}</div>
-                  </div>
-                  <div>
-                    <div className="text-xs text-muted-foreground">Total Interés</div>
-                    <div className="font-bold text-amber-700">{formatearMoneda(calculo.totalInteres)}</div>
-                  </div>
-                  <div>
-                    <div className="text-xs text-muted-foreground">Total a Pagar</div>
-                    <div className="font-bold text-primary">{formatearMoneda(calculo.totalPagar)}</div>
-                  </div>
-                </div>
-                {modalidad === 'CUOTA_PERSONALIZADA' && (
-                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs mt-2 pt-2 border-t border-primary/20">
-                    <div>
-                      <span className="text-muted-foreground">Tasa mensual:</span>{' '}
-                      <strong className="text-purple-700">{(calculo as any).tasaMensual}%</strong>
+                {modalidad === 'INTERES_FIJO_SIN_CAPITAL' ? (
+                  <>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
+                      <div>
+                        <div className="text-xs text-muted-foreground">Capital (deuda)</div>
+                        <div className="font-bold text-primary">{formatearMoneda(parseFloat(montoPrincipal) || 0)}</div>
+                      </div>
+                      <div>
+                        <div className="text-xs text-muted-foreground">Cuota mensual fija</div>
+                        <div className="font-bold text-purple-700">{formatearMoneda(calculo.montoCuota)}</div>
+                      </div>
+                      <div>
+                        <div className="text-xs text-muted-foreground">Tasa mensual equiv.</div>
+                        <div className="font-bold text-blue-700">
+                          {(calculo as any).tasaMensualCalculada?.toFixed(4)}%
+                        </div>
+                      </div>
+                      <div>
+                        <div className="text-xs text-muted-foreground">Tasa anual equiv.</div>
+                        <div className="font-bold text-blue-700">
+                          {(calculo as any).tasaAnualCalculada?.toFixed(2)}%
+                        </div>
+                      </div>
                     </div>
-                    <div>
-                      <span className="text-muted-foreground">Tasa anual:</span>{' '}
-                      <strong>{(calculo as any).tasaAnual}%</strong>
+                    <div className="mt-2 p-3 rounded-md bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-700">
+                      <p className="text-xs text-purple-900 dark:text-purple-100">
+                        <strong>💡 Funcionamiento:</strong> El cliente paga <strong>{formatearMoneda(calculo.montoCuota)}</strong> cada mes
+                        (solo intereses). El capital de <strong>{formatearMoneda(parseFloat(montoPrincipal) || 0)}</strong> se abona aparte mediante
+                        pagos extraordinarios. El saldo real del préstamo = capital − abonos extraordinarios.
+                        Los intereses se siguen pagando mes a mes hasta que el capital quede en $0.
+                      </p>
+                      {(calculo as any).proximaCuotaInteresFecha && (
+                        <p className="text-xs text-purple-700 dark:text-purple-300 mt-2">
+                          📅 Próxima cuota de interés:{' '}
+                          <strong>{formatearFecha((calculo as any).proximaCuotaInteresFecha)}</strong>
+                        </p>
+                      )}
                     </div>
-                    <div>
-                      <span className="text-muted-foreground">Interés por cuota:</span>{' '}
-                      <strong>{formatearMoneda(calculo.totalInteres / calculo.numeroCuotas)}</strong>
+                  </>
+                ) : (
+                  <>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
+                      <div>
+                        <div className="text-xs text-muted-foreground">N° Cuotas</div>
+                        <div className="font-bold">{calculo.numeroCuotas}</div>
+                      </div>
+                      <div>
+                        <div className="text-xs text-muted-foreground">Cuota Fija</div>
+                        <div className="font-bold">{formatearMoneda(calculo.montoCuota)}</div>
+                      </div>
+                      <div>
+                        <div className="text-xs text-muted-foreground">Total Interés</div>
+                        <div className="font-bold text-amber-700">{formatearMoneda(calculo.totalInteres)}</div>
+                      </div>
+                      <div>
+                        <div className="text-xs text-muted-foreground">Total a Pagar</div>
+                        <div className="font-bold text-primary">{formatearMoneda(calculo.totalPagar)}</div>
+                      </div>
                     </div>
-                  </div>
+                    {modalidad === 'CUOTA_PERSONALIZADA' && (
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs mt-2 pt-2 border-t border-primary/20">
+                        <div>
+                          <span className="text-muted-foreground">Tasa mensual:</span>{' '}
+                          <strong className="text-purple-700">{(calculo as any).tasaMensual}%</strong>
+                        </div>
+                        <div>
+                          <span className="text-muted-foreground">Tasa anual:</span>{' '}
+                          <strong>{(calculo as any).tasaAnual}%</strong>
+                        </div>
+                        <div>
+                          <span className="text-muted-foreground">Interés por cuota:</span>{' '}
+                          <strong>{formatearMoneda(calculo.totalInteres / calculo.numeroCuotas)}</strong>
+                        </div>
+                      </div>
+                    )}
+                  </>
                 )}
 
                 {/* Tasas aplicables (todas las modalidades) */}

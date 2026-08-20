@@ -412,6 +412,26 @@ model Prestamo {
   renovacionAnticipada             Boolean    @default(false)
   renovacionAnticipadaCosto        Float      @default(0)
 
+  // === MODALIDAD: INTERES_FIJO_SIN_CAPITAL ===
+  // Caso especial: el cliente paga SOLO intereses fijos mensuales mientras
+  // mantiene la deuda de capital. El capital se paga aparte en abonos
+  // extraordinarios acordados con el gestor.
+  //
+  // Ejemplo típico: deuda de $6.000.000, el cliente paga $370.000 mensuales
+  // que son 100% interés. Mientras tenga deuda de capital (por cualquier valor),
+  // paga esa cuota fija de intereses. El capital se abona aparte mediante
+  // pagos extraordinarios que reducen el saldo real pero NO cambian la cuota
+  // mensual (sigue siendo $370.000 hasta que se pague todo el capital).
+  //
+  // - interesFijoMensual: valor fijo COP que el cliente paga cada mes (ej: 370000)
+  // - capitalPagadoExtra: acumulado de capital pagado en abonos extraordinarios
+  // - interesPagadoAcumulado: acumulado de intereses pagados (las cuotas mensuales)
+  // - proximaCuotaInteresFecha: fecha del próximo vencimiento de la cuota de interés
+  interesFijoMensual              Float      @default(0)
+  capitalPagadoExtra               Float      @default(0)
+  interesPagadoAcumulado           Float      @default(0)
+  proximaCuotaInteresFecha         DateTime?
+
   notas               String?
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt

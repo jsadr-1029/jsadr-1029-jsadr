@@ -101,6 +101,11 @@ export async function POST(req: NextRequest) {
       // Campos de tasa fija mensual
       tasaMensualFija,
       numeroCuotasFija,
+      // === Modalidad INTERES_FIJO_SIN_CAPITAL ===
+      // Caso especial: el cliente paga SOLO intereses fijos mensuales mientras
+      // mantiene la deuda de capital. El capital se paga aparte en abonos
+      // extraordinarios acordados con el gestor.
+      interesFijoMensual,
       // Codeudor
       tieneCodeudor,
       codeudorId,
@@ -251,6 +256,7 @@ export async function POST(req: NextRequest) {
 
     const esCuotaPersonalizada = modalidad === 'CUOTA_PERSONALIZADA'
     const esTasaFija = modalidad === 'TASA_FIJA'
+    const esInteresFijoSinCapital = modalidad === 'INTERES_FIJO_SIN_CAPITAL'
 
     // Validaciones según modalidad
     if (esCuotaPersonalizada) {
@@ -264,6 +270,28 @@ export async function POST(req: NextRequest) {
       if (!clienteId || !montoPrincipal || !tasaMensualFija || !numeroCuotasFija || !frecuencia) {
         return NextResponse.json(
           { success: false, error: 'Faltan campos obligatorios para tasa fija mensual' },
+          { status: 400 }
+        )
+      }
+    } else if (esInteresFijoSinCapital) {
+      // === Validaciones para INTERES_FIJO_SIN_CAPITAL ===
+      // Requiere: cliente, monto (capital), e interesFijoMensual (la cuota mensual)
+      if (!clienteId || !montoPrincipal) {
+        return NextResponse.json(
+          { success: false, error: 'Faltan campos obligatorios: clienteId y montoPrincipal' },
+          { status: 400 }
+        )
+      }
+      const interesFijoNum = parseFloat(interesFijoMensual)
+      if (!interesFijoMensual || isNaN(interesFijoNum) || interesFijoNum <= 0) {
+        return NextResponse.json(
+          { success: false, error: 'El valor del interés fijo mensual es obligatorio para esta modalidad' },
+          { status: 400 }
+        )
+      }
+      if (frecuencia !== 'MENSUAL') {
+        return NextResponse.json(
+          { success: false, error: 'La modalidad INTERES_FIJO_SIN_CAPITAL solo soporta frecuencia MENSUAL' },
           { status: 400 }
         )
       }
@@ -501,8 +529,65 @@ export async function POST(req: NextRequest) {
       }
       cuotaFinal = calculo.montoCuota
       nCuotasFinal = calculo.numeroCuotas
+    } else if (esInteresFijoSinCapital) {
+      // === Modalidad INTERES_FIJO_SIN_CAPITAL ===
+      // El cliente paga SOLO intereses fijos mensuales mientras mantiene la
+      // deuda de capital. El capital se paga aparte en abonos extraordinarios.
+      //
+      // Para esta modalidad NO hay tabla de amortización tradicional ni
+      // plazo definido (el crédito se mantiene activo hasta que se pague
+      // todo el capital). El "saldo real" = montoPrincipal - capitalPagadoExtra.
+      //
+      // Para integrarlo con el modelo existente:
+      //   - numeroCuotas = 0 (no hay cuotas programadas; el cliente paga
+      //     mensualmente mientras tenga saldo, sin un número fijo)
+      //   - montoCuota = interesFijoMensual (la cuota mensual fija de interés)
+      //   - totalInteres = 0 (no se conoce el total porque depende de cuántos
+      //     meses tome pagar el capital)
+      //   - totalPagar = montoPrincipal (solo el capital; los intereses se
+      //     cobran mes a mes aparte)
+      //   - saldoCapital = montoPrincipal (se reduce con capitalPagadoExtra)
+      //   - saldoInteres = 0 (los intereses se generan mes a mes)
+      //   - saldoTotal = montoPrincipal - capitalPagadoExtra (saldo real)
+      //   - proximaCuotaInteresFecha = fechaBasePrestamo + 1 mes
+      //
+      // La tasa de interés anual se calcula como:
+      //   tasaAnual = (interesFijoMensual / montoPrincipal) * 12 * 100
+      // (es informativa — para reportes y estadísticas)
+      const monto = parseFloat(montoPrincipal)
+      const interesFijo = parseFloat(interesFijoMensual)
+      const tasaAnualCalculada = monto > 0 ? (interesFijo / monto) * 12 * 100 : 0
+
+      tasaAnualFinal = Math.round(tasaAnualCalculada * 100) / 100
+      tasaMoraFinal = parseFloat(tasaMoraAnual || tasaAnualFinal.toString())
+      plazoFinal = 0  // Sin plazo definido
+      cuotaFinal = interesFijo
+      nCuotasFinal = 0  // Sin cuotas programadas
+
+      // Fecha de la próxima cuota de interés (un mes después del préstamo)
+      const proximaCuota = new Date(fechaBaseParaAmortizacion.getTime())
+      proximaCuota.setMonth(proximaCuota.getMonth() + 1)
+
+      // Tabla vacía (no aplica amortización tradicional)
+      const tablaVacia: any[] = []
+
+      calculo = {
+        numeroCuotas: 0,
+        montoCuota: interesFijo,
+        totalInteres: 0,  // No se conoce — se paga mes a mes
+        totalPagar: monto,  // Solo capital; los intereses se cobran aparte
+        tasaAplicada: tasaAnualCalculada / 100 / 12,
+        tablaAmortizacion: tablaVacia,
+        fechaVencimiento: null,  // Sin vencimiento definido
+        fondoGarantia: 0,  // No aplica para esta modalidad
+        esInteresFijoSinCapital: true,
+        interesFijoMensual: interesFijo,
+        proximaCuotaInteresFecha: proximaCuota,
+        // Info adicional para mostrar en la UI
+        tasaAnualCalculada: Math.round(tasaAnualCalculada * 100) / 100,
+        tasaMensualCalculada: Math.round((tasaAnualCalculada / 12) * 100) / 100,
+      }
     } else {
-      // Modalidad francés
       tasaAnualFinal = parseFloat(tasaInteresAnual)
       tasaMoraFinal = parseFloat(tasaMoraAnual || tasaInteresAnual)
       plazoFinal = parseInt(plazoMeses)
@@ -648,8 +733,21 @@ export async function POST(req: NextRequest) {
           codeudorEmail: codeudorEmail || null,
           codeudorDireccion: codeudorDireccion || null,
           saldoCapital: parseFloat(montoPrincipal),
-          saldoInteres: calculo.totalInteres,
-          saldoTotal: calculo.totalPagar,
+          saldoInteres: esInteresFijoSinCapital ? 0 : calculo.totalInteres,
+          saldoTotal: esInteresFijoSinCapital ? parseFloat(montoPrincipal) : calculo.totalPagar,
+          // === Campos específicos de la modalidad INTERES_FIJO_SIN_CAPITAL ===
+          // El cliente paga SOLO intereses fijos mensuales mientras mantiene
+          // la deuda de capital. El capital se abona aparte.
+          interesFijoMensual: esInteresFijoSinCapital ? parseFloat(interesFijoMensual) : 0,
+          capitalPagadoExtra: 0,
+          interesPagadoAcumulado: 0,
+          proximaCuotaInteresFecha: esInteresFijoSinCapital
+            ? (calculo?.proximaCuotaInteresFecha || (() => {
+                const d = new Date(fechaBaseParaAmortizacion.getTime())
+                d.setMonth(d.getMonth() + 1)
+                return d
+              })())
+            : null,
           // === Fondo de Garantía (condicional) ===
           // Solo se marca como CARGADO si el gestor lo activó explícitamente.
           // Si incluirFondoGarantia=false, el préstamo NO lleva fondo de garantía
