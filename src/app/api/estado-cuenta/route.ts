@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import {
   calcularPrestamo,
+  calcularPrestamoTasaFijaMensual,
   calcularMoraCompuesta,
   calcularDiasMora, getTasaMoraAnual,
   calcularCargosInicialesPendientes,
@@ -90,14 +91,46 @@ export async function GET(req: NextRequest) {
     let totalCargosInicialesPendientes = 0  // nuevo (Task 12)
 
     const prestamosCalculados = cliente.prestamos.map((p) => {
-      const calculo = calcularPrestamo({
-        montoPrincipal: p.montoPrincipal,
-        tasaInteresAnual: p.tasaInteresAnual,
-        tasaMoraAnual: getTasaMoraAnual(p), // convertir diaria a anual
-        plazoMeses: p.plazoMeses,
-        frecuencia: p.frecuencia as any,
-        fechaDesembolso: p.fechaDesembolso || undefined,
-      })
+      // === Usar la función de cálculo correcta según la modalidad del préstamo ===
+      // - TASA_FIJA: calcularPrestamoTasaFijaMensual (interés fijo sobre capital inicial,
+      //   cuota constante, mismo capital y mismo interés en todas las cuotas)
+      // - FRANCES (default): calcularPrestamo (sistema francés, interés sobre saldo
+      //   decreciente, capital crece e interés decrece en cada cuota)
+      // - CUOTA_PERSONALIZADA: usar los valores guardados en el préstamo (no recalcular)
+      // - INTERES_FIJO_SIN_CAPITAL: no tiene tabla de amortización tradicional
+      let calculo: any
+      if (p.modalidadAmortizacion === 'TASA_FIJA') {
+        calculo = calcularPrestamoTasaFijaMensual({
+          montoPrincipal: p.montoPrincipal,
+          tasaMensualFija: p.tasaInteresMensual || p.tasaInteresAnual / 12,
+          numeroCuotas: p.numeroCuotas,
+          frecuencia: p.frecuencia as any,
+          fechaDesembolso: p.fechaDesembolso || undefined,
+        })
+      } else if (p.modalidadAmortizacion === 'INTERES_FIJO_SIN_CAPITAL') {
+        // Modalidad especial: no hay tabla de amortización tradicional.
+        // El cliente paga intereses fijos mensuales mientras mantenga deuda de capital.
+        // Mostramos una "tabla" informativa con el saldo real y la próxima cuota.
+        calculo = {
+          numeroCuotas: 0,
+          montoCuota: p.interesFijoMensual || 0,
+          totalInteres: 0,
+          totalPagar: p.montoPrincipal,
+          tasaAplicada: 0,
+          tablaAmortizacion: [],
+          fechaVencimiento: null,
+          fondoGarantia: 0,
+        }
+      } else {
+        calculo = calcularPrestamo({
+          montoPrincipal: p.montoPrincipal,
+          tasaInteresAnual: p.tasaInteresAnual,
+          tasaMoraAnual: getTasaMoraAnual(p), // convertir diaria a anual
+          plazoMeses: p.plazoMeses,
+          frecuencia: p.frecuencia as any,
+          fechaDesembolso: p.fechaDesembolso || undefined,
+        })
+      }
 
       // === FIX Task 12: calcular cargos iniciales pendientes de cobrar ===
       // Estos cargos (pagaré + carta, tarifa plataforma, flexibilidad financiera,
