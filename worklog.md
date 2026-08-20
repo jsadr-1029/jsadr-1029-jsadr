@@ -1512,3 +1512,100 @@ Stage Summary:
 - ✅ Cuota mensual de intereses ($370.000) NO se modificó.
 - ✅ Pago registrado con numeroCuota=0, audit log completo, movimiento de caja.
 - ✅ Producción (jsadr.com.co) desplegado y funcionando.
+
+---
+Task ID: fix-prestamo-nv-1193239937
+Agent: main (Super Z)
+Task: Revisar y corregir el crédito NV-CC-1193239937-20260819-01 — los valores en el estado de cuenta salían diferentes al acuerdo (300.000 al 20% mensual, 4 cuotas, 120.000 interés + 19.900 pagare)
+
+Work Log:
+- Diagnóstico del préstamo NV-CC-1193239937-20260819-01:
+  * Cliente: Naschla Vergara (cédula 1193239937).
+  * Modalidad: TASA_FIJA.
+  * Valores guardados (INCORRECTOS):
+    - montoPrincipal: 300000 ✓
+    - totalInteres: 120000 ✓
+    - montoCuota: 105000 ✓ (pero el pago cuota 1 estaba mal calculado en 94.641,24)
+    - totalPagar: 420000 ❌ (debería ser 439900 = 420000 + 19900)
+    - saldoTotal: 420000 ❌ (debería ser 439900)
+    - Pago cuota #1: montoCapital=64.641,24, montoInteres=30.000, montoTotal=94.641,24 ❌
+      (debería ser: capital=75.000, interés=30.000, total=124.900 con pagare)
+
+- Cálculo de valores correctos según el acuerdo:
+  * Capital: $300.000
+  * Interés total: $120.000 (20% mensual × 2 meses = 20% × 2 = 40% del capital = 120.000)
+  * Pagare + Carta: $19.900 (cargo único en cuota #1)
+  * Total a pagar: $439.900 (300.000 + 120.000 + 19.900)
+  * Cuota base: $105.000 (420.000 / 4)
+  * Cuota #1 con pagare: $124.900 (105.000 + 19.900)
+  * Cuotas #2, #3, #4: $105.000 cada una
+
+- Fix 1: Actualizar préstamo en BD con valores correctos:
+  * montoPrincipal: 300000 (sin cambios)
+  * totalInteres: 120000 (sin cambios)
+  * totalPagar: 439900 (corregido de 420000)
+  * montoCuota: 105000 (sin cambios)
+  * saldoCapital: 300000 (sin cambios)
+  * saldoInteres: 120000 (sin cambios)
+  * saldoTotal: 439900 (corregido de 420000)
+  * cobroPagareCarta: true
+  * valorPagareCarta: 19900 (sin cambios)
+  * Pago cuota #1 actualizado: montoCapital=75000, montoInteres=30000, montoTotal=124900
+
+- Fix 2: Estado de cuenta usaba calcularPrestamo (Sistema Francés) en lugar de
+  calcularPrestamoTasaFijaMensual para préstamos TASA_FIJA. Eso causaba que
+  la distribución de capital/interés por cuota fuera incorrecta (capital
+  creciente e interés decreciente, en lugar de constante).
+  * Actualizado src/app/api/estado-cuenta/route.ts para usar la función
+    correcta según modalidadAmortizacion:
+    - TASA_FIJA → calcularPrestamoTasaFijaMensual
+    - INTERES_FIJO_SIN_CAPITAL → tabla vacía
+    - FRANCES (default) → calcularPrestamo
+  * Resultado: todas las cuotas ahora muestran capital=$75.000 e interés=$30.000.
+
+- Fix 3: Doble cuenta de cargos iniciales en el saldo mostrado:
+  * El template sumaba p.saldoTotal + cargosInicialesPendientes, pero
+    p.saldoTotal ya incluía los cargos (439.900 = 420.000 + 19.900).
+  * Resultado: saldo mostraba $459.800 (doble cuenta de los $19.900).
+  * Fix: detectar si saldoTotal ya incluye los cargos comparando con el
+    saldo teórico esperado. Si lo incluye, no sumar de nuevo.
+  * Flag saldoYaIncluyeCargos pasado al template para que muestre el saldo
+    correcto sin doble cuenta.
+
+- Validación en producción (jsadr.com.co) con agent-browser:
+  * Login como admin Js1214731649 ✓
+  * Préstamos → buscar "1193239937" → encuentra el préstamo ✓
+  * Click en "Ver detalle" → click en "Estado de Cuenta" ✓
+  * Estado de cuenta muestra:
+    - TOTAL PRESTADO: $300.000 ✓
+    - TOTAL PAGADO: $0 ✓
+    - SALDO PENDIENTE: $439.900 ✓ (sin doble cuenta)
+    - MORA ACUMULADA: $0 ✓
+    - Cargos iniciales pendientes: $19.900 ✓
+    - Cuota: $105.000 ✓
+    - Cuotas: 0/4 (quincenal) ✓
+    - Total a pagar: $439.900 (incluye $19.900 cargos iniciales) ✓
+    - Saldo: $439.900 ✓
+    - Interés anual: 240% ✓
+    - Mora diaria: 1% ✓
+  * Tabla de amortización:
+    - Cuota 1: capital $75.000 + interés $30.000 = $124.900 (incluye $19.900 pagare) ✓
+    - Cuota 2: capital $75.000 + interés $30.000 = $105.000 ✓
+    - Cuota 3: capital $75.000 + interés $30.000 = $105.000 ✓
+    - Cuota 4: capital $75.000 + interés $30.000 = $105.000 ✓
+  * Total interés: $120.000 ✓
+
+- Sincronización:
+  * Commit 6fc0a07 (fix función de cálculo) + 0e115fc (fix doble cuenta) push a GitHub.
+  * HEAD = origin/main = 0e115fc.
+  * GitHub Actions auto-deploy disparado.
+  * Producción (jsadr.com.co): HTTP 200 respondiendo correctamente.
+
+Stage Summary:
+- ✅ Préstamo NV-CC-1193239937-20260819-01 corregido con valores exactos:
+  Capital $300.000 + Interés $120.000 + Pagare/Carta $19.900 = Total $439.900.
+- ✅ Cuota #1: $124.900 (incluye pagare+carta $19.900).
+- ✅ Cuotas #2-4: $105.000 cada una (capital $75.000 + interés $30.000).
+- ✅ Estado de cuenta muestra los valores correctos sin doble cuenta.
+- ✅ Función de cálculo correcta según modalidad (TASA_FIJA usa calcularPrestamoTasaFijaMensual).
+- ✅ Producción (jsadr.com.co) desplegado y verificado.
