@@ -679,7 +679,14 @@ async function generarPagareBlancoHTML(prestamo: any, firmaElectronica?: any, fi
   const selloDigital = generarSelloDigital(prestamo, 'pagare-blanco', codigoVerificacion)
   const qrCode = await generarQRCode(codigoVerificacion, req)
   const seccionVerificacion = generarSeccionVerificacion(codigoVerificacion, selloDigital, qrCode, 'pagare-blanco')
-  const fecha = new Date()
+  // === FIX (2026-08-20): Usar la fecha del préstamo (fecha de firma electrónica real) ===
+  // Antes se usaba `new Date()` que tomaba la fecha actual del servidor, causando
+  // discrepancia entre la fecha del pagaré/carta y la fecha de la firma electrónica.
+  // Ahora se usa prestamo.fechaDesembolso (fecha real de la firma) o en su defecto
+  // prestamo.fechaSolicitud (fecha de creación del préstamo).
+  // Si el préstamo tiene firmaElectronica con fechaFirmaCompleta, usar esa (la más precisa).
+  const fechaFirmaElectronica = firmaElectronica?.fechaFirmaCompleta || firmaElectronica?.createdAt
+  const fecha = new Date(fechaFirmaElectronica || prestamo.fechaDesembolso || prestamo.fechaSolicitud || new Date())
   const dia = fecha.getDate()
   const mes = fecha.toLocaleString('es-CO', { month: 'long' })
   const anio = fecha.getFullYear()
@@ -777,7 +784,13 @@ async function generarPagareDiligenciadoHTML(prestamo: any, calculo: any, firmaE
   const selloDigital = generarSelloDigital(prestamo, 'pagare-diligenciado', codigoVerificacion)
   const qrCode = await generarQRCode(codigoVerificacion, req)
   const seccionVerificacion = generarSeccionVerificacion(codigoVerificacion, selloDigital, qrCode, 'pagare-diligenciado')
-  const fecha = new Date(prestamo.fechaDesembolso || prestamo.fechaSolicitud)
+  // === FIX (2026-08-20): Usar la fecha de la firma electrónica real ===
+  // Antes se usaba `new Date(prestamo.fechaDesembolso || prestamo.fechaSolicitud)` que
+  // tomaba la fecha de desembolso del préstamo, pero esa fecha puede haber sido
+  // actualizada posteriormente (ej: al activar el préstamo). La fecha correcta es
+  // la fecha de la firma electrónica (cuando el cliente realmente firmó).
+  const fechaFirmaElectronicaPagare = firmaElectronica?.fechaFirmaCompleta || firmaElectronica?.createdAt
+  const fecha = new Date(fechaFirmaElectronicaPagare || prestamo.fechaDesembolso || prestamo.fechaSolicitud || new Date())
   const dia = fecha.getDate()
   const mes = fecha.toLocaleString('es-CO', { month: 'long' })
   const anio = fecha.getFullYear()
@@ -888,7 +901,13 @@ async function generarCartaInstruccionesHTML(prestamo: any, firmaElectronica?: a
   const qrCode = await generarQRCode(codigoVerificacion, req)
   const seccionVerificacion = generarSeccionVerificacion(codigoVerificacion, selloDigital, qrCode, 'carta')
   const cliente = prestamo.cliente
-  const fecha = new Date()
+  // === FIX (2026-08-20): Usar la fecha de la firma electrónica real ===
+  // Antes se usaba `new Date()` que tomaba la fecha actual del servidor, causando
+  // discrepancia con la fecha de la firma electrónica. Ahora se usa la fecha de
+  // la firma electrónica (cuando el cliente realmente firmó), o en su defecto
+  // la fecha de desembolso/solicitud del préstamo.
+  const fechaFirmaElectronicaCarta = firmaElectronica?.fechaFirmaCompleta || firmaElectronica?.createdAt
+  const fecha = new Date(fechaFirmaElectronicaCarta || prestamo.fechaDesembolso || prestamo.fechaSolicitud || new Date())
   const dia = fecha.getDate()
   const mes = fecha.toLocaleString('es-CO', { month: 'long' })
   const anio = fecha.getFullYear()
@@ -1023,15 +1042,23 @@ async function generarDocumentoCombinadoHTML(prestamo: any, calculo: any, firmaE
   // IMPORTANTE: No se calculan ni se muestran tasas, saldos ni valores monetarios del préstamo.
   // Esos campos quedan en blanco (líneas) para diligenciamiento MANUAL del acreedor, conforme
   // al modelo de pagaré en blanco + carta de instrucciones del abogado.
-  const fecha = new Date(prestamo.fechaDesembolso || prestamo.fechaSolicitud)
+  // === FIX (2026-08-20): Usar la fecha de la firma electrónica real ===
+  // Antes se usaba `new Date(prestamo.fechaDesembolso || prestamo.fechaSolicitud)` para el pagaré
+  // y `new Date()` para la carta de instrucciones (línea "Para constancia se firma a los...").
+  // Eso causaba discrepancia: el pagaré usaba la fecha de desembolso, pero la carta usaba la
+  // fecha actual del servidor. Ahora ambas usan la fecha de la firma electrónica (la fecha real
+  // en que el cliente firmó), que es la fuente de verdad.
+  const fechaFirmaElectronicaCombinada = firmaElectronica?.fechaFirmaCompleta || firmaElectronica?.createdAt
+  const fecha = new Date(fechaFirmaElectronicaCombinada || prestamo.fechaDesembolso || prestamo.fechaSolicitud || new Date())
   const dia = fecha.getDate()
   const mes = fecha.toLocaleString('es-CO', { month: 'long' })
   const anio = fecha.getFullYear()
   const cliente = prestamo.cliente
-  const hoy = new Date()
-  const diaHoy = hoy.getDate()
-  const mesHoy = hoy.toLocaleString('es-CO', { month: 'long' })
-  const anioHoy = hoy.getFullYear()
+  // diaHoy/mesHoy/anioHoy se usan en la carta de instrucciones "Para constancia se firma a los..."
+  // Deben usar la misma fecha que el pagaré (fecha de firma electrónica) para que coincidan.
+  const diaHoy = dia
+  const mesHoy = mes
+  const anioHoy = anio
 
   const domicilioDeudor = [
     cliente.direccion,
