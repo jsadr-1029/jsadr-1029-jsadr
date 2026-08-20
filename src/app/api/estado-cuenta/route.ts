@@ -174,7 +174,32 @@ export async function GET(req: NextRequest) {
       totalPrestado += p.montoPrincipal
       totalPagado += p.montoPagado
       // === FIX Task 12: sumar cargos iniciales pendientes al saldo mostrado ===
-      totalSaldo += p.saldoTotal + cargosInicialesPendientes
+      // IMPORTANTE: Para evitar doble contabilidad, solo sumamos los cargos
+      // iniciales pendientes SI el saldoTotal del préstamo NO los incluye ya.
+      // El saldoTotal del préstamo incluye los cargos cuando:
+      //   - El préstamo fue creado con cargos y el saldo se calculó como
+      //     totalPagar (que incluye los cargos) - montoPagado.
+      // El saldoTotal NO incluye los cargos cuando:
+      //   - El préstamo es legacy (creado antes del fix Task 12).
+      // Para distinguir, comparamos: si (saldoTotal + cargosInicialesPendientes)
+      // excede significativamente el totalPagar teórico (capital + interés + cargos),
+      // es probable que ya estén incluidos.
+      //
+      // SOLUCIÓN SIMPLE: usar el máximo entre saldoTotal y (saldoTotal sin cargos + cargos),
+      // pero evitando doble cuenta. Lo más correcto es:
+      //   - Si saldoTotal ya incluye los cargos (caso nuevo): NO sumarlos de nuevo.
+      //   - Si saldoTotal no los incluye (caso legacy): sumarlos.
+      //
+      // Heurística: si saldoTotal >= montoPrincipal + totalInteres + cargosInicialesPendientes - montoPagado - 1,
+      // entonces saldoTotal ya incluye los cargos.
+      const saldoSinCargos = p.montoPrincipal + p.totalInteres - p.montoPagado
+      const saldoConCargosEsperado = saldoSinCargos + cargosInicialesPendientes
+      // Si el saldoTotal guardado ya es >= al esperado con cargos, no sumar de nuevo
+      const saldoYaIncluyeCargos = p.saldoTotal >= saldoConCargosEsperado - 1
+      const saldoParaMostrar = saldoYaIncluyeCargos
+        ? p.saldoTotal
+        : p.saldoTotal + cargosInicialesPendientes
+      totalSaldo += saldoParaMostrar
       totalMora += p.montoMora
       totalCargosInicialesPendientes += cargosInicialesPendientes
 
@@ -196,6 +221,10 @@ export async function GET(req: NextRequest) {
         // === FIX Task 12: información de cargos iniciales para el template ===
         cargosInicialesInfo: cargosInicialesInfoAjustada,
         cargosInicialesPendientes,
+        // === FIX (2026-08-20): flag para evitar doble cuenta de cargos iniciales ===
+        // Si saldoTotal ya incluye los cargos (préstamos nuevos), el template NO debe
+        // sumarlos de nuevo. Si no los incluye (préstamos legacy), el template los suma.
+        saldoYaIncluyeCargos,
         cuota1Aplicada,
       }
     })
@@ -558,8 +587,8 @@ function generarEstadoCuentaHTML({
           <div><strong>Monto:</strong> ${formatearMoneda(p.montoPrincipal)}</div>
           <div><strong>Cuota:</strong> ${formatearMoneda(p.montoCuota)}</div>
           <div><strong>Cuotas:</strong> ${p.cuotasPagadas}/${p.numeroCuotas} (${p.frecuencia.toLowerCase()})</div>
-          <div><strong>Total a pagar:</strong> ${formatearMoneda(p.totalPagar + (p.cargosInicialesPendientes || 0))}${p.cargosInicialesPendientes > 0 ? `<br/><span style="font-size:8px;color:#6d28d9;">incluye ${formatearMoneda(p.cargosInicialesPendientes)} cargos iniciales</span>` : ''}</div>
-          <div><strong>Saldo:</strong> ${formatearMoneda(p.saldoTotal + (p.cargosInicialesPendientes || 0))}${p.cargosInicialesPendientes > 0 ? `<br/><span style="font-size:8px;color:#6d28d9;">+${formatearMoneda(p.cargosInicialesPendientes)} cargos pendientes</span>` : ''}</div>
+          <div><strong>Total a pagar:</strong> ${formatearMoneda(p.saldoYaIncluyeCargos ? p.totalPagar : p.totalPagar + (p.cargosInicialesPendientes || 0))}${p.cargosInicialesPendientes > 0 ? `<br/><span style="font-size:8px;color:#6d28d9;">incluye ${formatearMoneda(p.cargosInicialesPendientes)} cargos iniciales</span>` : ''}</div>
+          <div><strong>Saldo:</strong> ${formatearMoneda(p.saldoYaIncluyeCargos ? p.saldoTotal : p.saldoTotal + (p.cargosInicialesPendientes || 0))}${(!p.saldoYaIncluyeCargos && p.cargosInicialesPendientes > 0) ? `<br/><span style="font-size:8px;color:#6d28d9;">+${formatearMoneda(p.cargosInicialesPendientes)} cargos pendientes</span>` : ''}</div>
           <div><strong>Interés anual:</strong> ${p.tasaInteresAnual}%</div>
           <div><strong>Mora diaria:</strong> ${p.tasaMoraDiaria}%</div>
           <div><strong>Desembolso:</strong> ${p.fechaDesembolso ? formatearFecha(p.fechaDesembolso) : '—'}</div>
