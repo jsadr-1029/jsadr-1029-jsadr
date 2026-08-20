@@ -1434,3 +1434,81 @@ Stage Summary:
 - ✅ Modalidad visible en la lista de préstamos en producción.
 - ✅ Tasa anual equivalente (74%) y tasa mensual equivalente (6.17%) calculadas y mostradas.
 - ✅ Producción (jsadr.com.co) desplegado y funcionando.
+
+---
+Task ID: feat-abono-al-capital-interes-fijo
+Agent: main (Super Z)
+Task: Añadir opción "Abonar al capital" al aplicar pagos para préstamos INTERES_FIJO_SIN_CAPITAL (LM-CC-1234567890-20260820-01)
+
+Work Log:
+- Backend (src/app/api/pagos/route.ts):
+  * Nueva acción 'abonar_capital' en el handler POST.
+  * Función abonarCapitalExtraordinario():
+    - Valida que el préstamo tenga modalidad INTERES_FIJO_SIN_CAPITAL.
+    - Valida monto > 0 y no exceda el saldo real (montoPrincipal - capitalPagadoExtra).
+    - Crea Pago con numeroCuota=0, montoCapital=100% del abono, montoInteres=0, montoMora=0.
+    - Actualiza préstamo: capitalPagadoExtra += montoAbono, saldoCapital y saldoTotal = nuevo saldo real.
+    - Si saldo queda en 0, cancela el préstamo (estado=CANCELADO).
+    - Registra movimiento de caja en CAJA-CAPITAL o CAJA-INGRESOS-VARIOS.
+    - Audit log con accion=ABONO_CAPITAL_EXTRAORDINARIO.
+  * Respuesta incluye nuevoSaldoReal, capitalPagadoExtraAcumulado, prestamoSaldado.
+- Backend GET (src/app/api/pagos/aplicar/route.ts):
+  * Respuesta incluye campos nuevos para la UI:
+    - modalidadAmortizacion
+    - interesFijoMensual
+    - capitalPagadoExtra
+    - saldoReal (montoPrincipal - capitalPagadoExtra)
+    - proximaCuotaInteresFecha
+- Frontend (src/components/views/PagosView.tsx):
+  * Interface PrestamoAplicar ampliada con montoPrincipal, modalidadAmortizacion, interesFijoMensual, capitalPagadoExtra, saldoReal, proximaCuotaInteresFecha.
+  * Estado nuevo: abonarAlCapital (bool), montoAbonoCapital (string).
+  * Modal 'Aplicar Pago' muestra la opción abonar al capital cuando el préstamo tiene modalidad INTERES_FIJO_SIN_CAPITAL:
+    - Casilla morada '💰 Abonar al capital (pago extraordinario)'.
+    - Al marcarla: input para valor del abono, info de saldo real actual y capital abonado acumulado, cálculo del nuevo saldo en tiempo real, mensaje de préstamo saldado si aplica.
+    - Si no se marca: el pago se aplica normalmente a la cuota mensual de intereses (flujo estándar).
+  * confirmarAplicarPago maneja el caso abonarAlCapital:
+    - Valida monto > 0 y <= saldo real.
+    - Envía body con accion='abonar_capital' al backend.
+    - Toast con mensaje de éxito (incluye nuevo saldo real).
+    - Limpia el estado y recarga la lista de pagos.
+  * Botón "Aplicar Pago" verifica montoAbonoCapital cuando abonarAlCapital=true (fix para que el botón no quede deshabilitado).
+- Validación:
+  * TypeScript: ✓ sin errores.
+  * Next.js build: ✓ Compiled successfully in 39.0s, 225/225 static pages.
+  * Pruebas con agent-browser (iPhone 14 emulation) en producción:
+    - Login como admin Js1214731649 → /login → redirect a / ✓
+    - Pagos → Aplicar Pago → buscar "1234567890" → encuentra el préstamo LM-CC-1234567890-20260820-01 ✓
+    - Seleccionar préstamo → muestra casilla "💰 Abonar al capital (pago extraordinario)" ✓
+    - Marcar casilla → aparece input para valor del abono con placeholder "Ej: 500000" ✓
+    - Llenar "500000" → botón "Aplicar Pago" se habilita ✓
+    - Click en "Aplicar Pago" → pago aplicado exitosamente ✓
+  * Verificación en BD (Neon):
+    - Préstamo después del abono:
+      montoPrincipal: $6.000.000 (sin cambios)
+      interesFijoMensual: $370.000 (sin cambios ✓)
+      capitalPagadoExtra: $500.000 (antes $0)
+      saldoCapital: $5.500.000 (antes $6.000.000)
+      saldoTotal: $5.500.000 (antes $6.000.000)
+      montoPagado: $500.000 (antes $0)
+      estado: ACTIVO (sin cambios)
+    - Pago registrado:
+      codigo: PAY-MT0YLWFK-6PX2
+      numeroCuota: 0 (abono extraordinario)
+      montoCapital: $500.000
+      montoInteres: 0
+      montoMora: 0
+      estado: APLICADO
+      notas: "ABONO_EXTRAORDINARIO_CAPITAL: $500.000. Saldo real anterior: $6.000.000. Nuevo saldo real: $5.500.000. Modalidad: INTERES_FIJO_SIN_CAPITAL. La cuota mensual de intereses ($370.000) NO se modifica."
+- Sincronización:
+  * Commit eb39e59 (feature) + 549da4d (fix botón disabled) push a GitHub.
+  * HEAD = origin/main = 549da4d.
+  * GitHub Actions auto-deploy disparado.
+  * Producción (jsadr.com.co): HTTP 200 respondiendo correctamente.
+
+Stage Summary:
+- ✅ Opción "Abonar al capital" visible en el modal Aplicar Pago para préstamos INTERES_FIJO_SIN_CAPITAL.
+- ✅ Abono de $500.000 aplicado exitosamente al préstamo LM-CC-1234567890-20260820-01.
+- ✅ Saldo real actualizado de $6.000.000 a $5.500.000.
+- ✅ Cuota mensual de intereses ($370.000) NO se modificó.
+- ✅ Pago registrado con numeroCuota=0, audit log completo, movimiento de caja.
+- ✅ Producción (jsadr.com.co) desplegado y funcionando.
