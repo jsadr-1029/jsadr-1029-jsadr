@@ -1329,3 +1329,108 @@ Stage Summary:
 - ✅ En éxito, sesión establecida y redirección al portal del cliente.
 - ✅ Flujo end-to-end verificado en producción (jsadr.com.co) con cliente de prueba.
 - ✅ Login subsecuente con la nueva clave funciona sin requerir cambio (debeCambiarClave=false).
+
+---
+Task ID: feat-modalidad-interes-fijo-sin-capital
+Agent: main (Super Z)
+Task: Eliminar cliente de prueba 99999999 + crear préstamo especial para cliente 1234567890 con modalidad 'Interés Fijo sin Capital'
+
+Work Log:
+- Eliminación del cliente de prueba 99999999:
+  * Cliente creado para verificar el fix del login de clientes nuevos.
+  * Eliminado de la BD Neon con DELETE FROM "Cliente" WHERE cedula = '99999999'.
+  * Verificado: ya no existe en la BD.
+
+- Verificación del cliente 1234567890:
+  * Existe en la BD: 'la murga', teléfono 3217020054, activo.
+
+- Diseño de la nueva modalidad 'INTERES_FIJO_SIN_CAPITAL':
+  * El cliente paga SOLO intereses fijos mensuales mientras mantiene la deuda de capital.
+  * El capital se abona aparte mediante pagos extraordinarios acordados con el gestor.
+  * Saldo real = montoPrincipal - capitalPagadoExtra.
+  * Los intereses se generan mes a mes hasta que el capital quede en $0.
+
+- Schema Prisma (Prestamo model):
+  * Añadidos 4 campos nuevos:
+    - interesFijoMensual Float @default(0): cuota mensual fija COP.
+    - capitalPagadoExtra Float @default(0): acumulado de capital abonado.
+    - interesPagadoAcumulado Float @default(0): acumulado de intereses pagados.
+    - proximaCuotaInteresFecha DateTime?: próxima fecha de cuota de interés.
+
+- Migración aplicada a Neon:
+  * ALTER TABLE "Prestamo" ADD COLUMN interesFijoMensual, capitalPagadoExtra,
+    interesPagadoAcumulado, proximaCuotaInteresFecha.
+  * Las 4 columnas verificadas en producción.
+
+- Backend (src/app/api/prestamos/route.ts):
+  * Extracción del campo interesFijoMensual del body.
+  * Constante esInteresFijoSinCapital = modalidad === 'INTERES_FIJO_SIN_CAPITAL'.
+  * Validaciones específicas para esta modalidad:
+    - Requiere clienteId, montoPrincipal, interesFijoMensual > 0.
+    - Frecuencia forzada a MENSUAL.
+  * Cálculo:
+    - tasaAnual = (interesFijoMensual / montoPrincipal) * 12 * 100
+    - plazo = 0, numeroCuotas = 0 (sin cuotas programadas)
+    - montoCuota = interesFijoMensual
+    - totalInteres = 0 (no se conoce)
+    - totalPagar = montoPrincipal (solo capital)
+    - saldoCapital = montoPrincipal
+    - saldoTotal = montoPrincipal (saldo real inicial)
+    - proximaCuotaInteresFecha = fechaPrestamo + 1 mes
+  * Prestamo.create incluye los 4 campos nuevos.
+
+- Frontend (src/components/views/PrestamosView.tsx):
+  * Estado nuevo: interesFijoMensual (default 370000).
+  * Selector de modalidad: opción '🎯 Interés Fijo sin Capital'.
+  * Alerta morada explicativa.
+  * Inputs: Interés Fijo Mensual (COP) + Tasa Moratoria Diaria (%).
+  * Resumen con cálculo de tasas equivalentes.
+  * useMemo calculo: rama nueva para esta modalidad.
+  * Body enviado al backend con la nueva modalidad.
+
+- Librería finanzas (src/lib/finanzas.ts):
+  * Interface ResultadoCalculo ampliada:
+    - fechaVencimiento ahora es Date | null.
+    - Campos opcionales: esInteresFijoSinCapital, interesFijoMensual,
+      proximaCuotaInteresFecha, tasaAnualCalculada, tasaMensualCalculada.
+
+- Creación del préstamo especial para cliente 1234567890:
+  * Capital: $6.000.000 COP.
+  * Interés fijo mensual: $370.000 COP.
+  * Tasa anual equivalente: 74% (informativa).
+  * Tasa mensual equivalente: 6.17%.
+  * Frecuencia: MENSUAL.
+  * Estado: ACTIVO (directamente, sin T&C).
+  * Próxima cuota de interés: 2026-09-20.
+  * Código: LM-CC-1234567890-20260820-01.
+  * Saldo inicial: $6.000.000 (saldo real).
+
+- Validación:
+  * TypeScript: ✓ sin errores.
+  * Next.js build: ✓ Compiled successfully in 35.1s, 225/225 static pages.
+  * Pruebas con agent-browser (iPhone 14 emulation) en producción:
+    - Login como admin Js1214731649 → /login → redirect a / ✓
+    - Lista de préstamos muestra el préstamo nuevo con:
+      * Código: LM-CC-1234567890-20260820-01 ✓
+      * Cliente: la murga ✓
+      * Monto Principal: $6.000.000 ✓
+      * Tasa anual: 74% ✓
+      * Cuota: $370.000 ✓
+      * N° Cuotas: 0 (sin cuotas programadas) ✓
+      * Saldo: $6.000.000 (saldo real) ✓
+      * Estado: Activo ✓
+- Sincronización:
+  * Commit ff77fdb push a GitHub.
+  * HEAD = origin/main = ff77fdb.
+  * GitHub Actions auto-deploy disparado.
+  * Producción (jsadr.com.co): HTTP 200 respondiendo correctamente.
+
+Stage Summary:
+- ✅ Cliente de prueba 99999999 eliminado.
+- ✅ Nueva modalidad 'INTERES_FIJO_SIN_CAPITAL' creada en el sistema.
+- ✅ Préstamo de $6.000.000 creado para cliente 1234567890 (la murga) con cuota mensual fija de $370.000 (solo intereses).
+- ✅ Saldo real del préstamo = $6.000.000 - capitalPagadoExtra (que empieza en 0).
+- ✅ Próxima cuota de interés: 2026-09-20.
+- ✅ Modalidad visible en la lista de préstamos en producción.
+- ✅ Tasa anual equivalente (74%) y tasa mensual equivalente (6.17%) calculadas y mostradas.
+- ✅ Producción (jsadr.com.co) desplegado y funcionando.
