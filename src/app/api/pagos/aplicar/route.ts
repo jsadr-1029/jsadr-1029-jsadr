@@ -80,6 +80,13 @@ export async function GET(req: NextRequest) {
       // (Sistema Francés) en lugar de capital e interés constantes (Tasa Fija).
       // El monto total NO coincidía con el estado de cuenta (que sí usaba la función
       // correcta). Ahora ambas vistas usan la misma función según la modalidad.
+      //
+      // === FIX (2026-08-21): Usar fechaInicioAmortizacion si está disponible ===
+      // Si el admin definió fechaPrimerCuota al crear el préstamo, la fecha base
+      // para la amortización NO es fechaDesembolso sino fechaPrimerCuota - 1 periodo.
+      // Sin esto, las fechas de vencimiento de las cuotas no coincidirían con
+      // fechaPrimerCuota (el sistema contaría desde fechaDesembolso).
+      const fechaBaseAmortizacion = p.fechaInicioAmortizacion || p.fechaDesembolso || p.fechaSolicitud
       let calculo: any
       if (p.modalidadAmortizacion === 'TASA_FIJA') {
         calculo = calcularPrestamoTasaFijaMensual({
@@ -87,13 +94,10 @@ export async function GET(req: NextRequest) {
           tasaMensualFija: p.tasaInteresMensual || p.tasaInteresAnual / 12,
           numeroCuotas: p.numeroCuotas,
           frecuencia: p.frecuencia as any,
-          fechaDesembolso: p.fechaDesembolso || p.fechaSolicitud,
+          fechaDesembolso: fechaBaseAmortizacion,
         })
       } else if (p.modalidadAmortizacion === 'INTERES_FIJO_SIN_CAPITAL') {
-        // Modalidad especial: no hay tabla de amortización tradicional.
-        // El cliente paga intereses fijos mensuales mientras mantenga deuda de capital.
-        // Construir una "tabla" con una sola entrada para la próxima cuota de interés.
-        const fechaBase = p.fechaDesembolso || p.fechaSolicitud
+        const fechaBase = fechaBaseAmortizacion
         const fechaVenc = new Date(fechaBase)
         fechaVenc.setMonth(fechaVenc.getMonth() + proximaCuota)
         calculo = {
@@ -116,14 +120,13 @@ export async function GET(req: NextRequest) {
           fondoGarantia: 0,
         }
       } else {
-        // Modalidad FRANCÉS (default) — Sistema francés tradicional
         calculo = calcularPrestamo({
           montoPrincipal: p.montoPrincipal,
           tasaInteresAnual: p.tasaInteresAnual,
           tasaMoraAnual: getTasaMoraAnual(p),
           plazoMeses: p.plazoMeses,
           frecuencia: p.frecuencia as any,
-          fechaDesembolso: p.fechaDesembolso || p.fechaSolicitud,
+          fechaDesembolso: fechaBaseAmortizacion,
         })
       }
 

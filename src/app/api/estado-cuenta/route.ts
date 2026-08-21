@@ -105,7 +105,8 @@ export async function GET(req: NextRequest) {
           tasaMensualFija: p.tasaInteresMensual || p.tasaInteresAnual / 12,
           numeroCuotas: p.numeroCuotas,
           frecuencia: p.frecuencia as any,
-          fechaDesembolso: p.fechaDesembolso || undefined,
+          // === FIX (2026-08-21): usar fechaInicioAmortizacion si está disponible ===
+          fechaDesembolso: p.fechaInicioAmortizacion || p.fechaDesembolso || undefined,
         })
       } else if (p.modalidadAmortizacion === 'INTERES_FIJO_SIN_CAPITAL') {
         // Modalidad especial: no hay tabla de amortización tradicional.
@@ -125,10 +126,11 @@ export async function GET(req: NextRequest) {
         calculo = calcularPrestamo({
           montoPrincipal: p.montoPrincipal,
           tasaInteresAnual: p.tasaInteresAnual,
-          tasaMoraAnual: getTasaMoraAnual(p), // convertir diaria a anual
+          tasaMoraAnual: getTasaMoraAnual(p),
           plazoMeses: p.plazoMeses,
           frecuencia: p.frecuencia as any,
-          fechaDesembolso: p.fechaDesembolso || undefined,
+          // === FIX (2026-08-21): usar fechaInicioAmortizacion si está disponible ===
+          fechaDesembolso: p.fechaInicioAmortizacion || p.fechaDesembolso || undefined,
         })
       }
 

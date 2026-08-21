@@ -718,6 +718,11 @@ export async function POST(req: NextRequest) {
           fechaSolicitud: fechaBasePrestamo,
           fechaDesembolso: aprobarYEnviarTyC ? fechaBasePrestamo : null,
           fechaVencimiento: calculo.fechaVencimiento || null,
+          // === Guardar fechaInicioAmortizacion para que los endpoints de pagos
+          // usen la fecha correcta al recalcular la tabla de amortización.
+          // Si fechaPrimerCuota fue seteada, fechaBaseParaAmortizacion !=
+          // fechaBasePrestamo (es fechaPrimerCuota - 1 periodo).
+          fechaInicioAmortizacion: fechaBaseParaAmortizacion,
           tycEnviado: !!aprobarYEnviarTyC,
           tycToken,
           requiereDocumentos: requiereDocumentos ?? true,

@@ -51,6 +51,7 @@ import {
   Bell,
   Award,
   CalendarClock,
+  Calendar,
   HeartPulse,
   CreditCard,
   FileCheck,
@@ -2392,6 +2393,15 @@ function SimuladorCredito({
   const FLEXIBILIDAD_COSTO_PREMIUM = 34900
   const FLEXIBILIDAD_COSTO = flexibilidadModalidad === 'PREMIUM' ? FLEXIBILIDAD_COSTO_PREMIUM : FLEXIBILIDAD_COSTO_BASICA
 
+  // === Periodo de corte (2026-08-21) ===
+  // El cliente puede elegir si sus fechas de pago serán con corte del 5-20, 15-30,
+  // o una fecha personalizada (ej: 16-1, 6-20). El sistema calcula cuántos días
+  // faltan para el corte y cuánto se cobraría como días causados.
+  const [periodoCorte, setPeriodoCorte] = useState<string>('NINGUNO')
+  const [fechaSolicitudSim, setFechaSolicitudSim] = useState<string>(
+    new Date().toISOString().slice(0, 10)
+  )
+
   // === Renovación Anticipada (beneficio opcional con cobro único) ===
   // El cliente puede activar este beneficio en el simulador del portal
   // por un cobro único de $9.900 COP. Le da derecho a:
@@ -2439,7 +2449,13 @@ function SimuladorCredito({
       })
       return
     }
-    const fechaDesembolso = fechaPrimerPago ? new Date(fechaPrimerPago) : new Date()
+    // === FIX (2026-08-21): usar la fecha actual como fecha de desembolso, NO fechaPrimerPago ===
+    // Antes se usaba fechaPrimerPago como fechaDesembolso, lo que hacía que el
+    // sistema contara desde esa fecha como si el crédito empezara ese día.
+    // Ahora: fechaDesembolso = hoy (cuando se solicita el préstamo).
+    // fechaPrimerPago se usa solo como referencia para el primer vencimiento,
+    // pero el cálculo de la tabla de amortización empieza desde hoy.
+    const fechaDesembolso = new Date()
     let res: ResultadoCalculo
     if (tieneTasaPers && tasaPersValor > 0) {
       res = calcularPrestamoTasaFijaMensual({
@@ -2607,6 +2623,9 @@ function SimuladorCredito({
           // === Renovación Anticipada (cobro único $9.900) ===
           renovacionAnticipada,
           renovacionAnticipadaCosto: RENOVACION_ANTICIPADA_COSTO,
+          // === Periodo de corte (2026-08-21) ===
+          periodoCorte: periodoCorte !== 'NINGUNO' ? periodoCorte : undefined,
+          fechaSolicitud: fechaSolicitudSim,
         }),
       })
       const json = await res.json()
@@ -2718,6 +2737,51 @@ function SimuladorCredito({
                 onChange={(e) => setFechaPrimerPago(e.target.value)}
                 className="input-premium"
               />
+            </div>
+
+            {/* === Periodo de corte (2026-08-21) === */}
+            <div className="space-y-2 p-3 rounded-lg bg-indigo-500/10 border border-indigo-500/30">
+              <Label className="text-xs font-semibold text-indigo-200 flex items-center gap-1.5">
+                <Calendar className="w-3.5 h-3.5" />
+                Fechas de corte (opcional)
+              </Label>
+              <p className="text-[10px] text-muted-foreground">
+                Elige si tus pagos serán con corte del 5-20, 15-30, o una fecha personalizada.
+                El sistema calculará los días causados hasta el corte.
+              </p>
+              <div className="grid grid-cols-2 gap-2">
+                <div className="space-y-1">
+                  <Label className="text-[10px] text-muted-foreground">Periodo de corte</Label>
+                  <Select value={periodoCorte} onValueChange={setPeriodoCorte}>
+                    <SelectTrigger className="input-premium h-8 text-xs">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="NINGUNO">Sin corte</SelectItem>
+                      <SelectItem value="5-20">📅 Cortes 5 y 20</SelectItem>
+                      <SelectItem value="15-30">📅 Cortes 15 y 30</SelectItem>
+                      <SelectItem value="1-16">📅 Cortes 1 y 16</SelectItem>
+                      <SelectItem value="6-20">📅 Cortes 6 y 20</SelectItem>
+                      <SelectItem value="10-25">📅 Cortes 10 y 25</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-[10px] text-muted-foreground">Fecha de solicitud</Label>
+                  <Input
+                    type="date"
+                    value={fechaSolicitudSim}
+                    onChange={(e) => setFechaSolicitudSim(e.target.value)}
+                    className="input-premium h-8 text-xs"
+                  />
+                </div>
+              </div>
+              {periodoCorte !== 'NINGUNO' && (
+                <p className="text-[10px] text-indigo-200 italic">
+                  💡 Las cuotas se programarán desde la fecha de corte más cercana.
+                  Si la solicitud no cae en un día de corte, se cobrarán días causados adicionales.
+                </p>
+              )}
             </div>
           </div>
           <Button

@@ -32,19 +32,23 @@ import { registrarAuditLog, getClientInfo } from '@/lib/security'
 // el capital e interés por cuota fueran inconsistentes entre vistas.
 // =====================================================
 function calcularPrestamoSegunModalidad(prestamo: any) {
+  // === FIX (2026-08-21): usar fechaInicioAmortizacion si está disponible ===
+  // Si el admin definió fechaPrimerCuota al crear el préstamo, la fecha base
+  // para la amortización NO es fechaDesembolso sino fechaPrimerCuota - 1 periodo.
+  // Esa fecha se guardó en prestamo.fechaInicioAmortizacion al crear el préstamo.
+  // Sin esto, las fechas de vencimiento de las cuotas no coincidirían con
+  // fechaPrimerCuota (el sistema contaría desde fechaDesembolso).
+  const fechaBase = prestamo.fechaInicioAmortizacion || prestamo.fechaDesembolso || undefined
   if (prestamo.modalidadAmortizacion === 'TASA_FIJA') {
     return calcularPrestamoTasaFijaMensual({
       montoPrincipal: prestamo.montoPrincipal,
       tasaMensualFija: prestamo.tasaInteresMensual || prestamo.tasaInteresAnual / 12,
       numeroCuotas: prestamo.numeroCuotas,
       frecuencia: prestamo.frecuencia as any,
-      fechaDesembolso: prestamo.fechaDesembolso || undefined,
+      fechaDesembolso: fechaBase,
     })
   }
   if (prestamo.modalidadAmortizacion === 'INTERES_FIJO_SIN_CAPITAL') {
-    // No hay tabla de amortización tradicional — el cliente paga intereses
-    // fijos mensuales. Devolvemos un objeto compatible con la interfaz
-    // ResultadoCalculo pero con tabla vacía.
     return {
       numeroCuotas: 0,
       montoCuota: prestamo.interesFijoMensual || 0,
@@ -56,14 +60,13 @@ function calcularPrestamoSegunModalidad(prestamo: any) {
       fondoGarantia: 0,
     }
   }
-  // Default: Sistema Francés
   return calcularPrestamo({
     montoPrincipal: prestamo.montoPrincipal,
     tasaInteresAnual: prestamo.tasaInteresAnual,
     tasaMoraAnual: getTasaMoraDiaria(prestamo),
     plazoMeses: prestamo.plazoMeses,
     frecuencia: prestamo.frecuencia as any,
-    fechaDesembolso: prestamo.fechaDesembolso || undefined,
+    fechaDesembolso: fechaBase,
   })
 }
 

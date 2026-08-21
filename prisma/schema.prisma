@@ -285,6 +285,15 @@ model Prestamo {
   fechaAprobacion     DateTime?
   fechaDesembolso     DateTime?
   fechaVencimiento    DateTime?
+  // === fechaInicioAmortizacion (2026-08-21) ===
+  // Fecha base para la tabla de amortización. Normalmente = fechaDesembolso.
+  // Pero si el admin definió fechaPrimerCuota, esta fecha se calcula como
+  // fechaPrimerCuota - 1 periodo (MENSUAL=1 mes, QUINCENAL=15 días, etc.)
+  // para que la cuota #1 venza EXACTAMENTE en fechaPrimerCuota.
+  // Sin este campo, los endpoints de pagos recalculaban la tabla desde
+  // fechaDesembolso, causando que las fechas de vencimiento de las cuotas
+  // no coincidieran con fechaPrimerCuota.
+  fechaInicioAmortizacion DateTime?
   estado              String   @default("SOLICITUD")
   // SOLICITUD | PENDIENTE_ACEPTACION | ACTIVO | EN_MORA | JURIDICO | CANCELADO | RECHAZADO
 
