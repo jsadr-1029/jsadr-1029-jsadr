@@ -1792,3 +1792,61 @@ Stage Summary:
 - ✅ Al hacer clic en una campaña, se marca como vista (badge desaparece).
 - ✅ WhatsApp opcional solo se envía a los clientes destinatarios.
 - ✅ Producción (jsadr.com.co) desplegado y verificado.
+
+---
+Task ID: fix-fecha-primer-cuota-tarifa-corte-simulador
+Agent: main (Super Z)
+Task: 4 fixes: (1) fecha primera cuota en admin cuenta desde esa fecha, (2) tarifa plataforma $4.900 solo cuando tasa ≥ 15% en simulador portal, (3) mostrar fechas de corte en simulador portal, (4) calcular días causados hasta el corte
+
+Work Log:
+- FIX 1: Fecha primera cuota en admin
+  * Bug: al definir fechaPrimerCuota, los endpoints de pagos y estado de cuenta recalculaban la tabla desde fechaDesembolso (no desde fechaPrimerCuota - 1 periodo).
+  * Causa: no se guardaba fechaBaseParaAmortizacion en el préstamo.
+  * Fix: nuevo campo fechaInicioAmortizacion en Prestamo (migrado a Neon).
+  * Al crear préstamo: fechaInicioAmortizacion = fechaBaseParaAmortizacion.
+  * Helper calcularPrestamoSegunModalidad en /api/pagos/route.ts usa fechaInicioAmortizacion.
+  * /api/pagos/aplicar/route.ts usa fechaInicioAmortizacion.
+  * /api/estado-cuenta/route.ts usa fechaInicioAmortizacion.
+  * Backfill: 6 préstamos existentes actualizados con fechaInicioAmortizacion = fechaDesembolso.
+
+- FIX 2: Tarifa plataforma $4.900 solo cuando tasa ≥ 15%
+  * Antes: se cobraba en TODAS las simulaciones del portal.
+  * Ahora: solo cuando tasaMensualSimulacion ≥ 15%.
+  * API /api/portal/simular: tarifaPlataformaAplica = tasaMensual ≥ 15.
+  * Respuesta incluye tarifaPlataformaRazon explicando por qué se cobra o no.
+  * cargosIniciales solo incluye TARIFA_PLATAFORMA si aplica.
+
+- FIX 3: Fechas de corte en simulador del portal
+  * Panel 'Fechas de corte (opcional)' con opciones: Sin corte, 5-20, 15-30, 1-16, 6-20, 10-25.
+  * Selector de fecha de solicitud (default: hoy).
+  * Estado: periodoCorte, fechaSolicitudSim.
+  * Enviado al API /api/portal/simular y /api/solicitudes-web.
+
+- FIX 4: Cálculo de días causados hasta el corte
+  * API /api/portal/simular: si periodoCorte !== 'NINGUNO', calcula:
+    - fechaPrimerCorte (corte más cercano a la fecha de solicitud).
+    - diasCausadosAntes (días entre solicitud y corte).
+    - valorDiasCausados (monto COP a cobrar por interés anticipado).
+  * Mensaje: 'Tu solicitud es del X. El próximo corte es el Y. Se cobrarán N días por $Z.'
+  * valorDiasCausados se suma al total a pagar y a la primera cuota.
+  * Si la solicitud cae en día de corte, no hay días causados.
+
+- FIX adicional: Portal simulador fechaDesembolso
+  * Bug: fechaDesembolso = fechaPrimerPago (hacía que contara desde esa fecha).
+  * Fix: fechaDesembolso = new Date() (hoy, cuando se solicita).
+
+- Validación:
+  * TypeScript: ✓ sin errores.
+  * Next.js build: ✓ Compiled successfully in 34.8s, 226/226 static pages.
+- Sincronización:
+  * Commit 3b4d61b push a GitHub.
+  * HEAD = origin/main = 3b4d61b.
+  * GitHub Actions auto-deploy disparado.
+
+Stage Summary:
+- ✅ fechaPrimerCuota ahora se respeta en TODAS las vistas (admin, pagos, estado de cuenta).
+- ✅ Tarifa plataforma $4.900 solo se cobra cuando tasa ≥ 15% mensual.
+- ✅ Simulador del portal muestra fechas de corte (5-20, 15-30, 1-16, 6-20, 10-25).
+- ✅ Sistema calcula días causados hasta el corte + monto a cobrar.
+- ✅ Mensaje claro al cliente sobre días causados y valor.
+- ✅ Producción desplegado.
