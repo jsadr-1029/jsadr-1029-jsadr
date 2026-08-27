@@ -1,0 +1,357 @@
+{
+  "snapshot": {
+    "uuid": "2ab2ee1c-4213-40c1-9a4d-21f6d5884c8c",
+    "version": "vfase final 1 - 6:08",
+    "nombre": "Snapshot 1/08/26",
+    "proyecto": "Jsadr",
+    "timestamp": "2026-08-01T23:08:41.192Z",
+    "total_files": 357
+  },
+  "summary": {
+    "total_in_snapshot": 357,
+    "total_on_disk": 365,
+    "identical": 305,
+    "modified": 44,
+    "only_in_snapshot": 8,
+    "only_on_disk": 16
+  },
+  "only_in_snapshot": [
+    "src/app/api/auth/switch-back/route.ts",
+    "src/app/api/auth/switch-user/route.ts",
+    "src/app/api/seguridad/credenciales-activas/route.ts",
+    "src/app/api/seguridad/validar-firma/route.ts",
+    "src/app/api/verificar/route.ts",
+    "src/components/RelojColombia.tsx",
+    "src/lib/permisos.ts",
+    "src/proxy.ts"
+  ],
+  "only_on_disk": [
+    "Caddyfile",
+    "DEPLOYMENT_GUIDE.md",
+    "INFORME_FINAL.md",
+    "README.md",
+    "components.json",
+    "eslint.config.mjs",
+    "next-env.d.ts",
+    "next.config.ts",
+    "package-lock.json",
+    "package.json",
+    "postcss.config.mjs",
+    "prisma/schema.prisma",
+    "src/middleware.ts",
+    "tailwind.config.ts",
+    "tsconfig.json",
+    "vercel.json"
+  ],
+  "modified": [
+    {
+      "path": "src/components/views/SeguridadView.tsx",
+      "snap_size": 67316,
+      "disk_size": 50062,
+      "snap_hash": "d4d95dd4c972",
+      "disk_hash": "462b758a7671"
+    },
+    {
+      "path": "src/components/UserMenu.tsx",
+      "snap_size": 35987,
+      "disk_size": 22477,
+      "snap_hash": "8a9b6f677776",
+      "disk_hash": "e15f962499cb"
+    },
+    {
+      "path": "src/app/api/admin/portal/chat/route.ts",
+      "snap_size": 224907,
+      "disk_size": 214308,
+      "snap_hash": "022c2636bf63",
+      "disk_hash": "db875a36a9eb"
+    },
+    {
+      "path": "src/app/api/auditoria-seguridad/route.ts",
+      "snap_size": 86771,
+      "disk_size": 81821,
+      "snap_hash": "aa2f76fab806",
+      "disk_hash": "bd888eaba83b"
+    },
+    {
+      "path": "src/lib/api-client.ts",
+      "snap_size": 8461,
+      "disk_size": 5074,
+      "snap_hash": "f3ad810ee148",
+      "disk_hash": "9f6e5d982125"
+    },
+    {
+      "path": "src/app/api/documentos/verificar/route.ts",
+      "snap_size": 5336,
+      "disk_size": 2568,
+      "snap_hash": "d642eb8ffded",
+      "disk_hash": "784f6bcfcdb7"
+    },
+    {
+      "path": "src/lib/fetch-interceptor.ts",
+      "snap_size": 7243,
+      "disk_size": 4731,
+      "snap_hash": "bf1269cf6cff",
+      "disk_hash": "96ce4eac73fb"
+    },
+    {
+      "path": "src/components/Sidebar.tsx",
+      "snap_size": 6591,
+      "disk_size": 4698,
+      "snap_hash": "41b77bfc172a",
+      "disk_hash": "e54e1dcfa53d"
+    },
+    {
+      "path": "src/lib/asistente-personal.ts",
+      "snap_size": 17439,
+      "disk_size": 16042,
+      "snap_hash": "a8e722f1d54f",
+      "disk_hash": "a78ed4b3262f"
+    },
+    {
+      "path": "src/app/page.tsx",
+      "snap_size": 9597,
+      "disk_size": 8577,
+      "snap_hash": "ee1d5a9d25ae",
+      "disk_hash": "950668c15c4c"
+    },
+    {
+      "path": "src/components/views/ManualView.tsx",
+      "snap_size": 14743,
+      "disk_size": 13781,
+      "snap_hash": "e60e7f7f549a",
+      "disk_hash": "a25470142a68"
+    },
+    {
+      "path": "src/lib/nlp-asistente.ts",
+      "snap_size": 20664,
+      "disk_size": 19736,
+      "snap_hash": "a0b69a9a802f",
+      "disk_hash": "9eeae928d291"
+    },
+    {
+      "path": "src/app/login/page.tsx",
+      "snap_size": 29886,
+      "disk_size": 29246,
+      "snap_hash": "335372b0fba5",
+      "disk_hash": "c850683585ba"
+    },
+    {
+      "path": "src/lib/bot-admin-v2.ts",
+      "snap_size": 41850,
+      "disk_size": 41592,
+      "snap_hash": "a979a6d5d2c2",
+      "disk_hash": "c73c735316c9"
+    },
+    {
+      "path": "src/app/api/pagos/batch/route.ts",
+      "snap_size": 6342,
+      "disk_size": 6447,
+      "snap_hash": "4aa5a3801aea",
+      "disk_hash": "977891613e20"
+    },
+    {
+      "path": "src/components/views/BotsView.tsx",
+      "snap_size": 119954,
+      "disk_size": 119864,
+      "snap_hash": "676717c37164",
+      "disk_hash": "2b7e905b0bce"
+    },
+    {
+      "path": "src/app/api/portal/simular/route.ts",
+      "snap_size": 2697,
+      "disk_size": 2630,
+      "snap_hash": "4ca1c5459999",
+      "disk_hash": "0787a8747813"
+    },
+    {
+      "path": "src/app/api/auth/recuperar-clave/route.ts",
+      "snap_size": 14812,
+      "disk_size": 14762,
+      "snap_hash": "a360aa1b5ac1",
+      "disk_hash": "08580735f661"
+    },
+    {
+      "path": "src/app/api/portal/validar-otp/route.ts",
+      "snap_size": 4871,
+      "disk_size": 4828,
+      "snap_hash": "3df6dc568a43",
+      "disk_hash": "5c6c14581d7a"
+    },
+    {
+      "path": "src/lib/asistente-personal-mejorado.ts",
+      "snap_size": 17065,
+      "disk_size": 17022,
+      "snap_hash": "412155717dd7",
+      "disk_hash": "2e7d694d7222"
+    },
+    {
+      "path": "src/app/api/portal/solicitar-otp/route.ts",
+      "snap_size": 6555,
+      "disk_size": 6515,
+      "snap_hash": "cf449bfd52c9",
+      "disk_hash": "663e1ff655da"
+    },
+    {
+      "path": "src/app/api/seguridad/recuperacion-claves/route.ts",
+      "snap_size": 20638,
+      "disk_size": 20598,
+      "snap_hash": "a919df7f1e8c",
+      "disk_hash": "560f6a136573"
+    },
+    {
+      "path": "src/components/views/BuzonSolicitudesView.tsx",
+      "snap_size": 63593,
+      "disk_size": 63553,
+      "snap_hash": "bb408d2dd27c",
+      "disk_hash": "8f008bdb32b1"
+    },
+    {
+      "path": "src/components/views/pagos/ReciboPreviewModal.tsx",
+      "snap_size": 41640,
+      "disk_size": 41600,
+      "snap_hash": "18ad9100a14e",
+      "disk_hash": "6bb623372394"
+    },
+    {
+      "path": "src/app/api/chat/otp/route.ts",
+      "snap_size": 12164,
+      "disk_size": 12134,
+      "snap_hash": "8eae9f8064d4",
+      "disk_hash": "663ee6f1a90e"
+    },
+    {
+      "path": "src/app/api/portal/firmar/route.ts",
+      "snap_size": 2959,
+      "disk_size": 2929,
+      "snap_hash": "ee9c5e684f56",
+      "disk_hash": "7e20b94d5e22"
+    },
+    {
+      "path": "src/app/api/prestamos/[id]/aceptar-tyc-otp/route.ts",
+      "snap_size": 19481,
+      "disk_size": 19451,
+      "snap_hash": "c869dd7de11c",
+      "disk_hash": "fe2d9212c4a0"
+    },
+    {
+      "path": "src/components/views/PagosView.tsx",
+      "snap_size": 111803,
+      "disk_size": 111780,
+      "snap_hash": "ac5c756eec5d",
+      "disk_hash": "86483aa532b8"
+    },
+    {
+      "path": "src/app/api/documentos/route.ts",
+      "snap_size": 70425,
+      "disk_size": 70405,
+      "snap_hash": "65202e4e04a6",
+      "disk_hash": "d0678b230152"
+    },
+    {
+      "path": "src/app/api/snapshots/[id]/route.ts",
+      "snap_size": 11945,
+      "disk_size": 11925,
+      "snap_hash": "bb10b7024cd2",
+      "disk_hash": "7b4b05e24918"
+    },
+    {
+      "path": "src/app/api/juridico/[id]/exportar/route.ts",
+      "snap_size": 9767,
+      "disk_size": 9749,
+      "snap_hash": "1e5e94b26753",
+      "disk_hash": "40a9d1c26315"
+    },
+    {
+      "path": "src/app/api/pagos/boton-pago/route.ts",
+      "snap_size": 6947,
+      "disk_size": 6929,
+      "snap_hash": "6cf5956ae672",
+      "disk_hash": "26ecfbb58d13"
+    },
+    {
+      "path": "src/app/api/refinanciaciones/route.ts",
+      "snap_size": 5237,
+      "disk_size": 5219,
+      "snap_hash": "908347c900c8",
+      "disk_hash": "5a934f2238b1"
+    },
+    {
+      "path": "src/app/api/cajas/[id]/movimientos/route.ts",
+      "snap_size": 2340,
+      "disk_size": 2325,
+      "snap_hash": "d75f91154602",
+      "disk_hash": "49a67b61e403"
+    },
+    {
+      "path": "src/app/api/configuracion-global/route.ts",
+      "snap_size": 55271,
+      "disk_size": 55259,
+      "snap_hash": "dd8f8d451f1d",
+      "disk_hash": "16b0451010be"
+    },
+    {
+      "path": "src/app/api/firma/certificado/route.ts",
+      "snap_size": 21354,
+      "disk_size": 21365,
+      "snap_hash": "dfaa68600ae8",
+      "disk_hash": "11ecbbfc4c34"
+    },
+    {
+      "path": "src/app/api/conexiones/[id]/route.ts",
+      "snap_size": 15746,
+      "disk_size": 15736,
+      "snap_hash": "69f49a32a616",
+      "disk_hash": "8f633bb11268"
+    },
+    {
+      "path": "src/app/api/pagos/recibo/fidelizacion/route.ts",
+      "snap_size": 8932,
+      "disk_size": 8922,
+      "snap_hash": "8ae96a739feb",
+      "disk_hash": "ebc737538638"
+    },
+    {
+      "path": "src/app/layout.tsx",
+      "snap_size": 1352,
+      "disk_size": 1342,
+      "snap_hash": "7d634794b3eb",
+      "disk_hash": "d042da5b9d0f"
+    },
+    {
+      "path": "src/app/api/ficha-tecnica/route.ts",
+      "snap_size": 13454,
+      "disk_size": 13459,
+      "snap_hash": "5c17c052eaaf",
+      "disk_hash": "8f40e5b15e83"
+    },
+    {
+      "path": "src/app/api/pagos/bancolombia-redirect/route.ts",
+      "snap_size": 3717,
+      "disk_size": 3722,
+      "snap_hash": "1ff4de3ad1a7",
+      "disk_hash": "8134e191313e"
+    },
+    {
+      "path": "src/app/api/pagos/bancolombia-webhook/route.ts",
+      "snap_size": 8151,
+      "disk_size": 8156,
+      "snap_hash": "907af17cc2c0",
+      "disk_hash": "cc67e9085b24"
+    },
+    {
+      "path": "src/app/api/casos-juridicos/[id]/route.ts",
+      "snap_size": 2678,
+      "disk_size": 2682,
+      "snap_hash": "1bfe1e63b3a6",
+      "disk_hash": "c19f68b21f08"
+    },
+    {
+      "path": "src/app/api/casos-juridicos/route.ts",
+      "snap_size": 1831,
+      "disk_size": 1835,
+      "snap_hash": "014deca676e8",
+      "disk_hash": "08a8b4b653c3"
+    }
+  ],
+  "identical_count": 305
+}
