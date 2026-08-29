@@ -110,7 +110,7 @@ export function mensajeSolicitudCreada(d: {
   numeroCuotas: number
   fechaPrimerPago: string
 }): string {
-  return `🏦 *SOLICITUD DE PRÉSTAMO REGISTRADA*
+  return `🏦 *SOLICITUD DE SOLICITUD REGISTRADA*
 
 Hola *${d.nombreCliente}*, tu solicitud ha sido creada.
 
@@ -137,9 +137,9 @@ export function mensajeAprobacionTyC(d: {
 }): string {
   // La tasa anual NO se envía al cliente por WhatsApp (cambio solicitado).
   const lineaTasa = ''
-  return `✅ *PRÉSTAMO APROBADO - REQUIERE ACEPTACIÓN*
+  return `✅ *SOLICITUD APROBADO - REQUIERE ACEPTACIÓN*
 
-Hola *${d.nombreCliente}*, tu préstamo ${d.codigoPrestamo} fue aprobado.
+Hola *${d.nombreCliente}*, tu solicitud ${d.codigoPrestamo} fue aprobado.
 
 📋 *Características del crédito:*
 • Monto: $${d.monto.toLocaleString('es-CO')}
@@ -147,7 +147,7 @@ Hola *${d.nombreCliente}*, tu préstamo ${d.codigoPrestamo} fue aprobado.
 • N° cuotas: ${d.numeroCuotas}
 ${lineaTasa}• Total a pagar: $${d.totalPagar.toLocaleString('es-CO')}
 
-⚠️ *Para desembolsar el préstamo debes aceptar los Términos y Condiciones.*
+⚠️ *Para desembolsar el solicitud debes aceptar los Términos y Condiciones.*
 
 👉 Haz clic aquí para revisar y aceptar:
 ${d.linkAceptacion}
@@ -170,7 +170,7 @@ export function mensajePagoAplicado(d: {
 Hola *${d.nombreCliente}*, registramos tu pago.
 
 💵 *Detalle:*
-• Préstamo: ${d.codigoPrestamo}
+• Solicitud: ${d.codigoPrestamo}
 • Cuota: ${d.cuotaNumero}/${d.totalCuotas}
 • Pagado: $${d.montoPagado.toLocaleString('es-CO')}
 
@@ -188,7 +188,7 @@ export function mensajePrestamoCancelado(d: {
   montoTotal: number
   fechaCancelacion: string
 }): string {
-  return `🎉 *PRÉSTAMO CANCELADO*
+  return `🎉 *SOLICITUD CANCELADO*
 
 Felicidades *${d.nombreCliente}*, completaste el pago total.
 
@@ -214,7 +214,7 @@ export function mensajeRecordatorioPago(d: {
 Hola *${d.nombreCliente}*, tu cuota vence ${plazoTexto}.
 
 📋 *Detalle:*
-• Préstamo: ${d.codigoPrestamo}
+• Solicitud: ${d.codigoPrestamo}
 • Monto: $${d.montoCuota.toLocaleString('es-CO')}
 • Vence: ${d.fechaVencimiento}
 
@@ -232,10 +232,10 @@ export function mensajeMora(d: {
 }): string {
   return `⚠️ *AVISO DE MORA*
 
-Hola *${d.nombreCliente}*, tu préstamo presenta mora.
+Hola *${d.nombreCliente}*, tu solicitud presenta mora.
 
 📋 *Estado:*
-• Préstamo: ${d.codigoPrestamo}
+• Solicitud: ${d.codigoPrestamo}
 • Días de mora: ${d.diasMora}
 • Cuota pendiente: $${d.montoCuota.toLocaleString('es-CO')}
 • Tasa moratoria: ${d.tasaMora}% anual (compuesta diaria)
@@ -258,7 +258,7 @@ export function mensajeAvisoLegal(d: {
 
 Estimado/a *${d.nombreCliente}*:
 
-Su préstamo *${d.codigoPrestamo}* con saldo de *$${d.saldoTotal.toLocaleString('es-CO')}* fue derivado a cobro jurídico por incumplimiento de pago (30+ días de mora).
+Su solicitud *${d.codigoPrestamo}* con saldo de *$${d.saldoTotal.toLocaleString('es-CO')}* fue derivado a cobro jurídico por incumplimiento de pago (30+ días de mora).
 
 👤 *Abogado asignado:* ${d.abogado}
 📞 *Contacto:* ${d.telefonoAbogado}
@@ -295,7 +295,7 @@ export function mensajeLinkPago(d: {
 }): string {
   return `💳 *LINK DE PAGO*
 
-Hola *${d.nombreCliente}*, genera tu link de pago para la cuota ${d.cuotaNumero} del préstamo ${d.codigoPrestamo}.
+Hola *${d.nombreCliente}*, genera tu link de pago para la cuota ${d.cuotaNumero} del solicitud ${d.codigoPrestamo}.
 
 💵 *Monto a pagar:* $${d.monto.toLocaleString('es-CO')}
 📅 *Vence:* ${d.fechaVencimiento}

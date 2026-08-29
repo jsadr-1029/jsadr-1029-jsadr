@@ -1,4 +1,4 @@
-// Plantillas de mensajes WhatsApp para diferentes escenarios del sistema de préstamos
+// Plantillas de mensajes WhatsApp para diferentes escenarios del sistema de solicitudes
 
 import { formatCOP, formatDate } from './format'
 
@@ -22,11 +22,11 @@ type PlantillaContext = {
 
 export function tplSolicitudPrestamo(ctx: PlantillaContext): string {
   return [
-    `🏦 *SOLICITUD DE PRÉSTAMO REGISTRADA*`,
+    `🏦 *SOLICITUD DE SOLICITUD REGISTRADA*`,
     ``,
     `Hola *${ctx.clienteNombre}*,`,
     ``,
-    `Hemos registrado tu solicitud de préstamo:`,
+    `Hemos registrado tu solicitud de solicitud:`,
     `📋 Código: *${ctx.codigo}*`,
     ctx.monto ? `💰 Monto solicitado: *${formatCOP(ctx.monto)}*` : '',
     ctx.plazoMeses ? `📅 Plazo: *${ctx.plazoMeses} meses*` : '',
@@ -40,11 +40,11 @@ export function tplSolicitudPrestamo(ctx: PlantillaContext): string {
 
 export function tplAprobacionPrestamo(ctx: PlantillaContext): string {
   return [
-    `✅ *PRÉSTAMO APROBADO*`,
+    `✅ *SOLICITUD APROBADO*`,
     ``,
     `Hola *${ctx.clienteNombre}*,`,
     ``,
-    `¡Tu préstamo *${ctx.codigo}* fue aprobado!`,
+    `¡Tu solicitud *${ctx.codigo}* fue aprobado!`,
     ctx.monto ? `💰 Monto: *${formatCOP(ctx.monto)}*` : '',
     ctx.cuota ? `💵 Cuota: *${formatCOP(ctx.cuota)}*` : '',
     ctx.numeroCuota && ctx.totalCuotas ? `📅 Cuotas: *${ctx.numeroCuota}/${ctx.totalCuotas}*` : '',
@@ -64,11 +64,11 @@ export function tplDesembolso(ctx: PlantillaContext): string {
     `Hola *${ctx.clienteNombre}*,`,
     ``,
     `Te informamos que se realizó el desembolso:`,
-    `📋 Préstamo: *${ctx.codigo}*`,
+    `📋 Solicitud: *${ctx.codigo}*`,
     ctx.monto ? `💰 Monto: *${formatCOP(ctx.monto)}*` : '',
     ctx.banco && ctx.cuenta ? `🏦 Cuenta: ${ctx.banco} ****${ctx.cuenta?.slice(-4)}` : '',
     ``,
-    `Tu préstamo quedó ACTIVO.`,
+    `Tu solicitud quedó ACTIVO.`,
     ``,
     `_Mensaje automático_`,
   ].filter(Boolean).join('\n')
@@ -81,7 +81,7 @@ export function tplRecordatorioPago(ctx: PlantillaContext): string {
     `Hola *${ctx.clienteNombre}*,`,
     ``,
     `Te recordamos tu próxima cuota:`,
-    `📋 Préstamo: *${ctx.codigo}*`,
+    `📋 Solicitud: *${ctx.codigo}*`,
     ctx.cuota ? `💵 Valor cuota: *${formatCOP(ctx.cuota)}*` : '',
     ctx.numeroCuota && ctx.totalCuotas ? `📅 Cuota: *${ctx.numeroCuota}/${ctx.totalCuotas}*` : '',
     ctx.fechaVencimiento ? `🗓️ Vence: *${formatDate(ctx.fechaVencimiento)}*` : '',
@@ -98,7 +98,7 @@ export function tplAvisoMora(ctx: PlantillaContext): string {
     ``,
     `Hola *${ctx.clienteNombre}*,`,
     ``,
-    `Tu pago del préstamo *${ctx.codigo}* está vencido:`,
+    `Tu pago del solicitud *${ctx.codigo}* está vencido:`,
     ctx.cuota ? `💵 Cuota: *${formatCOP(ctx.cuota)}*` : '',
     ctx.diasMora ? `⏱️ Días de mora: *${ctx.diasMora}*` : '',
     ctx.saldoPendiente ? `💰 Saldo pendiente: *${formatCOP(ctx.saldoPendiente)}*` : '',
@@ -117,7 +117,7 @@ export function tplPagoConfirmado(ctx: PlantillaContext): string {
     `Hola *${ctx.clienteNombre}*,`,
     ``,
     `Hemos registrado tu pago:`,
-    `📋 Préstamo: *${ctx.codigo}*`,
+    `📋 Solicitud: *${ctx.codigo}*`,
     ctx.monto ? `💰 Monto recibido: *${formatCOP(ctx.monto)}*` : '',
     ctx.numeroCuota && ctx.totalCuotas ? `📅 Cuota: *${ctx.numeroCuota}/${ctx.totalCuotas}*` : '',
     ctx.saldoPendiente !== undefined ? `💵 Saldo pendiente: *${formatCOP(ctx.saldoPendiente)}*` : '',
@@ -151,7 +151,7 @@ export function tplCobroJuridico(ctx: PlantillaContext): string {
     ``,
     `Hola *${ctx.clienteNombre}*,`,
     ``,
-    `Tu préstamo *${ctx.codigo}* fue derivado a cobro jurídico:`,
+    `Tu solicitud *${ctx.codigo}* fue derivado a cobro jurídico:`,
     ctx.saldoPendiente ? `💰 Saldo total: *${formatCOP(ctx.saldoPendiente)}*` : '',
     ctx.diasMora ? `⏱️ Días de mora: *${ctx.diasMora}*` : '',
     ``,
@@ -167,7 +167,7 @@ export function tplEstadoCuenta(ctx: PlantillaContext): string {
     ``,
     `Hola *${ctx.clienteNombre}*,`,
     ``,
-    `Resumen de tu préstamo *${ctx.codigo}*:`,
+    `Resumen de tu solicitud *${ctx.codigo}*:`,
     ctx.saldoPendiente !== undefined ? `💰 Saldo pendiente: *${formatCOP(ctx.saldoPendiente)}*` : '',
     ctx.cuota ? `💵 Próxima cuota: *${formatCOP(ctx.cuota)}*` : '',
     ctx.fechaVencimiento ? `🗓️ Próximo vencimiento: *${formatDate(ctx.fechaVencimiento)}*` : '',
@@ -185,8 +185,8 @@ export function tplBienvenidaCliente(ctx: PlantillaContext): string {
     ``,
     `Tu cuenta fue creada exitosamente.`,
     `Ya puedes acceder al portal del cliente para:`,
-    `✓ Ver tus préstamos`,
-    `✓ Simular nuevos préstamos`,
+    `✓ Ver tus solicitudes`,
+    `✓ Simular nuevos solicitudes`,
     `✓ Consultar saldos y pagos`,
     `✓ Firmar documentos`,
     ``,

@@ -226,7 +226,7 @@ export async function GET(req: NextRequest) {
   </div>
 
   ${conversacion.cliente.prestamos.length > 0 ? `
-  <h2>Préstamos del Cliente</h2>
+  <h2>Solicitudes del Cliente</h2>
   <table>
     <thead><tr><th>Código</th><th>Monto Principal</th><th>Saldo Total</th><th>Estado</th></tr></thead>
     <tbody>${prestamosHtml}</tbody>

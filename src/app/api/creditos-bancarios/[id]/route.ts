@@ -19,7 +19,7 @@ export async function GET(
   }
 }
 
-// PUT - actualizar crédito bancario (préstamo o tarjeta)
+// PUT - actualizar crédito bancario (solicitud o tarjeta)
 export async function PUT(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }

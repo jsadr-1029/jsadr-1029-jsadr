@@ -11,7 +11,7 @@ import { sanitizeError } from '@/lib/error-handler'
 import { rateLimit, getClientInfo } from '@/lib/security'
 import { requireRole as requireRoleAuth } from '@/lib/auth-guard'
 
-// GET - buscar préstamos activos con cuotas pendientes y sugerir cuenta de recaudo
+// GET - buscar solicitudes activos con cuotas pendientes y sugerir cuenta de recaudo
 // Incluye desglose completo: cuota base + mora diaria + pendiente anterior - pagado
 export async function GET(req: NextRequest) {
   try {
@@ -30,7 +30,7 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url)
     const q = searchParams.get('q') || ''
 
-    // Buscar préstamos activos o en mora, con cliente y categoría
+    // Buscar solicitudes activos o en mora, con cliente y categoría
     const where: any = {
       estado: { in: ['ACTIVO', 'EN_MORA'] },
     }
@@ -62,7 +62,7 @@ export async function GET(req: NextRequest) {
       take: 50,
     })
 
-    // Para cada préstamo, calcular cuota pendiente, mora en tiempo real y desglose
+    // Para cada solicitud, calcular cuota pendiente, mora en tiempo real y desglose
     const resultados = prestamos.map((p) => {
       // Calcular cuántas cuotas están completamente pagadas
       const cuotasPagadasSet = new Set(
@@ -75,14 +75,14 @@ export async function GET(req: NextRequest) {
       // Calcular fecha de vencimiento de la próxima cuota
       // === FIX (2026-08-20): Usar la función de cálculo correcta según la modalidad ===
       // Antes siempre se usaba calcularPrestamo (Sistema Francés) sin importar la
-      // modalidad del préstamo. Eso causaba que para préstamos TASA_FIJA, la cuota
+      // modalidad del solicitud. Eso causaba que para solicitudes TASA_FIJA, la cuota
       // mostrada en "Aplicar Pago" tuviera un capital creciente e interés decreciente
       // (Sistema Francés) en lugar de capital e interés constantes (Tasa Fija).
       // El monto total NO coincidía con el estado de cuenta (que sí usaba la función
       // correcta). Ahora ambas vistas usan la misma función según la modalidad.
       //
       // === FIX (2026-08-21): Usar fechaInicioAmortizacion si está disponible ===
-      // Si el admin definió fechaPrimerCuota al crear el préstamo, la fecha base
+      // Si el admin definió fechaPrimerCuota al crear el solicitud, la fecha base
       // para la amortización NO es fechaDesembolso sino fechaPrimerCuota - 1 periodo.
       // Sin esto, las fechas de vencimiento de las cuotas no coincidirían con
       // fechaPrimerCuota (el sistema contaría desde fechaDesembolso).
@@ -200,7 +200,7 @@ export async function GET(req: NextRequest) {
       // 1. Instrucción temporal activa del cliente
       // 2. Cuenta asignada directamente al cliente (cliente.cuentaRecaudoId)
       // 3. Cuenta de la categoría del cliente (cliente.categoria.cuentaRecaudo)
-      // 4. Cuenta de la categoría del préstamo (p.categoria.cuentaRecaudo)
+      // 4. Cuenta de la categoría del solicitud (p.categoria.cuentaRecaudo)
       const instruccionActiva = p.cliente.instruccionCuentaId &&
         (!p.cliente.instruccionCuentaExpira || new Date(p.cliente.instruccionCuentaExpira) > new Date())
       const cuentaRecaudo = instruccionActiva
@@ -290,7 +290,7 @@ export async function GET(req: NextRequest) {
         flexibilidadUsosDisponibles: p.flexibilidadUsosDisponibles,
         flexibilidadUsosEjercidos: p.flexibilidadUsosEjercidos,
         flexibilidadCosto: p.flexibilidadCosto,
-        // ¿El préstamo califica para usar flexibilidad en esta cuota?
+        // ¿El solicitud califica para usar flexibilidad en esta cuota?
         // Reglas: >=4 cuotas, 1ra cuota pagada, próxima cuota >= 2 (no desde prima), usos disponibles
         flexibilidadElegible:
           p.flexibilidadActivada === true &&

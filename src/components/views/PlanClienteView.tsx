@@ -764,11 +764,11 @@ export function PlanClienteView() {
                 </div>
               </div>
               <div className="space-y-2">
-                <Label>ID préstamo vinculado (opcional)</Label>
+                <Label>ID solicitud vinculado (opcional)</Label>
                 <Input
                   value={metricas.prestamoVinculadoId}
                   onChange={(e) => setMetricas({ ...metricas, prestamoVinculadoId: e.target.value })}
-                  placeholder="cmr... (ID del préstamo en BD)"
+                  placeholder="cmr... (ID del solicitud en BD)"
                 />
               </div>
               <div className="space-y-2">

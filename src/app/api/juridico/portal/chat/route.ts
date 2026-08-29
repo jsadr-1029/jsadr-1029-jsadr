@@ -160,7 +160,7 @@ async function responderAsesorJuridico(
       return {
         tipo: 'TEXTO',
         respuesta:
-          '✅ No hay candidatos a cobro jurídico actualmente.\n\n(Criterio: préstamos con 60+ días de mora sin caso jurídico existente)',
+          '✅ No hay candidatos a cobro jurídico actualmente.\n\n(Criterio: solicitudes con 60+ días de mora sin caso jurídico existente)',
       }
     }
     let r = `⚖️ CANDIDATOS A COBRO JURÍDICO (${estado.candidatosJuridico.length}):\n\n`
@@ -235,7 +235,7 @@ async function responderAsesorJuridico(
         `• Mandamiento de pago\n` +
         `• Excepciones del demandado\n` +
         `• Sentencia y ejecución\n\n` +
-        `⚠️ Para analizar un caso específico, dame el código del préstamo.`,
+        `⚠️ Para analizar un caso específico, dame el código del solicitud.`,
     }
   }
 
@@ -361,7 +361,7 @@ async function responderAsesorJuridico(
   return {
     tipo: 'TEXTO',
     respuesta:
-      `Mira, ${usuarioNombre}, para responder esa con precisión necesito un poco más de contexto. Cuéntame: ¿es sobre un caso específico de la cartera, una consulta de fondo sobre normativa colombiana, o algo operativo del módulo jurídico? Si me das el detalle del préstamo, del cliente o del documento, te doy una respuesta mucho más útil. También puedo revisar casos activos, candidatos a jurídico o alertas pendientes si me dices qué necesitas ver.`,
+      `Mira, ${usuarioNombre}, para responder esa con precisión necesito un poco más de contexto. Cuéntame: ¿es sobre un caso específico de la cartera, una consulta de fondo sobre normativa colombiana, o algo operativo del módulo jurídico? Si me das el detalle del solicitud, del cliente o del documento, te doy una respuesta mucho más útil. También puedo revisar casos activos, candidatos a jurídico o alertas pendientes si me dices qué necesitas ver.`,
   }
 }
 

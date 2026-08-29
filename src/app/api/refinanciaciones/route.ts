@@ -53,9 +53,9 @@ export async function POST(req: NextRequest) {
       where: { id: prestamoId },
       include: { cliente: true, pagos: { where: { estado: { in: ['APLICADO', 'PAGO_PARCIAL'] } } } },
     })
-    if (!prestamo) return NextResponse.json({ success: false, error: 'Préstamo no encontrado' }, { status: 404 })
+    if (!prestamo) return NextResponse.json({ success: false, error: 'Solicitud no encontrado' }, { status: 404 })
 
-    // === Snapshot del préstamo actual ===
+    // === Snapshot del solicitud actual ===
     const saldoCapitalAntes = prestamo.saldoCapital
     const saldoInteresAntes = prestamo.saldoInteres
     const moraAntes = prestamo.montoMora

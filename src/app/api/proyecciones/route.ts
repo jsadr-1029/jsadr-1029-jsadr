@@ -15,7 +15,7 @@ export async function GET() {
     // - Proyección mensual 12 meses (capital + interés)
     // - Desglose por categoría
     // - Desglose por cliente (top 15)
-    // - Desglose por préstamo (top 20)
+    // - Desglose por solicitud (top 20)
     // =====================================================
 
     const prestamosActivos = await db.prestamo.findMany({
@@ -207,7 +207,7 @@ export async function GET() {
       .sort((a, b) => b.capitalActivo - a.capitalActivo)
       .slice(0, 15)
 
-    // === 5. Desglose por préstamo (top 20) ===
+    // === 5. Desglose por solicitud (top 20) ===
     const porPrestamo = prestamosActivos
       .map((p) => ({
         codigo: p.codigo,

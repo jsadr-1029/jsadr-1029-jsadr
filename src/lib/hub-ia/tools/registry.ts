@@ -4,7 +4,7 @@
 // Cada herramienta es una función REAL conectada a la plataforma.
 //
 // Categorías:
-//   - Consulta (read-only): clientes, préstamos, pagos, mora, config, etc.
+//   - Consulta (read-only): clientes, solicitudes, pagos, mora, config, etc.
 //   - Modificación (write): crear_alerta, modificar_configuracion, etc.
 //   - Sistema: estado, errores, integridad, reportes
 //
@@ -86,13 +86,13 @@ const consultar_clientes: ToolDef = {
 
 const consultar_prestamos: ToolDef = {
   name: 'consultar_prestamos',
-  description: 'Consulta préstamos. Puede filtrar por código, cliente (cédula), o estado (ACTIVO, EN_MORA, CANCELADO, etc.). Devuelve datos bancarios del préstamo (no PII del cliente).',
+  description: 'Consulta solicitudes. Puede filtrar por código, cliente (cédula), o estado (ACTIVO, EN_MORA, CANCELADO, etc.). Devuelve datos bancarios del solicitud (no PII del cliente).',
   parameters: {
     type: 'object',
     properties: {
-      codigo: { type: 'string', description: 'Código exacto del préstamo (opcional)' },
+      codigo: { type: 'string', description: 'Código exacto del solicitud (opcional)' },
       cedula: { type: 'string', description: 'Cédula del cliente (opcional)' },
-      estado: { type: 'string', enum: ['SOLICITUD', 'ACTIVO', 'EN_MORA', 'JURIDICO', 'CANCELADO', 'RECHAZADO'], description: 'Estado del préstamo (opcional)' },
+      estado: { type: 'string', enum: ['SOLICITUD', 'ACTIVO', 'EN_MORA', 'JURIDICO', 'CANCELADO', 'RECHAZADO'], description: 'Estado del solicitud (opcional)' },
       limite: { type: 'number', description: 'Máximo de resultados (default 20, max 100)' },
     },
   },
@@ -137,11 +137,11 @@ const consultar_prestamos: ToolDef = {
 
 const consultar_pagos: ToolDef = {
   name: 'consultar_pagos',
-  description: 'Consulta pagos. Puede filtrar por código de préstamo, estado (PENDIENTE, APLICADO, VENCIDO, etc.) o rango de fechas.',
+  description: 'Consulta pagos. Puede filtrar por código de solicitud, estado (PENDIENTE, APLICADO, VENCIDO, etc.) o rango de fechas.',
   parameters: {
     type: 'object',
     properties: {
-      prestamoCodigo: { type: 'string', description: 'Código del préstamo (opcional)' },
+      prestamoCodigo: { type: 'string', description: 'Código del solicitud (opcional)' },
       estado: { type: 'string', enum: ['PENDIENTE', 'APLICADO', 'VENCIDO', 'ANULADO', 'REVERSADO', 'PAGO_PARCIAL'] },
       desde: { type: 'string', description: 'Fecha desde (YYYY-MM-DD, opcional)' },
       hasta: { type: 'string', description: 'Fecha hasta (YYYY-MM-DD, opcional)' },
@@ -191,7 +191,7 @@ const consultar_pagos: ToolDef = {
 
 const consultar_mora: ToolDef = {
   name: 'consultar_mora',
-  description: 'Consulta préstamos en mora. Devuelve estadísticas y lista detallada con días de mora y saldo pendiente.',
+  description: 'Consulta solicitudes en mora. Devuelve estadísticas y lista detallada con días de mora y saldo pendiente.',
   parameters: {
     type: 'object',
     properties: {
@@ -314,7 +314,7 @@ const consultar_usuarios: ToolDef = {
 
 const consultar_estado_sistema: ToolDef = {
   name: 'consultar_estado_sistema',
-  description: 'Consulta el estado general del sistema: conteos de clientes, préstamos, pagos, mora, etc.',
+  description: 'Consulta el estado general del sistema: conteos de clientes, solicitudes, pagos, mora, etc.',
   parameters: { type: 'object', properties: {} },
   riesgo: 'bajo',
   async execute() {
@@ -476,7 +476,7 @@ const analizar_modulo: ToolDef = {
       out.enMora = mora
       out.juridico = juridico
       out.tasaMora = total ? ((mora / total) * 100).toFixed(2) + '%' : '0%'
-      out.observaciones = mora > 0 ? `Hay ${mora} préstamos en mora (${((mora / total) * 100).toFixed(2)}% del total).` : 'No hay préstamos en mora.'
+      out.observaciones = mora > 0 ? `Hay ${mora} solicitudes en mora (${((mora / total) * 100).toFixed(2)}% del total).` : 'No hay solicitudes en mora.'
     } else if (modulo === 'clientes') {
       const [total, activos] = await Promise.all([
         db.cliente.count(),
@@ -737,7 +737,7 @@ const consultar_modulos: ToolDef = {
       data: {
         modulos: [
           { nombre: 'clientes', descripcion: 'Gestión de clientes' },
-          { nombre: 'prestamos', descripcion: 'Gestión de préstamos' },
+          { nombre: 'prestamos', descripcion: 'Gestión de solicitudes' },
           { nombre: 'pagos', descripcion: 'Registro y conciliación de pagos' },
           { nombre: 'juridico', descripcion: 'Casos jurídicos y cobranza' },
           { nombre: 'configuracion', descripcion: 'Configuración global de la plataforma' },
@@ -787,7 +787,7 @@ const consultar_reportes: ToolDef = {
       ok: true,
       data: {
         reportes: [
-          { tipo: 'cartera', descripcion: 'Reporte de cartera activa (préstamos ACTIVO/EN_MORA/JURIDICO)' },
+          { tipo: 'cartera', descripcion: 'Reporte de cartera activa (solicitudes ACTIVO/EN_MORA/JURIDICO)' },
           { tipo: 'mora', descripcion: 'Reporte de mora con buckets de antigüedad (1-30, 31-60, 61-90, +90 días)' },
           { tipo: 'pagos', descripcion: 'Reporte de pagos en rango de fechas (default: últimos 30 días)' },
           { tipo: 'clientes', descripcion: 'Reporte de clientes (totales, activos, opt-out)' },
@@ -803,11 +803,11 @@ const consultar_reportes: ToolDef = {
 
 const crear_registro: ToolDef = {
   name: 'crear_registro',
-  description: 'Crea una nota en la bitácora de un préstamo. Útil para registrar observaciones, llamadas, visitas o seguimientos.',
+  description: 'Crea una nota en la bitácora de un solicitud. Útil para registrar observaciones, llamadas, visitas o seguimientos.',
   parameters: {
     type: 'object',
     properties: {
-      prestamoId: { type: 'string', description: 'ID del préstamo' },
+      prestamoId: { type: 'string', description: 'ID del solicitud' },
       tipo: { type: 'string', enum: ['NOTA', 'LLAMADA', 'VISITA', 'EMAIL', 'WHATSAPP', 'REUNION', 'OTRO'], description: 'Tipo de evento' },
       titulo: { type: 'string', description: 'Título breve' },
       descripcion: { type: 'string', description: 'Descripción del evento' },
@@ -818,7 +818,7 @@ const crear_registro: ToolDef = {
   riesgo: 'medio',
   async execute(args, ctx) {
     const prestamo = await db.prestamo.findUnique({ where: { id: String(args.prestamoId) } })
-    if (!prestamo) return { ok: false, error: 'Préstamo no encontrado' }
+    if (!prestamo) return { ok: false, error: 'Solicitud no encontrado' }
     const nota = await db.bitacoraPrestamo.create({
       data: {
         prestamoId: prestamo.id,
@@ -838,7 +838,7 @@ const crear_registro: ToolDef = {
 
 const actualizar_registro: ToolDef = {
   name: 'actualizar_registro',
-  description: 'Actualiza una nota existente en la bitácora de un préstamo. Solo el autor o un ADMIN pueden modificarla.',
+  description: 'Actualiza una nota existente en la bitácora de un solicitud. Solo el autor o un ADMIN pueden modificarla.',
   parameters: {
     type: 'object',
     properties: {

@@ -38,7 +38,7 @@ export async function GET(req: NextRequest) {
       )
     }
 
-    // === Buscar todos los préstamos del cliente ===
+    // === Buscar todos los solicitudes del cliente ===
     const prestamos = await db.prestamo.findMany({
       where: { clienteId: cliente.id },
       select: {
@@ -63,7 +63,7 @@ export async function GET(req: NextRequest) {
     const prestamoIds = prestamos.map((p) => p.id)
     const prestamoMap = new Map(prestamos.map((p) => [p.id, p]))
 
-    // === Buscar Otros Síes de esos préstamos (PENDIENTE_FIRMA y FIRMADO) ===
+    // === Buscar Otros Síes de esos solicitudes (PENDIENTE_FIRMA y FIRMADO) ===
     // Excluimos ANULADO. Orden: PENDIENTE_FIRMA primero, luego FIRMADO por fecha desc.
     const otrosSi = await db.otroSiCambioFecha.findMany({
       where: {

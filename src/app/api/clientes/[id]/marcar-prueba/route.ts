@@ -68,7 +68,7 @@ export async function PUT(
 
       return NextResponse.json({
         success: true,
-        message: `Cliente "${cliente.nombre}" marcado como cliente de prueba. Sus préstamos y pagos ya no se contabilizan en los saldos reales del sistema.`,
+        message: `Cliente "${cliente.nombre}" marcado como cliente de prueba. Sus solicitudes y pagos ya no se contabilizan en los saldos reales del sistema.`,
         data: actualizado,
       })
     }
@@ -97,7 +97,7 @@ export async function PUT(
 
     return NextResponse.json({
       success: true,
-      message: `Cliente "${cliente.nombre}" desmarcado como cliente de prueba. Sus préstamos y pagos vuelven a contabilizarse en los saldos reales del sistema.`,
+      message: `Cliente "${cliente.nombre}" desmarcado como cliente de prueba. Sus solicitudes y pagos vuelven a contabilizarse en los saldos reales del sistema.`,
       data: actualizado,
     })
   } catch (error) {

@@ -7,7 +7,7 @@ import { writeFileSync, mkdirSync } from 'fs'
 import { join } from 'path'
 
 // =====================================================
-// POST - Borrar TODOS los préstamos y datos relacionados.
+// POST - Borrar TODOS los solicitudes y datos relacionados.
 //
 // ENDPOINT DESTRUCTIVO — Blindaje:
 //   1. requireRole ADMIN
@@ -116,11 +116,11 @@ export async function POST(req: NextRequest) {
       db.notificacionLog.deleteMany(),
       // 9. Pagos
       db.pago.deleteMany(),
-      // 10. Bitácora de préstamos
+      // 10. Bitácora de solicitudes
       db.bitacoraPrestamo.deleteMany(),
-      // 11. Movimientos de caja asociados a préstamos
+      // 11. Movimientos de caja asociados a solicitudes
       db.movimientoCaja.deleteMany({ where: { prestamoId: { not: null } } }),
-      // 12. Préstamos
+      // 12. Solicitudes
       db.prestamo.deleteMany(),
     ])
 
@@ -130,7 +130,7 @@ export async function POST(req: NextRequest) {
       usuarioNombre: auth.username,
       accion: 'LIMPIAR_TODOS_PRESTAMOS',
       modulo: 'prestamos',
-      entidadNombre: 'TODOS LOS PRÉSTAMOS',
+      entidadNombre: 'TODOS LOS SOLICITUDES',
       detalles: JSON.stringify({
         motivo: motivo || 'No especificado',
         backupFile,
@@ -149,7 +149,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      mensaje: 'Todos los préstamos y datos relacionados han sido borrados. Se generó backup previo.',
+      mensaje: 'Todos los solicitudes y datos relacionados han sido borrados. Se generó backup previo.',
       backupFile,
       datosBorrados: {
         prestamos: prestamos.length,

@@ -1,5 +1,5 @@
 // =====================================================
-// /api/planes-clientes — Plan Cliente (Préstamos)
+// /api/planes-clientes — Plan Cliente (Solicitudes)
 // CRUD para planes personalizados de clientes
 // Seguridad: requireRole + Zod + rate limit + sanitizeError
 // =====================================================

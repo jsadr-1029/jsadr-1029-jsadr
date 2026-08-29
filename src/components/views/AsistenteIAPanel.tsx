@@ -441,7 +441,7 @@ export function AsistenteIAPanel() {
               <Input
                 value={faqPregunta}
                 onChange={(e) => setFaqPregunta(e.target.value)}
-                placeholder="ej: ¿Cómo solicito un préstamo?"
+                placeholder="ej: ¿Cómo solicito un solicitud?"
                 maxLength={500}
               />
             </div>

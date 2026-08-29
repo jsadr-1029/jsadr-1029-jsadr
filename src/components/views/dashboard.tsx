@@ -44,7 +44,7 @@ export function Dashboard({ navigate }: { navigate: (v: any) => void }) {
     <div className="space-y-6">
       <PageHeader
         title="Dashboard"
-        subtitle="Resumen general del sistema de préstamos"
+        subtitle="Resumen general del sistema de solicitudes"
         icon={TrendingUp}
         actions={
           <button
@@ -67,12 +67,12 @@ export function Dashboard({ navigate }: { navigate: (v: any) => void }) {
         <StatCard
           label="Clientes Activos"
           value={kpis.totalClientes}
-          hint={`${kpis.clientesConPrestamosActivos} con préstamos activos`}
+          hint={`${kpis.clientesConPrestamosActivos} con solicitudes activos`}
           icon={Users}
           color="emerald"
         />
         <StatCard
-          label="Préstamos Activos"
+          label="Solicitudes Activos"
           value={kpis.prestamosActivos}
           hint={`${kpis.totalPrestamos} total en sistema`}
           icon={FileText}
@@ -88,7 +88,7 @@ export function Dashboard({ navigate }: { navigate: (v: any) => void }) {
         <StatCard
           label="Tasa Morosidad"
           value={formatPercent(kpis.tasaMorosidad)}
-          hint={`${kpis.prestamosEnMora} préstamos en mora`}
+          hint={`${kpis.prestamosEnMora} solicitudes en mora`}
           icon={AlertTriangle}
           color={kpis.tasaMorosidad > 10 ? 'red' : kpis.tasaMorosidad > 5 ? 'amber' : 'emerald'}
         />
@@ -115,7 +115,7 @@ export function Dashboard({ navigate }: { navigate: (v: any) => void }) {
           }
         >
           {proximosVencimientos.length === 0 ? (
-            <EmptyState icon={Calendar} title="Sin vencimientos próximos" description="No hay préstamos con vencimiento en los próximos 7 días." />
+            <EmptyState icon={Calendar} title="Sin vencimientos próximos" description="No hay solicitudes con vencimiento en los próximos 7 días." />
           ) : (
             <div className="divide-y divide-slate-100">
               {proximosVencimientos.map((v) => {
@@ -145,7 +145,7 @@ export function Dashboard({ navigate }: { navigate: (v: any) => void }) {
         </Card>
 
         {/* Distribución por estado */}
-        <Card title="Distribución de Préstamos" subtitle="Por estado actual">
+        <Card title="Distribución de Solicitudes" subtitle="Por estado actual">
           {distribucionEstados.length === 0 ? (
             <EmptyState icon={FileText} title="Sin datos" />
           ) : (
@@ -174,10 +174,10 @@ export function Dashboard({ navigate }: { navigate: (v: any) => void }) {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {/* Préstamos en mora */}
+        {/* Solicitudes en mora */}
         <Card
-          title="Préstamos en Mora"
-          subtitle={`${prestamosMora.length} préstamos vencidos`}
+          title="Solicitudes en Mora"
+          subtitle={`${prestamosMora.length} solicitudes vencidos`}
           actions={
             <button onClick={() => navigate({ name: 'juridicos' })} className="text-xs text-red-600 hover:underline flex items-center gap-1">
               Ver jurídica <ArrowRight className="w-3 h-3" />
@@ -185,7 +185,7 @@ export function Dashboard({ navigate }: { navigate: (v: any) => void }) {
           }
         >
           {prestamosMora.length === 0 ? (
-            <EmptyState icon={AlertTriangle} title="Sin morosidad" description="No hay préstamos vencidos actualmente." />
+            <EmptyState icon={AlertTriangle} title="Sin morosidad" description="No hay solicitudes vencidos actualmente." />
           ) : (
             <div className="space-y-2 max-h-80 overflow-y-auto">
               {prestamosMora.map((p) => (

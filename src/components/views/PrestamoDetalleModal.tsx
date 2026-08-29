@@ -154,7 +154,7 @@ export function PrestamoDetalleModal({
 
   // === Otro Sí — Flexibilidad Financiera ===
   const [otrosSi, setOtrosSi] = useState<any[]>([])
-  const [flexInfo, setFlexInfo] = useState<any>(null) // info de flexibilidad del préstamo
+  const [flexInfo, setFlexInfo] = useState<any>(null) // info de flexibilidad del solicitud
   const [cargandoOtrosSi, setCargandoOtrosSi] = useState(false)
   const [modalNuevoOtroSi, setModalNuevoOtroSi] = useState(false)
   const [otroSiTipo, setOtroSiTipo] = useState<'CAMBIO_FECHA' | 'TRASLADO_CUOTA'>('CAMBIO_FECHA')
@@ -203,12 +203,12 @@ export function PrestamoDetalleModal({
           setEstadoVerificacion(null)
         }
       } else {
-        throw new Error(json.error || 'No se pudo cargar el préstamo')
+        throw new Error(json.error || 'No se pudo cargar el solicitud')
       }
     } catch (e: any) {
       if (e?.name !== 'AbortError') {
         console.error(e)
-        setErrorCarga(e.message || 'Error desconocido al cargar el préstamo')
+        setErrorCarga(e.message || 'Error desconocido al cargar el solicitud')
       }
     } finally {
       if (!signal?.aborted) setLoading(false)
@@ -225,7 +225,7 @@ export function PrestamoDetalleModal({
     }
   }
 
-  // Carga el estado de verificación de códigos OTP del préstamo
+  // Carga el estado de verificación de códigos OTP del solicitud
   // (deudor y, si aplica, codeudor). Permite mostrar badges de
   // "verificado / pendiente" en la UI.
   const cargarEstadoVerificacion = async (signal?: AbortSignal) => {
@@ -242,7 +242,7 @@ export function PrestamoDetalleModal({
     }
   }
 
-  // === Otro Sí — Cargar lista de Otros Síes del préstamo ===
+  // === Otro Sí — Cargar lista de Otros Síes del solicitud ===
   const cargarOtrosSi = async () => {
     try {
       setCargandoOtrosSi(true)
@@ -612,7 +612,7 @@ export function PrestamoDetalleModal({
         <DialogContent className="max-w-5xl">
           <div className="py-8 text-center text-muted-foreground flex flex-col items-center gap-3">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
-            <span>Cargando préstamo...</span>
+            <span>Cargando solicitud...</span>
           </div>
         </DialogContent>
       </Dialog>
@@ -626,7 +626,7 @@ export function PrestamoDetalleModal({
           <div className="py-8 text-center space-y-4">
             <AlertTriangle className="w-12 h-12 text-red-500 mx-auto" />
             <div>
-              <p className="font-semibold text-red-700">Error cargando el préstamo</p>
+              <p className="font-semibold text-red-700">Error cargando el solicitud</p>
               <p className="text-sm text-muted-foreground mt-1">{errorCarga}</p>
             </div>
             <div className="flex justify-center gap-2">
@@ -648,7 +648,7 @@ export function PrestamoDetalleModal({
       <Dialog open={true} onOpenChange={onClose}>
         <DialogContent className="max-w-5xl">
           <div className="py-8 text-center space-y-4">
-            <p className="text-muted-foreground">No se encontraron datos del préstamo.</p>
+            <p className="text-muted-foreground">No se encontraron datos del solicitud.</p>
             <Button variant="outline" size="sm" onClick={onClose}>
               Cerrar
             </Button>
@@ -978,7 +978,7 @@ export function PrestamoDetalleModal({
               )}
 
               {/* === Otro Sí — Ver / Descargar (solo si hay Otros Síes firmados) === */}
-              {/* Solo se muestra cuando al menos un Otro Sí del préstamo ya está FIRMADO. */}
+              {/* Solo se muestra cuando al menos un Otro Sí del solicitud ya está FIRMADO. */}
               {/* Si hay uno solo → botones directos. Si hay varios → dropdown. */}
               {otrosSiFirmados.length === 1 && (
                 <>
@@ -1128,16 +1128,16 @@ export function PrestamoDetalleModal({
                 <div className="flex items-start gap-2 flex-wrap w-full">
                   {/* Si el método fue CORREO (o null/legacy — el endpoint enviar-codigo
                       siempre manda por correo y ahora setea metodoConfirmacion='CORREO',
-                      pero los préstamos creados antes del fix tienen metodoConfirmacion=null),
+                      pero los solicitudes creados antes del fix tienen metodoConfirmacion=null),
                       mostrar input de código de verificación OTP */}
                   {(data.metodoConfirmacion === 'CORREO' || !data.metodoConfirmacion) && (
                     <div className="w-full space-y-2">
                       {/* === Aviso de doble confirmación cuando hay codeudor === */}
                       {estadoVerificacion?.requiereCodeudor && (
                         <div className="w-full bg-violet-50 border border-violet-200 rounded-md p-3 text-sm text-violet-900">
-                          <div className="font-semibold mb-1">⚠️ Préstamo con codeudor — requiere doble confirmación</div>
+                          <div className="font-semibold mb-1">⚠️ Solicitud con codeudor — requiere doble confirmación</div>
                           <div className="text-xs">
-                            El préstamo se activará <strong>ÚNICAMENTE</strong> cuando tanto el <strong>Titular</strong>
+                            El solicitud se activará <strong>ÚNICAMENTE</strong> cuando tanto el <strong>Titular</strong>
                             {' '}como el <strong>Codeudor</strong> verifiquen su respectivo código OTP enviado por correo.
                           </div>
                           <div className="flex flex-wrap gap-2 mt-2 text-xs">
@@ -1188,7 +1188,7 @@ export function PrestamoDetalleModal({
                               const json = await res.json()
                               if (json.success) {
                                 toast({
-                                  title: json.data?.activado ? '✅ Préstamo activado' : '✅ Código verificado',
+                                  title: json.data?.activado ? '✅ Solicitud activado' : '✅ Código verificado',
                                   description: json.mensaje,
                                   duration: 8000,
                                 })
@@ -1244,7 +1244,7 @@ export function PrestamoDetalleModal({
                                 const json = await res.json()
                                 if (json.success) {
                                   toast({
-                                    title: json.data?.activado ? '✅ Préstamo activado' : '✅ Código verificado',
+                                    title: json.data?.activado ? '✅ Solicitud activado' : '✅ Código verificado',
                                     description: json.mensaje,
                                     duration: 8000,
                                   })
@@ -1650,7 +1650,7 @@ export function PrestamoDetalleModal({
                 ) : (
                   <div className="text-center py-8 text-muted-foreground text-sm">
                     <PenTool className="w-12 h-12 mx-auto mb-2 opacity-40" />
-                    No hay firmas electrónicas registradas para este préstamo.
+                    No hay firmas electrónicas registradas para este solicitud.
                     <p className="text-xs mt-2">
                       Las firmas se realizan desde el portal del cliente con OTP por WhatsApp.
                     </p>
@@ -1773,7 +1773,7 @@ export function PrestamoDetalleModal({
                 ) : otrosSi.length === 0 ? (
                   <div className="text-center py-8 text-muted-foreground text-sm">
                     <FileText className="w-10 h-10 mx-auto mb-2 opacity-40" />
-                    No hay Otros Síes generados para este préstamo.
+                    No hay Otros Síes generados para este solicitud.
                     {flexInfo?.flexibilidadFinanciera && flexInfo?.flexibilidadActivada && (
                       <p className="text-xs mt-2 text-emerald-700">
                         Presiona "Generar Otro Sí" para crear el primer acuerdo de cambio de fechas.
@@ -1902,7 +1902,7 @@ export function PrestamoDetalleModal({
               ¿Cómo enviar la confirmación al cliente?
             </DialogTitle>
             <p className="text-sm text-muted-foreground mt-1">
-              Préstamo: <strong>{data.codigo}</strong> · Cliente: <strong>{data.cliente.nombre}</strong>
+              Solicitud: <strong>{data.codigo}</strong> · Cliente: <strong>{data.cliente.nombre}</strong>
             </p>
           </DialogHeader>
           <div className="space-y-3">
@@ -2064,7 +2064,7 @@ export function PrestamoDetalleModal({
               Generar Otro Sí — Acuerdo de Cambio de Fechas
             </DialogTitle>
             <p className="text-sm text-muted-foreground mt-1">
-              Préstamo: <strong>{data?.codigo}</strong> · Cliente: <strong>{data?.cliente?.nombre}</strong>
+              Solicitud: <strong>{data?.codigo}</strong> · Cliente: <strong>{data?.cliente?.nombre}</strong>
             </p>
           </DialogHeader>
           <form onSubmit={crearOtroSi} className="space-y-4">

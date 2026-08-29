@@ -57,7 +57,7 @@ export async function GET(req: NextRequest) {
     // 1) SECCIÓN FINANCIERA
     // =====================================================
 
-    // --- Préstamos creados en el mes ---
+    // --- Solicitudes creados en el mes ---
     const prestamosCreadosMes = await db.prestamo.findMany({
       where: {
         createdAt: { gte: inicioMes, lt: finMes },
@@ -70,7 +70,7 @@ export async function GET(req: NextRequest) {
     const totalPrestamosCreados = prestamosCreadosMes.length
     const montoPrestamosCreados = prestamosCreadosMes.reduce((s, p) => s + p.montoPrincipal, 0)
 
-    // --- Préstamos desembolsados en el mes (activados) ---
+    // --- Solicitudes desembolsados en el mes (activados) ---
     const prestamosDesembolsadosMes = await db.prestamo.findMany({
       where: {
         fechaDesembolso: { gte: inicioMes, lt: finMes },
@@ -117,7 +117,7 @@ export async function GET(req: NextRequest) {
     const carteraJuridico = carteraActual.filter((p) => p.estado === 'JURIDICO').reduce((s, p) => s + p.saldoTotal, 0)
     const moraTotal = carteraActual.reduce((s, p) => s + (p.montoMora || 0), 0)
 
-    // --- Préstamos cancelados (liquidados) en el mes ---
+    // --- Solicitudes cancelados (liquidados) en el mes ---
     const prestamosCanceladosMes = await db.prestamo.findMany({
       where: {
         estado: 'CANCELADO',
@@ -395,7 +395,7 @@ function generarHtmlInforme(d: {
 <div class="container">
   <div class="header">
     <h1>📊 Informe Mensual de Operaciones</h1>
-    <div class="subtitle">JSADR Plataforma de Préstamos · Informe Financiero y Técnico</div>
+    <div class="subtitle">JSADR Plataforma de Solicitudes · Informe Financiero y Técnico</div>
     <div class="periodo">📅 Período: ${d.nombreMes} (del ${fmtFecha(d.inicioMes)} al ${fmtFecha(new Date(d.finMes.getTime() - 1))})</div>
   </div>
 
@@ -405,7 +405,7 @@ function generarHtmlInforme(d: {
 
     <div class="kpi-grid">
       <div class="kpi">
-        <div class="label">Préstamos creados</div>
+        <div class="label">Solicitudes creados</div>
         <div class="value">${d.totalPrestamosCreados}</div>
         <div class="delta">Monto total: ${fmt(d.montoPrestamosCreados)}</div>
       </div>
@@ -530,7 +530,7 @@ function generarHtmlInforme(d: {
     <h3 style="font-size:14px;color:#475569;margin:24px 0 8px 0;">Volumen de datos</h3>
     <table>
       <tr><th>Recurso</th><th style="text-align:right;">Total registros</th></tr>
-      <tr><td>Préstamos (todos los estados)</td><td style="text-align:right;">${d.totalPrestamos}</td></tr>
+      <tr><td>Solicitudes (todos los estados)</td><td style="text-align:right;">${d.totalPrestamos}</td></tr>
       <tr><td>Pagos (todos los estados)</td><td style="text-align:right;">${d.totalPagos}</td></tr>
       <tr><td>Clientes</td><td style="text-align:right;">${d.totalClientes}</td></tr>
       <tr><td>Usuarios</td><td style="text-align:right;">${d.totalUsuarios}</td></tr>
@@ -543,7 +543,7 @@ function generarHtmlInforme(d: {
   </div>
 
   <div class="footer">
-    <p><strong>JSADR Plataforma de Préstamos</strong> · Informe mensual automático</p>
+    <p><strong>JSADR Plataforma de Solicitudes</strong> · Informe mensual automático</p>
     <p>Generado el ${new Date().toLocaleString('es-CO')} · Período: ${d.nombreMes}</p>
   </div>
 </div>

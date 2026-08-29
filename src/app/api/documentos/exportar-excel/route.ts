@@ -8,11 +8,11 @@ import ExcelJS from 'exceljs'
 // GET /api/documentos/exportar-excel
 // =====================================================
 // Exporta un consolidado en Excel de TODOS los documentos (fotos) del módulo
-// DocumentosPrestamosView, ordenados por Cliente → Préstamo → Tipo → Fecha.
+// DocumentosPrestamosView, ordenados por Cliente → Solicitud → Tipo → Fecha.
 //
 // Filtros opcionales (query string):
 //   ?clienteId=xxx   → solo documentos de un cliente
-//   ?prestamoId=xxx  → solo documentos de un préstamo
+//   ?prestamoId=xxx  → solo documentos de un solicitud
 //   ?tipo=FOTO_SELSI → solo documentos de un tipo
 //   ?incluirImagenes=true|false (default true) → embebe las imágenes en una columna
 //
@@ -74,7 +74,7 @@ export async function GET(req: NextRequest) {
 
     // === Crear workbook ===
     const workbook = new ExcelJS.Workbook()
-    workbook.creator = 'JSADR - Sistema de Préstamos'
+    workbook.creator = 'JSADR - Sistema de Solicitudes'
     workbook.created = new Date()
 
     // ---------- Hoja 1: Inventario ----------
@@ -87,7 +87,7 @@ export async function GET(req: NextRequest) {
       { header: '#', key: 'idx', width: 6 },
       { header: 'Cliente', key: 'cliente', width: 32 },
       { header: 'Cédula', key: 'cedula', width: 18 },
-      { header: 'Código Préstamo', key: 'prestamo', width: 28 },
+      { header: 'Código Solicitud', key: 'prestamo', width: 28 },
       { header: 'Tipo documento', key: 'tipo', width: 28 },
       { header: 'Título', key: 'titulo', width: 40 },
       { header: 'Descripción', key: 'descripcion', width: 40 },

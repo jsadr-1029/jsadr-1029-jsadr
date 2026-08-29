@@ -91,12 +91,12 @@ export async function GET(req: NextRequest) {
     let totalCargosInicialesPendientes = 0  // nuevo (Task 12)
 
     const prestamosCalculados = cliente.prestamos.map((p) => {
-      // === Usar la función de cálculo correcta según la modalidad del préstamo ===
+      // === Usar la función de cálculo correcta según la modalidad del solicitud ===
       // - TASA_FIJA: calcularPrestamoTasaFijaMensual (interés fijo sobre capital inicial,
       //   cuota constante, mismo capital y mismo interés en todas las cuotas)
       // - FRANCES (default): calcularPrestamo (sistema francés, interés sobre saldo
       //   decreciente, capital crece e interés decrece en cada cuota)
-      // - CUOTA_PERSONALIZADA: usar los valores guardados en el préstamo (no recalcular)
+      // - CUOTA_PERSONALIZADA: usar los valores guardados en el solicitud (no recalcular)
       // - INTERES_FIJO_SIN_CAPITAL: no tiene tabla de amortización tradicional
       let calculo: any
       if (p.modalidadAmortizacion === 'TASA_FIJA') {
@@ -177,12 +177,12 @@ export async function GET(req: NextRequest) {
       totalPagado += p.montoPagado
       // === FIX Task 12: sumar cargos iniciales pendientes al saldo mostrado ===
       // IMPORTANTE: Para evitar doble contabilidad, solo sumamos los cargos
-      // iniciales pendientes SI el saldoTotal del préstamo NO los incluye ya.
-      // El saldoTotal del préstamo incluye los cargos cuando:
-      //   - El préstamo fue creado con cargos y el saldo se calculó como
+      // iniciales pendientes SI el saldoTotal del solicitud NO los incluye ya.
+      // El saldoTotal del solicitud incluye los cargos cuando:
+      //   - El solicitud fue creado con cargos y el saldo se calculó como
       //     totalPagar (que incluye los cargos) - montoPagado.
       // El saldoTotal NO incluye los cargos cuando:
-      //   - El préstamo es legacy (creado antes del fix Task 12).
+      //   - El solicitud es legacy (creado antes del fix Task 12).
       // Para distinguir, comparamos: si (saldoTotal + cargosInicialesPendientes)
       // excede significativamente el totalPagar teórico (capital + interés + cargos),
       // es probable que ya estén incluidos.
@@ -224,8 +224,8 @@ export async function GET(req: NextRequest) {
         cargosInicialesInfo: cargosInicialesInfoAjustada,
         cargosInicialesPendientes,
         // === FIX (2026-08-20): flag para evitar doble cuenta de cargos iniciales ===
-        // Si saldoTotal ya incluye los cargos (préstamos nuevos), el template NO debe
-        // sumarlos de nuevo. Si no los incluye (préstamos legacy), el template los suma.
+        // Si saldoTotal ya incluye los cargos (solicitudes nuevos), el template NO debe
+        // sumarlos de nuevo. Si no los incluye (solicitudes legacy), el template los suma.
         saldoYaIncluyeCargos,
         cuota1Aplicada,
       }
@@ -513,7 +513,7 @@ function generarEstadoCuentaHTML({
 
   <div class="header">
     <h1>ESTADO DE CUENTA</h1>
-    <p class="subtitle">Sistema de Gestión de Préstamos</p>
+    <p class="subtitle">Sistema de Gestión de Solicitudes</p>
     <p class="fecha-gen">Generado el ${fechaGen}</p>
   </div>
 
@@ -570,12 +570,12 @@ function generarEstadoCuentaHTML({
       </div>
       ` : ''}
       <p style="margin: 8px 0 0 0; color: #6b7280; font-size: 10px;">
-        <strong>${totales.numPrestamos}</strong> préstamo(s) registrado(s)
+        <strong>${totales.numPrestamos}</strong> solicitud(s) registrado(s)
       </p>
     </div>
   </div>
 
-  <!-- Detalle por préstamo -->
+  <!-- Detalle por solicitud -->
   ${prestamos.map((p: any) => {
     const pagosAplicados = p.pagos.filter((pg: any) => pg.estado === 'APLICADO' || pg.estado === 'PAGO_PARCIAL')
     const totalPagosPrestamo = pagosAplicados.reduce((s: number, pg: any) => s + pg.montoTotal, 0)
@@ -700,7 +700,7 @@ function generarEstadoCuentaHTML({
 
       ${(() => {
         // === Tarea Q: Historial de cuotas trasladadas por Flexibilidad Financiera ===
-        // Si el préstamo tiene movimientos de flexibilidad registrados (JSON en flexibilidadMovimientos),
+        // Si el solicitud tiene movimientos de flexibilidad registrados (JSON en flexibilidadMovimientos),
         // mostrar el detalle de cada uso con su cuota, fecha original, fecha nueva, intereses causados.
         try {
           if (!p.flexibilidadMovimientos) return ''
@@ -809,14 +809,14 @@ function generarEstadoCuentaHTML({
           </div>
           <div style="font-size: 10px; color: #14532d; line-height: 1.5;">
             <div style="font-weight: 700; margin-bottom: 4px;">Declaración de aceptación:</div>
-            El cliente declara haber leído, entendido y aceptado voluntariamente los términos y condiciones del préstamo <strong>${p.codigo}</strong>, así como la obligación de pago según el cronograma arriba detallado. La firma electrónica tiene plena validez legal conforme a la Ley 527 de 1999 y el Decreto 1074 de 2015.
+            El cliente declara haber leído, entendido y aceptado voluntariamente los términos y condiciones del solicitud <strong>${p.codigo}</strong>, así como la obligación de pago según el cronograma arriba detallado. La firma electrónica tiene plena validez legal conforme a la Ley 527 de 1999 y el Decreto 1074 de 2015.
           </div>
         </div>
         ` : `
         <div style="margin-top: 14px; padding-top: 12px; border-top: 1px dashed #16a34a;">
           <div style="font-size: 10px; color: #14532d; line-height: 1.5;">
             <div style="font-weight: 700; margin-bottom: 4px;">Declaración de aceptación:</div>
-            El cliente declara haber leído, entendido y aceptado voluntariamente los términos y condiciones del préstamo <strong>${p.codigo}</strong>, así como la obligación de pago según el cronograma arriba detallado. La firma electrónica tiene plena validez legal conforme a la Ley 527 de 1999 y el Decreto 1074 de 2015.
+            El cliente declara haber leído, entendido y aceptado voluntariamente los términos y condiciones del solicitud <strong>${p.codigo}</strong>, así como la obligación de pago según el cronograma arriba detallado. La firma electrónica tiene plena validez legal conforme a la Ley 527 de 1999 y el Decreto 1074 de 2015.
           </div>
         </div>
         `}
@@ -830,7 +830,7 @@ function generarEstadoCuentaHTML({
           <span style="margin-left: auto; background: #f3f4f6; color: #6b7280; padding: 3px 10px; border-radius: 12px; font-size: 10px; font-weight: 600;">PENDIENTE</span>
         </div>
         <div style="font-size: 10px; color: #6b7280; line-height: 1.4;">
-          Este préstamo aún no cuenta con firma electrónica registrada. El cliente debe completar el proceso de aceptación y firma para validar el documento.
+          Este solicitud aún no cuenta con firma electrónica registrada. El cliente debe completar el proceso de aceptación y firma para validar el documento.
         </div>
       </div>
       `}
@@ -839,9 +839,9 @@ function generarEstadoCuentaHTML({
   }).join('')}
 
   <div class="footer">
-    <p>Documento generado automáticamente por el Sistema de Gestión de Préstamos</p>
+    <p>Documento generado automáticamente por el Sistema de Gestión de Solicitudes</p>
     <p>Este estado de cuenta es una referencia de los pagos registrados. En caso de discrepancia, contacte a su gestor.</p>
-    <p>© ${new Date().getFullYear()} - Sistema de Gestión de Préstamos</p>
+    <p>© ${new Date().getFullYear()} - Sistema de Gestión de Solicitudes</p>
   </div>
 
   <script>

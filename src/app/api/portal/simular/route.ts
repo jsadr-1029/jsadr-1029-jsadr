@@ -7,7 +7,7 @@ import {
   calcularValorDiasCausados,
 } from '@/lib/corte-fechas'
 
-// Simula un préstamo basado en una categoría
+// Simula un solicitud basado en una categoría
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
@@ -113,7 +113,7 @@ export async function POST(req: NextRequest) {
           tarifaPlataforma: tarifaPlataformaMonto,
           tarifaPlataformaObligatoria: tarifaPlataformaAplica,
           tarifaPlataformaRazon: tarifaPlataformaAplica
-            ? `Cobro obligatorio porque la tasa mensual (${tasaMensualSimulacion.toFixed(2)}%) es ≥ ${TASA_MIN_PARA_TARIFA}%. Se cobra una sola vez durante la vigencia del préstamo, cargado en la primera cuota.`
+            ? `Cobro obligatorio porque la tasa mensual (${tasaMensualSimulacion.toFixed(2)}%) es ≥ ${TASA_MIN_PARA_TARIFA}%. Se cobra una sola vez durante la vigencia del solicitud, cargado en la primera cuota.`
             : `No se cobra porque la tasa mensual (${tasaMensualSimulacion.toFixed(2)}%) es < ${TASA_MIN_PARA_TARIFA}%.`,
           // === Flexibilidad Financiera ===
           flexibilidadFinanciera: flexActivada,
@@ -135,7 +135,7 @@ export async function POST(req: NextRequest) {
                   descripcion: 'Tarifa de Uso de Plataforma (cobro único)',
                   monto: TARIFA_PLATAFORMA,
                   obligatorio: true,
-                  explicacion: 'Se cobra una sola vez durante la vigencia del préstamo. Se carga en la primera cuota.',
+                  explicacion: 'Se cobra una sola vez durante la vigencia del solicitud. Se carga en la primera cuota.',
                 }]
               : []),
             ...(flexActivada
@@ -223,7 +223,7 @@ export async function POST(req: NextRequest) {
         tarifaPlataforma: tarifaPlataformaMonto,
         tarifaPlataformaObligatoria: tarifaPlataformaAplica,
         tarifaPlataformaRazon: tarifaPlataformaAplica
-          ? `Cobro obligatorio porque la tasa mensual (${tasaMensual.toFixed(2)}%) es ≥ ${TASA_MIN_PARA_TARIFA}%. Se cobra una sola vez durante la vigencia del préstamo, cargado en la primera cuota.`
+          ? `Cobro obligatorio porque la tasa mensual (${tasaMensual.toFixed(2)}%) es ≥ ${TASA_MIN_PARA_TARIFA}%. Se cobra una sola vez durante la vigencia del solicitud, cargado en la primera cuota.`
           : `No se cobra porque la tasa mensual (${tasaMensual.toFixed(2)}%) es < ${TASA_MIN_PARA_TARIFA}%.`,
         // === Flexibilidad Financiera ===
         flexibilidadFinanciera: flexActivada,
@@ -245,7 +245,7 @@ export async function POST(req: NextRequest) {
                 descripcion: 'Tarifa de Uso de Plataforma (cobro único)',
                 monto: TARIFA_PLATAFORMA,
                 obligatorio: true,
-                explicacion: 'Se cobra una sola vez durante la vigencia del préstamo. Se carga en la primera cuota.',
+                explicacion: 'Se cobra una sola vez durante la vigencia del solicitud. Se carga en la primera cuota.',
               }]
             : []),
           ...(flexActivada

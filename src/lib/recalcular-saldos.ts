@@ -2,7 +2,7 @@ import { db } from './db'
 import { calcularPrestamo, calcularMoraCompuesta, calcularDiasMora, getTasaMoraDiaria } from './finanzas'
 
 /**
- * Recalcula automáticamente todos los saldos del préstamo en base a los pagos
+ * Recalcula automáticamente todos los saldos del solicitud en base a los pagos
  * realmente APLICADOS y PAGO_PARCIAL (excluyendo PENDIENTE, REVERSADO, ANULADO).
  *
  * Esta función debe llamarse SIEMPRE después de:
@@ -23,10 +23,10 @@ import { calcularPrestamo, calcularMoraCompuesta, calcularDiasMora, getTasaMoraD
  * - estado: CANCELADO si cuotasPagadas >= numeroCuotas o saldoTotal <= 0
  *           ACTIVO si era EN_MORA y TODAS las cuotas vencidas están APLICADO (pago completo, no parcial)
  *
- * @param prestamoId - ID del préstamo a recalcular
+ * @param prestamoId - ID del solicitud a recalcular
  */
 export async function recalcularSaldosPrestamo(prestamoId: string) {
-  // Buscar el préstamo con sus pagos
+  // Buscar el solicitud con sus pagos
   const prestamo = await db.prestamo.findUnique({
     where: { id: prestamoId },
     include: {
@@ -35,7 +35,7 @@ export async function recalcularSaldosPrestamo(prestamoId: string) {
   })
 
   if (!prestamo) {
-    throw new Error(`Préstamo no encontrado: ${prestamoId}`)
+    throw new Error(`Solicitud no encontrado: ${prestamoId}`)
   }
 
   // Filtrar solo pagos que cuentan (APLICADO y PAGO_PARCIAL)
@@ -95,7 +95,7 @@ export async function recalcularSaldosPrestamo(prestamoId: string) {
       }
     }
   } catch (e) {
-    // Fallback: usar el snapshot montoMora del préstamo
+    // Fallback: usar el snapshot montoMora del solicitud
     moraPendiente = Math.max(0, prestamo.montoMora - montoMoraPagado)
   }
 
@@ -132,12 +132,12 @@ export async function recalcularSaldosPrestamo(prestamoId: string) {
     nuevoEstado = 'ACTIVO'
   }
 
-  // Auto-detección de EN_MORA: si hay mora pendiente > 0 y el préstamo está ACTIVO, pasar a EN_MORA
+  // Auto-detección de EN_MORA: si hay mora pendiente > 0 y el solicitud está ACTIVO, pasar a EN_MORA
   if (nuevoEstado === 'ACTIVO' && moraPendiente > 0 && diasMoraMaximo > 0) {
     nuevoEstado = 'EN_MORA'
   }
 
-  // Actualizar préstamo
+  // Actualizar solicitud
   const prestamoActualizado = await db.prestamo.update({
     where: { id: prestamoId },
     data: {

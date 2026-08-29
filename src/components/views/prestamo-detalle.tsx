@@ -22,14 +22,14 @@ export function PrestamoDetalle({ id, navigate }: { id: string; navigate: (v: an
   const [notifOpen, setNotifOpen] = useState(false)
 
   if (loading) return <LoadingState />
-  if (!p) return <EmptyState icon={FileText} title="Préstamo no encontrado" />
+  if (!p) return <EmptyState icon={FileText} title="Solicitud no encontrado" />
 
   const progreso = p.numeroCuotas > 0 ? (p.cuotasPagadas / p.numeroCuotas) * 100 : 0
 
   return (
     <div className="space-y-4">
       <Button variant="ghost" size="sm" onClick={() => navigate({ name: 'prestamos' })} className="mb-2">
-        <ArrowLeft className="w-4 h-4 mr-1" /> Volver a préstamos
+        <ArrowLeft className="w-4 h-4 mr-1" /> Volver a solicitudes
       </Button>
 
       <PageHeader
@@ -46,7 +46,7 @@ export function PrestamoDetalle({ id, navigate }: { id: string; navigate: (v: an
         }
       />
 
-      {/* KPIs del préstamo */}
+      {/* KPIs del solicitud */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <Card>
           <p className="text-xs text-slate-500">Monto Principal</p>
@@ -73,7 +73,7 @@ export function PrestamoDetalle({ id, navigate }: { id: string; navigate: (v: an
       {/* Barra de progreso */}
       <Card>
         <div className="flex items-center justify-between mb-2">
-          <p className="text-sm font-medium text-slate-700">Progreso del préstamo</p>
+          <p className="text-sm font-medium text-slate-700">Progreso del solicitud</p>
           <p className="text-sm text-slate-500">{p.cuotasPagadas}/{p.numeroCuotas} cuotas pagadas</p>
         </div>
         <div className="h-3 bg-slate-100 rounded-full overflow-hidden">
@@ -209,7 +209,7 @@ export function PrestamoDetalle({ id, navigate }: { id: string; navigate: (v: an
         <TabsContent value="firmas">
           <Card title="Firmas Digitales" subtitle={`${p.firmas?.length || 0} firmas`}>
             {!p.firmas?.length ? (
-              <EmptyState icon={FileCheck} title="Sin firmas" description="No se han iniciado firmas para este préstamo." />
+              <EmptyState icon={FileCheck} title="Sin firmas" description="No se han iniciado firmas para este solicitud." />
             ) : (
               <div className="space-y-2">
                 {p.firmas.map((f: any) => (

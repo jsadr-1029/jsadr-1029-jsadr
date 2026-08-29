@@ -3,7 +3,7 @@ import { db } from '@/lib/db'
 import { sanitizeError } from '@/lib/error-handler'
 import { requireRole as requireRoleAuth } from '@/lib/auth-guard'
 
-// GET - listar bitácoras (con filtros por préstamo)
+// GET - listar bitácoras (con filtros por solicitud)
 // Requiere autenticación (cualquier rol interno: ADMIN, GESTOR, CONSULTOR)
 export async function GET(req: NextRequest) {
   try {

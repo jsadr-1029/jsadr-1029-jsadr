@@ -38,11 +38,11 @@ import {
 // =====================================================
 // Modal completo con la "Hoja de Vida" del cliente:
 //   - Perfil: datos personales, bancarios, tasa, fechas
-//   - Préstamos: tabla con todos los préstamos del cliente
+//   - Solicitudes: tabla con todos los solicitudes del cliente
 //   - Comportamiento: métricas de puntualidad, pagos atrasados, promedios
 //   - Pagos: historial cronológico de pagos aplicados
 //   - Fotos: cédula frente/reverso + selfie del registro
-//   - Bitácora: eventos registrados en sus préstamos + accesos al portal
+//   - Bitácora: eventos registrados en sus solicitudes + accesos al portal
 //
 // Se alimenta de la API /api/clientes/[id]/hoja-vida.
 
@@ -263,7 +263,7 @@ export function HojaVidaClienteModal({ clienteId, open, onClose }: Props) {
               <TabsList className="grid grid-cols-6 mb-4">
                 <TabsTrigger value="perfil">Perfil</TabsTrigger>
                 <TabsTrigger value="prestamos">
-                  Préstamos
+                  Solicitudes
                   {data.estadisticas.totalPrestamos > 0 && (
                     <Badge variant="secondary" className="ml-1 text-[10px]">
                       {data.estadisticas.totalPrestamos}
@@ -328,7 +328,7 @@ export function HojaVidaClienteModal({ clienteId, open, onClose }: Props) {
 
                 {/* Resumen rápido de actividad */}
                 <div className="grid grid-cols-4 gap-2">
-                  <StatCard label="Préstamos" value={String(data.estadisticas.totalPrestamos)} icon={<FileText className="w-4 h-4" />} />
+                  <StatCard label="Solicitudes" value={String(data.estadisticas.totalPrestamos)} icon={<FileText className="w-4 h-4" />} />
                   <StatCard label="Total prestado" value={formatearMoneda(data.estadisticas.totalPrestado)} icon={<DollarSign className="w-4 h-4" />} />
                   <StatCard label="Total pagado" value={formatearMoneda(data.estadisticas.totalPagado)} icon={<CheckCircle className="w-4 h-4" />} />
                   <StatCard
@@ -347,13 +347,13 @@ export function HojaVidaClienteModal({ clienteId, open, onClose }: Props) {
                 )}
               </TabsContent>
 
-              {/* === PESTAÑA PRÉSTAMOS === */}
+              {/* === PESTAÑA SOLICITUDES === */}
               <TabsContent value="prestamos">
                 <Card>
                   <CardContent className="p-0">
                     {data.prestamos.length === 0 ? (
                       <div className="text-center py-8 text-muted-foreground text-sm">
-                        Este cliente no tiene préstamos registrados.
+                        Este cliente no tiene solicitudes registrados.
                       </div>
                     ) : (
                       <Table>
@@ -472,9 +472,9 @@ export function HojaVidaClienteModal({ clienteId, open, onClose }: Props) {
                 {/* Distribución por estado */}
                 <Card>
                   <CardContent className="p-4">
-                    <div className="text-sm font-semibold mb-3">Distribución de préstamos por estado</div>
+                    <div className="text-sm font-semibold mb-3">Distribución de solicitudes por estado</div>
                     {Object.keys(data.estadisticas.distribucionEstados).length === 0 ? (
-                      <div className="text-sm text-muted-foreground">Sin préstamos.</div>
+                      <div className="text-sm text-muted-foreground">Sin solicitudes.</div>
                     ) : (
                       <div className="flex flex-wrap gap-2">
                         {Object.entries(data.estadisticas.distribucionEstados).map(([estado, count]) => (
@@ -499,7 +499,7 @@ export function HojaVidaClienteModal({ clienteId, open, onClose }: Props) {
                         <TableHeader>
                           <TableRow>
                             <TableHead>Fecha</TableHead>
-                            <TableHead>Préstamo</TableHead>
+                            <TableHead>Solicitud</TableHead>
                             <TableHead>Cuota</TableHead>
                             <TableHead>Vence</TableHead>
                             <TableHead>Monto</TableHead>
@@ -590,7 +590,7 @@ export function HojaVidaClienteModal({ clienteId, open, onClose }: Props) {
                 <Card>
                   <CardContent className="p-4">
                     <div className="text-sm font-semibold mb-3 flex items-center gap-2">
-                      <FileText className="w-4 h-4" /> Eventos de préstamos ({data.bitacora.prestamosEventos.length})
+                      <FileText className="w-4 h-4" /> Eventos de solicitudes ({data.bitacora.prestamosEventos.length})
                     </div>
                     {data.bitacora.prestamosEventos.length === 0 ? (
                       <div className="text-sm text-muted-foreground">Sin eventos registrados.</div>

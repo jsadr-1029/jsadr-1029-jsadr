@@ -19,23 +19,23 @@ import { buildAbsoluteUrl } from '@/lib/url'
 import { registrarAuditLog, getClientInfo } from '@/lib/security'
 
 // =====================================================
-// Helper: calcular préstamo según modalidad
+// Helper: calcular solicitud según modalidad
 // -----------------------------------------------------
 // Centraliza el cálculo para que TODAS las funciones de pagos usen la misma
-// función según la modalidad del préstamo. Esto garantiza que el monto de
+// función según la modalidad del solicitud. Esto garantiza que el monto de
 // la cuota mostrado en "Aplicar Pago", "Generar Link", "Solo Intereses" y
 // "Usar Flexibilidad" coincida exactamente con el monto mostrado en el
 // estado de cuenta.
 //
 // Antes, todas las funciones usaban calcularPrestamo (Sistema Francés)
-// sin importar la modalidad, lo que causaba que para préstamos TASA_FIJA
+// sin importar la modalidad, lo que causaba que para solicitudes TASA_FIJA
 // el capital e interés por cuota fueran inconsistentes entre vistas.
 // =====================================================
 function calcularPrestamoSegunModalidad(prestamo: any) {
   // === FIX (2026-08-21): usar fechaInicioAmortizacion si está disponible ===
-  // Si el admin definió fechaPrimerCuota al crear el préstamo, la fecha base
+  // Si el admin definió fechaPrimerCuota al crear el solicitud, la fecha base
   // para la amortización NO es fechaDesembolso sino fechaPrimerCuota - 1 periodo.
-  // Esa fecha se guardó en prestamo.fechaInicioAmortizacion al crear el préstamo.
+  // Esa fecha se guardó en prestamo.fechaInicioAmortizacion al crear el solicitud.
   // Sin esto, las fechas de vencimiento de las cuotas no coincidirían con
   // fechaPrimerCuota (el sistema contaría desde fechaDesembolso).
   const fechaBase = prestamo.fechaInicioAmortizacion || prestamo.fechaDesembolso || undefined
@@ -86,7 +86,7 @@ function calcularPrestamoSegunModalidad(prestamo: any) {
 //                              causados, evitando generación de mora.
 //                              NO recibe dinero (montoTotal=0) — es
 //                              un asiento contable que documenta el uso.
-//                              Valida: préstamo con flexibilidad activa,
+//                              Valida: solicitud con flexibilidad activa,
 //                              >=4 cuotas, 1ra cuota paga, cuota actual >=2,
 //                              usos disponibles > 0.
 // =====================================================
@@ -175,7 +175,7 @@ async function generarLinkPago(body: any, user: any) {
     include: { cliente: true, pagos: true },
   })
   if (!prestamo) {
-    return NextResponse.json({ success: false, error: 'Préstamo no encontrado' }, { status: 404 })
+    return NextResponse.json({ success: false, error: 'Solicitud no encontrado' }, { status: 404 })
   }
 
   // === FIX (2026-08-20): usar helper que selecciona la función correcta según modalidad ===
@@ -278,17 +278,17 @@ async function aplicarPago(body: any, user: any) {
       pagos: true,
     },
   })
-  if (!prestamo) return NextResponse.json({ success: false, error: 'Préstamo no encontrado' }, { status: 404 })
+  if (!prestamo) return NextResponse.json({ success: false, error: 'Solicitud no encontrado' }, { status: 404 })
 
-  // === v4.7 (QA M04 TC-PAG-004): validar estado del préstamo antes de aplicar pago ===
+  // === v4.7 (QA M04 TC-PAG-004): validar estado del solicitud antes de aplicar pago ===
   // Estados que NO aceptan pagos: ANULADO, RECHAZADO, CANCELADO.
-  // (CANCELADO = préstamo saldado; ANULADO/RECHAZADO = préstamo cancelado administrativamente)
+  // (CANCELADO = solicitud saldado; ANULADO/RECHAZADO = solicitud cancelado administrativamente)
   const ESTADOS_NO_ACEPTAN_PAGOS = ['ANULADO', 'RECHAZADO', 'CANCELADO']
   if (ESTADOS_NO_ACEPTAN_PAGOS.includes(prestamo.estado)) {
     return NextResponse.json(
       {
         success: false,
-        error: `No se pueden registrar pagos a un préstamo en estado ${prestamo.estado}. Solo préstamos ACTIVO/SOLICITUD/EN_MORA/PENDIENTE_ACEPTACION aceptan pagos.`,
+        error: `No se pueden registrar pagos a un solicitud en estado ${prestamo.estado}. Solo solicitudes ACTIVO/SOLICITUD/EN_MORA/PENDIENTE_ACEPTACION aceptan pagos.`,
         codigo: 'PRESTAMO_NO_APLICA_PAGOS',
         estadoPrestamo: prestamo.estado,
       },
@@ -301,10 +301,10 @@ async function aplicarPago(body: any, user: any) {
   //   1. Instrucción temporal activa del cliente
   //   2. Cuenta asignada directamente al cliente (cliente.cuentaRecaudoId)
   //   3. Cuenta de la categoría del cliente (cliente.categoria.cuentaRecaudoId)
-  //   4. Cuenta de la categoría del préstamo (prestamo.categoria.cuentaRecaudoId)
+  //   4. Cuenta de la categoría del solicitud (prestamo.categoria.cuentaRecaudoId)
   //
   // BUG PREVIO: si el frontend enviaba una cuenta distinta (p.ej. la de la
-  // categoría del préstamo cuando el cliente tiene su propia cuenta), el
+  // categoría del solicitud cuando el cliente tiene su propia cuenta), el
   // sistema RECHAZABA el pago con 400. Esto bloqueaba al usuario.
   // FIX v4.0.1: si la cuenta enviada no coincide con la asignada, se
   // AUTO-CORRIGE silenciosamente a la cuenta asignada. El pago se aplica
@@ -519,7 +519,7 @@ async function aplicarPago(body: any, user: any) {
     // === FIX Task 12: los cargos iniciales se acumulan en `montoMora` para
     // que la suma montoCapital+montoInteres+montoMora = montoTotal (sin
     // excedente). Esto mantiene la consistencia contable del registro de pago
-    // y permite que el `montoPagado` acumulado del préstamo incluya los cargos. ===
+    // y permite que el `montoPagado` acumulado del solicitud incluya los cargos. ===
     const montoMoraConCargos = montoMoraPagada + montoCargosInicialesPagado
     const pago = pagoExistente
       ? await tx.pago.update({
@@ -555,7 +555,7 @@ async function aplicarPago(body: any, user: any) {
           },
         })
 
-    // 2. Recalcular saldos del préstamo (también dentro de la transacción)
+    // 2. Recalcular saldos del solicitud (también dentro de la transacción)
     //    Lo hacemos manualmente para mantener tx
     const prestamoCompleto = await tx.prestamo.findUnique({
       where: { id: prestamoId },
@@ -592,7 +592,7 @@ async function aplicarPago(body: any, user: any) {
             ? { tarifaPlataformaCargada: true } : {}),
         },
       })
-      // Recargar préstamo con el nuevo totalPagar
+      // Recargar solicitud con el nuevo totalPagar
       const prestamoAjustado = await tx.prestamo.findUnique({
         where: { id: prestamoId },
         include: { pagos: true },
@@ -643,7 +643,7 @@ async function aplicarPago(body: any, user: any) {
             cajaId: cajaMora.id,
             tipo: 'INGRESO',
             monto: montoMoraPagada,
-            concepto: `Mora cobrada - Préstamo ${prestamo.codigo} - Cuota ${numeroCuota}`,
+            concepto: `Mora cobrada - Solicitud ${prestamo.codigo} - Cuota ${numeroCuota}`,
             referencia: prestamo.codigo,
             prestamoId,
             usuarioId: user.id,
@@ -680,16 +680,16 @@ async function aplicarPago(body: any, user: any) {
         let conceptoMov = ''
         if (cargo.concepto === 'TARIFA_PLATAFORMA') {
           codigoCaja = 'CAJA-USO-PLATAFORMA'
-          conceptoMov = `Tarifa Plataforma - Préstamo ${prestamo.codigo}`
+          conceptoMov = `Tarifa Plataforma - Solicitud ${prestamo.codigo}`
         } else if (cargo.concepto === 'PAGARE_CARTA') {
           codigoCaja = 'CAJA-PAGARE-CARTA'
-          conceptoMov = `Pagaré + Carta - Préstamo ${prestamo.codigo}`
+          conceptoMov = `Pagaré + Carta - Solicitud ${prestamo.codigo}`
         } else if (cargo.concepto === 'FLEXIBILIDAD') {
           codigoCaja = 'CAJA-FLEXIBILIDAD-FINANCIERA'
-          conceptoMov = `Flexibilidad Financiera (${prestamo.flexibilidadModalidad || 'BASICA'}) - Préstamo ${prestamo.codigo}`
+          conceptoMov = `Flexibilidad Financiera (${prestamo.flexibilidadModalidad || 'BASICA'}) - Solicitud ${prestamo.codigo}`
         } else if (cargo.concepto === 'FONDO_GARANTIA') {
           codigoCaja = 'CAJA-GARANTIA'
-          conceptoMov = `Fondo de Garantía (${(prestamo.fondoGarantiaTasa ? (prestamo.fondoGarantiaTasa * 100).toFixed(2) : '5')}%) - Préstamo ${prestamo.codigo}`
+          conceptoMov = `Fondo de Garantía (${(prestamo.fondoGarantiaTasa ? (prestamo.fondoGarantiaTasa * 100).toFixed(2) : '5')}%) - Solicitud ${prestamo.codigo}`
         }
 
         const cajaCargo = await tx.cajaMenor.findUnique({ where: { codigo: codigoCaja } })
@@ -766,7 +766,7 @@ async function aplicarPago(body: any, user: any) {
     ipOrigen: '', userAgent: '',
   })
 
-  // Bitácora del préstamo (pago aplicado / pago parcial / pago con excedente)
+  // Bitácora del solicitud (pago aplicado / pago parcial / pago con excedente)
   try {
     const tituloBit = excedente > 0
       ? `Pago con excedente aplicado — cuota ${numeroCuota}`
@@ -778,7 +778,7 @@ async function aplicarPago(body: any, user: any) {
       `Método: ${metodoPago || 'EFECTIVO'}. Referencia: ${referencia || 'sin referencia'}. ` +
       (excedente > 0 ? `EXCEDENTE de ${formatearMoneda(excedente)} pendiente de decisión del gestor. ` : '') +
       (cargosRecienCubiertos ? `CARGOS INICIALES cobrados por ${formatearMoneda(cargosInicialesPendientesMonto)} (ajuste totalPagar +${formatearMoneda(ajusteTotalPagar)}). ` : '') +
-      `Estado del pago: ${estadoPago}. Nuevo saldo del préstamo: ${formatearMoneda(prestamoActualizado?.saldoTotal ?? 0)}.`
+      `Estado del pago: ${estadoPago}. Nuevo saldo del solicitud: ${formatearMoneda(prestamoActualizado?.saldoTotal ?? 0)}.`
     await db.bitacoraPrestamo.create({
       data: {
         prestamoId,
@@ -787,7 +787,7 @@ async function aplicarPago(body: any, user: any) {
         tipo: 'PAGO',
         titulo: tituloBit,
         descripcion: descBit,
-        resultado: `Pago ${pago.id} registrado; préstamo en estado ${prestamoActualizado?.estado ?? '?'}`,
+        resultado: `Pago ${pago.id} registrado; solicitud en estado ${prestamoActualizado?.estado ?? '?'}`,
       },
     })
   } catch (e) {
@@ -839,7 +839,7 @@ async function aplicarPago(body: any, user: any) {
 //      consulta de "próximos pagos" lo muestre en la nueva fecha.
 //   6. NO contar esta cuota como "pagada" para fines de avance
 //      (porque el capital sigue pendiente).
-//   7. El préstamo no entra en mora por esa cuota mientras tenga
+//   7. El solicitud no entra en mora por esa cuota mientras tenga
 //      el aplazamiento activo.
 // =====================================================
 async function aplicarSoloIntereses(body: any, user: any) {
@@ -865,7 +865,7 @@ async function aplicarSoloIntereses(body: any, user: any) {
       pagosProgramados: true,
     },
   })
-  if (!prestamo) return NextResponse.json({ success: false, error: 'Préstamo no encontrado' }, { status: 404 })
+  if (!prestamo) return NextResponse.json({ success: false, error: 'Solicitud no encontrado' }, { status: 404 })
 
   // Validación de cuenta asignada (igual que pago normal — auto-corrección v4.0.1)
   const cliente = prestamo.cliente
@@ -992,7 +992,7 @@ async function aplicarSoloIntereses(body: any, user: any) {
       })
     }
 
-    // 3. Actualizar saldos del préstamo
+    // 3. Actualizar saldos del solicitud
     //    NOTA: NO incrementamos cuotasPagadas porque el capital sigue pendiente.
     //    El saldoTotal NO cambia porque el capital sigue debiéndose.
     //    Solo actualizamos montoPagado y montoInteresPagado implícitamente
@@ -1007,7 +1007,7 @@ async function aplicarSoloIntereses(body: any, user: any) {
   // WhatsApp
   const mensaje =
     `Hola ${prestamo.cliente.nombre}, registraste un pago de SOLO INTERESES por ${formatearMoneda(montoRecibidoNum)} ` +
-    `correspondiente a la cuota ${proximaCuotaNum} del préstamo ${prestamo.codigo}. ` +
+    `correspondiente a la cuota ${proximaCuotaNum} del solicitud ${prestamo.codigo}. ` +
     `El capital de esta cuota fue aplazado y tu nuevo vencimiento es el ${formatearFecha(resultado.fechaNueva)}. ` +
     `Gracias por mantener tus intereses al día.`
   const envio = await enviarWhatsApp(prestamo.cliente.telefono, mensaje)
@@ -1022,7 +1022,7 @@ async function aplicarSoloIntereses(body: any, user: any) {
     usuarioId: user.id, usuarioNombre: user.nombre,
     accion: 'PAGO_SOLO_INTERESES', modulo: 'pagos',
     entidadId: resultado.pago.id,
-    entidadNombre: `Pago solo intereses - Cuota ${proximaCuotaNum} - Préstamo ${prestamo.codigo}`,
+    entidadNombre: `Pago solo intereses - Cuota ${proximaCuotaNum} - Solicitud ${prestamo.codigo}`,
     detalles: JSON.stringify({
       prestamoId, numeroCuota: proximaCuotaNum,
       montoInteres: montoRecibidoNum,
@@ -1064,7 +1064,7 @@ async function aplicarSoloIntereses(body: any, user: any) {
 //   6. Se crea un OtroSiCambioFecha tipo TRASLADO_CUOTA para documento legal.
 //
 // Validaciones (reglas de negocio del usuario):
-//   - Préstamo tiene flexibilidadActivada = true
+//   - Solicitud tiene flexibilidadActivada = true
 //   - numeroCuotas >= 4 (flexibilidad solo para créditos >= 4 cuotas)
 //   - cuotasPagadasCompletamente >= 1 (la prima debe estar paga)
 //   - proximaCuota >= 2 (no se puede usar desde la prima)
@@ -1089,7 +1089,7 @@ async function usarFlexibilidadFinanciera(body: any, user: any) {
     },
   })
   if (!prestamo) {
-    return NextResponse.json({ success: false, error: 'Préstamo no encontrado' }, { status: 404 })
+    return NextResponse.json({ success: false, error: 'Solicitud no encontrado' }, { status: 404 })
   }
 
   // === VALIDACIONES DE NEGOCIO ===
@@ -1282,7 +1282,7 @@ async function usarFlexibilidadFinanciera(body: any, user: any) {
       },
     })
 
-    // 3. Actualizar el préstamo: decrementar usos disponibles, incrementar ejercidos,
+    // 3. Actualizar el solicitud: decrementar usos disponibles, incrementar ejercidos,
     //    agregar movimiento al JSON de bitácora
     const movimientosPrevios: any[] = prestamo.flexibilidadMovimientos
       ? JSON.parse(prestamo.flexibilidadMovimientos)
@@ -1339,13 +1339,13 @@ async function usarFlexibilidadFinanciera(body: any, user: any) {
     return { pago, fechaVencimientoNueva, fechaVencimientoOriginal, interesesCausados, nuevoMovimiento }
   })
 
-  // Recalcular saldos del préstamo
+  // Recalcular saldos del solicitud
   const { prestamo: prestamoActualizado } = await recalcularSaldosPrestamo(prestamoId)
 
   // WhatsApp al cliente
   const mensaje =
     `Hola ${prestamo.cliente.nombre}, registramos el uso de tu beneficio de Flexibilidad Financiera ` +
-    `(${prestamo.flexibilidadModalidad || 'BASICA'}) en el préstamo ${prestamo.codigo}. ` +
+    `(${prestamo.flexibilidadModalidad || 'BASICA'}) en el solicitud ${prestamo.codigo}. ` +
     `La cuota ${proximaCuotaNum} (vencía el ${formatearFecha(resultado.fechaVencimientoOriginal)}) ` +
     `se trasladó al FINAL de tu crédito con nuevo vencimiento el ${formatearFecha(resultado.fechaVencimientoNueva)}. ` +
     `Los intereses moratorios causados (${formatearMoneda(resultado.interesesCausados)}) se incluyen en esa cuota, ` +
@@ -1363,7 +1363,7 @@ async function usarFlexibilidadFinanciera(body: any, user: any) {
     usuarioId: user.id, usuarioNombre: user.nombre,
     accion: 'FLEXIBILIDAD_FINANCIERA_USO', modulo: 'pagos',
     entidadId: resultado.pago.id,
-    entidadNombre: `Uso Flexibilidad - Cuota ${proximaCuotaNum} - Préstamo ${prestamo.codigo}`,
+    entidadNombre: `Uso Flexibilidad - Cuota ${proximaCuotaNum} - Solicitud ${prestamo.codigo}`,
     detalles: JSON.stringify({
       prestamoId, numeroCuota: proximaCuotaNum,
       fechaVencimientoOriginal: resultado.fechaVencimientoOriginal,
@@ -1376,7 +1376,7 @@ async function usarFlexibilidadFinanciera(body: any, user: any) {
     ipOrigen: '', userAgent: '',
   })
 
-  // Bitácora del préstamo
+  // Bitácora del solicitud
   try {
     await db.bitacoraPrestamo.create({
       data: {
@@ -1391,7 +1391,7 @@ async function usarFlexibilidadFinanciera(body: any, user: any) {
           `al ${formatearFecha(resultado.fechaVencimientoNueva)}. ` +
           `Intereses moratorios causados al traslado: ${formatearMoneda(resultado.interesesCausados)} (incluidos en la cuota, no se cobran aparte). ` +
           `Usos disponibles restantes: ${prestamo.flexibilidadUsosDisponibles - 1}.`,
-        resultado: `Préstamo sigue activo. Cuota ${proximaCuotaNum} reprogramada al final del crédito.`,
+        resultado: `Solicitud sigue activo. Cuota ${proximaCuotaNum} reprogramada al final del crédito.`,
       },
     })
   } catch (e) {
@@ -1420,16 +1420,16 @@ async function usarFlexibilidadFinanciera(body: any, user: any) {
 // =====================================================
 // ACCIÓN: Abono extraordinario al capital
 // -----------------------------------------------------
-// Para préstamos con modalidad INTERES_FIJO_SIN_CAPITAL.
+// Para solicitudes con modalidad INTERES_FIJO_SIN_CAPITAL.
 // El gestor ingresa manualmente el valor del abono al capital.
-// Esto reduce el saldo real del préstamo (montoPrincipal - capitalPagadoExtra)
+// Esto reduce el saldo real del solicitud (montoPrincipal - capitalPagadoExtra)
 // pero NO cambia la cuota mensual fija de intereses (sigue siendo la misma).
 //
 // El pago se registra como un Pago con estado APLICADO, numeroCuota=0
 // (no corresponde a una cuota programada), y se actualiza el capitalPagadoExtra
-// del préstamo. El saldoTotal se recalcula como montoPrincipal - capitalPagadoExtra.
+// del solicitud. El saldoTotal se recalcula como montoPrincipal - capitalPagadoExtra.
 //
-// Si el abono cubre todo el capital restante, el préstamo se cancela
+// Si el abono cubre todo el capital restante, el solicitud se cancela
 // (estado = CANCELADO, fechaCancelacion = hoy).
 // =====================================================
 async function abonarCapitalExtraordinario(body: any, user: any) {
@@ -1473,28 +1473,28 @@ async function abonarCapitalExtraordinario(body: any, user: any) {
     },
   })
   if (!prestamo) {
-    return NextResponse.json({ success: false, error: 'Préstamo no encontrado' }, { status: 404 })
+    return NextResponse.json({ success: false, error: 'Solicitud no encontrado' }, { status: 404 })
   }
 
-  // === Solo aplica para préstamos con modalidad INTERES_FIJO_SIN_CAPITAL ===
+  // === Solo aplica para solicitudes con modalidad INTERES_FIJO_SIN_CAPITAL ===
   if (prestamo.modalidadAmortizacion !== 'INTERES_FIJO_SIN_CAPITAL') {
     return NextResponse.json(
       {
         success: false,
-        error: `Este tipo de abono solo aplica para préstamos con modalidad INTERES_FIJO_SIN_CAPITAL. Este préstamo tiene modalidad ${prestamo.modalidadAmortizacion}.`,
+        error: `Este tipo de abono solo aplica para solicitudes con modalidad INTERES_FIJO_SIN_CAPITAL. Este solicitud tiene modalidad ${prestamo.modalidadAmortizacion}.`,
         codigo: 'MODALIDAD_NO_APLICA',
       },
       { status: 400 }
     )
   }
 
-  // === Validar estado del préstamo ===
+  // === Validar estado del solicitud ===
   const ESTADOS_NO_ACEPTAN_PAGOS = ['ANULADO', 'RECHAZADO', 'CANCELADO']
   if (ESTADOS_NO_ACEPTAN_PAGOS.includes(prestamo.estado)) {
     return NextResponse.json(
       {
         success: false,
-        error: `No se pueden registrar abonos a un préstamo en estado ${prestamo.estado}.`,
+        error: `No se pueden registrar abonos a un solicitud en estado ${prestamo.estado}.`,
         codigo: 'PRESTAMO_NO_APLICA_PAGOS',
         estadoPrestamo: prestamo.estado,
       },
@@ -1508,7 +1508,7 @@ async function abonarCapitalExtraordinario(body: any, user: any) {
     return NextResponse.json(
       {
         success: false,
-        error: `El monto del abono (${formatearMoneda(montoAbonoNum)}) excede el saldo real del capital (${formatearMoneda(saldoReal)}). Si deseas saldar el préstamo por completo, ingresa exactamente ${formatearMoneda(saldoReal)}.`,
+        error: `El monto del abono (${formatearMoneda(montoAbonoNum)}) excede el saldo real del capital (${formatearMoneda(saldoReal)}). Si deseas saldar el solicitud por completo, ingresa exactamente ${formatearMoneda(saldoReal)}.`,
         codigo: 'ABONO_EXCEDE_SALDO',
         saldoReal,
         montoAbono: montoAbonoNum,
@@ -1539,7 +1539,7 @@ async function abonarCapitalExtraordinario(body: any, user: any) {
   // === Generar código del pago ===
   const codigoPago = generarCodigoPago()
 
-  // === Transacción atómica: crear pago + actualizar préstamo + registrar en caja ===
+  // === Transacción atómica: crear pago + actualizar solicitud + registrar en caja ===
   const fechaPagoFinal = fechaPago ? new Date(fechaPago) : new Date()
 
   const resultado = await db.$transaction(async (tx) => {
@@ -1563,7 +1563,7 @@ async function abonarCapitalExtraordinario(body: any, user: any) {
       },
     })
 
-    // 2. Actualizar el préstamo
+    // 2. Actualizar el solicitud
     const prestamoActualizado = await tx.prestamo.update({
       where: { id: prestamoId },
       data: {
@@ -1572,7 +1572,7 @@ async function abonarCapitalExtraordinario(body: any, user: any) {
         saldoCapital: nuevoSaldoReal,
         saldoTotal: nuevoSaldoReal,  // Saldo real mostrado en informes
         montoPagado: prestamo.montoPagado + montoAbonoNum,
-        // Si el saldo queda en 0, cancelar el préstamo
+        // Si el saldo queda en 0, cancelar el solicitud
         ...(prestamoSaldado ? {
           estado: 'CANCELADO',
           fechaCancelacion: new Date(),
@@ -1591,7 +1591,7 @@ async function abonarCapitalExtraordinario(body: any, user: any) {
             cajaId: cajaCapital.id,
             tipo: 'INGRESO',
             monto: montoAbonoNum,
-            concepto: `Abono extraordinario al capital - Préstamo ${prestamo.codigo}`,
+            concepto: `Abono extraordinario al capital - Solicitud ${prestamo.codigo}`,
             referencia: prestamo.codigo,
             prestamoId,
             usuarioId: user.id === 'system' ? null : user.id,
@@ -1622,7 +1622,7 @@ async function abonarCapitalExtraordinario(body: any, user: any) {
         accion: 'ABONO_CAPITAL_EXTRAORDINARIO',
         modulo: 'pagos',
         entidadId: prestamo.id,
-        entidadNombre: `Préstamo ${prestamo.codigo} - Pago ${codigoPago}`,
+        entidadNombre: `Solicitud ${prestamo.codigo} - Pago ${codigoPago}`,
         detalles: JSON.stringify({
           prestamoId,
           codigoPrestamo: prestamo.codigo,
@@ -1657,7 +1657,7 @@ async function abonarCapitalExtraordinario(body: any, user: any) {
     capitalPagadoExtraAcumulado: nuevoCapitalPagadoExtra,
     prestamoSaldado,
     mensaje: prestamoSaldado
-      ? `✅ Abono de ${formatearMoneda(montoAbonoNum)} aplicado al capital. El préstamo ha sido saldado completamente (saldo real: $0). Estado: CANCELADO.`
+      ? `✅ Abono de ${formatearMoneda(montoAbonoNum)} aplicado al capital. El solicitud ha sido saldado completamente (saldo real: $0). Estado: CANCELADO.`
       : `✅ Abono de ${formatearMoneda(montoAbonoNum)} aplicado al capital. Nuevo saldo real: ${formatearMoneda(nuevoSaldoReal)}. La cuota mensual de intereses (${formatearMoneda(prestamo.interesFijoMensual)}) se mantiene sin cambios.`,
   })
 }

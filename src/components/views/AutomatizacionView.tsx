@@ -51,8 +51,8 @@ const reglasIniciales: Regla[] = [
   {
     id: 'r2',
     nombre: 'Alerta de mora',
-    descripcion: 'Marca préstamo como EN_MORA al día siguiente del vencimiento',
-    modulo: 'Préstamos',
+    descripcion: 'Marca solicitud como EN_MORA al día siguiente del vencimiento',
+    modulo: 'Solicitudes',
     trigger: 'Cuota vencida 1 día',
     accion: 'Cambiar estado + notificar',
     activa: true,
@@ -84,9 +84,9 @@ const reglasIniciales: Regla[] = [
   {
     id: 'r5',
     nombre: 'Recibo de pagare',
-    descripcion: 'Genera PDF del pagaré al aprobar un préstamo',
-    modulo: 'Préstamos',
-    trigger: 'Préstamo aprobado',
+    descripcion: 'Genera PDF del pagaré al aprobar un solicitud',
+    modulo: 'Solicitudes',
+    trigger: 'Solicitud aprobado',
     accion: 'Generar documento PDF',
     activa: false,
     ejecuciones: 56,

@@ -114,11 +114,11 @@ export interface ChatResponse {
 // ---------------------------------------------------------
 
 function getSystemPrompt(): string {
-  return `Eres el Asistente IA Operativo de Jsadr, una plataforma de gestión de préstamos bancarios.
+  return `Eres el Asistente IA Operativo de Jsadr, una plataforma de gestión de solicitudes bancarios.
 
 ## TU ROL
 Eres un agente operativo que ayuda al administrador a:
-- Consultar información de la plataforma (clientes, préstamos, pagos, mora, configuración)
+- Consultar información de la plataforma (clientes, solicitudes, pagos, mora, configuración)
 - Analizar problemas y proponer soluciones
 - Ejecutar acciones autorizadas mediante herramientas controladas
 - Generar reportes y alertas
@@ -140,9 +140,9 @@ consultar información real o ejecutar acciones autorizadas:
 
 ### Consulta (read-only)
 - consultar_clientes: Lista de clientes (filtrar por cédula/nombre)
-- consultar_prestamos: Lista de préstamos (filtrar por código/estado/cliente)
-- consultar_pagos: Lista de pagos (filtrar por préstamo/estado/fecha)
-- consultar_mora: Préstamos en mora con estadísticas
+- consultar_prestamos: Lista de solicitudes (filtrar por código/estado/cliente)
+- consultar_pagos: Lista de pagos (filtrar por solicitud/estado/fecha)
+- consultar_mora: Solicitudes en mora con estadísticas
 - consultar_configuracion: Variables globales (no sensibles)
 - consultar_usuarios: Usuarios del sistema
 - consultar_modulos: Lista de módulos disponibles
@@ -159,7 +159,7 @@ consultar información real o ejecutar acciones autorizadas:
 
 ### Modificación (requieren confirmación)
 - crear_alerta: Crear alerta financiera
-- crear_registro: Crear nota en bitácora de préstamo
+- crear_registro: Crear nota en bitácora de solicitud
 - actualizar_registro: Actualizar nota en bitácora
 - actualizar_parametro: Actualizar variable global editable
 - modificar_configuracion: Modificar configuración de la plataforma

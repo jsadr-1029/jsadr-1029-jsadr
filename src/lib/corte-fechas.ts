@@ -155,7 +155,7 @@ export function calcularDiasCausadosAntes(
  *   - Para tasa anual: tasaAnual / 365 (ej: 24% → 0.06575% diario)
  *   - Para tasa mensual: tasaMensual / 30 (ej: 15% → 0.5% diario)
  *
- * @param montoPrincipal Capital del préstamo (COP)
+ * @param montoPrincipal Capital del solicitud (COP)
  * @param dias Número de días causados
  * @param tasaValor Valor de la tasa (ej: 24 para 24% anual, 15 para 15% mensual)
  * @param tipoTasa "ANUAL" | "MENSUAL" — define cómo calcular la tasa diaria

@@ -17,8 +17,8 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "Jsadr · Jo*** Se*** Al*** D** R**",
-  description: "Plataforma bancaria para registro y control de préstamos, con seguimiento jurídico y notificaciones WhatsApp automáticas.",
-  keywords: ["préstamos", "gestión", "banca", "jurídico", "WhatsApp"],
+  description: "Plataforma bancaria para registro y control de solicitudes, con seguimiento jurídico y notificaciones WhatsApp automáticas.",
+  keywords: ["solicitudes", "gestión", "banca", "jurídico", "WhatsApp"],
 };
 
 export const viewport: Viewport = {

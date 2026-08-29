@@ -412,7 +412,7 @@ export function UsuariosView() {
                   <SelectItem value="GESTOR">
                     <span className="flex items-center gap-2">
                       <UserCog className="w-4 h-4 text-blue-600" />
-                      Gestor - Operativo (préstamos, pagos, jurídico)
+                      Gestor - Operativo (solicitudes, pagos, jurídico)
                     </span>
                   </SelectItem>
                   <SelectItem value="CONSULTOR">

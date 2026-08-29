@@ -68,7 +68,7 @@ export async function POST(
       },
     })
 
-    // 2. Recalcular automáticamente todos los saldos del préstamo
+    // 2. Recalcular automáticamente todos los saldos del solicitud
     // Esto garantiza consistencia total sin cálculos manuales propensos a errores
     const { prestamo: prestamoActualizado, estadisticas } = await recalcularSaldosPrestamo(prestamoId)
 
@@ -81,7 +81,7 @@ export async function POST(
             cajaId: cajaMora.id,
             tipo: 'EGRESO',
             monto: pago.montoMora,
-            concepto: `REVERSIÓN de mora - Préstamo ${prestamo.codigo} - Cuota ${pago.numeroCuota} - ${motivoReversion}`,
+            concepto: `REVERSIÓN de mora - Solicitud ${prestamo.codigo} - Cuota ${pago.numeroCuota} - ${motivoReversion}`,
             referencia: prestamo.codigo,
             prestamoId: prestamo.id,
             creadoPor: usuarioNombre || 'Sistema',
@@ -98,7 +98,7 @@ export async function POST(
       }
     }
 
-    // 4. Crear entrada en la bitácora del préstamo
+    // 4. Crear entrada en la bitácora del solicitud
     await db.bitacoraPrestamo.create({
       data: {
         prestamoId: prestamo.id,
@@ -119,7 +119,7 @@ export async function POST(
         prestamo: prestamoActualizado,
       },
       saldosRecalculados: estadisticas,
-      mensaje: `Pago reversado correctamente. El préstamo ${prestamo.codigo} recalculado: saldo ${estadisticas.saldoTotal} COP, ${estadisticas.cuotasPagadas} cuota(s) pagada(s).`,
+      mensaje: `Pago reversado correctamente. El solicitud ${prestamo.codigo} recalculado: saldo ${estadisticas.saldoTotal} COP, ${estadisticas.cuotasPagadas} cuota(s) pagada(s).`,
     })
   } catch (error: any) {
     return NextResponse.json({ success: false, error: sanitizeError(error).message }, { status: 500 })

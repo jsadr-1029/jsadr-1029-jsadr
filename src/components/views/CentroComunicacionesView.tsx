@@ -951,7 +951,7 @@ export function CentroComunicacionesView() {
                     {detalle.cliente.prestamos.length > 0 && (
                       <div>
                         <p className="text-xs uppercase tracking-wide text-muted-foreground mb-2 mt-3">
-                          Préstamos ({detalle.cliente.prestamos.length})
+                          Solicitudes ({detalle.cliente.prestamos.length})
                         </p>
                         <div className="space-y-2">
                           {detalle.cliente.prestamos.map((p) => (

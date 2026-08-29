@@ -47,7 +47,7 @@ export async function GET(
         // (cédula frente/reverso + selfie) que se carga desde la solicitud de
         // nuevo cliente al ser convertida, y también las fotos subidas en el
         // flujo de firma electrónica. Así el gestor puede disponer de la cédula
-        // y la foto del cliente desde Préstamos > Clientes > Detalle.
+        // y la foto del cliente desde Solicitudes > Clientes > Detalle.
         documentosGestor: {
           where: {
             tipo: { in: ['FOTO_DOCUMENTO', 'FOTO_CEDULA', 'FOTO_SELFI', 'FOTO_DOCUMENTO_REVERSO'] },

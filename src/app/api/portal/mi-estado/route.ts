@@ -4,7 +4,7 @@
 // =====================================================
 // Devuelve el estado de cuenta del cliente autenticado:
 //   - Datos básicos del cliente
-//   - Préstamos activos/cancelados/jurídicos
+//   - Solicitudes activos/cancelados/jurídicos
 //   - Saldos totales
 //   - Próximos vencimientos (cuotas pendientes)
 //
@@ -66,7 +66,7 @@ export async function GET(req: NextRequest) {
       )
     }
 
-    // === Procesar préstamos y calcular resumen ===
+    // === Procesar solicitudes y calcular resumen ===
     const prestamosConCuenta = cliente.prestamos.map((p) => {
       const cuentaRecaudo = p.categoria?.cuentaRecaudo || cliente.categoria?.cuentaRecaudo || null
       return {
@@ -93,7 +93,7 @@ export async function GET(req: NextRequest) {
     const totalPagado = prestamosConCuenta.reduce((s, p) => s + p.montoPagado, 0)
 
     // === Próximos vencimientos: cuotas pendientes no pagadas ===
-    // Tomamos la próxima cuota pendiente de cada préstamo activo.
+    // Tomamos la próxima cuota pendiente de cada solicitud activo.
     const proximosVencimientos: Array<{
       prestamoId: string
       prestamoCodigo: string
@@ -143,7 +143,7 @@ export async function GET(req: NextRequest) {
         userAgent: req.headers.get('user-agent') || null,
         accion: 'CONSULTA_ESTADO',
         exito: true,
-        detalle: `Cliente consultó su estado de cuenta (${prestamosActivos.length} préstamos activos)`,
+        detalle: `Cliente consultó su estado de cuenta (${prestamosActivos.length} solicitudes activos)`,
       },
     })
 

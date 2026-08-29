@@ -3,7 +3,7 @@ import { formatearMoneda, formatearFecha, Frecuencia } from '@/lib/finanzas'
 import { sanitizeError } from '@/lib/error-handler'
 import { requireRole } from '@/lib/auth-guard'
 
-// POST - calcular préstamo con cuota personalizada (modalidad "checa")
+// POST - calcular solicitud con cuota personalizada (modalidad "checa")
 // El usuario define: monto, tasa mensual, número de cuotas, frecuencia, cuota manual
 // El sistema calcula: intereses, distribución, total, tabla de amortización
 export async function POST(req: NextRequest) {

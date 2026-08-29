@@ -11,7 +11,7 @@ import { requireRole } from '@/lib/auth-guard'
 
 // =====================================================
 // Helper: Registrar ingresos automáticos en cajas correspondientes
-// (Tarea U) — Se ejecuta cuando el préstamo pasa a ACTIVO tras la
+// (Tarea U) — Se ejecuta cuando el solicitud pasa a ACTIVO tras la
 // aceptación de T&C. Registra los ingresos por:
 //   • Flexibilidad Financiera    → CAJA-FLEXIBILIDAD
 //   • Días causados (corte)      → CAJA-INGRESOS-CAUSADOS
@@ -19,13 +19,13 @@ import { requireRole } from '@/lib/auth-guard'
 //   • Tarifa de Uso de Plataforma → CAJA-USO-PLATAFORMA
 //   • Renovación Anticipada      → CAJA-RENOVACIONES
 //   • Fondo de Garantía          → CAJA-GARANTIA  (solo si el gestor lo activó)
-// Solo registra los ingresos que apliquen al préstamo y que no se hayan
+// Solo registra los ingresos que apliquen al solicitud y que no se hayan
 // registrado antes (idempotente vía tarifaPlataformaCargada / flag en
 // la descripción del movimiento).
 //
-// Política 2026-08-15: El Fondo de Garantía es OPCIONAL por préstamo.
+// Política 2026-08-15: El Fondo de Garantía es OPCIONAL por solicitud.
 // Solo se carga si el gestor marcó incluirFondoGarantia=true al crear el crédito.
-// Si no se activa, NO se carga nada a CAJA-GARANTIA y el préstamo no muestra
+// Si no se activa, NO se carga nada a CAJA-GARANTIA y el solicitud no muestra
 // el concepto en el estado de cuenta.
 // =====================================================
 async function registrarIngresosCajasPorActivacion(prestamoId: string) {
@@ -46,7 +46,7 @@ async function registrarIngresosCajasPorActivacion(prestamoId: string) {
       tarifaPlataformaCargada: true,
       renovacionAnticipada: true,
       renovacionAnticipadaCosto: true,
-      // === Fondo de Garantía (opcional por préstamo) ===
+      // === Fondo de Garantía (opcional por solicitud) ===
       fondoGarantiaCargado: true,
       fondoGarantiaMonto: true,
       fondoGarantiaTasa: true,
@@ -56,14 +56,14 @@ async function registrarIngresosCajasPorActivacion(prestamoId: string) {
   if (!prestamo) return null
 
   // Buscar las 6 cajas (5 + CAJA-GARANTIA). CAJA-GARANTIA se crea automáticamente
-  // si no existe (seed bajo demanda) para soportar préstamos con fondo activado.
+  // si no existe (seed bajo demanda) para soportar solicitudes con fondo activado.
   const codigosCajas = ['CAJA-FLEXIBILIDAD', 'CAJA-INGRESOS-CAUSADOS', 'CAJA-PAGARE-CARTA', 'CAJA-USO-PLATAFORMA', 'CAJA-RENOVACIONES', 'CAJA-GARANTIA']
   const cajas = await db.cajaMenor.findMany({ where: { codigo: { in: codigosCajas } } })
   const cajaPorCodigo: Record<string, string> = {}
   for (const c of cajas) cajaPorCodigo[c.codigo] = c.id
 
   // === Seed bajo demanda: crear CAJA-GARANTIA si no existe ===
-  // Esto permite que los préstamos con fondo de garantía activado funcionen
+  // Esto permite que los solicitudes con fondo de garantía activado funcionen
   // sin requerir un script de seed manual del administrador.
   if (!cajaPorCodigo['CAJA-GARANTIA']) {
     try {
@@ -71,7 +71,7 @@ async function registrarIngresosCajasPorActivacion(prestamoId: string) {
         data: {
           codigo: 'CAJA-GARANTIA',
           nombre: 'Fondo de Garantía',
-          descripcion: 'Caja donde se registran los ingresos por Fondo de Garantía de los préstamos que lo tienen activado. Solo se carga cuando el gestor activa el fondo al crear el crédito. El fondo se devuelve al cliente al finalizar el préstamo previa verificación de cumplimiento.',
+          descripcion: 'Caja donde se registran los ingresos por Fondo de Garantía de los solicitudes que lo tienen activado. Solo se carga cuando el gestor activa el fondo al crear el crédito. El fondo se devuelve al cliente al finalizar el solicitud previa verificación de cumplimiento.',
           saldoActual: 0,
           totalIngresos: 0,
           totalEgresos: 0,
@@ -95,7 +95,7 @@ async function registrarIngresosCajasPorActivacion(prestamoId: string) {
     ingresos.push({
       cajaCodigo: 'CAJA-FLEXIBILIDAD',
       monto: prestamo.flexibilidadCosto,
-      concepto: `Flexibilidad Financiera (${prestamo.flexibilidadModalidad || 'BASICA'}) — Préstamo ${prestamo.codigo}`,
+      concepto: `Flexibilidad Financiera (${prestamo.flexibilidadModalidad || 'BASICA'}) — Solicitud ${prestamo.codigo}`,
       referencia: prestamo.codigo,
     })
   }
@@ -105,7 +105,7 @@ async function registrarIngresosCajasPorActivacion(prestamoId: string) {
     ingresos.push({
       cajaCodigo: 'CAJA-INGRESOS-CAUSADOS',
       monto: prestamo.valorDiasCausados!,
-      concepto: `Ingresos por días causados (periodo de corte) — Préstamo ${prestamo.codigo}`,
+      concepto: `Ingresos por días causados (periodo de corte) — Solicitud ${prestamo.codigo}`,
       referencia: prestamo.codigo,
     })
   }
@@ -115,7 +115,7 @@ async function registrarIngresosCajasPorActivacion(prestamoId: string) {
     ingresos.push({
       cajaCodigo: 'CAJA-PAGARE-CARTA',
       monto: prestamo.valorPagareCarta,
-      concepto: `Pagaré + Carta de Instrucciones — Préstamo ${prestamo.codigo}`,
+      concepto: `Pagaré + Carta de Instrucciones — Solicitud ${prestamo.codigo}`,
       referencia: prestamo.codigo,
     })
   }
@@ -125,7 +125,7 @@ async function registrarIngresosCajasPorActivacion(prestamoId: string) {
     ingresos.push({
       cajaCodigo: 'CAJA-USO-PLATAFORMA',
       monto: prestamo.valorTarifaPlataforma,
-      concepto: `Tarifa de Uso de Plataforma — Préstamo ${prestamo.codigo}`,
+      concepto: `Tarifa de Uso de Plataforma — Solicitud ${prestamo.codigo}`,
       referencia: prestamo.codigo,
     })
   }
@@ -139,22 +139,22 @@ async function registrarIngresosCajasPorActivacion(prestamoId: string) {
     ingresos.push({
       cajaCodigo: 'CAJA-RENOVACIONES',
       monto: prestamo.renovacionAnticipadaCosto,
-      concepto: `Renovación Anticipada — Préstamo ${prestamo.codigo}`,
+      concepto: `Renovación Anticipada — Solicitud ${prestamo.codigo}`,
       referencia: prestamo.codigo,
     })
   }
 
-  // 6) Fondo de Garantía (SOLO si el gestor lo activó al crear el préstamo)
+  // 6) Fondo de Garantía (SOLO si el gestor lo activó al crear el solicitud)
   // Política: NO todos los créditos llevan fondo de garantía. Solo los que el
   // gestor determine en el sistema. Cuando está activado, el monto se carga
-  // automáticamente a CAJA-GARANTIA al activar el préstamo (aceptar TyC).
+  // automáticamente a CAJA-GARANTIA al activar el solicitud (aceptar TyC).
   // Si no está activado, no se carga nada.
   if (prestamo.fondoGarantiaCargado && (prestamo.fondoGarantiaMonto || 0) > 0) {
     const tasaPct = ((prestamo.fondoGarantiaTasa || 0) * 100).toFixed(2)
     ingresos.push({
       cajaCodigo: 'CAJA-GARANTIA',
       monto: prestamo.fondoGarantiaMonto,
-      concepto: `Fondo de Garantía (${tasaPct}% del capital) — Préstamo ${prestamo.codigo}`,
+      concepto: `Fondo de Garantía (${tasaPct}% del capital) — Solicitud ${prestamo.codigo}`,
       referencia: prestamo.codigo,
     })
   }
@@ -217,9 +217,9 @@ async function registrarIngresosCajasPorActivacion(prestamoId: string) {
 }
 
 // =====================================================
-// Helper: cancelar crédito anterior si el préstamo actual es renovación
+// Helper: cancelar crédito anterior si el solicitud actual es renovación
 // (Tarea T) — Se ejecuta únicamente cuando el cliente completa la aceptación
-// de T&C del nuevo préstamo. El crédito anterior se cancela en ese momento
+// de T&C del nuevo solicitud. El crédito anterior se cancela en ese momento
 // (no antes) para que el cliente no pierda su crédito activo mientras no
 // haya aceptado formalmente las nuevas condiciones.
 // =====================================================
@@ -272,7 +272,7 @@ async function cancelarPrestamoAnteriorSiRenovacion(prestamoNuevoId: string) {
         saldoCapital: 0,
         saldoInteres: 0,
         saldoTotal: 0,
-        notas: `Finalizado por renovación - nuevo préstamo: ${nuevo.codigo} (aceptado por el cliente el ${new Date().toLocaleString('es-CO')})`,
+        notas: `Finalizado por renovación - nuevo solicitud: ${nuevo.codigo} (aceptado por el cliente el ${new Date().toLocaleString('es-CO')})`,
       },
     })
 
@@ -285,7 +285,7 @@ async function cancelarPrestamoAnteriorSiRenovacion(prestamoNuevoId: string) {
         tipo: 'OTRO',
         titulo: `CRÉDITO CANCELADO POR RENOVACIÓN (T&C ACEPTADOS)`,
         descripcion:
-          `Este crédito fue finalizado (CANCELADO) porque el cliente aceptó los T&C del nuevo préstamo ${nuevo.codigo}.\n\n` +
+          `Este crédito fue finalizado (CANCELADO) porque el cliente aceptó los T&C del nuevo solicitud ${nuevo.codigo}.\n\n` +
           `═══ ORIGEN DEL CIERRE ═══\n` +
           `• Crédito anterior (este): ${anterior.codigo}\n` +
           `• Saldo pendiente al cierre: ${formatearMoneda(saldoAnterior)}\n` +
@@ -313,7 +313,7 @@ async function cancelarPrestamoAnteriorSiRenovacion(prestamoNuevoId: string) {
         tipo: 'OTRO',
         titulo: `CRÉDITO ANTERIOR CANCELADO (T&C ACEPTADOS)`,
         descripcion:
-          `El cliente aceptó los T&C de este préstamo, por lo que el crédito anterior ${anterior.codigo} fue CANCELADO automáticamente.\n\n` +
+          `El cliente aceptó los T&C de este solicitud, por lo que el crédito anterior ${anterior.codigo} fue CANCELADO automáticamente.\n\n` +
           `═══ DETALLE ═══\n` +
           `• Crédito anterior: ${anterior.codigo}\n` +
           `• Saldo pendiente cancelado: ${formatearMoneda(saldoAnterior)}\n` +
@@ -350,7 +350,7 @@ async function cancelarPrestamoAnteriorSiRenovacion(prestamoNuevoId: string) {
       },
     })
 
-    // 5) Marcar el nuevo préstamo: ya no está pendiente de T&C para la renovación
+    // 5) Marcar el nuevo solicitud: ya no está pendiente de T&C para la renovación
     await tx.prestamo.update({
       where: { id: prestamoNuevoId },
       data: {
@@ -407,16 +407,16 @@ async function enviarOTP(prestamoId: string, body: any) {
   const { canal } = body
   const canalFinal = canal || 'AMBOS'
   const prestamo = await db.prestamo.findUnique({ where: { id: prestamoId }, include: { cliente: true } })
-  if (!prestamo) return NextResponse.json({ success: false, error: 'Préstamo no encontrado' }, { status: 404 })
+  if (!prestamo) return NextResponse.json({ success: false, error: 'Solicitud no encontrado' }, { status: 404 })
   // === Permitir OTP en estados SOLICITUD o PENDIENTE_ACEPTACION ===
   // El flujo de firma del cliente se habilita cuando la solicitud web fue aprobada.
-  // El préstamo puede estar en estado SOLICITUD (recién creado) o PENDIENTE_ACEPTACION.
+  // El solicitud puede estar en estado SOLICITUD (recién creado) o PENDIENTE_ACEPTACION.
   // FIX 2026-08-12: También permitir si hay una firma EN PROGRESO (PENDIENTE,
-  // FOTOS_SUBIDAS, FIRMA_DIBUJADA, OTP_ENVIADO) aunque el estado del préstamo
-  // haya cambiado — esto evita bloquear al cliente si el préstamo cambió de
+  // FOTOS_SUBIDAS, FIRMA_DIBUJADA, OTP_ENVIADO) aunque el estado del solicitud
+  // haya cambiado — esto evita bloquear al cliente si el solicitud cambió de
   // estado mientras la firma estaba en curso.
   if (prestamo.estado !== 'PENDIENTE_ACEPTACION' && prestamo.estado !== 'SOLICITUD') {
-    // Verificar si hay una firma en progreso para este préstamo
+    // Verificar si hay una firma en progreso para este solicitud
     const firmaEnProgreso = await db.firmaElectronica.findFirst({
       where: {
         prestamoId,
@@ -427,7 +427,7 @@ async function enviarOTP(prestamoId: string, body: any) {
     if (!firmaEnProgreso) {
       return NextResponse.json({
         success: false,
-        error: `El préstamo no está pendiente de aceptación (estado actual: ${prestamo.estado}). Solo se puede enviar OTP a préstamos en SOLICITUD o PENDIENTE_ACEPTACION, o que tengan una firma electrónica en progreso.`,
+        error: `El solicitud no está pendiente de aceptación (estado actual: ${prestamo.estado}). Solo se puede enviar OTP a solicitudes en SOLICITUD o PENDIENTE_ACEPTACION, o que tengan una firma electrónica en progreso.`,
       }, { status: 400 })
     }
     // Hay una firma en progreso — permitir continuar
@@ -567,7 +567,7 @@ async function enviarOTP(prestamoId: string, body: any) {
     destinatario: canalFinal === 'EMAIL' ? (prestamo.cliente.email || '') : (prestamo.cliente.telefono || ''),
     tipo: 'FIRMA_ELECTRONICA',
     entidadRefId: firma.id,
-    descripcion: `OTP aceptación TyC préstamo ${prestamo.codigo}`,
+    descripcion: `OTP aceptación TyC solicitud ${prestamo.codigo}`,
     maxIntentos: firma.maxIntentos,
     expiraEnMinutos: 5,
     guardarCodigoPlano: false,
@@ -575,7 +575,7 @@ async function enviarOTP(prestamoId: string, body: any) {
 
   let envioWhatsApp: any = null
   if (canalFinal === 'WHATSAPP' || canalFinal === 'AMBOS') {
-    const mensaje = `🔐 *CÓDIGO DE VERIFICACIÓN - ACEPTACIÓN DE PRÉSTAMO*\n\nHola *${prestamo.cliente.nombre}*,\n\nPara confirmar la aceptación de los Términos y Condiciones de tu préstamo *${prestamo.codigo}*, ingresa el siguiente código:\n\n  >>  ${otp}  <<\n\n⏰ El código expira en 5 minutos.\n⚠️ No compartas este código con nadie.`
+    const mensaje = `🔐 *CÓDIGO DE VERIFICACIÓN - ACEPTACIÓN DE SOLICITUD*\n\nHola *${prestamo.cliente.nombre}*,\n\nPara confirmar la aceptación de los Términos y Condiciones de tu solicitud *${prestamo.codigo}*, ingresa el siguiente código:\n\n  >>  ${otp}  <<\n\n⏰ El código expira en 5 minutos.\n⚠️ No compartas este código con nadie.`
     // v4.13: usar envío inteligente (plantilla Authentication de Meta primero, fallback a texto libre)
     const otpResult = await enviarOTPSmart(prestamo.cliente.telefono, otp, mensaje)
     if (otpResult.exito) {
@@ -609,7 +609,7 @@ async function enviarOTP(prestamoId: string, body: any) {
     if (tplResult.success && tplResult.usadaPlantilla) {
       envioEmail = tplResult
     } else {
-      envioEmail = await enviarEmail({ to: prestamo.cliente.email, subject: `Código de Verificación - Préstamo ${prestamo.codigo}`, text: `Tu código es: ${otp}`, html: `<div style="font-size:36px;font-weight:bold;color:#1e40af;text-align:center;padding:20px;">${otp}</div><p>Expira en 5 minutos.</p>` })
+      envioEmail = await enviarEmail({ to: prestamo.cliente.email, subject: `Código de Verificación - Solicitud ${prestamo.codigo}`, text: `Tu código es: ${otp}`, html: `<div style="font-size:36px;font-weight:bold;color:#1e40af;text-align:center;padding:20px;">${otp}</div><p>Expira en 5 minutos.</p>` })
     }
   }
 
@@ -734,7 +734,7 @@ async function confirmarConFoto(prestamoId: string, body: any) {
   }
   const prestamo = firma.prestamo
   if (!prestamo) {
-    return NextResponse.json({ success: false, error: 'Préstamo no encontrado' }, { status: 404 })
+    return NextResponse.json({ success: false, error: 'Solicitud no encontrado' }, { status: 404 })
   }
 
   // === Calcular hashes SHA-256 de ambas fotos ===
@@ -770,7 +770,7 @@ async function confirmarConFoto(prestamoId: string, body: any) {
       clienteId: prestamo.clienteId,
       tipo: 'FOTO_CEDULA',
       titulo: `Foto de cédula - Aceptación T&C ${prestamo.codigo}`,
-      descripcion: `Foto del documento de identidad (cédula) subida por el cliente al aceptar T&C del préstamo ${prestamo.codigo}. Hash SHA-256: ${hashDocumento}.`,
+      descripcion: `Foto del documento de identidad (cédula) subida por el cliente al aceptar T&C del solicitud ${prestamo.codigo}. Hash SHA-256: ${hashDocumento}.`,
       archivoBase64: fotoDocumentoBase64,
       archivoNombre: `cedula_${prestamo.codigo}.jpg`,
       archivoTipo: 'image/jpeg',
@@ -786,7 +786,7 @@ async function confirmarConFoto(prestamoId: string, body: any) {
       clienteId: prestamo.clienteId,
       tipo: 'FOTO_SELFI',
       titulo: `Selfie con cédula - Aceptación T&C ${prestamo.codigo}`,
-      descripcion: `Selfie sosteniendo la cédula, subida por el cliente al aceptar T&C del préstamo ${prestamo.codigo}. Hash SHA-256: ${hashSelfie}.`,
+      descripcion: `Selfie sosteniendo la cédula, subida por el cliente al aceptar T&C del solicitud ${prestamo.codigo}. Hash SHA-256: ${hashSelfie}.`,
       archivoBase64: fotoSelfieBase64,
       archivoNombre: `selfie_${prestamo.codigo}.jpg`,
       archivoTipo: 'image/jpeg',
@@ -795,7 +795,7 @@ async function confirmarConFoto(prestamoId: string, body: any) {
     },
   })
 
-  // === Bitácora del préstamo (trazabilidad) ===
+  // === Bitácora del solicitud (trazabilidad) ===
   await db.bitacoraPrestamo.create({
     data: {
       prestamoId,
@@ -807,11 +807,11 @@ async function confirmarConFoto(prestamoId: string, body: any) {
 - Foto de su cédula de identidad (hash: ${hashDocumento.slice(0, 16)}...).
 - Selfie sosteniendo la cédula (hash: ${hashSelfie.slice(0, 16)}...).
 Ambas fotos fueron guardadas en DocumentoGestor y se incluyen como respaldo de firma en el pagaré PDF.`,
-      resultado: 'Préstamo activado',
+      resultado: 'Solicitud activado',
     },
   })
 
-  // === Activar el préstamo ===
+  // === Activar el solicitud ===
   const calculo = calcularPrestamo({
     montoPrincipal: prestamo.montoPrincipal,
     tasaInteresAnual: prestamo.tasaInteresAnual,
@@ -833,7 +833,7 @@ Ambas fotos fueron guardadas en DocumentoGestor y se incluyen como respaldo de f
     include: { cliente: true },
   })
 
-  // === Tarea T: Si este préstamo es una renovación, cancelar el crédito anterior ===
+  // === Tarea T: Si este solicitud es una renovación, cancelar el crédito anterior ===
   // El cliente ya aceptó los T&C, completó OTP + fotos + (en este flujo) ya está ACTIVO.
   // Es el momento seguro para cancelar el crédito anterior.
   let renovacionCancelacionInfo: { anteriorCodigo?: string; anteriorCancelado?: boolean } = {}
@@ -846,7 +846,7 @@ Ambas fotos fueron guardadas en DocumentoGestor y se incluyen como respaldo de f
       }
     }
   } catch (e) {
-    // No bloquear la activación del nuevo préstamo si falla la cancelación del anterior
+    // No bloquear la activación del nuevo solicitud si falla la cancelación del anterior
     console.error('[aceptar-tyc-otp/confirmarConFoto] Error cancelando crédito anterior:', e)
   }
 
@@ -862,7 +862,7 @@ Ambas fotos fueron guardadas en DocumentoGestor y se incluyen como respaldo de f
   const mensajeCorreo = `
 Hola ${prestamo.cliente.nombre},
 
-Tu préstamo ${prestamo.codigo} ha sido activado exitosamente.
+Tu solicitud ${prestamo.codigo} ha sido activado exitosamente.
 
 DETALLES:
 - Monto: $${prestamo.montoPrincipal.toLocaleString('es-CO')}
@@ -883,12 +883,12 @@ Si no reconoces esta activación, contacta inmediatamente al administrador.
     if (prestamo.cliente.email) {
       await enviarEmail({
         to: prestamo.cliente.email,
-        subject: `Préstamo ${prestamo.codigo} activado — Jo*** Se*** Al*** D** R**`,
+        subject: `Solicitud ${prestamo.codigo} activado — Jo*** Se*** Al*** D** R**`,
         text: mensajeCorreo,
         html: `<div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto; padding: 24px;">
-  <h2 style="color: #1e40af;">Préstamo activado</h2>
+  <h2 style="color: #1e40af;">Solicitud activado</h2>
   <p>Hola <strong>${prestamo.cliente.nombre}</strong>,</p>
-  <p>Tu préstamo <strong>${prestamo.codigo}</strong> ha sido activado exitosamente.</p>
+  <p>Tu solicitud <strong>${prestamo.codigo}</strong> ha sido activado exitosamente.</p>
   <h3>Detalles:</h3>
   <ul>
     <li>Monto: $${prestamo.montoPrincipal.toLocaleString('es-CO')}</li>
@@ -910,7 +910,7 @@ Si no reconoces esta activación, contacta inmediatamente al administrador.
   }
 
   // Notificación WhatsApp opcional (si el cliente tiene teléfono, no es OTP)
-  const mensaje = `✅ *PRÉSTAMO ACTIVADO*\n\nHola *${prestamo.cliente.nombre}*,\n\nTu préstamo *${prestamo.codigo}* ha sido activado.\n\n• Monto: $${prestamo.montoPrincipal.toLocaleString('es-CO')}\n• Cuota: $${prestamo.montoCuota.toLocaleString('es-CO')}\n• Cuotas: ${prestamo.numeroCuotas}\n• Total: $${prestamo.totalPagar.toLocaleString('es-CO')}\n\nSe envió comprobante a tu correo electrónico.`
+  const mensaje = `✅ *SOLICITUD ACTIVADO*\n\nHola *${prestamo.cliente.nombre}*,\n\nTu solicitud *${prestamo.codigo}* ha sido activado.\n\n• Monto: $${prestamo.montoPrincipal.toLocaleString('es-CO')}\n• Cuota: $${prestamo.montoCuota.toLocaleString('es-CO')}\n• Cuotas: ${prestamo.numeroCuotas}\n• Total: $${prestamo.totalPagar.toLocaleString('es-CO')}\n\nSe envió comprobante a tu correo electrónico.`
   if (prestamo.cliente.telefono) {
     try {
       const envio = await enviarWhatsApp(prestamo.cliente.telefono, mensaje)
@@ -928,7 +928,7 @@ Si no reconoces esta activación, contacta inmediatamente al administrador.
   return NextResponse.json({
     success: true,
     mensaje:
-      '¡Términos aceptados! Tu préstamo ha sido activado. Se guardó tu foto de cédula y selfie como respaldo de firma.',
+      '¡Términos aceptados! Tu solicitud ha sido activado. Se guardó tu foto de cédula y selfie como respaldo de firma.',
     data: {
       prestamo: prestamoActualizado,
       firmaId: firma.id,
@@ -949,12 +949,12 @@ async function checkOTP(prestamoId: string) {
 
 // =====================================================
 // NUEVAS ACCIONES — Flujo de firma del cliente desde el portal
-// (cuando la solicitud fue aprobada/convertida en préstamo)
+// (cuando la solicitud fue aprobada/convertida en solicitud)
 // =====================================================
 
 // === guardar_fotos_simple: guarda fotos SIN requerir OTP validado ===
 // Paso 1 del flujo: el cliente sube cédula + selfie.
-// NO activa el préstamo — solo registra las fotos en la FirmaElectronica.
+// NO activa el solicitud — solo registra las fotos en la FirmaElectronica.
 async function guardarFotosSimple(prestamoId: string, body: any) {
   const { fotoDocumentoBase64, fotoSelfieBase64 } = body
   if (!fotoDocumentoBase64 || !fotoSelfieBase64) {
@@ -973,7 +973,7 @@ async function guardarFotosSimple(prestamoId: string, body: any) {
   }
 
   const prestamo = await db.prestamo.findUnique({ where: { id: prestamoId }, include: { cliente: true } })
-  if (!prestamo) return NextResponse.json({ success: false, error: 'Préstamo no encontrado' }, { status: 404 })
+  if (!prestamo) return NextResponse.json({ success: false, error: 'Solicitud no encontrado' }, { status: 404 })
 
   // Buscar o crear FirmaElectronica(tipo='TYC')
   // FIX 2026-08-12 (Faltan las fotos): Preferir la firma que ya tiene fotos o
@@ -1086,7 +1086,7 @@ async function guardarFirmaManuscrita(prestamoId: string, body: any) {
   }
 
   const prestamo = await db.prestamo.findUnique({ where: { id: prestamoId }, include: { cliente: true } })
-  if (!prestamo) return NextResponse.json({ success: false, error: 'Préstamo no encontrado' }, { status: 404 })
+  if (!prestamo) return NextResponse.json({ success: false, error: 'Solicitud no encontrado' }, { status: 404 })
 
   // FIX 2026-08-12 (Faltan las fotos): Preferir la firma que ya tiene fotos
   // o firma manuscrita, para consolidar todos los datos en una sola firma y
@@ -1144,12 +1144,12 @@ async function guardarFirmaManuscrita(prestamoId: string, body: any) {
   return NextResponse.json({ success: true, message: 'Firma manuscrita guardada correctamente.' })
 }
 
-// === confirmar_activacion: activa el préstamo después de OTP validado ===
-// Paso final: marca la firma como COMPLETADA y activa el préstamo.
+// === confirmar_activacion: activa el solicitud después de OTP validado ===
+// Paso final: marca la firma como COMPLETADA y activa el solicitud.
 // Requiere que el OTP haya sido validado previamente.
 async function confirmarActivacion(prestamoId: string) {
   // FIX 2026-08-12 (Faltan las fotos): Si existen múltiples firmas con
-  // otpValidado=true para el mismo préstamo (p.ej. por el bug anterior donde
+  // otpValidado=true para el mismo solicitud (p.ej. por el bug anterior donde
   // enviar_otp creaba una firma nueva sin fotos), preferir la firma que SÍ
   // tiene fotos y firma manuscrita. Esto permite al cliente recuperar el
   // flujo sin tener que rehacer todo desde cero.
@@ -1178,7 +1178,7 @@ async function confirmarActivacion(prestamoId: string) {
     return NextResponse.json({ success: false, error: 'Debes validar el OTP antes de activar el crédito.' }, { status: 400 })
   }
   if (firma.estadoFirma === 'COMPLETADA') {
-    return NextResponse.json({ success: true, message: 'El préstamo ya estaba activado.', yaActivado: true })
+    return NextResponse.json({ success: true, message: 'El solicitud ya estaba activado.', yaActivado: true })
   }
   if (!firma.fotoDocumento || !firma.fotoSelfie) {
     return NextResponse.json({ success: false, error: 'Faltan las fotos. Vuelve al paso 1.' }, { status: 400 })
@@ -1187,7 +1187,7 @@ async function confirmarActivacion(prestamoId: string) {
     return NextResponse.json({ success: false, error: 'Falta la firma manuscrita. Vuelve al paso 2.' }, { status: 400 })
   }
 
-  // Calcular fecha de vencimiento del préstamo
+  // Calcular fecha de vencimiento del solicitud
   const prestamo = firma.prestamo
   let fechaVencimiento: Date | null = null
   if (prestamo) {
@@ -1214,14 +1214,14 @@ async function confirmarActivacion(prestamoId: string) {
       // FIX 2026-08-12 (Task 6): Última oportunidad para asegurar que los
       // datos del firmante queden registrados (deudor). Si por algún motivo
       // la firma se creó sin estos campos (p.ej. por un bug previo), los
-      // seteamos aquí usando los datos del préstamo.
+      // seteamos aquí usando los datos del solicitud.
       firmanteRol: firma.firmanteRol || 'DEUDOR',
       firmanteNombre: firma.firmanteNombre || prestamo?.cliente?.nombre || '',
       firmanteCedula: firma.firmanteCedula || prestamo?.cliente?.cedula || '',
     },
   })
 
-  // Activar el préstamo
+  // Activar el solicitud
   await db.prestamo.update({
     where: { id: prestamoId },
     data: {
@@ -1234,9 +1234,9 @@ async function confirmarActivacion(prestamoId: string) {
     },
   })
 
-  // === Tarea T: Si este préstamo es una renovación, cancelar el crédito anterior ===
+  // === Tarea T: Si este solicitud es una renovación, cancelar el crédito anterior ===
   // El cliente ya completó todo el flujo (fotos + firma manuscrita + OTP validado)
-  // y el préstamo quedó ACTIVO. Es el momento seguro para cancelar el crédito anterior.
+  // y el solicitud quedó ACTIVO. Es el momento seguro para cancelar el crédito anterior.
   let renovacionCancelacionInfo: { anteriorCodigo?: string; anteriorCancelado?: boolean } = {}
   try {
     const res = await cancelarPrestamoAnteriorSiRenovacion(prestamoId)
@@ -1247,7 +1247,7 @@ async function confirmarActivacion(prestamoId: string) {
       }
     }
   } catch (e) {
-    // No bloquear la activación del nuevo préstamo si falla la cancelación del anterior
+    // No bloquear la activación del nuevo solicitud si falla la cancelación del anterior
     console.error('[aceptar-tyc-otp/confirmarActivacion] Error cancelando crédito anterior:', e)
   }
 
@@ -1267,7 +1267,7 @@ async function confirmarActivacion(prestamoId: string) {
         prestamoCodigo: prestamo?.codigo || '',
         usuarioNombre: 'Cliente (Portal)',
         tipo: 'OTRO',
-        titulo: 'Préstamo activado por el cliente',
+        titulo: 'Solicitud activado por el cliente',
         descripcion:
           `El cliente completó el flujo de firma (fotos + firma manuscrita + OTP) desde el portal. Firma ID: ${firma.id}.` +
           (renovacionCancelacionInfo.anteriorCancelado
@@ -1282,7 +1282,7 @@ async function confirmarActivacion(prestamoId: string) {
   return NextResponse.json({
     success: true,
     message:
-      'Préstamo activado correctamente.' +
+      'Solicitud activado correctamente.' +
       (renovacionCancelacionInfo.anteriorCancelado
         ? ` El crédito anterior ${renovacionCancelacionInfo.anteriorCodigo} fue cancelado automáticamente.`
         : ''),

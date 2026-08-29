@@ -8,20 +8,20 @@ import { requireRole } from '@/lib/auth-guard'
 import { generarYEnviarCodigosConfirmacion } from '@/lib/prestamo-codigo'
 
 // =====================================================
-// POST - renovar un préstamo.
+// POST - renovar un solicitud.
 //
-// Genera un nuevo préstamo basado en el saldo pendiente del préstamo
+// Genera un nuevo solicitud basado en el saldo pendiente del solicitud
 // original, agregando opcionalmente un monto adicional, nueva fecha de
 // inicio, plazo y frecuencia.
 //
 // SEGURIDAD (fix C9 — 2026-08-01):
-//   - El nuevo préstamo se crea en estado PENDIENTE_ACEPTACION (NO ACTIVO).
+//   - El nuevo solicitud se crea en estado PENDIENTE_ACEPTACION (NO ACTIVO).
 //   - tycAceptado se inicia en false (NO true) — el cliente debe aceptar TyC.
-//   - Si el préstamo tiene codeudor, se dispara automáticamente el flujo de
+//   - Si el solicitud tiene codeudor, se dispara automáticamente el flujo de
 //     doble OTP (DEUDOR + CODEUDOR) usando el helper
 //     generarYEnviarCodigosConfirmacion.
 //   - Sin codeudor, basta con el OTP del DEUDOR.
-//   - El préstamo solo pasa a ACTIVO cuando verificar-codigo confirma todos
+//   - El solicitud solo pasa a ACTIVO cuando verificar-codigo confirma todos
 //     los roles requeridos.
 //   - El usuarioNombre se toma del token de auth (NO del body).
 //   - Toda la operación (crear nuevo + cerrar original + crear renovación +
@@ -42,12 +42,12 @@ export async function POST(
     const body = await req.json()
     const {
       nuevoMontoPrestado, // valor total prestado (puede ser saldo anterior + adicional)
-      nuevaTasaInteresAnual, // opcional, si no viene se usa la del préstamo original
+      nuevaTasaInteresAnual, // opcional, si no viene se usa la del solicitud original
       nuevoPlazoMeses,
       nuevaFrecuencia,
       fechaInicioPago, // fecha de inicio de pago (string ISO)
       motivoRenovacion,
-      cerrarOriginal, // si true, marca el préstamo original como CANCELADO
+      cerrarOriginal, // si true, marca el solicitud original como CANCELADO
     } = body
 
     // usuarioNombre SIEMPRE del auth, NUNCA del body (fix C9 / hallazgo #12).
@@ -88,7 +88,7 @@ export async function POST(
       )
     }
 
-    // Buscar préstamo original
+    // Buscar solicitud original
     const prestamoOriginal = await db.prestamo.findUnique({
       where: { id },
       include: { cliente: true, categoria: true },
@@ -96,25 +96,25 @@ export async function POST(
 
     if (!prestamoOriginal) {
       return NextResponse.json(
-        { success: false, error: 'Préstamo no encontrado' },
+        { success: false, error: 'Solicitud no encontrado' },
         { status: 404 }
       )
     }
 
     // Calcular tasa: si el body trae nuevaTasaInteresAnual válida, usarla;
-    // si no, heredar la del préstamo original.
+    // si no, heredar la del solicitud original.
     const tasaNum = parseFloat(nuevaTasaInteresAnual || '')
     const tasaFinal =
       Number.isFinite(tasaNum) && tasaNum > 0
         ? tasaNum
         : prestamoOriginal.tasaInteresAnual
 
-    // Validar estado del préstamo original (fix C9 / hallazgo #8).
+    // Validar estado del solicitud original (fix C9 / hallazgo #8).
     if (!ESTADOS_RENOVABLES.has(prestamoOriginal.estado)) {
       return NextResponse.json(
         {
           success: false,
-          error: `El préstamo está en estado ${prestamoOriginal.estado}. Solo se pueden renovar préstamos en: ACTIVO, EN_MORA, CANCELADO.`,
+          error: `El solicitud está en estado ${prestamoOriginal.estado}. Solo se pueden renovar solicitudes en: ACTIVO, EN_MORA, CANCELADO.`,
         },
         { status: 400 }
       )
@@ -128,12 +128,12 @@ export async function POST(
     })
     if (renovacionPrev) {
       return NextResponse.json(
-        { success: false, error: 'Este préstamo ya fue renovado' },
+        { success: false, error: 'Este solicitud ya fue renovado' },
         { status: 400 }
       )
     }
 
-    // Calcular el nuevo préstamo con interés fijo sobre el nuevo capital
+    // Calcular el nuevo solicitud con interés fijo sobre el nuevo capital
     const calculo = calcularPrestamo({
       montoPrincipal: montoNum,
       tasaInteresAnual: tasaFinal,
@@ -143,7 +143,7 @@ export async function POST(
       fechaDesembolso: fechaInicio,
     })
 
-    // Generar código único del nuevo préstamo
+    // Generar código único del nuevo solicitud
     const nuevoCodigo = `PREST-${Date.now().toString().slice(-8)}-${crypto
       .randomInt(0, 1000)
       .toString()
@@ -155,7 +155,7 @@ export async function POST(
     // ============================================================
     // TRANSACCIÓN ATÓMICA (fix C9 / hallazgo #4):
     // 1. Re-verificar que no haya renovación previa (race condition)
-    // 2. Crear nuevo préstamo en PENDIENTE_ACEPTACION
+    // 2. Crear nuevo solicitud en PENDIENTE_ACEPTACION
     // 3. Cerrar original si se solicitó
     // 4. Crear registro RenovacionPrestamo
     // 5. Bitácora en el original
@@ -172,7 +172,7 @@ export async function POST(
         throw new Error('RENOVACION_YA_EXISTE')
       }
 
-      // 2. Crear el nuevo préstamo en PENDIENTE_ACEPTACION (fix C9).
+      // 2. Crear el nuevo solicitud en PENDIENTE_ACEPTACION (fix C9).
       // NO se setea tycAceptado=true, NO se setea estado=ACTIVO.
       // El cliente debe confirmar mediante OTP dual.
       const nuevoPrestamo = await tx.prestamo.create({
@@ -203,7 +203,7 @@ export async function POST(
           saldoCapital: montoNum,
           saldoInteres: calculo.totalInteres,
           saldoTotal: calculo.totalPagar,
-          notas: `Renovación del préstamo ${prestamoOriginal.codigo}. ${
+          notas: `Renovación del solicitud ${prestamoOriginal.codigo}. ${
             motivoRenovacion || ''
           }`.trim(),
           // Preservar codeudor del original si lo tenía
@@ -216,7 +216,7 @@ export async function POST(
         include: { cliente: true },
       })
 
-      // 3. Cerrar préstamo original si se solicitó
+      // 3. Cerrar solicitud original si se solicitó
       if (cerrarOriginal) {
         await tx.prestamo.update({
           where: { id: prestamoOriginal.id },
@@ -246,15 +246,15 @@ export async function POST(
         },
       })
 
-      // 5. Bitácora en el préstamo original
+      // 5. Bitácora en el solicitud original
       await tx.bitacoraPrestamo.create({
         data: {
           prestamoId: prestamoOriginal.id,
           prestamoCodigo: prestamoOriginal.codigo,
           usuarioNombre,
           tipo: 'OTRO',
-          titulo: `Préstamo renovado → ${nuevoCodigo} (pendiente confirmación)`,
-          descripcion: `Se renovó el préstamo. Saldo anterior: $${prestamoOriginal.saldoTotal.toLocaleString(
+          titulo: `Solicitud renovado → ${nuevoCodigo} (pendiente confirmación)`,
+          descripcion: `Se renovó el solicitud. Saldo anterior: $${prestamoOriginal.saldoTotal.toLocaleString(
             'es-CO'
           )}. Nuevo monto: $${montoNum.toLocaleString('es-CO')}. Nuevo plazo: ${plazoNum} meses (${
             calculo.numeroCuotas
@@ -262,22 +262,22 @@ export async function POST(
             'es-CO'
           )}). Fecha inicio: ${formatearFecha(fechaInicio)}. ${
             motivoRenovacion ? 'Motivo: ' + motivoRenovacion : ''
-          } El nuevo préstamo requiere confirmación OTP del cliente${
+          } El nuevo solicitud requiere confirmación OTP del cliente${
             nuevoPrestamo.tieneCodeudor ? ' y codeudor' : ''
           } antes de activarse.`,
-          resultado: `Nuevo préstamo: ${nuevoCodigo} (PENDIENTE_ACEPTACION)`,
+          resultado: `Nuevo solicitud: ${nuevoCodigo} (PENDIENTE_ACEPTACION)`,
         },
       })
 
-      // 6. Bitácora en el nuevo préstamo (informativa)
+      // 6. Bitácora en el nuevo solicitud (informativa)
       await tx.bitacoraPrestamo.create({
         data: {
           prestamoId: nuevoPrestamo.id,
           prestamoCodigo: nuevoCodigo,
           usuarioNombre,
           tipo: 'OTRO',
-          titulo: `Préstamo creado por renovación de ${prestamoOriginal.codigo}`,
-          descripcion: `Este préstamo fue generado por renovación. Préstamo original: ${
+          titulo: `Solicitud creado por renovación de ${prestamoOriginal.codigo}`,
+          descripcion: `Este solicitud fue generado por renovación. Solicitud original: ${
             prestamoOriginal.codigo
           } (saldo anterior $${prestamoOriginal.saldoTotal.toLocaleString(
             'es-CO'
@@ -300,11 +300,11 @@ export async function POST(
     // ============================================================
     const lineaTasaRenovacion = ''
 
-    const mensaje = `🔄 *PRÉSTAMO RENOVADO - PENDIENTE CONFIRMACIÓN*
+    const mensaje = `🔄 *SOLICITUD RENOVADO - PENDIENTE CONFIRMACIÓN*
 
-Hola *${nuevoPrestamo.cliente.nombre}*, tu préstamo ${prestamoOriginal.codigo} fue renovado.
+Hola *${nuevoPrestamo.cliente.nombre}*, tu solicitud ${prestamoOriginal.codigo} fue renovado.
 
-📋 *Nuevo préstamo (PENDIENTE DE CONFIRMACIÓN):*
+📋 *Nuevo solicitud (PENDIENTE DE CONFIRMACIÓN):*
 • Código: ${nuevoCodigo}
 • Monto total: $${montoNum.toLocaleString('es-CO')}
 • Cuota fija: $${calculo.montoCuota.toLocaleString('es-CO')}
@@ -314,12 +314,12 @@ ${lineaTasaRenovacion}• Fecha primer pago: ${formatearFecha(
     )}
 • Total a pagar: $${calculo.totalPagar.toLocaleString('es-CO')}
 
-🔐 *Para activar este préstamo:*
+🔐 *Para activar este solicitud:*
 Hemos enviado un código de confirmación a tu correo${
       nuevoPrestamo.tieneCodeudor ? ' y al correo de tu codeudor' : ''
-    }. Compártelo con tu gestor para activar el préstamo.
+    }. Compártelo con tu gestor para activar el solicitud.
 
-El préstamo NO se activará hasta que verifiques tu código.`
+El solicitud NO se activará hasta que verifiques tu código.`
 
     const envioWhatsApp = await enviarWhatsApp(nuevoPrestamo.cliente.telefono, mensaje)
     await guardarNotificacion({
@@ -361,19 +361,19 @@ El préstamo NO se activará hasta que verifiques tu código.`
         otpError,
       },
       mensaje:
-        `Préstamo renovado correctamente. Nuevo préstamo: ${nuevoCodigo} (PENDIENTE_ACEPTACION). ` +
+        `Solicitud renovado correctamente. Nuevo solicitud: ${nuevoCodigo} (PENDIENTE_ACEPTACION). ` +
         (otpResult?.success
           ? otpResult.body?.mensaje ||
             'Se enviaron códigos de confirmación al cliente' +
               (nuevoPrestamo.tieneCodeudor ? ' y codeudor' : '') +
               '.'
-          : `⚠️ El préstamo fue creado pero falló el envío de códigos OTP: ${otpError}. El gestor debe reenviar los códigos manualmente.`),
+          : `⚠️ El solicitud fue creado pero falló el envío de códigos OTP: ${otpError}. El gestor debe reenviar los códigos manualmente.`),
       whatsapp: envioWhatsApp,
     })
   } catch (error: any) {
     if (error?.message === 'RENOVACION_YA_EXISTE') {
       return NextResponse.json(
-        { success: false, error: 'Este préstamo ya fue renovado (detectado en transacción)' },
+        { success: false, error: 'Este solicitud ya fue renovado (detectado en transacción)' },
         { status: 409 }
       )
     }

@@ -358,7 +358,7 @@ export async function PATCH(
           if (smtpResult.success && to) {
             envioPrueba = await enviarEmail({
               to,
-              subject: 'Prueba de SMTP - Sistema de Préstamos',
+              subject: 'Prueba de SMTP - Sistema de Solicitudes',
               text: 'Si recibiste este correo, la configuración SMTP funciona correctamente.',
               html: '<h2>Prueba de SMTP ✅</h2><p>Si recibiste este correo, la configuración SMTP funciona correctamente.</p>',
             })

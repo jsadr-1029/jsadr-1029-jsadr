@@ -7,16 +7,16 @@ import { registrarAuditLog, getClientInfo } from '@/lib/security'
 
 // =====================================================
 // /api/pagos/conciliacion v6.0
-// Conciliación bancaria por PRÉSTAMO — flujo simplificado.
+// Conciliación bancaria por SOLICITUD — flujo simplificado.
 //
 // Flujos soportados:
 //   1) { accion: 'buscar-prestamos', codigo?: string, cedula?: string }
-//      Devuelve los préstamos activos con cuotas pendientes
+//      Devuelve los solicitudes activos con cuotas pendientes
 //      (PENDIENTE + VENCIDO) y la lista completa de esas cuotas.
 //
 //   2) { accion: 'aplicar-pagos', prestamoId, pagoIds: string[] }
 //      Marca como APLICADO cada cuota seleccionada, registra
-//      método CONCILIACION_BANCARIA, recalcula saldos del préstamo
+//      método CONCILIACION_BANCARIA, recalcula saldos del solicitud
 //      y devuelve el resumen de la operación.
 //
 // No hay paso de "pegar CSV": las cuotas pendientes se obtienen
@@ -69,7 +69,7 @@ export async function POST(req: NextRequest) {
 
 // ---------------------------------------------------------
 // Acción: buscar-prestamos
-// Recibe { codigo? } o { cedula? } y devuelve préstamos activos
+// Recibe { codigo? } o { cedula? } y devuelve solicitudes activos
 // (con al menos una cuota PENDIENTE o VENCIDA) para que el
 // usuario seleccione cuáles pagos aplicar.
 // ---------------------------------------------------------
@@ -79,12 +79,12 @@ async function buscarPrestamos(body: { codigo?: string; cedula?: string }) {
 
   if (!codigo && !cedula) {
     return NextResponse.json(
-      { success: false, error: 'Debe ingresar un código de préstamo o una cédula' },
+      { success: false, error: 'Debe ingresar un código de solicitud o una cédula' },
       { status: 400 }
     )
   }
 
-  // Préstamos "activos" (no en estado SOLICITUD/RECHAZADO/CANCELADO)
+  // Solicitudes "activos" (no en estado SOLICITUD/RECHAZADO/CANCELADO)
   const where: any = {
     estado: { notIn: ['SOLICITUD', 'RECHAZADO', 'CANCELADO'] },
   }
@@ -121,7 +121,7 @@ async function buscarPrestamos(body: { codigo?: string; cedula?: string }) {
   if (prestamos.length === 0) {
     return NextResponse.json({
       success: true,
-      data: { prestamos: [], mensaje: 'No se encontraron préstamos activos con cuotas pendientes para ese criterio' },
+      data: { prestamos: [], mensaje: 'No se encontraron solicitudes activos con cuotas pendientes para ese criterio' },
     })
   }
 
@@ -171,7 +171,7 @@ async function buscarPrestamos(body: { codigo?: string; cedula?: string }) {
 // Recibe { prestamoId, pagoIds: string[] }
 // Marca cada pago seleccionado como APLICADO, registra el método
 // CONCILIACION_BANCARIA con la fecha actual, recalcula saldos
-// del préstamo y devuelve el resumen de la operación.
+// del solicitud y devuelve el resumen de la operación.
 // ---------------------------------------------------------
 async function aplicarPagos(
   body: { prestamoId?: string; pagoIds?: string[] },
@@ -198,10 +198,10 @@ async function aplicarPagos(
   })
 
   if (!prestamo) {
-    return NextResponse.json({ success: false, error: 'Préstamo no encontrado' }, { status: 404 })
+    return NextResponse.json({ success: false, error: 'Solicitud no encontrado' }, { status: 404 })
   }
 
-  // Traer todos los pagos seleccionados y validar que pertenezcan al préstamo
+  // Traer todos los pagos seleccionados y validar que pertenezcan al solicitud
   // y sigan pendientes (PENDIENTE o VENCIDO).
   const pagos = await db.pago.findMany({
     where: { id: { in: pagoIds } },
@@ -218,7 +218,7 @@ async function aplicarPagos(
         pagoId: pago.id,
         codigo: pago.codigo,
         numeroCuota: pago.numeroCuota,
-        error: 'El pago no pertenece al préstamo seleccionado',
+        error: 'El pago no pertenece al solicitud seleccionado',
       })
       continue
     }
@@ -260,7 +260,7 @@ async function aplicarPagos(
       usuarioNombre: user.nombre,
       accion: 'CONCILIACION_BANCARIA',
       modulo: 'pagos',
-      entidadNombre: `Préstamo ${prestamo.codigo} — ${ahora.toISOString()}`,
+      entidadNombre: `Solicitud ${prestamo.codigo} — ${ahora.toISOString()}`,
       detalles: JSON.stringify({
         prestamoId: prestamo.id,
         prestamoCodigo: prestamo.codigo,

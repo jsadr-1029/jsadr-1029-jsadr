@@ -56,7 +56,7 @@ export async function GET(req: NextRequest) {
       })
     }
 
-    // === Búsqueda 1: préstamo.tycToken (formato legacy) ===
+    // === Búsqueda 1: solicitud.tycToken (formato legacy) ===
     const prestamoLegacy = await db.prestamo.findFirst({
       where: { tycToken: codigo },
       include: {
@@ -89,7 +89,7 @@ export async function GET(req: NextRequest) {
           canalOTP: firma?.otpCanal || null,
           ipFirma: firma?.ipFirma || null,
         },
-        mensaje: '✅ Código VÁLIDO. El documento coincide con un préstamo registrado en el sistema.',
+        mensaje: '✅ Código VÁLIDO. El documento coincide con un solicitud registrado en el sistema.',
       })
     }
 

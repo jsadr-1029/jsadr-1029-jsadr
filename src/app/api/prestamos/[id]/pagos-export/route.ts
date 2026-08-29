@@ -20,7 +20,7 @@ function sanitizarCsv(valor: string | null | undefined): string {
   return s
 }
 
-// GET - exportar relación de pagos de un préstamo
+// GET - exportar relación de pagos de un solicitud
 export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -46,7 +46,7 @@ export async function GET(
     })
 
     if (!prestamo) {
-      return NextResponse.json({ success: false, error: 'Préstamo no encontrado' }, { status: 404 })
+      return NextResponse.json({ success: false, error: 'Solicitud no encontrado' }, { status: 404 })
     }
 
     const fechaExport = new Date().toISOString().split('T')[0]
@@ -54,7 +54,7 @@ export async function GET(
     if (formato === 'csv') {
       const lineas: string[] = []
       lineas.push('=== RELACIÓN DE PAGOS ===')
-      lineas.push(`Préstamo: ${sanitizarCsv(prestamo.codigo)}`)
+      lineas.push(`Solicitud: ${sanitizarCsv(prestamo.codigo)}`)
       lineas.push(`Cliente: ${sanitizarCsv(prestamo.cliente.nombre)}`)
       lineas.push(`Cédula: ${sanitizarCsv(prestamo.cliente.cedula)}`)
       lineas.push(`Monto Principal: ${prestamo.montoPrincipal}`)

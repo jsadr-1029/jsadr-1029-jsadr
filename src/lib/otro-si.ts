@@ -33,7 +33,7 @@ export interface DatosOtroSi {
   codigo: string  // OS-001, OS-002, etc.
   tipoModificacion: TipoModificacionOtroSi
 
-  // Datos del préstamo (para contexto del documento)
+  // Datos del solicitud (para contexto del documento)
   prestamoCodigo: string
   clienteNombre: string
   clienteCedula: string
@@ -355,7 +355,7 @@ export function generarHtmlOtroSi(datos: DatosOtroSi): string {
     <div class="seccion-titulo">Identificación del crédito</div>
     <div class="info-grid">
       <div>
-        <div class="label">Código del préstamo</div>
+        <div class="label">Código del solicitud</div>
         <div class="value">${prestamoCodigo}</div>
       </div>
       <div>
@@ -363,7 +363,7 @@ export function generarHtmlOtroSi(datos: DatosOtroSi): string {
         <div class="value">${formatearFechaLarga(fechaGeneracion)}</div>
       </div>
       <div>
-        <div class="label">Capital del préstamo</div>
+        <div class="label">Capital del solicitud</div>
         <div class="value">${formatearCOP(montoPrincipal)}</div>
       </div>
       <div>
@@ -555,7 +555,7 @@ export function generarHtmlOtroSi(datos: DatosOtroSi): string {
   <div class="footer-doc">
     Documento generado el ${formatearFechaLarga(fechaGeneracion)} ·
     Código: ${codigo} ·
-    Préstamo: ${prestamoCodigo}
+    Solicitud: ${prestamoCodigo}
     ${firma && firma.imagenFirma ? `· Firmado electrónicamente el ${formatearFechaLarga(firma.fechaFirma)}` : ''}
   </div>
 
@@ -565,7 +565,7 @@ export function generarHtmlOtroSi(datos: DatosOtroSi): string {
 
 /**
  * Genera el código consecutivo del Otro Sí: OS-001, OS-002, etc.
- * Basado en la cantidad de Otros Síes ya existentes para el préstamo.
+ * Basado en la cantidad de Otros Síes ya existentes para el solicitud.
  */
 export function generarCodigoOtroSi(conteoPrevio: number): string {
   const n = (conteoPrevio + 1).toString().padStart(3, '0')

@@ -324,7 +324,7 @@ export function SimuladorView() {
                   <div>
                     <p>
                       ⚠ Este cliente <strong>no tiene tasa personalizada</strong> asignada en el
-                      módulo Préstamos → Clientes.
+                      módulo Solicitudes → Clientes.
                     </p>
                     <p className="mt-0.5 text-amber-700">
                       Ingresa la tasa manualmente o asigna una tasa al cliente en su ficha para
@@ -538,7 +538,7 @@ export function SimuladorView() {
                   <p>
                     <strong>Fondo de Garantía (5%):</strong>{' '}
                     {formatearMoneda(calculo.fondoGarantia)}
-                    <span className="text-xs text-muted-foreground"> (opcional — se activa por préstamo)</span>
+                    <span className="text-xs text-muted-foreground"> (opcional — se activa por solicitud)</span>
                   </p>
                   {metodo === 'FRANCES' ? (
                     <p className="text-xs text-muted-foreground">

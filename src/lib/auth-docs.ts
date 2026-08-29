@@ -166,7 +166,7 @@ export async function abrirDocumentoAutenticado(
 
 /**
  * Atajo para abrir un documento HTML imprimible (estado de cuenta, paz y salvo,
- * documentos de préstamo) en una nueva pestaña.
+ * documentos de solicitud) en una nueva pestaña.
  */
 export async function abrirHtmlImprimible(url: string): Promise<boolean> {
   return abrirDocumentoAutenticado(url, { descargar: false })

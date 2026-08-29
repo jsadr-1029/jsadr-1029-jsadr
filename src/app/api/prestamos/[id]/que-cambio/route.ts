@@ -47,7 +47,7 @@ export async function GET(
     if (authResult instanceof NextResponse) return authResult
     const { id } = await params
 
-    // === Cargar el préstamo ===
+    // === Cargar el solicitud ===
     const prestamo = await db.prestamo.findUnique({
       where: { id },
       select: {
@@ -71,12 +71,12 @@ export async function GET(
 
     if (!prestamo) {
       return NextResponse.json(
-        { success: false, error: 'Préstamo no encontrado' },
+        { success: false, error: 'Solicitud no encontrado' },
         { status: 404 }
       )
     }
 
-    // === Cargar pagos APLICADO de este préstamo, ordenados por fecha ===
+    // === Cargar pagos APLICADO de este solicitud, ordenados por fecha ===
     const pagos = await db.pago.findMany({
       where: {
         prestamoId: id,

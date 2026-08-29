@@ -93,7 +93,7 @@ export async function obtenerDashboardConsolidado() {
       tipo: 'PICO_MORA',
       severidad: 'ALTA',
       titulo: `⚠️ Tasa de mora elevada (${estadoCartera.resumen.tasaMora}%)`,
-      descripcion: `${estadoCartera.resumen.totalMora} préstamos en mora de ${estadoCartera.resumen.totalActivos} activos.`,
+      descripcion: `${estadoCartera.resumen.totalMora} solicitudes en mora de ${estadoCartera.resumen.totalActivos} activos.`,
     })
   }
 
@@ -166,7 +166,7 @@ export async function obtenerDashboardConsolidado() {
       tipo: 'CRECIMIENTO_RECAUDO',
       titulo: `📈 Crecimiento de recaudo del ${crecimientoRecaudo}%`,
       descripcion: 'Tendencia positiva, considerar expansión',
-      impactoEstimado: 'Mayor liquidez para nuevos préstamos',
+      impactoEstimado: 'Mayor liquidez para nuevos solicitudes',
     })
   }
 
@@ -268,7 +268,7 @@ export async function generarDashboardEjecutivoConsolidado() {
   texto += `═══ COMERCIAL ═══\n`
   texto += `Total clientes: ${r.totalClientes}\n`
   texto += `Nuevos este mes: ${r.clientesNuevosMes} (${r.crecimientoClientes >= 0 ? '+' : ''}${r.crecimientoClientes}%)\n`
-  texto += `Total préstamos: ${r.totalPrestamos}\n`
+  texto += `Total solicitudes: ${r.totalPrestamos}\n`
   texto += `• Activos: ${r.prestamosActivos}\n`
   texto += `• En mora: ${r.prestamosMora} (${r.tasaMora}%)\n\n`
 

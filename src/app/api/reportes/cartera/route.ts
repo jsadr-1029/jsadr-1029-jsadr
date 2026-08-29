@@ -32,9 +32,9 @@ export async function GET(req: NextRequest) {
     const hasta = searchParams.get('hasta')
 
     // Construir where dinámico
-    // Se excluyen automáticamente los préstamos de clientes de prueba para que
+    // Se excluyen automáticamente los solicitudes de clientes de prueba para que
     // no contamine los saldos reales de cartera. La cédula 1214731649 es el cliente
-    // canónico de QA y tiene préstamos en ACTIVO/EN_MORA/JURIDICO que NO deben
+    // canónico de QA y tiene solicitudes en ACTIVO/EN_MORA/JURIDICO que NO deben
     // sumarse a la cartera real.
     const filtroPrueba = excluirPruebaPrestamo()
     const where: any = { estado: { in: ['ACTIVO', 'EN_MORA', 'JURIDICO'] }, ...filtroPrueba }
@@ -120,7 +120,7 @@ export async function GET(req: NextRequest) {
     // === Excel ===
     if (format === 'xlsx') {
       const workbook = new ExcelJS.Workbook()
-      workbook.creator = 'Sistema de Préstamos JSADR'
+      workbook.creator = 'Sistema de Solicitudes JSADR'
       workbook.created = new Date()
 
       const wsResumen = workbook.addWorksheet('Resumen')
@@ -128,7 +128,7 @@ export async function GET(req: NextRequest) {
         { header: 'Métrica', key: 'metrica', width: 35 },
         { header: 'Valor', key: 'valor', width: 25 },
       ]
-      wsResumen.addRow({ metrica: 'Total Préstamos', valor: resumen.totalPrestamos })
+      wsResumen.addRow({ metrica: 'Total Solicitudes', valor: resumen.totalPrestamos })
       wsResumen.addRow({ metrica: 'Cartera Total', valor: resumen.carteraTotal })
       wsResumen.addRow({ metrica: 'Monto en Mora', valor: resumen.montoEnMora })
       wsResumen.addRow({ metrica: 'Cartera al Día', valor: resumen.carteraAlDia })
@@ -193,7 +193,7 @@ export async function GET(req: NextRequest) {
       doc.fontSize(12).fillColor('#1f2937').text('Resumen', { underline: true })
       doc.moveDown(0.3)
       doc.fontSize(10).fillColor('#374151')
-      doc.text(`Total Préstamos: ${resumen.totalPrestamos}`, { continued: true })
+      doc.text(`Total Solicitudes: ${resumen.totalPrestamos}`, { continued: true })
       doc.text(`   Cartera Total: $${resumen.carteraTotal.toLocaleString('es-CO')}`)
       doc.text(`Monto en Mora: $${resumen.montoEnMora.toLocaleString('es-CO')}   (% ${resumen.porcentajeMora}%)`)
       doc.text(`Cartera al Día: $${resumen.carteraAlDia.toLocaleString('es-CO')}`)

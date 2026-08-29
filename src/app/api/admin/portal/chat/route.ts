@@ -411,7 +411,7 @@ export async function POST(req: NextRequest) {
       } catch (e) { respuesta = `❌ Error: ${e instanceof Error ? e.message : 'desconocido'}` }
     }
     // A = Estado del sistema
-    else if (mensajeLower === 'a' || mensajeLower === 'a️⃣' || (mensajeLower.includes('estado') && mensajeLower.includes('sistema')) || mensajeLower.includes('cuantos prestamos') || mensajeLower.includes('cuántos préstamos')) {
+    else if (mensajeLower === 'a' || mensajeLower === 'a️⃣' || (mensajeLower.includes('estado') && mensajeLower.includes('sistema')) || mensajeLower.includes('cuantos prestamos') || mensajeLower.includes('cuántos solicitudes')) {
       try {
         const activos = await db.prestamo.count({ where: { estado: 'ACTIVO' } })
         const enMora = await db.prestamo.count({ where: { estado: 'EN_MORA' } })
@@ -425,7 +425,7 @@ export async function POST(req: NextRequest) {
         const clientes = await db.cliente.count()
         tipo = 'REPORTE'
         respuesta = `🛡️ Estado del sistema Jsadr\n\n`
-        respuesta += `═══ PRÉSTAMOS ═══\n`
+        respuesta += `═══ SOLICITUDES ═══\n`
         respuesta += `✅ Activos: ${activos}\n`
         respuesta += `⚠️ En mora: ${enMora}\n`
         respuesta += `⚖️ Jurídico: ${juridico}\n`
@@ -437,7 +437,7 @@ export async function POST(req: NextRequest) {
         respuesta += `\n📅 Reporte generado: ${new Date().toLocaleString('es-CO')}`
       } catch (e) { respuesta = `❌ Error: ${e instanceof Error ? e.message : 'desconocido'}` }
     }
-    // B = Préstamos en mora
+    // B = Solicitudes en mora
     else if (mensajeLower === 'b' || mensajeLower === 'b️⃣' || mensajeLower.includes('mora') || (mensajeLower.includes('prestamos') && mensajeLower.includes('moroso'))) {
       try {
         const morosos = await db.prestamo.findMany({
@@ -446,9 +446,9 @@ export async function POST(req: NextRequest) {
         })
         tipo = 'REPORTE'
         if (morosos.length === 0) {
-          respuesta = `✅ No hay préstamos en mora. ¡Todo al día!`
+          respuesta = `✅ No hay solicitudes en mora. ¡Todo al día!`
         } else {
-          respuesta = `⚠️ Préstamos en mora (${morosos.length})\n\n`
+          respuesta = `⚠️ Solicitudes en mora (${morosos.length})\n\n`
           morosos.forEach((p, i) => {
             respuesta += `${i+1}. ${p.cliente.nombre} (${p.cliente.cedula})\n`
             respuesta += `   Código: ${p.codigo}\n`
@@ -489,7 +489,7 @@ export async function POST(req: NextRequest) {
         respuesta = `🔔 Alertas inteligentes\n\n`
         if (balance < 0) respuesta += `🔴 Balance negativo este mes: ${formatearMoneda(balance)}\n`
         if (gastos > ingresos * 0.8 && ingresos > 0) respuesta += `🟡 Gastos > 80% de ingresos. Reduce gastos.\n`
-        if (morosos > 0) respuesta += `🔴 ${morosos} préstamo(s) en mora. Gestiona el cobro.\n`
+        if (morosos > 0) respuesta += `🔴 ${morosos} solicitud(s) en mora. Gestiona el cobro.\n`
         if (balance >= 0 && morosos === 0 && gastos <= ingresos * 0.8) respuesta += `✅ No hay alertas críticas. Todo bajo control.\n`
         respuesta += `\n💡 Revisa estas alertas y toma acción si es necesario.`
       } catch (e) { respuesta = `❌ Error: ${e instanceof Error ? e.message : 'desconocido'}` }
@@ -548,7 +548,7 @@ export async function POST(req: NextRequest) {
           respuesta += `🟡 Tus gastos representan más del 80% de tus ingresos.\n   → Busca fuentes adicionales de ingreso.\n   → Renegocia tarifas de servicios.\n\n`
         }
         if (morosos > 0) {
-          respuesta += `🔴 Tienes ${morosos} préstamo(s) en mora.\n   → Gestiona el cobro urgentemente.\n   → Considera renovación o acuerdo de pago.\n\n`
+          respuesta += `🔴 Tienes ${morosos} solicitud(s) en mora.\n   → Gestiona el cobro urgentemente.\n   → Considera renovación o acuerdo de pago.\n\n`
         }
         if (balance >= 0 && morosos === 0) {
           respuesta += `✅ Tu situación financiera es saludable.\n   → Considera aumentar tu ahorro.\n   → Evalúa oportunidades de inversión.\n\n`
@@ -588,7 +588,7 @@ export async function POST(req: NextRequest) {
         tipo = 'REPORTE'
         respuesta = `💳 Deudas y activos\n\n`
         respuesta += `═══ DEUDAS ═══\n`
-        respuesta += `Préstamos bancarios activos: ${prestamosBancarios.length}\n`
+        respuesta += `Solicitudes bancarios activos: ${prestamosBancarios.length}\n`
         respuesta += `Saldo total deudas: ${formatearMoneda(totalDeudas)}\n\n`
         if (prestamosBancarios.length > 0) {
           prestamosBancarios.forEach((p, i) => {
@@ -617,7 +617,7 @@ export async function POST(req: NextRequest) {
       respuesta += `  9  Ver proyección fin de mes\n\n`
       respuesta += `🛡️ SISTEMA\n`
       respuesta += `  A  Estado del sistema\n`
-      respuesta += `  B  Préstamos en mora\n`
+      respuesta += `  B  Solicitudes en mora\n`
       respuesta += `  C  Ver auditoría reciente\n`
       respuesta += `  D  Ver alertas inteligentes\n`
       respuesta += `  E  Crear evento en calendario\n\n`
@@ -629,7 +629,7 @@ export async function POST(req: NextRequest) {
       respuesta += `💡 También puedes escribir directamente:\n`
       respuesta += `   "Registra un gasto de $50.000 en comida"\n`
       respuesta += `   "¿Cómo va el balance del mes?"\n`
-      respuesta += `   "Muéstrame los préstamos en mora"`
+      respuesta += `   "Muéstrame los solicitudes en mora"`
     }
 
     // === 1. REGISTRAR GASTO ===
@@ -758,7 +758,7 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // === 4. CONSULTAR PRÉSTAMOS EN MORA ===
+    // === 4. CONSULTAR SOLICITUDES EN MORA ===
     else if (mensajeLower.includes('mora') || (mensajeLower.includes('prestamos') && mensajeLower.includes('moroso'))) {
       try {
         const morosos = await db.prestamo.findMany({
@@ -767,9 +767,9 @@ export async function POST(req: NextRequest) {
         })
         tipo = 'REPORTE'
         if (morosos.length === 0) {
-          respuesta = `✅ No hay préstamos en mora. ¡Todo al día!`
+          respuesta = `✅ No hay solicitudes en mora. ¡Todo al día!`
         } else {
-          respuesta = `⚠️ Tienes ${morosos.length} préstamo(s) en mora:\n\n`
+          respuesta = `⚠️ Tienes ${morosos.length} solicitud(s) en mora:\n\n`
           morosos.forEach((p, i) => {
             respuesta += `${i + 1}. ${p.cliente.nombre} (${p.cliente.cedula})\n   Código: ${p.codigo}\n   Saldo: ${formatearMoneda(p.saldoTotal)}\n   Días mora: ${p.diasMora}\n\n`
           })
@@ -807,8 +807,8 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // === 6. CONSULTAR PRÉSTAMOS ACTIVOS ===
-    else if (mensajeLower.includes('prestamos activos') || mensajeLower.includes('préstamos activos') || mensajeLower.includes('cuantos prestamos') || mensajeLower.includes('cuántos préstamos')) {
+    // === 6. CONSULTAR SOLICITUDES ACTIVOS ===
+    else if (mensajeLower.includes('prestamos activos') || mensajeLower.includes('solicitudes activos') || mensajeLower.includes('cuantos prestamos') || mensajeLower.includes('cuántos solicitudes')) {
       try {
         const activos = await db.prestamo.count({ where: { estado: 'ACTIVO' } })
         const enMora = await db.prestamo.count({ where: { estado: 'EN_MORA' } })
@@ -817,22 +817,22 @@ export async function POST(req: NextRequest) {
           _sum: { saldoTotal: true },
         })
         tipo = 'REPORTE'
-        respuesta = `📊 Estado de la cartera:\n\n✅ Préstamos activos: ${activos}\n⚠️ En mora: ${enMora}\n💰 Saldo total: ${formatearMoneda(saldoTotal._sum.saldoTotal || 0)}`
+        respuesta = `📊 Estado de la cartera:\n\n✅ Solicitudes activos: ${activos}\n⚠️ En mora: ${enMora}\n💰 Saldo total: ${formatearMoneda(saldoTotal._sum.saldoTotal || 0)}`
       } catch (e) {
-        respuesta = `❌ No pude consultar los préstamos. Error: ${e instanceof Error ? e.message : 'desconocido'}`
+        respuesta = `❌ No pude consultar los solicitudes. Error: ${e instanceof Error ? e.message : 'desconocido'}`
       }
     }
 
     // === 7. SALUDO / AYUDA ===
     else if (mensajeLower.includes('hola') || mensajeLower.includes('ayuda') || mensajeLower.includes('que puedes hacer') || mensajeLower.includes('qué puedes hacer')) {
       tipo = 'TEXTO'
-      respuesta = `👋 ¡Hola! Soy el sistema Jsadr. Puedo ayudarte con:\n\n💰 **Registrar gastos:** "Registra un gasto de $50.000 en transporte"\n📈 **Registrar ingresos:** "Registra un ingreso de $100.000"\n📊 **Ver balance del mes:** "¿Cómo va el balance del mes?"\n⚠️ **Ver morosos:** "Muéstrame los préstamos en mora"\n📅 **Crear eventos:** "Crea un evento para pagar la tarjeta el 30"\n📋 **Ver préstamos activos:** "¿Cuántos préstamos activos hay?"\n\nEscribe tu instrucción y la ejecutaré en tiempo real.`
+      respuesta = `👋 ¡Hola! Soy el sistema Jsadr. Puedo ayudarte con:\n\n💰 **Registrar gastos:** "Registra un gasto de $50.000 en transporte"\n📈 **Registrar ingresos:** "Registra un ingreso de $100.000"\n📊 **Ver balance del mes:** "¿Cómo va el balance del mes?"\n⚠️ **Ver morosos:** "Muéstrame los solicitudes en mora"\n📅 **Crear eventos:** "Crea un evento para pagar la tarjeta el 30"\n📋 **Ver solicitudes activos:** "¿Cuántos solicitudes activos hay?"\n\nEscribe tu instrucción y la ejecutaré en tiempo real.`
     }
 
     // === RESPUESTA POR DEFECTO ===
     else {
       tipo = 'TEXTO'
-      respuesta = `🤔 No reconocí esa instrucción. Prueba con:\n\n• "Registra un gasto de $50.000 en transporte"\n• "¿Cómo va el balance del mes?"\n• "Muéstrame los préstamos en mora"\n• "Crea un evento para pagar la tarjeta el 30"\n• "¿Cuántos préstamos activos hay?"\n• "Registra un ingreso de $100.000"\n\nO escribe "ayuda" para ver todas las opciones.`
+      respuesta = `🤔 No reconocí esa instrucción. Prueba con:\n\n• "Registra un gasto de $50.000 en transporte"\n• "¿Cómo va el balance del mes?"\n• "Muéstrame los solicitudes en mora"\n• "Crea un evento para pagar la tarjeta el 30"\n• "¿Cuántos solicitudes activos hay?"\n• "Registra un ingreso de $100.000"\n\nO escribe "ayuda" para ver todas las opciones.`
     }
 
     return NextResponse.json({
@@ -872,7 +872,7 @@ async function responderSegunBot(botTipo: string, botNombre: string, mensaje: st
     })
   }
 
-  // === PRESTAMOS (Asistente Préstamos) — Director Inteligente del Módulo ===
+  // === PRESTAMOS (Asistente Solicitudes) — Director Inteligente del Módulo ===
   else if (botTipo === 'PRESTAMOS') {
     // 1. Verificar si LLM está activado
     const configLLM = await db.configBot.findUnique({ where: { clave: 'asistente_prestamos_llm' } })
@@ -889,10 +889,10 @@ async function responderSegunBot(botTipo: string, botNombre: string, mensaje: st
         const estado = await obtenerEstadoModuloPrestamos()
         const r = estado.resumen
 
-        const contextoPrestamos = `CONTEXTO MÓDULO PRÉSTAMOS (tiempo real — ${new Date().toLocaleString('es-CO')}):
+        const contextoPrestamos = `CONTEXTO MÓDULO SOLICITUDES (tiempo real — ${new Date().toLocaleString('es-CO')}):
 
 ═══ PANORAMA GENERAL ═══
-Total préstamos: ${r.totalPrestamos}
+Total solicitudes: ${r.totalPrestamos}
 Solicitudes pendientes: ${r.totalSolicitudes}
 Activos: ${r.totalActivos}
 Finalizados: ${r.totalFinalizados}
@@ -947,7 +947,7 @@ ${estado.alertas.length > 0 ? `═══ ALERTAS (${estado.alertas.length}) ═�
           },
         })
       } catch (e: any) {
-        console.error('[Chat] LLM Asistente Préstamos falló, usando patrones:', e?.message)
+        console.error('[Chat] LLM Asistente Solicitudes falló, usando patrones:', e?.message)
       }
     }
 
@@ -993,11 +993,11 @@ ${estado.alertas.length > 0 ? `═══ ALERTAS (${estado.alertas.length}) ═�
         })
       }
     }
-    // Préstamos activos
+    // Solicitudes activos
     else if (mensajeLower.includes('activo') || mensajeLower === '3' || mensajeLower === '3️⃣') {
       tipo = 'REPORTE'
       const estado = await obtenerEstadoModuloPrestamos()
-      respuesta = `📋 PRÉSTAMOS ACTIVOS: ${estado.resumen.totalActivos}
+      respuesta = `📋 SOLICITUDES ACTIVOS: ${estado.resumen.totalActivos}
 
 `
       // Listar los 10 más recientes
@@ -1024,9 +1024,9 @@ ${estado.alertas.length > 0 ? `═══ ALERTAS (${estado.alertas.length}) ═�
         orderBy: { diasMora: 'desc' },
       })
       if (morosos.length === 0) {
-        respuesta = `✅ No hay préstamos en mora.`
+        respuesta = `✅ No hay solicitudes en mora.`
       } else {
-        respuesta = `⚠️ PRÉSTAMOS EN MORA (${morosos.length}):
+        respuesta = `⚠️ SOLICITUDES EN MORA (${morosos.length}):
 
 `
         morosos.forEach((p, i) => {
@@ -1063,7 +1063,7 @@ ${estado.alertas.length > 0 ? `═══ ALERTAS (${estado.alertas.length}) ═�
       if (estado.aptosRenovacion.length === 0) {
         respuesta = `ℹ️ No hay clientes aptos para renovación actualmente.
 
-(Criterio: al día + 70%+ del préstamo pagado)`
+(Criterio: al día + 70%+ del solicitud pagado)`
       } else {
         respuesta = `🔄 CLIENTES APTOS PARA RENOVACIÓN (${estado.aptosRenovacion.length}):
 
@@ -1084,14 +1084,14 @@ ${estado.alertas.length > 0 ? `═══ ALERTAS (${estado.alertas.length}) ═�
       tipo = 'REPORTE'
       respuesta = await generarAnalisisRentabilidad()
     }
-    // Préstamos más rentables
+    // Solicitudes más rentables
     else if (mensajeLower.includes('mas rentable') || mensajeLower.includes('más rentable') || mensajeLower === '8' || mensajeLower === '8️⃣') {
       tipo = 'REPORTE'
       const estado = await obtenerEstadoModuloPrestamos()
       if (estado.masRentables.length === 0) {
-        respuesta = `ℹ️ No hay préstamos activos para analizar rentabilidad.`
+        respuesta = `ℹ️ No hay solicitudes activos para analizar rentabilidad.`
       } else {
-        respuesta = `📈 PRÉSTAMOS MÁS RENTABLES:
+        respuesta = `📈 SOLICITUDES MÁS RENTABLES:
 
 `
         estado.masRentables.forEach((p, i) => {
@@ -1110,9 +1110,9 @@ ${estado.alertas.length > 0 ? `═══ ALERTAS (${estado.alertas.length}) ═�
       tipo = 'REPORTE'
       const estado = await obtenerEstadoModuloPrestamos()
       if (estado.mayorRiesgo.length === 0) {
-        respuesta = `✅ No hay préstamos en mora. Sin riesgo detectado.`
+        respuesta = `✅ No hay solicitudes en mora. Sin riesgo detectado.`
       } else {
-        respuesta = `🔴 PRÉSTAMOS DE MAYOR RIESGO:
+        respuesta = `🔴 SOLICITUDES DE MAYOR RIESGO:
 
 `
         estado.mayorRiesgo.forEach((p, i) => {
@@ -1170,7 +1170,7 @@ ${estado.alertas.length > 0 ? `═══ ALERTAS (${estado.alertas.length}) ═�
           respuesta += `📊 Rentabilidad: ${simulacion.rentabilidadPct}%
 
 `
-          respuesta += `💡 Ve a Préstamos → Simulador para más opciones.`
+          respuesta += `💡 Ve a Solicitudes → Simulador para más opciones.`
         }
       } else {
         respuesta = `🧮 SIMULAR CRÉDITO
@@ -1203,15 +1203,15 @@ Escribe los parámetros, ej:
 `
       respuesta += `• Estado de cuenta (PDF)
 `
-      respuesta += `• Paz y salvo (préstamos cancelados)
+      respuesta += `• Paz y salvo (solicitudes cancelados)
 
 `
-      respuesta += `💡 Ve a Préstamos → Documentos para generarlos.`
+      respuesta += `💡 Ve a Solicitudes → Documentos para generarlos.`
     }
     // Menú
     else if (mensajeLower === 'menu' || mensajeLower === 'menú' || mensajeLower === 'ayuda' || mensajeLower === 'hola' || mensajeLower === 'help') {
       tipo = 'TEXTO'
-      respuesta = `📋 MENÚ ASISTENTE PRÉSTAMOS
+      respuesta = `📋 MENÚ ASISTENTE SOLICITUDES
 ` +
         `═══ ESTADO DEL MÓDULO ═══
 ` +
@@ -1219,9 +1219,9 @@ Escribe los parámetros, ej:
 ` +
         `2️⃣ Solicitudes pendientes
 ` +
-        `3️⃣ Préstamos activos
+        `3️⃣ Solicitudes activos
 ` +
-        `4️⃣ Préstamos en mora
+        `4️⃣ Solicitudes en mora
 ` +
         `═══ CONSULTAS INTELIGENTES ═══
 ` +
@@ -1231,9 +1231,9 @@ Escribe los parámetros, ej:
 ` +
         `7️⃣ Análisis de rentabilidad
 ` +
-        `8️⃣ Préstamos más rentables
+        `8️⃣ Solicitudes más rentables
 ` +
-        `9️⃣ Préstamos de mayor riesgo
+        `9️⃣ Solicitudes de mayor riesgo
 ` +
         `══️ ACCIONES ═══
 ` +
@@ -1242,18 +1242,18 @@ Escribe los parámetros, ej:
         `0️⃣ Generar documentos
 
 ` +
-        `💡 Pregúntame: "¿cuántos préstamos activos hay?", "¿qué clientes pueden renovar?", "¿cuál es la utilidad del mes?"`
+        `💡 Pregúntame: "¿cuántos solicitudes activos hay?", "¿qué clientes pueden renovar?", "¿cuál es la utilidad del mes?"`
     }
         // Default
 // Default
     else {
       tipo = 'TEXTO'
-      respuesta = `📋 Soy Asistente Préstamos, Director Inteligente del Módulo de Préstamos.
+      respuesta = `📋 Soy Asistente Solicitudes, Director Inteligente del Módulo de Solicitudes.
 
 ` +
         `Escribe "menú" para ver opciones o pregúntame:
 ` +
-        `• "¿cuántos préstamos activos hay?"
+        `• "¿cuántos solicitudes activos hay?"
 ` +
         `• "¿qué clientes pueden renovar?"
 ` +
@@ -1353,7 +1353,7 @@ ${estado.alertasPendientes.length > 0 ? `═══ ALERTAS PENDIENTES (${estado.
       tipo = 'REPORTE'
       const estado = await obtenerEstadoModuloJuridico()
       if (estado.candidatosJuridico.length === 0) {
-        respuesta = `✅ No hay candidatos a cobro jurídico actualmente.\n\n(Criterio: préstamos con 60+ días de mora sin caso jurídico existente)`
+        respuesta = `✅ No hay candidatos a cobro jurídico actualmente.\n\n(Criterio: solicitudes con 60+ días de mora sin caso jurídico existente)`
       } else {
         respuesta = `⚖️ CANDIDATOS A COBRO JURÍDICO (${estado.candidatosJuridico.length}):\n\n`
         estado.candidatosJuridico.forEach((c, i) => {
@@ -1362,7 +1362,7 @@ ${estado.alertasPendientes.length > 0 ? `═══ ALERTAS PENDIENTES (${estado.
           respuesta += `   📞 ${c.telefono}\n`
           respuesta += `   🎯 Recomendación: ${c.recomendacion}\n\n`
         })
-        respuesta += `💡 Para crear un caso: ve a Jurídico → Nuevo Caso y selecciona el préstamo.`
+        respuesta += `💡 Para crear un caso: ve a Jurídico → Nuevo Caso y selecciona el solicitud.`
       }
     }
     // Alertas legales
@@ -1399,7 +1399,7 @@ ${estado.alertasPendientes.length > 0 ? `═══ ALERTAS PENDIENTES (${estado.
     else if (mensajeLower.includes('civil') || mensajeLower.includes('comercial') || mensajeLower.includes('contrato') || mensajeLower.includes('pagare') || mensajeLower.includes('pagaré') || mensajeLower === '7' || mensajeLower === '7️⃣') {
       tipo = 'TEXTO'
       if (mensajeLower.includes('pagar') || mensajeLower.includes('pagaré')) {
-        respuesta = `📋 ASESORÍA SOBRE PAGARÉ\n\n**Información jurídica general:**\nEl pagaré es un título valor regulado por el Código de Comercio colombiano (arts. 620-624 y 702-707).\n\n**Requisitos del pagaré (art. 621 C.Co.):**\n1. La mención de ser "pagaré"\n2. La promesa incondicional de pagar una suma determinada\n3. El nombre del beneficiario\n4. La fecha y lugar de suscripción\n5. La fecha de vencimiento\n6. Lugar de pago\n7. La firma del suscriptor\n\n**Acción ejecutiva:** El pagaré es título ejecutivo (art. 488 CGP). La acción prescribe en 3 años desde el vencimiento (art. 784 C.Co.).\n\n**Recomendación:** Para cobro judicial, el pagaré permite proceso ejecutivo单documental (art. 420 CGP).\n\n⚠️ Para análisis de un caso específico, comparte el código del préstamo.`
+        respuesta = `📋 ASESORÍA SOBRE PAGARÉ\n\n**Información jurídica general:**\nEl pagaré es un título valor regulado por el Código de Comercio colombiano (arts. 620-624 y 702-707).\n\n**Requisitos del pagaré (art. 621 C.Co.):**\n1. La mención de ser "pagaré"\n2. La promesa incondicional de pagar una suma determinada\n3. El nombre del beneficiario\n4. La fecha y lugar de suscripción\n5. La fecha de vencimiento\n6. Lugar de pago\n7. La firma del suscriptor\n\n**Acción ejecutiva:** El pagaré es título ejecutivo (art. 488 CGP). La acción prescribe en 3 años desde el vencimiento (art. 784 C.Co.).\n\n**Recomendación:** Para cobro judicial, el pagaré permite proceso ejecutivo单documental (art. 420 CGP).\n\n⚠️ Para análisis de un caso específico, comparte el código del solicitud.`
       } else if (mensajeLower.includes('contrato')) {
         respuesta = `📋 ASESORÍA SOBRE CONTRATOS\n\n**Información jurídica general:**\nLos contratos en Colombia se rigen por el Código Civil (arts. 1495-1501).\n\n**Elementos esenciales (art. 1501 C.C.):**\n1. Consentimiento\n2. Objeto físico y jurídicamente posible\n3. Causa lícita\n\n**Clases de contratos:**\n• Consensuales: se perfeccionan con el solo consentimiento\n• Reales: requieren entrega de la cosa\n• Solemnes: requieren formalidades específicas\n\n**Incumplimiento:** Da lugar a indemnización de perjuicios (arts. 1546-1556 C.C.) y resolución del contrato.\n\n⚠️ Para asesoría sobre un contrato específico, compártelo.`
       } else {
@@ -1409,7 +1409,7 @@ ${estado.alertasPendientes.length > 0 ? `═══ ALERTAS PENDIENTES (${estado.
     // Cobranza
     else if (mensajeLower.includes('cobran') || mensajeLower.includes('cobro') || mensajeLower.includes('ejecut') || mensajeLower === '8' || mensajeLower === '8️⃣') {
       tipo = 'TEXTO'
-      respuesta = `💼 ASESORÍA EN COBRANZA\n\n**Etapas de cobro en Colombia:**\n\n1. **Cobro persuasivo** (1-30 días):\n   • Llamadas, WhatsApp, correos\n   • Recordatorios amables\n   • Sin acciones legales\n\n2. **Cobro prejurídico** (30-60 días):\n   • Requerimiento escrito\n   • Última oportunidad de acuerdo\n   • Preparación documental\n\n3. **Cobro judicial** (60+ días):\n   • Proceso ejecutivo (art. 420 CGP)\n   • Si el título es pagaré/letra: proceso ejecutivo single\n   • Medidas cautelares: embargo y secuestro\n   • Audiencia de conciliación\n\n**Proceso ejecutivo (Ley 1564/2012 art. 420-423):**\n• Título ejecutivo: pagaré, letra, contrato\n• Demanda con sus anexos\n• Mandamiento de pago\n• Excepciones del demandado\n• Sentencia y ejecución\n\n⚠️ Para analizar un caso específico, dame el código del préstamo.`
+      respuesta = `💼 ASESORÍA EN COBRANZA\n\n**Etapas de cobro en Colombia:**\n\n1. **Cobro persuasivo** (1-30 días):\n   • Llamadas, WhatsApp, correos\n   • Recordatorios amables\n   • Sin acciones legales\n\n2. **Cobro prejurídico** (30-60 días):\n   • Requerimiento escrito\n   • Última oportunidad de acuerdo\n   • Preparación documental\n\n3. **Cobro judicial** (60+ días):\n   • Proceso ejecutivo (art. 420 CGP)\n   • Si el título es pagaré/letra: proceso ejecutivo single\n   • Medidas cautelares: embargo y secuestro\n   • Audiencia de conciliación\n\n**Proceso ejecutivo (Ley 1564/2012 art. 420-423):**\n• Título ejecutivo: pagaré, letra, contrato\n• Demanda con sus anexos\n• Mandamiento de pago\n• Excepciones del demandado\n• Sentencia y ejecución\n\n⚠️ Para analizar un caso específico, dame el código del solicitud.`
     }
     // Procesos judiciales
     else if (mensajeLower.includes('proceso') || mensajeLower.includes('demanda') || mensajeLower.includes('embargo') || mensajeLower.includes('audiencia') || mensajeLower === '9' || mensajeLower === '9️⃣') {
@@ -1844,7 +1844,7 @@ FINANCIERO:
 COMERCIAL:
 • Total clientes: ${r.totalClientes}
 • Nuevos este mes: ${r.clientesNuevosMes} (${r.crecimientoClientes >= 0 ? '+' : ''}${r.crecimientoClientes}%)
-• Total préstamos: ${r.totalPrestamos} (${r.prestamosActivos} activos, ${r.prestamosMora} en mora)
+• Total solicitudes: ${r.totalPrestamos} (${r.prestamosActivos} activos, ${r.prestamosMora} en mora)
 • Tasa de mora: ${r.tasaMora}%
 
 OPERATIVO:
@@ -1926,7 +1926,7 @@ ${consolidado.oportunidades.length > 0 ? `═══ OPORTUNIDADES (${consolidado
       respuesta += `═══ CLIENTES ═══\n`
       respuesta += `Total: ${r.totalClientes}\n`
       respuesta += `Nuevos este mes: ${r.clientesNuevosMes} (${r.crecimientoClientes >= 0 ? '📈' : '📉'} ${r.crecimientoClientes}%)\n\n`
-      respuesta += `═══ PRÉSTAMOS ═══\n`
+      respuesta += `═══ SOLICITUDES ═══\n`
       respuesta += `Total: ${r.totalPrestamos}\n`
       respuesta += `Activos: ${r.prestamosActivos}\n`
       respuesta += `En mora: ${r.prestamosMora} (${r.tasaMora}%)\n\n`
@@ -2132,7 +2132,7 @@ Libre: ${audit.sistema.disco.libre} GB
 
 ═══ BASE DE DATOS ═══
 Tamaño: ${audit.baseDatos.tamañoMB} MB
-Clientes: ${audit.baseDatos.clientes} | Préstamos: ${audit.baseDatos.prestamos} | Pagos: ${audit.baseDatos.pagos}
+Clientes: ${audit.baseDatos.clientes} | Solicitudes: ${audit.baseDatos.prestamos} | Pagos: ${audit.baseDatos.pagos}
 Mensajes: ${audit.baseDatos.mensajes} | Audit logs: ${audit.baseDatos.auditLogs}
 
 ══️ VARIABLES DE ENTORNO ═══
@@ -2192,7 +2192,7 @@ ${audit.hallazgos.length > 0 ? `═══ HALLAZGOS (${audit.hallazgos.length}) 
       respuesta += `═══ TAMAÑO ═══\n${audit.baseDatos.tamañoMB} MB\n\n`
       respuesta += `═══ REGISTROS ═══\n`
       respuesta += `• Clientes: ${audit.baseDatos.clientes}\n`
-      respuesta += `• Préstamos: ${audit.baseDatos.prestamos}\n`
+      respuesta += `• Solicitudes: ${audit.baseDatos.prestamos}\n`
       respuesta += `• Pagos: ${audit.baseDatos.pagos}\n`
       respuesta += `• Mensajes: ${audit.baseDatos.mensajes}\n`
       respuesta += `• Audit logs: ${audit.baseDatos.auditLogs}\n`
@@ -2846,7 +2846,7 @@ ${metas.length > 0 ? metas.map(m => `- ${m.nombre} (${m.ambito}): ${formatearMon
         const contextoCartera = `CONTEXTO DE CARTERA (tiempo real — ${new Date().toLocaleString('es-CO')}):
 
 ═══ PANORAMA GENERAL ═══
-Total préstamos: ${r.totalPrestamos}
+Total solicitudes: ${r.totalPrestamos}
 Activos: ${r.totalActivos}
 Pendientes desembolso: ${r.totalPendientes}
 Al día: ${r.totalAlDia}
@@ -3075,12 +3075,12 @@ ${r.tasaMora < 10 ? '🟢 Cartera saludable' : r.tasaMora < 20 ? '🟡 Atención
       tipo = 'REPORTE'
       respuesta = await generarAnalisisEstrategico()
     }
-    // Préstamos activos/pendientes
+    // Solicitudes activos/pendientes
     else if (mensajeLower.includes('activo') || mensajeLower.includes('pendiente') || mensajeLower === '2' || mensajeLower === '2️⃣') {
       tipo = 'REPORTE'
       const estado = await obtenerEstadoCartera()
       const r = estado.resumen
-      respuesta = `📋 PRÉSTAMOS
+      respuesta = `📋 SOLICITUDES
 
 `
       respuesta += `Activos: ${r.totalActivos}
@@ -3139,7 +3139,7 @@ ${r.tasaMora < 10 ? '🟢 Cartera saludable' : r.tasaMora < 20 ? '🟡 Atención
 
 `
         })
-        respuesta += `💡 Para escalar: ve a Jurídico → Nuevo Caso y selecciona el préstamo.`
+        respuesta += `💡 Para escalar: ve a Jurídico → Nuevo Caso y selecciona el solicitud.`
       }
     }
     // Menú
@@ -3151,7 +3151,7 @@ ${r.tasaMora < 10 ? '🟢 Cartera saludable' : r.tasaMora < 20 ? '🟡 Atención
 ` +
         `1️⃣ Resumen ejecutivo (cartera hoy)
 ` +
-        `2️⃣ Préstamos activos / pendientes
+        `2️⃣ Solicitudes activos / pendientes
 ` +
         `3️⃣ Mora actual (clientes + días)
 ` +
@@ -3321,7 +3321,7 @@ ${r.tasaMora < 10 ? '🟢 Cartera saludable' : r.tasaMora < 20 ? '🟡 Atención
       tipo = 'TEXTO'
       respuesta = `💬 ¡Hola${cliente ? `, ${cliente.nombre.split(' ')[0]}` : ''}! Soy Clientes, tu asistente de atención.\n\n` +
         `MENÚ\n` +
-        `1️⃣ Consultar saldo de mi préstamo\n` +
+        `1️⃣ Consultar saldo de mi solicitud\n` +
         `2️⃣ Ver fecha de mi próximo pago\n` +
         `3️⃣ Ver cuotas pagadas\n` +
         `4️⃣ Información sobre renovación\n` +
@@ -3337,10 +3337,10 @@ ${r.tasaMora < 10 ? '🟢 Cartera saludable' : r.tasaMora < 20 ? '🟡 Atención
         respuesta = `💰 Consulta de saldo\n\nNo tengo acceso a tu información en este momento. Para consultarlo, ingresa al Portal del Cliente con tu cédula y PIN.\n\nSi necesitas ayuda, escribe "asesor" y te conectaremos con un humano.`
       } else if (prestamosActivos.length === 0) {
         tipo = 'TEXTO'
-        respuesta = `💰 Consulta de saldo\n\nHola ${cliente.nombre.split(' ')[0]}, no tienes préstamos activos actualmente.\n\n¿Te gustaría información sobre requisitos para un nuevo crédito? Escribe "requisitos".`
+        respuesta = `💰 Consulta de saldo\n\nHola ${cliente.nombre.split(' ')[0]}, no tienes solicitudes activos actualmente.\n\n¿Te gustaría información sobre requisitos para un nuevo crédito? Escribe "requisitos".`
       } else {
         tipo = 'REPORTE'
-        respuesta = `💰 Saldo de tu préstamo${prestamosActivos.length > 1 ? 's' : ''}, ${cliente.nombre.split(' ')[0]}:\n\n`
+        respuesta = `💰 Saldo de tu solicitud${prestamosActivos.length > 1 ? 's' : ''}, ${cliente.nombre.split(' ')[0]}:\n\n`
         prestamosActivos.forEach((p, i) => {
           respuesta += `${i + 1}. Crédito ${p.codigo}\n` +
             `   • Saldo pendiente: ${formatearMoneda(p.saldoTotal)}\n` +
@@ -3354,7 +3354,7 @@ ${r.tasaMora < 10 ? '🟢 Cartera saludable' : r.tasaMora < 20 ? '🟡 Atención
     else if (mensajeLower.includes('fecha') || mensajeLower.includes('pago') || mensajeLower.includes('cuota') || mensajeLower === '2' || mensajeLower === '2️⃣') {
       if (!cliente || prestamosActivos.length === 0) {
         tipo = 'TEXTO'
-        respuesta = `📅 Fecha de pago\n\nNo tienes préstamos activos. Tu próxima fecha de pago se muestra en el Portal del Cliente cuando tienes un crédito activo.`
+        respuesta = `📅 Fecha de pago\n\nNo tienes solicitudes activos. Tu próxima fecha de pago se muestra en el Portal del Cliente cuando tienes un crédito activo.`
       } else {
         tipo = 'REPORTE'
         respuesta = `📅 Próximos pagos, ${cliente.nombre.split(' ')[0]}:\n\n`
@@ -3371,7 +3371,7 @@ ${r.tasaMora < 10 ? '🟢 Cartera saludable' : r.tasaMora < 20 ? '🟡 Atención
     else if (mensajeLower.includes('pagadas') || mensajeLower.includes('historial') || mensajeLower === '3' || mensajeLower === '3️⃣') {
       if (!cliente || prestamosActivos.length === 0) {
         tipo = 'TEXTO'
-        respuesta = `📊 Cuotas pagadas\n\nNo tienes préstamos activos para mostrar historial.`
+        respuesta = `📊 Cuotas pagadas\n\nNo tienes solicitudes activos para mostrar historial.`
       } else {
         tipo = 'REPORTE'
         respuesta = `📊 Estado de cuotas, ${cliente.nombre.split(' ')[0]}:\n\n`
@@ -3396,7 +3396,7 @@ ${r.tasaMora < 10 ? '🟢 Cartera saludable' : r.tasaMora < 20 ? '🟡 Atención
         `5. El sistema trae tu saldo pendiente automáticamente\n` +
         `6. Ingresa el nuevo capital\n` +
         `7. El sistema calcula el excedente a entregarte\n\n` +
-        `💡 Solo puedes renovar si tu préstamo está al día.`
+        `💡 Solo puedes renovar si tu solicitud está al día.`
     }
     // 11. Requisitos
     else if (mensajeLower.includes('requisito') || mensajeLower.includes('credito') || mensajeLower.includes('crédito') || mensajeLower.includes('solicitar') || mensajeLower === '5' || mensajeLower === '5️⃣') {
@@ -4063,10 +4063,10 @@ Puedes pedirme cosas como:
 • "Consejos de ahorro"
 
 También puedes cambiar de ámbito (Negocio/Personal) o pedirme un reporte diario, semanal o mensual. Cuéntame qué necesitas.`,
-    'PRESTAMOS': `📋 Soy el Asistente de Préstamos. Te doy visibilidad completa del módulo de créditos.
+    'PRESTAMOS': `📋 Soy el Asistente de Solicitudes. Te doy visibilidad completa del módulo de créditos.
 
 Pregúntame en lenguaje natural:
-• "¿Cuántos préstamos activos hay?"
+• "¿Cuántos solicitudes activos hay?"
 • "¿Qué clientes pueden renovar?"
 • "¿Cuál es la utilidad del mes?"
 • "¿Cuáles son los más rentables?"
@@ -4174,14 +4174,14 @@ Pregúntame:
 • "Clientes con excelente pago"
 
 ¿Quieres que empiece con un resumen de la cartera?`,
-    'CHAT_CLIENTES': `💬 Soy el Asistente del Portal del Cliente. Estoy aquí para ayudarte con tu préstamo.
+    'CHAT_CLIENTES': `💬 Soy el Asistente del Portal del Cliente. Estoy aquí para ayudarte con tu solicitud.
 
 Puedes preguntarme en lenguaje natural:
 • "¿Cuánto debo?"
 • "¿Cuándo es mi próximo pago?"
 • "¿Cómo voy con mis cuotas?"
 • "Quiero renovar mi crédito"
-• "Requisitos para nuevo préstamo"
+• "Requisitos para nuevo solicitud"
 • "¿Cómo pago?"
 • "¿Qué pasa si me atraso?"
 • "Cambiar mi PIN"

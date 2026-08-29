@@ -106,14 +106,14 @@ function renderSeccionCliente(cliente: any): string {
   `
 }
 
-// Construye la sección "Datos del Crédito" con info detallada del préstamo
+// Construye la sección "Datos del Crédito" con info detallada del solicitud
 function renderSeccionCredito(credito: any): string {
   if (!credito) return ''
   return `
     <div class="section">
       <h3 class="section-title">💰 Datos del Crédito</h3>
       <div class="grid">
-        <div class="row"><span class="lbl">Código préstamo:</span><span class="val mono">${credito.codigoPrestamo || '—'}</span></div>
+        <div class="row"><span class="lbl">Código solicitud:</span><span class="val mono">${credito.codigoPrestamo || '—'}</span></div>
         <div class="row"><span class="lbl">Estado:</span><span class="val">${estadoBadge(credito.estado)}</span></div>
         <div class="row"><span class="lbl">Monto principal:</span><span class="val">${moneda(credito.montoPrincipal)}</span></div>
         ${credito.tasaInteresAnual != null ? `<div class="row"><span class="lbl">Tasa anual:</span><span class="val">${credito.tasaInteresAnual}%</span></div>` : ''}
@@ -201,7 +201,7 @@ function renderHTML(codigo: string, data: any): string {
             <div class="row"><span class="lbl">Tipo de documento:</span><span class="val">${d.tipoDocumento || '—'}</span></div>
             <div class="row"><span class="lbl">Deudor:</span><span class="val">${d.deudor || '—'}</span></div>
             <div class="row"><span class="lbl">Cédula:</span><span class="val mono">${d.cedula || '—'}</span></div>
-            <div class="row"><span class="lbl">Préstamo:</span><span class="val mono">${d.codigoPrestamo || '—'}</span></div>
+            <div class="row"><span class="lbl">Solicitud:</span><span class="val mono">${d.codigoPrestamo || '—'}</span></div>
             <div class="row"><span class="lbl">Estado:</span><span class="val">${estadoBadge(d.estado)}</span></div>
             <div class="row"><span class="lbl">Monto principal:</span><span class="val">${moneda(d.monto)}</span></div>
             <div class="row"><span class="lbl">Tipo de código:</span><span class="val mono">${d.tipoCodigo || '—'}</span></div>

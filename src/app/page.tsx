@@ -82,8 +82,8 @@ export default function Home() {
   const [portalToken, setPortalToken] = useState<string | null>(null)
   const [refreshKey, setRefreshKey] = useState(0)
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false)
-  // === Solicitud web pendiente de convertir en préstamo ===
-  // Cuando el usuario hace clic en "Préstamo" desde el Buzón de Solicitudes
+  // === Solicitud web pendiente de convertir en solicitud ===
+  // Cuando el usuario hace clic en "Solicitud" desde el Buzón de Solicitudes
   // (vista 'buzon-solicitudes' montada directamente en page.tsx), capturamos
   // la solicitud aquí y la inyectamos en PrestamosView al cambiar de vista.
   // PrestamosView la procesa en un useEffect, abre el modal de creación
@@ -288,7 +288,7 @@ export default function Home() {
   }
   const refresh = () => setRefreshKey((k) => k + 1)
 
-  // Convertir una solicitud web en préstamo: captura la solicitud en el
+  // Convertir una solicitud web en solicitud: captura la solicitud en el
   // estado `solicitudPendiente` y cambia a la vista 'prestamos'. Allí,
   // PrestamosView detecta el cambio vía useEffect, precarga el formulario
   // con los datos de la solicitud (cliente, monto, tasa, cuotas, frecuencia,
@@ -304,7 +304,7 @@ export default function Home() {
     setView('prestamos')
     toast({
       title: 'Solicitud cargada',
-      description: `Se precargó el formulario con los datos de la solicitud ${solicitud.codigo || ''}. Completa la información restante para crear el préstamo.`,
+      description: `Se precargó el formulario con los datos de la solicitud ${solicitud.codigo || ''}. Completa la información restante para crear el solicitud.`,
     })
   }
 
@@ -312,7 +312,7 @@ export default function Home() {
   // re-disparos del useEffect[solicitudPendiente, onSolicitudConsumida] en
   // PrestamosView. Antes, la arrow inline se recreaba en cada render del
   // padre, lo que podía limpiar solicitudPendiente prematuramente y
-  // provocar que el modal de creación de préstamo no se abriera.
+  // provocar que el modal de creación de solicitud no se abriera.
   const handleSolicitudConsumida = useCallback(() => {
     setSolicitudPendiente(null)
   }, [])

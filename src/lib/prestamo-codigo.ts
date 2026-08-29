@@ -1,11 +1,11 @@
 // =====================================================
 // Helper compartido: generar y enviar código(s) OTP de
-// confirmación por correo para un préstamo.
+// confirmación por correo para un solicitud.
 //
 // REGLA DE NEGOCIO:
-//   Si el préstamo tiene tieneCodeudor=true y codeudorEmail
+//   Si el solicitud tiene tieneCodeudor=true y codeudorEmail
 //   seteado, se generan y envían DOS códigos (uno al DEUDOR
-//   y otro al CODEUDOR). El préstamo se activa solo cuando
+//   y otro al CODEUDOR). El solicitud se activa solo cuando
 //   AMBOS roles hayan verificado su código.
 //
 //   Si NO hay codeudor, se genera un solo código para el
@@ -53,11 +53,11 @@ function buildEmailContent(opts: {
 }): { subject: string; text: string; html: string } {
   const { nombreDestinatario, rol, prestamo, calculo, codigo } = opts
   const rolLabel = rol === 'CODEUDOR' ? 'Codeudor' : 'Titular'
-  const subject = `Código de Confirmación (${rolLabel}) - Préstamo ${prestamo.codigo}`
+  const subject = `Código de Confirmación (${rolLabel}) - Solicitud ${prestamo.codigo}`
 
   const textContent = `Estimado/a ${nombreDestinatario},
 
-Tu rol en este préstamo es: ${rolLabel.toUpperCase()}.
+Tu rol en este solicitud es: ${rolLabel.toUpperCase()}.
 
 DETALLES DEL CRÉDITO:
 - Código: ${prestamo.codigo}
@@ -74,29 +74,29 @@ TU CÓDIGO DE CONFIRMACIÓN ES:
 
   >>  ${codigo}  <<
 
-Para activar este préstamo:
+Para activar este solicitud:
 1. Comparte este código con tu gestor.
 2. Tu gestor lo ingresará en el sistema.
 ${rol === 'CODEUDOR'
-      ? '3. Como este préstamo tiene codeudor, el préstamo se activará solo cuando tanto el TITULAR como el CODEUDOR hayan verificado su código.\n'
-      : '3. Una vez verificado, el préstamo se activará.\n'
+      ? '3. Como este solicitud tiene codeudor, el solicitud se activará solo cuando tanto el TITULAR como el CODEUDOR hayan verificado su código.\n'
+      : '3. Una vez verificado, el solicitud se activará.\n'
     }
 IMPORTANTE:
 - Este código expira en 24 horas.
 - No compartas este código con nadie que no sea tu gestor autorizado.
 
 Saludos,
-Sistema de Gestión de Préstamos`
+Sistema de Gestión de Solicitudes`
 
   const htmlContent = `
 <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #f9fafb;">
   <div style="background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%); color: white; padding: 24px; border-radius: 12px 12px 0 0;">
-    <h1 style="margin: 0; font-size: 22px;">Préstamo Aprobado ✅</h1>
+    <h1 style="margin: 0; font-size: 22px;">Solicitud Aprobado ✅</h1>
     <p style="margin: 8px 0 0; opacity: 0.9;">Código de Confirmación · <strong>${rolLabel}</strong></p>
   </div>
   <div style="background: white; padding: 24px; border: 1px solid #e5e7eb; border-top: none;">
     <p style="font-size: 16px; color: #374151;">Estimado/a <strong>${nombreDestinatario}</strong>,</p>
-    <p style="color: #6b7280;">Tu rol en este préstamo es <strong>${rolLabel}</strong>. A continuación los detalles:</p>
+    <p style="color: #6b7280;">Tu rol en este solicitud es <strong>${rolLabel}</strong>. A continuación los detalles:</p>
     <div style="background: #f3f4f6; padding: 16px; border-radius: 8px; margin: 16px 0;">
       <table style="width: 100%; font-size: 14px; color: #374151;">
         <tr><td style="padding: 4px 0; color: #6b7280;">Código:</td><td style="font-weight: bold;">${prestamo.codigo}</td></tr>
@@ -117,28 +117,28 @@ Sistema de Gestión de Préstamos`
     </div>
     ${rol === 'CODEUDOR'
       ? `<div style="background: #ede9fe; padding: 16px; border-radius: 8px; margin: 16px 0;">
-          <p style="margin: 0 0 8px; font-weight: bold; color: #6d28d9;">⚠️ Préstamo con codeudor</p>
+          <p style="margin: 0 0 8px; font-weight: bold; color: #6d28d9;">⚠️ Solicitud con codeudor</p>
           <p style="margin: 0; color: #4c1d95; font-size: 14px;">
-            Este préstamo cuenta con codeudor. El préstamo NO se activará hasta que tanto el
+            Este solicitud cuenta con codeudor. El solicitud NO se activará hasta que tanto el
             <strong>titular</strong> como el <strong>codeudor</strong> hayan verificado su respectivo código.
           </p>
         </div>`
       : ''
     }
     <div style="background: #dbeafe; padding: 16px; border-radius: 8px; margin: 16px 0;">
-      <p style="margin: 0 0 8px; font-weight: bold; color: #1e40af;">¿Cómo activar tu préstamo?</p>
+      <p style="margin: 0 0 8px; font-weight: bold; color: #1e40af;">¿Cómo activar tu solicitud?</p>
       <ol style="margin: 0; padding-left: 20px; color: #374151; font-size: 14px;">
         <li>Comparte este código con tu gestor.</li>
         <li>Tu gestor lo ingresará en el sistema.</li>
-        <li>Una vez verificado${rol === 'CODEUDOR' ? ' (junto con el del titular)' : ''}, el préstamo se activará.</li>
+        <li>Una vez verificado${rol === 'CODEUDOR' ? ' (junto con el del titular)' : ''}, el solicitud se activará.</li>
       </ol>
     </div>
     <div style="background: #fee2e2; padding: 12px; border-radius: 8px; margin: 16px 0; font-size: 12px; color: #991b1b;">
       ⚠️ No compartas este código con nadie que no sea tu gestor autorizado.<br>
-      Si no solicitaste este préstamo, ignora este mensaje.
+      Si no solicitaste este solicitud, ignora este mensaje.
     </div>
     <p style="color: #6b7280; font-size: 12px; text-align: center; margin-top: 24px;">
-      Sistema de Gestión de Préstamos<br>
+      Sistema de Gestión de Solicitudes<br>
       Este es un correo automático, no respondas a esta dirección.
     </p>
   </div>
@@ -166,7 +166,7 @@ export async function generarYEnviarCodigosConfirmacion(opts: {
   })
 
   if (!prestamo) {
-    return { success: false, status: 404, body: { success: false, error: 'Préstamo no encontrado' } }
+    return { success: false, status: 404, body: { success: false, error: 'Solicitud no encontrado' } }
   }
 
   if (prestamo.estado !== 'SOLICITUD' && prestamo.estado !== 'PENDIENTE_ACEPTACION') {
@@ -175,7 +175,7 @@ export async function generarYEnviarCodigosConfirmacion(opts: {
       status: 400,
       body: {
         success: false,
-        error: `El préstamo está en estado ${prestamo.estado}. Solo se puede enviar código a préstamos en SOLICITUD o PENDIENTE_ACEPTACION.`,
+        error: `El solicitud está en estado ${prestamo.estado}. Solo se puede enviar código a solicitudes en SOLICITUD o PENDIENTE_ACEPTACION.`,
       },
     }
   }
@@ -202,7 +202,7 @@ export async function generarYEnviarCodigosConfirmacion(opts: {
       status: 400,
       body: {
         success: false,
-        error: 'El préstamo tiene codeudor pero falta el nombre del codeudor. Edita el préstamo antes de enviar el código.',
+        error: 'El solicitud tiene codeudor pero falta el nombre del codeudor. Edita el solicitud antes de enviar el código.',
       },
     }
   }
@@ -279,9 +279,9 @@ export async function generarYEnviarCodigosConfirmacion(opts: {
   const lineaTasa = ''
 
   const mensajeWhatsApp = requiereCodeudor
-    ? `✅ *PRÉSTAMO APROBADO - CÓDIGOS DE CONFIRMACIÓN*
+    ? `✅ *SOLICITUD APROBADO - CÓDIGOS DE CONFIRMACIÓN*
 
-Hola *${prestamo.cliente.nombre}*, tu préstamo ${prestamo.codigo} fue aprobado.
+Hola *${prestamo.cliente.nombre}*, tu solicitud ${prestamo.codigo} fue aprobado.
 
 📋 *Características del crédito:*
 • Monto: $${prestamo.montoPrincipal.toLocaleString('es-CO')}
@@ -289,13 +289,13 @@ Hola *${prestamo.cliente.nombre}*, tu préstamo ${prestamo.codigo} fue aprobado.
 • N° cuotas: ${calculo.numeroCuotas}
 ${lineaTasa}• Total a pagar: $${calculo.totalPagar.toLocaleString('es-CO')}
 
-🔐 *PRÉSTAMO CON CODEUDOR — Requiere doble confirmación*
+🔐 *SOLICITUD CON CODEUDOR — Requiere doble confirmación*
 Hemos enviado un código a TU correo (${prestamo.cliente.email}) y OTRO código al correo del codeudor (${prestamo.codeudorEmail}).
 
-El préstamo se activará ÚNICAMENTE cuando ambas partes entreguen su código a su gestor.`
-    : `✅ *PRÉSTAMO APROBADO - CÓDIGO DE CONFIRMACIÓN*
+El solicitud se activará ÚNICAMENTE cuando ambas partes entreguen su código a su gestor.`
+    : `✅ *SOLICITUD APROBADO - CÓDIGO DE CONFIRMACIÓN*
 
-Hola *${prestamo.cliente.nombre}*, tu préstamo ${prestamo.codigo} fue aprobado.
+Hola *${prestamo.cliente.nombre}*, tu solicitud ${prestamo.codigo} fue aprobado.
 
 📋 *Características del crédito:*
 • Monto: $${prestamo.montoPrincipal.toLocaleString('es-CO')}
@@ -306,7 +306,7 @@ ${lineaTasa}• Total a pagar: $${calculo.totalPagar.toLocaleString('es-CO')}
 🔐 *Hemos enviado un código de confirmación a tu correo electrónico:*
 ${prestamo.cliente.email}
 
-Para activar tu préstamo, comparte ese código con tu gestor.
+Para activar tu solicitud, comparte ese código con tu gestor.
 El código expira en 24 horas.`
 
   const envioWhatsApp = await enviarWhatsApp(prestamo.cliente.telefono, mensajeWhatsApp)
@@ -380,7 +380,7 @@ El código expira en 24 horas.`
   let mensajeRespuesta: string
   if (fallidos.length === 0 && alMenosUnoReal) {
     mensajeRespuesta = requiereCodeudor
-      ? `✅ Se enviaron 2 códigos de confirmación: uno al TITULAR (${destinatarios[0].email}) y otro al CODEUDOR (${destinatarios[1].email}). El préstamo se activará solo cuando el gestor verifique AMBOS códigos.`
+      ? `✅ Se enviaron 2 códigos de confirmación: uno al TITULAR (${destinatarios[0].email}) y otro al CODEUDOR (${destinatarios[1].email}). El solicitud se activará solo cuando el gestor verifique AMBOS códigos.`
       : `✅ Código de confirmación enviado al correo ${destinatarios[0].email}. Se notificó al cliente por WhatsApp que revise su correo.`
   } else if (todosEthereal) {
     mensajeRespuesta = `⚠️ MODO DE PRUEBA: NO hay SMTP configurado. Se generaron ${resultadosEmail.length} código(s) pero los correos se enviaron por Ethereal (no llegaron a destino real). Códigos generados: ${resultadosEmail.map((r: any) => `${r.rol}=${r.codigo}`).join(', ')}. Configura una conexión EMAIL_SMTP en Conexiones API para envíos reales.`

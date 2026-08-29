@@ -127,7 +127,7 @@ export function ProyeccionesView() {
     {
       title: 'Capital Activo',
       value: formatearMoneda(k.capitalActivo),
-      subtitle: `${k.cantidadPrestamos} préstamos activos`,
+      subtitle: `${k.cantidadPrestamos} solicitudes activos`,
       icon: Wallet,
       color: 'text-blue-700 bg-blue-50',
       border: 'border-blue-200',
@@ -421,7 +421,7 @@ export function ProyeccionesView() {
             <TableHeader>
               <TableRow>
                 <TableHead>Categoría</TableHead>
-                <TableHead className="text-center">Préstamos</TableHead>
+                <TableHead className="text-center">Solicitudes</TableHead>
                 <TableHead className="text-right">Tasa Promedio</TableHead>
                 <TableHead className="text-right">Capital Activo</TableHead>
                 <TableHead className="text-right">Intereses Proyectados</TableHead>
@@ -459,7 +459,7 @@ export function ProyeccionesView() {
               {data.porCategoria.length === 0 && (
                 <TableRow>
                   <TableCell colSpan={8} className="text-center py-6 text-muted-foreground">
-                    Sin préstamos activos
+                    Sin solicitudes activos
                   </TableCell>
                 </TableRow>
               )}
@@ -484,7 +484,7 @@ export function ProyeccionesView() {
                 <TableHead>Cliente</TableHead>
                 <TableHead>Cédula</TableHead>
                 <TableHead className="text-center">Cat</TableHead>
-                <TableHead className="text-center">Préstamos</TableHead>
+                <TableHead className="text-center">Solicitudes</TableHead>
                 <TableHead className="text-right">Capital Activo</TableHead>
                 <TableHead className="text-right">Intereses</TableHead>
                 <TableHead className="text-right">Mora</TableHead>
@@ -516,7 +516,7 @@ export function ProyeccionesView() {
               {data.porCliente.length === 0 && (
                 <TableRow>
                   <TableCell colSpan={10} className="text-center py-6 text-muted-foreground">
-                    Sin préstamos activos
+                    Sin solicitudes activos
                   </TableCell>
                 </TableRow>
               )}
@@ -525,12 +525,12 @@ export function ProyeccionesView() {
         </CardContent>
       </Card>
 
-      {/* Tabla top préstamos */}
+      {/* Tabla top solicitudes */}
       <Card>
         <CardHeader>
           <CardTitle className="text-base flex items-center gap-2">
             <Wallet className="w-4 h-4 text-primary" />
-            Top 20 Préstamos por Saldo
+            Top 20 Solicitudes por Saldo
           </CardTitle>
         </CardHeader>
         <CardContent className="p-0">
@@ -580,7 +580,7 @@ export function ProyeccionesView() {
               {data.porPrestamo.length === 0 && (
                 <TableRow>
                   <TableCell colSpan={10} className="text-center py-6 text-muted-foreground">
-                    Sin préstamos activos
+                    Sin solicitudes activos
                   </TableCell>
                 </TableRow>
               )}

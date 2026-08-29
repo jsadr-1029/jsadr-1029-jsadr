@@ -532,7 +532,7 @@ function InformeCasos({ token }: { token: string }) {
               <TableHeader>
                 <TableRow>
                   <TableHead>Cliente</TableHead>
-                  <TableHead>Préstamo</TableHead>
+                  <TableHead>Solicitud</TableHead>
                   <TableHead>Estado</TableHead>
                   <TableHead>Juzgado</TableHead>
                   <TableHead>Radicado</TableHead>
@@ -596,7 +596,7 @@ function InformeCasos({ token }: { token: string }) {
                   <p className="font-medium">{casoSeligido.prestamo?.cliente?.nombre}</p>
                 </div>
                 <div>
-                  <p className="text-xs text-muted-foreground">Préstamo</p>
+                  <p className="text-xs text-muted-foreground">Solicitud</p>
                   <p className="font-mono text-xs">{casoSeligido.prestamo?.codigo}</p>
                 </div>
                 <div>

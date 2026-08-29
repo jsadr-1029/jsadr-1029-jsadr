@@ -251,14 +251,14 @@ export function ReportesUnificadoView({ onAbrirPrestamo }: Props) {
         <KPICard
           title="Cartera Total"
           value={formatearMoneda(kpis.carteraTotal)}
-          subtitle={`${kpis.totalPrestamos} préstamos`}
+          subtitle={`${kpis.totalPrestamos} solicitudes`}
           icon={Wallet}
           color="violet"
         />
         <KPICard
           title="En Mora"
           value={formatearMoneda(kpis.montoEnMora)}
-          subtitle={`${kpis.cantidadEnMora} préstamos`}
+          subtitle={`${kpis.cantidadEnMora} solicitudes`}
           icon={AlertTriangle}
           color="amber"
         />
@@ -682,7 +682,7 @@ export function ReportesUnificadoView({ onAbrirPrestamo }: Props) {
                 <TableRow className="border-white/10 hover:bg-transparent">
                   <TableHead className="text-muted-foreground">Código</TableHead>
                   <TableHead className="text-muted-foreground">Categoría</TableHead>
-                  <TableHead className="text-right text-muted-foreground">Préstamos</TableHead>
+                  <TableHead className="text-right text-muted-foreground">Solicitudes</TableHead>
                   <TableHead className="text-right text-muted-foreground">Monto Principal</TableHead>
                   <TableHead className="text-right text-muted-foreground">Saldo Total</TableHead>
                   <TableHead className="text-right text-muted-foreground">% Cartera</TableHead>
@@ -757,7 +757,7 @@ export function ReportesUnificadoView({ onAbrirPrestamo }: Props) {
                   <TableHead className="text-muted-foreground">#</TableHead>
                   <TableHead className="text-muted-foreground">Cliente</TableHead>
                   <TableHead className="text-muted-foreground">Cédula</TableHead>
-                  <TableHead className="text-right text-muted-foreground">Préstamos</TableHead>
+                  <TableHead className="text-right text-muted-foreground">Solicitudes</TableHead>
                   <TableHead className="text-right text-muted-foreground">Saldo Total</TableHead>
                 </TableRow>
               </TableHeader>
@@ -765,7 +765,7 @@ export function ReportesUnificadoView({ onAbrirPrestamo }: Props) {
                 {data.porCliente.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
-                      No hay clientes con préstamos activos
+                      No hay clientes con solicitudes activos
                     </TableCell>
                   </TableRow>
                 ) : (
@@ -789,12 +789,12 @@ export function ReportesUnificadoView({ onAbrirPrestamo }: Props) {
         </CardContent>
       </Card>
 
-      {/* === TABLA: TOP 20 PRÉSTAMOS === */}
+      {/* === TABLA: TOP 20 SOLICITUDES === */}
       <Card className="glass-card">
         <CardHeader>
           <CardTitle className="text-base flex items-center gap-2">
             <FileText className="w-4 h-4 text-primary" />
-            Top 20 Préstamos por Saldo
+            Top 20 Solicitudes por Saldo
           </CardTitle>
         </CardHeader>
         <CardContent className="p-0">
@@ -816,7 +816,7 @@ export function ReportesUnificadoView({ onAbrirPrestamo }: Props) {
                 {data.porPrestamo.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
-                      No hay préstamos activos
+                      No hay solicitudes activos
                     </TableCell>
                   </TableRow>
                 ) : (

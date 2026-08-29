@@ -132,7 +132,7 @@ export function BitacoraPanel({
         <div className="flex items-center justify-between">
           <CardTitle className="text-base flex items-center gap-2">
             <BookOpen className="w-4 h-4" />
-            Bitácora del Préstamo ({entries.length})
+            Bitácora del Solicitud ({entries.length})
             <span className="text-xs text-muted-foreground font-normal">
               · {prestamoCodigo}
             </span>
@@ -208,7 +208,7 @@ export function BitacoraPanel({
         ) : entries.length === 0 ? (
           <div className="text-center py-8 text-muted-foreground text-sm">
             <BookOpen className="w-12 h-12 mx-auto mb-2 opacity-40" />
-            <p>No hay entradas en la bitácora de este préstamo.</p>
+            <p>No hay entradas en la bitácora de este solicitud.</p>
             <p className="text-xs mt-1">
               Documenta llamadas, visitas, correos, pagos, reuniones o cualquier evento relacionado
               con el crédito {prestamoCodigo}.

@@ -3,7 +3,7 @@
 // POST { clienteId/cedula, codigo } → verifica TOTP → emite sessionId
 //
 // REEMPLAZA al OTP-WhatsApp (api/chat/otp) SOLO para chat interno.
-// Otros OTPs (firma pagaré, código aprobación préstamo, MFA admin) NO se tocan.
+// Otros OTPs (firma pagaré, código aprobación solicitud, MFA admin) NO se tocan.
 //
 // El sessionId generado se guarda en cliente.tokenSesion — igual que hace
 // /api/chat/otp al verificar. Por lo tanto, los gates existentes en

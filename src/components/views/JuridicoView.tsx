@@ -93,7 +93,7 @@ export function JuridicoView({ onChanged }: { onChanged: () => void }) {
   }
 
   const cargarPrestamosDisponibles = async () => {
-    // Traer préstamos activos/mora que no tengan caso jurídico
+    // Traer solicitudes activos/mora que no tengan caso jurídico
     const res = await fetch('/api/prestamos?estado=EN_MORA')
     const json = await res.json()
     const morosos = json.success ? json.data : []
@@ -191,7 +191,7 @@ export function JuridicoView({ onChanged }: { onChanged: () => void }) {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Préstamo</TableHead>
+                <TableHead>Solicitud</TableHead>
                 <TableHead>Cliente</TableHead>
                 <TableHead>Estado</TableHead>
                 <TableHead>Abogado</TableHead>
@@ -273,15 +273,15 @@ export function JuridicoView({ onChanged }: { onChanged: () => void }) {
           </DialogHeader>
           <form onSubmit={crearCaso} className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="prestamo">Préstamo a derivar *</Label>
+              <Label htmlFor="prestamo">Solicitud a derivar *</Label>
               <Select value={prestamoId} onValueChange={setPrestamoId}>
                 <SelectTrigger>
-                  <SelectValue placeholder="Selecciona el préstamo moroso" />
+                  <SelectValue placeholder="Selecciona el solicitud moroso" />
                 </SelectTrigger>
                 <SelectContent>
                   {prestamosDisponibles.length === 0 ? (
                     <SelectItem value="none" disabled>
-                      No hay préstamos disponibles
+                      No hay solicitudes disponibles
                     </SelectItem>
                   ) : (
                     prestamosDisponibles.map((p) => (
@@ -835,7 +835,7 @@ function DetalleCasoModal({
             <div className="space-y-2">
               {caso.documentos.length === 0 ? (
                 <div className="text-center py-8 text-muted-foreground text-sm">
-                  Sin documentos registrados. Puedes ver el pagaré del préstamo en la sección de Préstamos.
+                  Sin documentos registrados. Puedes ver el pagaré del solicitud en la sección de Solicitudes.
                 </div>
               ) : (
                 caso.documentos.map((doc) => (
@@ -858,7 +858,7 @@ function DetalleCasoModal({
             <Card>
               <CardContent className="p-4 text-sm text-muted-foreground">
                 💡 <strong>Tip:</strong> Para generar documentos legales automáticos (pagaré, carta de instrucciones),
-                ve a la sección <strong>Préstamos</strong> y abre el detalle del préstamo.
+                ve a la sección <strong>Solicitudes</strong> y abre el detalle del solicitud.
               </CardContent>
             </Card>
           </TabsContent>

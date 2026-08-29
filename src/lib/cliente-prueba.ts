@@ -18,7 +18,7 @@
 //   // En consultas de Cliente:
 //   db.cliente.findMany({ where: { ...excluirPruebaCliente() } })
 //
-//   // En consultas de Préstamo:
+//   // En consultas de Solicitud:
 //   db.prestamo.findMany({ where: { estado: 'ACTIVO', ...excluirPruebaPrestamo() } })
 //
 //   // En consultas de Pago:
@@ -111,7 +111,7 @@ export function excluirPruebaCliente() {
 }
 
 /**
- * Filtro Prisma para EXCLUIR préstamos de clientes de prueba de una consulta sobre Préstamo.
+ * Filtro Prisma para EXCLUIR solicitudes de clientes de prueba de una consulta sobre Solicitud.
  *
  * Uso:
  *   db.prestamo.findMany({ where: { estado: 'ACTIVO', ...excluirPruebaPrestamo() } })

@@ -96,14 +96,14 @@ export function DashboardView({ onAbrirPrestamo }: { onAbrirPrestamo: (id: strin
     {
       title: 'Cartera Total',
       value: formatearMoneda(kpis.carteraTotal),
-      subtitle: `${kpis.totalPrestamos} préstamos registrados`,
+      subtitle: `${kpis.totalPrestamos} solicitudes registrados`,
       icon: Wallet,
       color: 'text-blue-700 bg-blue-50',
     },
     {
       title: 'En Mora',
       value: formatearMoneda(kpis.montoEnMora),
-      subtitle: `${kpis.cantidadEnMora} préstamos atrasados`,
+      subtitle: `${kpis.cantidadEnMora} solicitudes atrasados`,
       icon: AlertTriangle,
       color: 'text-amber-700 bg-amber-50',
     },
@@ -127,7 +127,7 @@ export function DashboardView({ onAbrirPrestamo }: { onAbrirPrestamo: (id: strin
     <div className="space-y-6">
       <PageHeader
         title="Reportes"
-        subtitle="Panel general del sistema de gestión de préstamos"
+        subtitle="Panel general del sistema de gestión de solicitudes"
         icon={<LayoutDashboard className="w-5 h-5" />}
         actions={
           <Button variant="outline" onClick={() => location.reload()}>
@@ -136,7 +136,7 @@ export function DashboardView({ onAbrirPrestamo }: { onAbrirPrestamo: (id: strin
         }
       />
 
-      {/* Alerta de préstamos que deben ir a jurídico */}
+      {/* Alerta de solicitudes que deben ir a jurídico */}
       {data.alertasJuridico.length > 0 && (
         <Card className="border-red-300 bg-red-50">
           <CardContent className="p-4">
@@ -144,7 +144,7 @@ export function DashboardView({ onAbrirPrestamo }: { onAbrirPrestamo: (id: strin
               <AlertCircle className="w-6 h-6 text-red-700 shrink-0 mt-0.5" />
               <div className="flex-1">
                 <p className="font-semibold text-red-900">
-                  ⚠️ {data.alertasJuridico.length} préstamo(s) con 60+ días de mora
+                  ⚠️ {data.alertasJuridico.length} solicitud(s) con 60+ días de mora
                 </p>
                 <p className="text-sm text-red-800 mt-1">
                   Deben ser derivados a cobro jurídico según la política de la empresa.
@@ -263,7 +263,7 @@ export function DashboardView({ onAbrirPrestamo }: { onAbrirPrestamo: (id: strin
           <CardContent className="p-5 flex items-center gap-4">
             <FileText className="w-8 h-8 text-primary" />
             <div>
-              <p className="text-xs text-muted-foreground">Préstamos totales</p>
+              <p className="text-xs text-muted-foreground">Solicitudes totales</p>
               <p className="text-xl font-bold">{kpis.totalPrestamos}</p>
             </div>
           </CardContent>

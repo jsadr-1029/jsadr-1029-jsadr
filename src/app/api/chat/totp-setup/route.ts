@@ -8,7 +8,7 @@
 //   3. desactivar  → pide código actual, desactiva y borra secreto
 //
 // REEMPLAZA al OTP-WhatsApp SOLO para chat interno.
-// Otros OTPs (firma pagaré, código aprobación préstamo, MFA admin, recuperación clave) NO se tocan.
+// Otros OTPs (firma pagaré, código aprobación solicitud, MFA admin, recuperación clave) NO se tocan.
 // =====================================================
 
 import { NextRequest, NextResponse } from 'next/server'

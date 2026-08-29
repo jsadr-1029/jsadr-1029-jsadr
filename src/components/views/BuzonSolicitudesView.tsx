@@ -6,7 +6,7 @@
 // Buzón de solicitudes web provenientes del portal del cliente.
 // Muestra KPIs, buscador, filtros por estado y tabla con
 // acciones: ver detalle, cambiar estado, observaciones,
-// rechazar y convertir en solicitud de préstamo.
+// rechazar y convertir en solicitud de solicitud.
 // =====================================================
 
 import { useEffect, useState, useMemo, useCallback } from 'react'
@@ -873,12 +873,12 @@ export function BuzonSolicitudesView({ onConvertir }: BuzonSolicitudesViewProps)
                           <Button
                             size="sm"
                             onClick={() => convertirSolicitud(s)}
-                            title="Crear solicitud de préstamo"
+                            title="Crear solicitud de solicitud"
                             disabled={s.estado === 'CONVERTIDA' || s.estado === 'RECHAZADA'}
                             className="bg-gradient-to-r from-violet-600 to-fuchsia-600 hover:from-violet-500 hover:to-fuchsia-500 text-white border-0"
                           >
                             <Plus className="w-4 h-4 mr-1" />
-                            Préstamo
+                            Solicitud
                           </Button>
                         </div>
                       </TableCell>
@@ -998,7 +998,7 @@ export function BuzonSolicitudesView({ onConvertir }: BuzonSolicitudesViewProps)
                         className="h-7 text-xs bg-gradient-to-r from-violet-600 to-fuchsia-600 hover:from-violet-500 hover:to-fuchsia-500 text-white border-0"
                       >
                         <Plus className="w-3 h-3 mr-1" />
-                        Préstamo
+                        Solicitud
                       </Button>
                     </div>
                   </CardContent>
@@ -1408,7 +1408,7 @@ export function BuzonSolicitudesView({ onConvertir }: BuzonSolicitudesViewProps)
                           onClick={() => convertirSolicitud(detalle)}
                           className="bg-gradient-to-r from-violet-600 to-fuchsia-600 hover:from-violet-500 hover:to-fuchsia-500 text-white border-0"
                         >
-                          <Plus className="w-4 h-4 mr-1" /> Crear Préstamo
+                          <Plus className="w-4 h-4 mr-1" /> Crear Solicitud
                         </Button>
                       </>
                     )}

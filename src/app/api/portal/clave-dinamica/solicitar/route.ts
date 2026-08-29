@@ -180,7 +180,7 @@ Si no solicitaste esta clave, ignora este correo.
   <p style="color: #6b7280; font-size: 13px;">Esta clave expira en <strong>5 minutos</strong>. No la compartas con nadie.</p>
   <p style="color: #6b7280; font-size: 13px;">Si no solicitaste esta clave, ignora este correo.</p>
   <hr style="border: 0; border-top: 1px solid #e5e7eb; margin: 24px 0;">
-  <p style="color: #9ca3af; font-size: 12px;">Jo*** Se*** Al*** D** R** v5.0 — Sistema de préstamos</p>
+  <p style="color: #9ca3af; font-size: 12px;">Jo*** Se*** Al*** D** R** v5.0 — Sistema de solicitudes</p>
 </div>`,
     })
 

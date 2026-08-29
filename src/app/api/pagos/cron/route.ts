@@ -12,7 +12,7 @@ import { calcularPrestamo, calcularDiasMora, getTasaMoraAnual, calcularMoraCompu
 //
 // Acciones:
 //  1. Marcar como VENCIDO los pagos PENDIENTE con linkExpira < now
-//  2. Regenerar tabla PagoProgramado para todos los préstamos activos
+//  2. Regenerar tabla PagoProgramado para todos los solicitudes activos
 //  3. Actualizar diasMora y moraCalculada en PagoProgramado
 // =====================================================
 
@@ -137,7 +137,7 @@ export async function POST(req: NextRequest) {
           resultado.pagosProgramadosActualizados++
         }
       } catch (e: any) {
-        resultado.errores.push(`Préstamo ${p.codigo}: ${e.message}`)
+        resultado.errores.push(`Solicitud ${p.codigo}: ${e.message}`)
       }
     }
 

@@ -282,7 +282,7 @@ export function ContabilidadBancariaView() {
       if (json.success) {
         toast({
           title: editando ? 'Crédito actualizado' : 'Crédito creado',
-          description: `${tab === 'PRESTAMO' ? 'Préstamo' : 'Tarjeta'} "${form.nombre}" guardado correctamente.`,
+          description: `${tab === 'PRESTAMO' ? 'Solicitud' : 'Tarjeta'} "${form.nombre}" guardado correctamente.`,
         })
         setModalForm(false)
         cargar()
@@ -339,7 +339,7 @@ export function ContabilidadBancariaView() {
     <div className="space-y-6">
       <PageHeader
         title="Contabilidad Bancaria"
-        subtitle="Gestiona préstamos bancarios y tarjetas de crédito"
+        subtitle="Gestiona solicitudes bancarios y tarjetas de crédito"
         icon={<Calculator className="w-5 h-5" />}
       />
 
@@ -347,7 +347,7 @@ export function ContabilidadBancariaView() {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard
           icon={<Banknote className="w-5 h-5" />}
-          label="Préstamos Activos"
+          label="Solicitudes Activos"
           value={stats.prestamosActivos.toString()}
           subtitle={formatearMoneda(stats.totalPrincipalPrestamos)}
           gradient="from-violet-500/20 to-indigo-500/10"
@@ -383,7 +383,7 @@ export function ContabilidadBancariaView() {
         <TabsList className="grid grid-cols-2 w-full max-w-md">
           <TabsTrigger value="PRESTAMO">
             <Banknote className="w-4 h-4 mr-1.5" />
-            Préstamos
+            Solicitudes
           </TabsTrigger>
           <TabsTrigger value="TARJETA_CREDITO">
             <CreditCard className="w-4 h-4 mr-1.5" />
@@ -391,18 +391,18 @@ export function ContabilidadBancariaView() {
           </TabsTrigger>
         </TabsList>
 
-        {/* ============================ PESTAÑA PRÉSTAMOS ============================ */}
+        {/* ============================ PESTAÑA SOLICITUDES ============================ */}
         <TabsContent value="PRESTAMO" className="space-y-4">
           <Card className="glass-card">
             <CardHeader>
               <div className="flex items-center justify-between">
                 <CardTitle className="text-base flex items-center gap-2">
                   <Banknote className="w-4 h-4 text-primary" />
-                  Préstamos Bancarios
+                  Solicitudes Bancarios
                 </CardTitle>
                 <Button size="sm" onClick={abrirNuevo}>
                   <Plus className="w-4 h-4 mr-2" />
-                  Nuevo Préstamo
+                  Nuevo Solicitud
                 </Button>
               </div>
             </CardHeader>
@@ -425,13 +425,13 @@ export function ContabilidadBancariaView() {
                   {loading ? (
                     <TableRow>
                       <TableCell colSpan={9} className="text-center py-8 text-muted-foreground">
-                        Cargando préstamos...
+                        Cargando solicitudes...
                       </TableCell>
                     </TableRow>
                   ) : prestamos.length === 0 ? (
                     <TableRow>
                       <TableCell colSpan={9} className="text-center py-8 text-muted-foreground">
-                        No hay préstamos bancarios registrados. Crea el primero con el botón "Nuevo Préstamo".
+                        No hay solicitudes bancarios registrados. Crea el primero con el botón "Nuevo Solicitud".
                       </TableCell>
                     </TableRow>
                   ) : (
@@ -492,7 +492,7 @@ export function ContabilidadBancariaView() {
             </CardContent>
           </Card>
 
-          {/* Tabla de amortización del préstamo seleccionado */}
+          {/* Tabla de amortización del solicitud seleccionado */}
           {seleccionado && seleccionado.tipo === 'PRESTAMO' && (
             <AmortizacionTable prestamo={seleccionado} />
           )}
@@ -609,8 +609,8 @@ export function ContabilidadBancariaView() {
                 <CreditCard className="w-5 h-5 text-primary" />
               )}
               {editando
-                ? `Editar ${tab === 'PRESTAMO' ? 'Préstamo' : 'Tarjeta'}`
-                : `Nuevo ${tab === 'PRESTAMO' ? 'Préstamo Bancario' : 'Tarjeta de Crédito'}`}
+                ? `Editar ${tab === 'PRESTAMO' ? 'Solicitud' : 'Tarjeta'}`
+                : `Nuevo ${tab === 'PRESTAMO' ? 'Solicitud Bancario' : 'Tarjeta de Crédito'}`}
             </DialogTitle>
           </DialogHeader>
           <form onSubmit={guardar} className="space-y-4">
@@ -621,7 +621,7 @@ export function ContabilidadBancariaView() {
                 <Input
                   value={form.nombre}
                   onChange={(e) => setForm({ ...form, nombre: e.target.value })}
-                  placeholder={tab === 'PRESTAMO' ? 'Ej: Préstamo Libre Inversión' : 'Ej: Visa Gold'}
+                  placeholder={tab === 'PRESTAMO' ? 'Ej: Solicitud Libre Inversión' : 'Ej: Visa Gold'}
                   required
                 />
               </div>
@@ -642,7 +642,7 @@ export function ContabilidadBancariaView() {
               </div>
             </div>
 
-            {/* Campos específicos de PRÉSTAMO */}
+            {/* Campos específicos de SOLICITUD */}
             {tab === 'PRESTAMO' && (
               <>
                 <div className="grid grid-cols-2 gap-3">

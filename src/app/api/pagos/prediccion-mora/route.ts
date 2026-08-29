@@ -7,12 +7,12 @@ import { calcularPrestamo, calcularDiasMora, getTasaMoraAnual } from '@/lib/fina
 // =====================================================
 // /api/pagos/prediccion-mora v4.0 — OLA 3
 // Modelo heurístico simple de predicción de mora.
-// Para cada préstamo activo, calcula un score (0-100) de probabilidad
+// Para cada solicitud activo, calcula un score (0-100) de probabilidad
 // de atrasarse en la próxima cuota, basado en:
 //   - Historial de pagos del cliente (puntualidad)
 //   - Días de mora actuales
 //   - Número de pagos parciales vs completos
-//   - Antigüedad del préstamo
+//   - Antigüedad del solicitud
 //   - Tasa de mora aplicada (más alta = más probable de no poder pagar)
 // =====================================================
 
@@ -104,7 +104,7 @@ export async function GET(req: NextRequest) {
           factores.push(`${pagosParciales} pago(s) parciales (+${factorParciales})`)
         }
       } else {
-        // Préstamo nuevo sin historial: riesgo medio por defecto
+        // Solicitud nuevo sin historial: riesgo medio por defecto
         score += 15
         factores.push('Sin historial de pagos (+15)')
       }
@@ -116,13 +116,13 @@ export async function GET(req: NextRequest) {
         factores.push(`Tasa mora alta ${p.tasaMoraDiaria}% (+${factorTasa.toFixed(0)})`)
       }
 
-      // 4. Antigüedad: préstamos muy nuevos o muy antiguos tienen más riesgo
+      // 4. Antigüedad: solicitudes muy nuevos o muy antiguos tienen más riesgo
       if (diasAntiguedad < 30) {
         score += 5
-        factores.push('Préstamo reciente (+5)')
+        factores.push('Solicitud reciente (+5)')
       } else if (diasAntiguedad > 365) {
         score += 3
-        factores.push('Préstamo antiguo (+3)')
+        factores.push('Solicitud antiguo (+3)')
       }
 
       // 5. Saldo grande relativo al monto original

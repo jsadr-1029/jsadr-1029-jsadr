@@ -15,7 +15,7 @@ import crypto from 'crypto'
 // /api/pagos/recibo v4.1 — RECIBO RE-DISEÑADO
 // -----------------------------------------------------
 // Genera un recibo de pago firmado criptográficamente con:
-//   • Datos completos del pago y el préstamo
+//   • Datos completos del pago y el solicitud
 //   • Número de cuotas pendientes después de este pago
 //   • Flag esUltimaCuota → habilita mensaje de fidelización
 //   • Información de cuenta de recaudo y firma institucional
@@ -46,7 +46,7 @@ function construirContenidoRecibo(pago: any): string {
   ].join('|')
 }
 
-// Calcula cuotas pendientes y esUltimaCuota en base al estado del préstamo
+// Calcula cuotas pendientes y esUltimaCuota en base al estado del solicitud
 // después de aplicar este pago.
 function calcularCuotasPendientes(pago: any, prestamo: any): {
   cuotasPendientes: number

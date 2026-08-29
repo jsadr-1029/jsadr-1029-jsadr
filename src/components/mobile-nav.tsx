@@ -52,7 +52,7 @@ interface NavItem {
  * El botón central (Inicio/Dashboard) se renderiza aparte con estilo destacado.
  */
 const primaryItems: NavItem[] = [
-  { key: 'prestamos', label: 'Préstamos', icon: FileText },
+  { key: 'prestamos', label: 'Solicitudes', icon: FileText },
   { key: 'pagos', label: 'Pagos', icon: DollarSign },
   { key: 'portal', label: 'Portal', icon: Search },
 ]
@@ -65,7 +65,7 @@ const primaryItems: NavItem[] = [
 /**
  * Módulos adicionales que se muestran dentro del Sheet "Más".
  * Estructura simplificada — los submódulos son internos a cada vista:
- *   - Préstamos: Clientes, Cajas, Campañas, Simulador son internos (tabs)
+ *   - Solicitudes: Clientes, Cajas, Campañas, Simulador son internos (tabs)
  *   - Seguridad: Conexiones API, Usuarios, Código Fuente, Manual,
  *     Auditoría Seguridad y Exportar Base de Datos son internos.
  */
@@ -78,13 +78,13 @@ const moreItems: NavItem[] = [
 ]
 
 /**
- * Grupo de módulos de Préstamos que se muestra como desplegable en el Sheet.
+ * Grupo de módulos de Solicitudes que se muestra como desplegable en el Sheet.
  * Solo "Clientes" — los demás (cajas, campañas, simulador) son internos
- * a la vista de Préstamos.
+ * a la vista de Solicitudes.
  */
 const prestamosGroup: NavItem = {
   key: 'prestamos',
-  label: 'Préstamos (más)',
+  label: 'Solicitudes (más)',
   icon: FileText,
   children: [
     { key: 'clientes', label: 'Clientes', icon: Users },
@@ -96,7 +96,7 @@ const prestamosGroup: NavItem = {
  *
  * - Visible solo en móvil (`md:hidden`).
  * - Posicionada de forma fija en la parte inferior con glassmorphism.
- * - 5 accesos rápidos: Préstamos · Pagos · Inicio (central) · Portal · Más.
+ * - 5 accesos rápidos: Solicitudes · Pagos · Inicio (central) · Portal · Más.
  * - El botón "Más" abre un `Sheet` con el resto de módulos.
  * - Respeta la safe area de iOS (`env(safe-area-inset-bottom)`).
  */
@@ -107,7 +107,7 @@ export function MobileNav({ current, onChange, forceVisible = false }: MobileNav
   // === Permisos por usuario ===
   // Verifica si el usuario actual puede acceder a cada vista.
   // Esto permite que P_jsadr (bloqueado a portal-admin) NO vea los botones
-  // de Préstamos/Pagos/Portal que no puede usar.
+  // de Solicitudes/Pagos/Portal que no puede usar.
   const user = getUserData()
   const puedeAcceder = (v: ViewKey) => puedeAccederUsuario(user?.username, user?.rol, v)
 
@@ -166,7 +166,7 @@ export function MobileNav({ current, onChange, forceVisible = false }: MobileNav
       aria-label="Navegación principal móvil"
     >
       <div className="grid grid-cols-4 items-center gap-1 px-2 pt-2 pb-2">
-        {/* --- Préstamos (solo si el usuario tiene acceso) --- */}
+        {/* --- Solicitudes (solo si el usuario tiene acceso) --- */}
         {puedeAcceder('prestamos') ? (
           <NavButton
             item={primaryItems[0]}

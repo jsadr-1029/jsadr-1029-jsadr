@@ -151,7 +151,7 @@ export function NotificacionesView() {
                   <p className="text-slate-500">Enviada: <span className="text-slate-900">{formatDate(selected.fechaEnvio, { withTime: true })}</span></p>
                 )}
                 {selected.prestamo && (
-                  <p className="text-slate-500">Préstamo: <span className="text-slate-900 font-mono">{selected.prestamo.codigo}</span></p>
+                  <p className="text-slate-500">Solicitud: <span className="text-slate-900 font-mono">{selected.prestamo.codigo}</span></p>
                 )}
               </div>
 

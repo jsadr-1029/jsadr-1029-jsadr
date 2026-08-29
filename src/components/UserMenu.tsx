@@ -100,7 +100,7 @@ const ROLE_COLORS: Record<string, string> = {
 
 const QUICK_NAV_ALL = [
   { key: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
-  { key: 'prestamos', label: 'Préstamos', icon: FileText },
+  { key: 'prestamos', label: 'Solicitudes', icon: FileText },
   { key: 'pagos', label: 'Pagos', icon: DollarSign },
   { key: 'buzon-solicitudes', label: 'Buzón Solicitudes', icon: Inbox },
   { key: 'comunicaciones', label: 'Comunicaciones', icon: MessageSquare },
@@ -110,10 +110,10 @@ const QUICK_NAV_ALL = [
 
 const FULL_NAV_ALL = [
   { key: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, group: 'Principal' },
-  { key: 'prestamos', label: 'Préstamos', icon: FileText, group: 'Operación' },
+  { key: 'prestamos', label: 'Solicitudes', icon: FileText, group: 'Operación' },
   { key: 'pagos', label: 'Pagos', icon: DollarSign, group: 'Operación' },
   { key: 'juridico', label: 'Jurídico', icon: Scale, group: 'Operación' },
-  { key: 'clientes', label: 'Clientes (dentro de Préstamos)', icon: Users, group: 'Operación' },
+  { key: 'clientes', label: 'Clientes (dentro de Solicitudes)', icon: Users, group: 'Operación' },
   { key: 'cajas', label: 'Cajas', icon: Landmark, group: 'Operación' },
   { key: 'campanas', label: 'Campañas', icon: Megaphone, group: 'Operación' },
   { key: 'simulador', label: 'Simulador', icon: Calculator, group: 'Operación' },

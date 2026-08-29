@@ -64,7 +64,7 @@ export function PagosView({ navigate }: { navigate: (v: any) => void }) {
               <thead className="bg-slate-50 border-b border-slate-200">
                 <tr>
                   <th className="text-left px-4 py-2 font-semibold text-slate-600">Fecha</th>
-                  <th className="text-left px-4 py-2 font-semibold text-slate-600">Préstamo</th>
+                  <th className="text-left px-4 py-2 font-semibold text-slate-600">Solicitud</th>
                   <th className="text-left px-4 py-2 font-semibold text-slate-600 hidden md:table-cell">Cliente</th>
                   <th className="text-center px-4 py-2 font-semibold text-slate-600 hidden sm:table-cell">Cuota</th>
                   <th className="text-left px-4 py-2 font-semibold text-slate-600 hidden lg:table-cell">Método</th>
@@ -155,8 +155,8 @@ function ReversarPagoModal({ pago, onClose, onSaved }: { pago: any; onClose: () 
         </DialogHeader>
         <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 mb-3">
           <p className="text-sm text-amber-800">
-            Vas a reversar el pago de <strong>{formatCOP(pago.montoTotal)}</strong> del préstamo <strong>{pago.prestamo?.codigo}</strong>.
-            Esta acción reabrirá el saldo del préstamo.
+            Vas a reversar el pago de <strong>{formatCOP(pago.montoTotal)}</strong> del solicitud <strong>{pago.prestamo?.codigo}</strong>.
+            Esta acción reabrirá el saldo del solicitud.
           </p>
         </div>
         <form onSubmit={handleSubmit} className="space-y-3">

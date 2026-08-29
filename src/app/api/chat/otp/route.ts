@@ -46,7 +46,7 @@ export async function POST(req: NextRequest) {
 async function solicitarOtp(req: NextRequest, body: any) {
   const clientInfo = getPortalClientInfo(req)
   // FIXED v5.0: el OTP del chat del portal SIEMPRE se envía por correo electrónico.
-  // La modalidad (WhatsApp/Email/Ambos) SOLO aplica a OTPs de préstamos.
+  // La modalidad (WhatsApp/Email/Ambos) SOLO aplica a OTPs de solicitudes.
   // El parámetro `metodo` del body se ignora para forzar canal=EMAIL.
   const metodo: 'EMAIL' = 'EMAIL'
   const { clienteId, cedula } = body

@@ -145,7 +145,7 @@ function generarHTMLCaso(caso: any): string {
   </div>
 
   <div class="seccion">
-    <h3>📋 INFORMACIÓN DEL PRÉSTAMO</h3>
+    <h3>📋 INFORMACIÓN DEL SOLICITUD</h3>
     <div class="info-grid">
       <div class="info-item"><strong>Monto Principal</strong><span>${formatearMoneda(p.montoPrincipal)}</span></div>
       <div class="info-item"><strong>Total a Pagar</strong><span>${formatearMoneda(p.totalPagar)}</span></div>
@@ -194,7 +194,7 @@ function generarHTMLCaso(caso: any): string {
   </div>
 
   <div class="seccion">
-    <h3>💰 HISTORIAL DE PAGOS DEL PRÉSTAMO (${p.pagos.length})</h3>
+    <h3>💰 HISTORIAL DE PAGOS DEL SOLICITUD (${p.pagos.length})</h3>
     ${p.pagos.length > 0 ? `
     <table>
       <thead><tr><th>Cuota</th><th>Vencimiento</th><th>Fecha Pago</th><th>Monto</th><th>Método</th><th>Estado</th></tr></thead>
@@ -214,7 +214,7 @@ function generarHTMLCaso(caso: any): string {
   <div class="footer">
     <p>Documento generado el ${fechaReporte}</p>
     <p>Este expediente contiene el seguimiento paso a paso del caso jurídico ${p.codigo}</p>
-    <p>Sistema de Gestión de Préstamos v2.0</p>
+    <p>Sistema de Gestión de Solicitudes v2.0</p>
   </div>
 
   <button class="print-btn no-print" onclick="window.print()">🖨️ Imprimir / Guardar como PDF</button>

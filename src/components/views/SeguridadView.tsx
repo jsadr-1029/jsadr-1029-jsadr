@@ -1917,7 +1917,7 @@ function ValidadorFirmaPanel() {
                     )}
                     {resultado.data.codigoPrestamo && (
                       <div>
-                        <span className="text-slate-500">Préstamo:</span>{' '}
+                        <span className="text-slate-500">Solicitud:</span>{' '}
                         <span className="font-mono font-semibold text-slate-900">{resultado.data.codigoPrestamo}</span>
                       </div>
                     )}

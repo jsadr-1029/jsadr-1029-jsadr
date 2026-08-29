@@ -156,7 +156,7 @@ export function PagoSoloInteresesModal({ abierto, pago, onCerrar, onAplicado }: 
                 <span className="font-semibold text-slate-800">{pago.cliente.nombre}</span>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-slate-500">Préstamo:</span>
+                <span className="text-slate-500">Solicitud:</span>
                 <span className="font-mono text-xs text-slate-700">{pago.codigo}</span>
               </div>
               <div className="flex items-center justify-between">

@@ -1,7 +1,7 @@
 // =====================================================
 // 🕰️ Línea de Tiempo 360° — Motor de reconstrucción histórica
 // =====================================================
-// Funciones puras que, dado un préstamo y una fecha de corte T,
+// Funciones puras que, dado un solicitud y una fecha de corte T,
 // "rebobinan" el estado del crédito al momento exacto T usando
 // los eventos reales registrados (pagos, anulaciones, reversiones,
 // refinanciaciones, otros-síes, cancelaciones).
@@ -143,7 +143,7 @@ function horaColombia(fecha: Date): string {
 }
 
 // =====================================================
-// Reconstrucción de un préstamo "as of T"
+// Reconstrucción de un solicitud "as of T"
 // =====================================================
 export async function reconstruirPrestamoHastaFecha(
   prestamoId: string,
@@ -158,7 +158,7 @@ export async function reconstruirPrestamoHastaFecha(
   if (!p) return null
 
   // === ¿Existía en T? ===
-  // Un préstamo "existía" en T si fue creado (fechaSolicitud) <= T
+  // Un solicitud "existía" en T si fue creado (fechaSolicitud) <= T
   const existiaEnT = p.fechaSolicitud <= fechaCorte
   if (!existiaEnT) {
     return {
@@ -421,7 +421,7 @@ export async function reconstruirCarteraHastaFecha(
 ): Promise<CarteraHistorica> {
   const advertencias: string[] = []
 
-  // Cargar todos los préstamos que existían en T (fechaSolicitud <= T)
+  // Cargar todos los solicitudes que existían en T (fechaSolicitud <= T)
   const todos = await db.prestamo.findMany({
     where: {
       fechaSolicitud: { lte: fechaCorte },
@@ -487,7 +487,7 @@ export async function reconstruirCarteraHastaFecha(
     : null
   if (masAntiguo && fechaCorte < masAntiguo) {
     advertencias.push(
-      `La fecha seleccionada es anterior al primer préstamo registrado (${masAntiguo.toLocaleDateString('es-CO')}). No hay datos históricos para mostrar.`
+      `La fecha seleccionada es anterior al primer solicitud registrado (${masAntiguo.toLocaleDateString('es-CO')}). No hay datos históricos para mostrar.`
     )
   }
 
@@ -513,7 +513,7 @@ export async function reconstruirCarteraHastaFecha(
 }
 
 // =====================================================
-// Línea de tiempo de eventos de un préstamo
+// Línea de tiempo de eventos de un solicitud
 // =====================================================
 export async function obtenerEventosPrestamo(
   prestamoId: string,
@@ -543,7 +543,7 @@ export async function obtenerEventosPrestamo(
       tipo: 'SOLICITUD_CREADA',
       tipoDisplay: 'Solicitud creada',
       icono: '📝',
-      titulo: 'Solicitud de préstamo creada',
+      titulo: 'Solicitud de solicitud creada',
       descripcion: `Monto: $${p.montoPrincipal.toLocaleString('es-CO')} · ${p.plazoMeses} meses · ${p.frecuencia.toLowerCase()}`,
       monto: p.montoPrincipal,
     })
@@ -598,7 +598,7 @@ export async function obtenerEventosPrestamo(
       tipo: 'DESEMBOLSO',
       tipoDisplay: 'Desembolso',
       icono: '💰',
-      titulo: 'Préstamo desembolsado',
+      titulo: 'Solicitud desembolsado',
       descripcion: `Capital: $${p.montoPrincipal.toLocaleString('es-CO')} · Vence: ${p.fechaVencimiento ? p.fechaVencimiento.toLocaleDateString('es-CO') : 'N/A'}`,
       monto: p.montoPrincipal,
     })
@@ -830,7 +830,7 @@ export async function obtenerEventosPrestamo(
     })
   }
 
-  // 11. Renovaciones (este préstamo fue cancelado por una renovación)
+  // 11. Renovaciones (este solicitud fue cancelado por una renovación)
   const renov = await db.renovacionPrestamo.findFirst({
     where: { prestamoOriginalId: p.id },
   })
@@ -846,8 +846,8 @@ export async function obtenerEventosPrestamo(
       tipo: 'RENOVACION',
       tipoDisplay: 'Renovación',
       icono: '🔁',
-      titulo: 'Préstamo renovado',
-      descripcion: `Nuevo préstamo: ${renov.prestamoNuevoId} · Por: ${renov.usuarioNombre || 'N/A'}`,
+      titulo: 'Solicitud renovado',
+      descripcion: `Nuevo solicitud: ${renov.prestamoNuevoId} · Por: ${renov.usuarioNombre || 'N/A'}`,
       usuarioNombre: renov.usuarioNombre || undefined,
     })
   }

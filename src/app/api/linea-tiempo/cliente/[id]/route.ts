@@ -1,7 +1,7 @@
 // =====================================================
 // 🕰️ /api/linea-tiempo/cliente/[id]
 // =====================================================
-// Hoja de vida histórica del cliente: préstamos, pagos,
+// Hoja de vida histórica del cliente: solicitudes, pagos,
 // comportamiento, todos reconstruidos "as of fecha T".
 //
 // Query params:
@@ -59,14 +59,14 @@ export async function GET(
       )
     }
 
-    // Cargar préstamos del cliente
+    // Cargar solicitudes del cliente
     const prestamos = await db.prestamo.findMany({
       where: { clienteId: id },
       orderBy: { fechaSolicitud: 'desc' },
       select: { id: true },
     })
 
-    // Reconstruir cada préstamo "as of T"
+    // Reconstruir cada solicitud "as of T"
     const prestamosHistoricos: any[] = []
     const eventosTodos: any[] = []
 

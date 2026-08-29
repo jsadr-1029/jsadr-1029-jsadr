@@ -18,13 +18,13 @@ import { FileSignature, Printer, Download, ChevronDown, Loader2 } from 'lucide-r
  * OtroSiAccionesDropdown
  *
  * Botón de acciones para descargar / ver los Otros Síes firmados
- * de un préstamo, ubicado en la columna "Acciones" de la tabla
- * principal de préstamos.
+ * de un solicitud, ubicado en la columna "Acciones" de la tabla
+ * principal de solicitudes.
  *
  * Comportamiento:
  *  - Renderiza un botón con icono FileSignature (siempre visible).
  *  - Al abrirse el dropdown, hace fetch a /api/prestamos/[id]/otro-si
- *    para listar los Otros Síes del préstamo.
+ *    para listar los Otros Síes del solicitud.
  *  - Para cada Otro Sí FIRMADO muestra dos acciones:
  *      · Ver (abre HTML imprimible en nueva pestaña)
  *      · Descargar (fuerza descarga .html)
@@ -127,7 +127,7 @@ export function OtroSiAccionesDropdown({
           size="sm"
           variant="ghost"
           className="text-amber-700 hover:text-amber-800 hover:bg-amber-50"
-          title={`Otros Síes del préstamo ${prestamoCodigo}`}
+          title={`Otros Síes del solicitud ${prestamoCodigo}`}
         >
           <FileSignature className="w-4 h-4" />
         </Button>
@@ -147,7 +147,7 @@ export function OtroSiAccionesDropdown({
         ) : otrosSi.length === 0 ? (
           <div className="py-4 px-2 text-center text-xs text-muted-foreground">
             <FileSignature className="w-7 h-7 mx-auto mb-1.5 opacity-40" />
-            Este préstamo no tiene Otros Síes generados.
+            Este solicitud no tiene Otros Síes generados.
           </div>
         ) : firmados.length === 0 ? (
           <div className="py-3 px-2 text-center text-xs text-amber-700 bg-amber-50 rounded mx-1">

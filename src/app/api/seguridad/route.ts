@@ -60,7 +60,7 @@ export async function GET(req: NextRequest) {
     const modulosSistema = [
       { key: 'dashboard', nombre: 'Reportes' },
       { key: 'clientes', nombre: 'Clientes' },
-      { key: 'prestamos', nombre: 'Préstamos' },
+      { key: 'prestamos', nombre: 'Solicitudes' },
       { key: 'pagos', nombre: 'Pagos' },
       { key: 'juridico', nombre: 'Jurídico' },
       { key: 'cajas', nombre: 'Cajas Menores' },

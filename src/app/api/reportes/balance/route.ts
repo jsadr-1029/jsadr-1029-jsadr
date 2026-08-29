@@ -74,7 +74,7 @@ export async function GET(req: NextRequest) {
         // Indicadores derivados
         rentabilidad: capitalPrestado > 0 ? Number(((interesesGenerados / capitalPrestado) * 100).toFixed(2)) : 0,
         ratioMora: capitalPrestado > 0 ? Number(((moraGenerada / capitalPrestado) * 100).toFixed(2)) : 0,
-        totalPréstamos: prestamos.length,
+        totalSolicitudes: prestamos.length,
         totalPagos: pagos.length,
         rango: { desde, hasta },
       },

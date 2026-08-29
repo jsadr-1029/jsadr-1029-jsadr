@@ -41,7 +41,7 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    // Buscar el préstamo
+    // Buscar el solicitud
     const prestamo = await db.prestamo.findUnique({
       where: { id: prestamoId },
       include: { cliente: true, pagos: true },
@@ -49,7 +49,7 @@ export async function POST(req: NextRequest) {
 
     if (!prestamo) {
       return NextResponse.json(
-        { success: false, error: 'Préstamo no encontrado' },
+        { success: false, error: 'Solicitud no encontrado' },
         { status: 404 }
       )
     }
@@ -101,7 +101,7 @@ export async function POST(req: NextRequest) {
             amount: montoCuota,
             currency: 'COP',
             reference: referencia,
-            description: `Cuota ${numeroCuota} - Préstamo ${prestamo.codigo}`,
+            description: `Cuota ${numeroCuota} - Solicitud ${prestamo.codigo}`,
             returnUrl: `${baseUrl}/api/pagos/confirmar?prestamoId=${prestamoId}&cuota=${numeroCuota}`,
             customer: {
               name: prestamo.cliente.nombre,

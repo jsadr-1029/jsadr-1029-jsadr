@@ -444,14 +444,14 @@ export default function PaginaFirma({ params }: { params: Promise<{ token: strin
               </h2>
               <p className="text-sm text-muted-foreground mt-1">
                 {esOtroSi
-                  ? 'Tu Otro Sí se ha firmado electrónicamente. Queda anexado a tu préstamo sin modificar el pagaré ni la carta de instrucciones originales.'
+                  ? 'Tu Otro Sí se ha firmado electrónicamente. Queda anexado a tu solicitud sin modificar el pagaré ni la carta de instrucciones originales.'
                   : 'Tu firma electrónica se ha guardado correctamente.'}
               </p>
             </div>
             {datos.prestamo && (
               <div className="bg-muted/50 p-3 rounded-lg w-full text-left space-y-1 text-sm">
                 <div className="flex justify-between">
-                  <span className="text-muted-foreground">Préstamo:</span>
+                  <span className="text-muted-foreground">Solicitud:</span>
                   <span className="font-mono">{datos.prestamo.codigo}</span>
                 </div>
                 <div className="flex justify-between">
@@ -529,7 +529,7 @@ export default function PaginaFirma({ params }: { params: Promise<{ token: strin
           </CardHeader>
         </Card>
 
-        {/* Info del cliente y préstamo */}
+        {/* Info del cliente y solicitud */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <Card>
             <CardContent className="p-4">
@@ -546,7 +546,7 @@ export default function PaginaFirma({ params }: { params: Promise<{ token: strin
               <CardContent className="p-4">
                 <div className="flex items-center gap-2 mb-2">
                   <FileText className="w-4 h-4 text-blue-600" />
-                  <span className="text-sm font-semibold">Préstamo</span>
+                  <span className="text-sm font-semibold">Solicitud</span>
                 </div>
                 <p className="font-mono text-sm">{prestamo.codigo}</p>
                 <p className="text-xs text-muted-foreground">
@@ -834,7 +834,7 @@ export default function PaginaFirma({ params }: { params: Promise<{ token: strin
                     ) : (
                       <>
                         <CheckCircle className="w-4 h-4 mr-2" />
-                        Firmar y activar préstamo
+                        Firmar y activar solicitud
                       </>
                     )}
                   </Button>

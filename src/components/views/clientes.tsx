@@ -154,7 +154,7 @@ export function ClientesView({ navigate }: { navigate: (v: any) => void }) {
                       {c.saldoPendiente > 0 ? (
                         <div>
                           <p className="font-semibold text-slate-900">{formatCOP(c.saldoPendiente)}</p>
-                          <p className="text-xs text-slate-500">{c.prestamosActivos} préstamo(s)</p>
+                          <p className="text-xs text-slate-500">{c.prestamosActivos} solicitud(s)</p>
                         </div>
                       ) : (
                         <span className="text-xs text-slate-400">Sin saldo</span>

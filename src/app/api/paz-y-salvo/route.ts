@@ -1,9 +1,9 @@
 // =====================================================
 // /api/paz-y-salvo — Genera PDF/HTML de paz y salvo v3.0
-// GET: genera documento de paz y salvo para préstamos cancelados.
+// GET: genera documento de paz y salvo para solicitudes cancelados.
 // Autenticación:
 //   - Cliente del portal: ?prestamoId=xxx&token=<portal-token>
-//     (el token se valida contra Cliente.tokenSesion del dueño del préstamo)
+//     (el token se valida contra Cliente.tokenSesion del dueño del solicitud)
 //   - Staff autenticado: requiere JWT (admin/gestor/consultor)
 // =====================================================
 
@@ -48,7 +48,7 @@ export async function GET(req: NextRequest) {
 
     if (!prestamo) {
       return NextResponse.json(
-        { success: false, error: 'Préstamo no encontrado', code: 'NOT_FOUND' },
+        { success: false, error: 'Solicitud no encontrado', code: 'NOT_FOUND' },
         { status: 404 }
       )
     }
@@ -75,7 +75,7 @@ export async function GET(req: NextRequest) {
       if (auth instanceof NextResponse) return auth
     }
 
-    // Verificar que el préstamo esté cancelado o completamente pagado
+    // Verificar que el solicitud esté cancelado o completamente pagado
     const estaCancelado = prestamo.estado === 'CANCELADO'
     const estaSaldado = prestamo.saldoTotal <= 0 && prestamo.cuotasPagadas >= prestamo.numeroCuotas
 
@@ -84,7 +84,7 @@ export async function GET(req: NextRequest) {
         {
           success: false,
           error:
-            'El paz y salvo solo se puede generar para préstamos cancelados o completamente pagados',
+            'El paz y salvo solo se puede generar para solicitudes cancelados o completamente pagados',
           code: 'NOT_CANCELLED',
           estado: prestamo.estado,
           saldoPendiente: prestamo.saldoTotal,
@@ -222,7 +222,7 @@ function generarPazYSalvoHTML(pys: any): string {
       </div>
     </div>
 
-    <p>Ha cumplido en su totalidad con las obligaciones adquiridas mediante el contrato de préstamo identificado con el código <strong>${p.codigo}</strong>, celebrado el ${formatearFecha(p.fechaDesembolso || p.fechaSolicitud)}, por un monto principal de <strong>${formatearMoneda(r.montoPrincipal)}</strong>.</p>
+    <p>Ha cumplido en su totalidad con las obligaciones adquiridas mediante el contrato de solicitud identificado con el código <strong>${p.codigo}</strong>, celebrado el ${formatearFecha(p.fechaDesembolso || p.fechaSolicitud)}, por un monto principal de <strong>${formatearMoneda(r.montoPrincipal)}</strong>.</p>
 
     <div class="destacado">
       ✅ CERTIFICA QUE NO PRESENTA SALDOS PENDIENTES
@@ -234,7 +234,7 @@ function generarPazYSalvoHTML(pys: any): string {
           <tr><th>Concepto</th><th class="num">Valor</th></tr>
         </thead>
         <tbody>
-          <tr><td>Monto Principal del Préstamo</td><td class="num">${formatearMoneda(r.montoPrincipal)}</td></tr>
+          <tr><td>Monto Principal del Solicitud</td><td class="num">${formatearMoneda(r.montoPrincipal)}</td></tr>
           <tr><td>Total Interés Generado</td><td class="num">${formatearMoneda(r.totalInteres)}</td></tr>
           <tr><td>Total a Pagar (Capital + Interés)</td><td class="num">${formatearMoneda(r.totalPagar)}</td></tr>
           <tr><td>Total Pagado por el Cliente</td><td class="num">${formatearMoneda(r.montoPagado)}</td></tr>
@@ -247,7 +247,7 @@ function generarPazYSalvoHTML(pys: any): string {
     <p>Por lo anterior, se expide el presente <strong>PAZ Y SALVO</strong> a solicitud del interesado, para los fines que estime convenientes. Este documento no requiere de firma adicional para su validez, pero se anexan las firmas del representante legal y del cliente como constancia de recibido.</p>
 
     <p>Fecha de expedición: <strong>${fechaGen}</strong></p>
-    <p>Estado del préstamo al momento de la expedición: <strong>${p.estado}</strong></p>
+    <p>Estado del solicitud al momento de la expedición: <strong>${p.estado}</strong></p>
 
     <div class="firmas">
       <div class="firma">

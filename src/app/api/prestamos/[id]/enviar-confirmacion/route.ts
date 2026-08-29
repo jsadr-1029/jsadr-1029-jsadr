@@ -37,12 +37,12 @@ export async function POST(
     })
 
     if (!prestamo) {
-      return NextResponse.json({ success: false, error: 'Préstamo no encontrado' }, { status: 404 })
+      return NextResponse.json({ success: false, error: 'Solicitud no encontrado' }, { status: 404 })
     }
 
     if (prestamo.estado !== 'SOLICITUD' && prestamo.estado !== 'PENDIENTE_ACEPTACION') {
       return NextResponse.json(
-        { success: false, error: `El préstamo está en estado ${prestamo.estado}. Solo se puede enviar confirmación a préstamos en SOLICITUD o PENDIENTE_ACEPTACION.` },
+        { success: false, error: `El solicitud está en estado ${prestamo.estado}. Solo se puede enviar confirmación a solicitudes en SOLICITUD o PENDIENTE_ACEPTACION.` },
         { status: 400 }
       )
     }
@@ -121,8 +121,8 @@ export async function POST(
     //
     // Delega en el helper compartido `generarYEnviarCodigosConfirmacion`
     // para garantizar que se aplique la REGLA DE NEGOCIO de doble OTP
-    // cuando el préstamo tenga codeudor. Antes este método generaba
-    // un solo código para el deudor, lo que permitía activar préstamos
+    // cuando el solicitud tenga codeudor. Antes este método generaba
+    // un solo código para el deudor, lo que permitía activar solicitudes
     // con codeudor sin que este confirmara.
     // ============================================================
     if (metodo === 'CORREO') {
@@ -173,7 +173,7 @@ export async function POST(
               interactive: {
                 type: 'button',
                 body: {
-                  text: `✅ *PRÉSTAMO APROBADO*\n\nHola *${prestamo.cliente.nombre}*, tu préstamo ${prestamo.codigo} fue aprobado.\n\n📋 *Detalles:*\n• Monto: $${prestamo.montoPrincipal.toLocaleString('es-CO')}\n• Cuota: $${calculo.montoCuota.toLocaleString('es-CO')}\n• N° cuotas: ${calculo.numeroCuotas}\n• Total: $${calculo.totalPagar.toLocaleString('es-CO')}\n\nPara activar tu préstamo, acepta los términos y condiciones:`,
+                  text: `✅ *SOLICITUD APROBADO*\n\nHola *${prestamo.cliente.nombre}*, tu solicitud ${prestamo.codigo} fue aprobado.\n\n📋 *Detalles:*\n• Monto: $${prestamo.montoPrincipal.toLocaleString('es-CO')}\n• Cuota: $${calculo.montoCuota.toLocaleString('es-CO')}\n• N° cuotas: ${calculo.numeroCuotas}\n• Total: $${calculo.totalPagar.toLocaleString('es-CO')}\n\nPara activar tu solicitud, acepta los términos y condiciones:`,
                 },
                 action: {
                   buttons: [

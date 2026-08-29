@@ -40,13 +40,13 @@ export function PrestamosView({ navigate }: { navigate: (v: any) => void }) {
   return (
     <div className="space-y-4">
       <PageHeader
-        title="Préstamos"
-        subtitle={`${data?.total || 0} préstamos registrados`}
+        title="Solicitudes"
+        subtitle={`${data?.total || 0} solicitudes registrados`}
         icon={FileText}
         actions={
           <Button onClick={() => setNuevoOpen(true)} size="sm">
             <Plus className="w-4 h-4 mr-1" />
-            Nuevo Préstamo
+            Nuevo Solicitud
           </Button>
         }
       />
@@ -83,13 +83,13 @@ export function PrestamosView({ navigate }: { navigate: (v: any) => void }) {
         {loading ? (
           <LoadingState />
         ) : !data?.prestamos.length ? (
-          <EmptyState icon={FileText} title="Sin préstamos" />
+          <EmptyState icon={FileText} title="Sin solicitudes" />
         ) : (
           <div className="overflow-x-auto -mx-4">
             <table className="w-full text-sm">
               <thead className="bg-slate-50 border-b border-slate-200">
                 <tr>
-                  <th className="text-left px-4 py-2 font-semibold text-slate-600">Préstamo</th>
+                  <th className="text-left px-4 py-2 font-semibold text-slate-600">Solicitud</th>
                   <th className="text-left px-4 py-2 font-semibold text-slate-600 hidden md:table-cell">Cliente</th>
                   <th className="text-right px-4 py-2 font-semibold text-slate-600">Monto</th>
                   <th className="text-right px-4 py-2 font-semibold text-slate-600 hidden sm:table-cell">Saldo</th>
@@ -172,7 +172,7 @@ export function PrestamosView({ navigate }: { navigate: (v: any) => void }) {
         onCreated={(p) => {
           setNuevoOpen(false)
           setRefreshKey((k) => k + 1)
-          toast.success('Préstamo creado')
+          toast.success('Solicitud creado')
           navigate({ name: 'prestamo-detalle', id: p.prestamo.id })
         }}
       />
@@ -250,7 +250,7 @@ function NuevoPrestamoModal({ open, onClose, onCreated }: { open: boolean; onClo
     <Dialog open={open} onOpenChange={onClose}>
       <DialogContent className="max-w-2xl">
         <DialogHeader>
-          <DialogTitle>Nuevo Préstamo</DialogTitle>
+          <DialogTitle>Nuevo Solicitud</DialogTitle>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-3 max-h-[65vh] overflow-y-auto pr-2">
           <div>
@@ -330,7 +330,7 @@ function NuevoPrestamoModal({ open, onClose, onCreated }: { open: boolean; onClo
 
           <DialogFooter>
             <Button type="button" variant="outline" onClick={onClose}>Cancelar</Button>
-            <Button type="submit" disabled={saving || !calc}>{saving ? 'Guardando...' : 'Crear Préstamo'}</Button>
+            <Button type="submit" disabled={saving || !calc}>{saving ? 'Guardando...' : 'Crear Solicitud'}</Button>
           </DialogFooter>
         </form>
       </DialogContent>

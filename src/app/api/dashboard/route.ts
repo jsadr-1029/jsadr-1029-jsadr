@@ -98,7 +98,7 @@ export async function GET() {
       orderBy: { createdAt: 'desc' },
     })
 
-    // Identificar préstamos que deben ir a jurídico (60 días mora)
+    // Identificar solicitudes que deben ir a jurídico (60 días mora)
     const prestanosParaJuridico: any[] = []
     for (const p of prestamosMora) {
       const diasMora = await calcularDiasMoraPrestamo(p.id)

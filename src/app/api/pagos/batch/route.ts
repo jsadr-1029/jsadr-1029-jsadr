@@ -52,7 +52,7 @@ async function enviarWhatsAppMasivo(body: any, user: any) {
     return NextResponse.json({ success: false, error: 'prestamoIds debe ser un array no vacío' }, { status: 400 })
   }
   if (prestamoIds.length > 100) {
-    return NextResponse.json({ success: false, error: 'Máximo 100 préstamos por operación batch' }, { status: 400 })
+    return NextResponse.json({ success: false, error: 'Máximo 100 solicitudes por operación batch' }, { status: 400 })
   }
 
   const prestamos = await db.prestamo.findMany({
@@ -128,7 +128,7 @@ async function enviarRecordatorios(body: any, user: any) {
     const proximaCuotaNum = cuotasPagadas + 1
     // Verificar si la próxima cuota cae en los próximos N días
     // (cálculo simplificado — el endpoint /proximos hace esto más detallado)
-    const msg = `Hola ${p.cliente.nombre}, te recordamos que la cuota ${proximaCuotaNum} de tu préstamo ${p.codigo} vence pronto. Contáctanos para más información.`
+    const msg = `Hola ${p.cliente.nombre}, te recordamos que la cuota ${proximaCuotaNum} de tu solicitud ${p.codigo} vence pronto. Contáctanos para más información.`
     if (!p.cliente.telefono) {
       fallidos++
       continue
@@ -167,7 +167,7 @@ async function enviarAvisosMora(body: any, user: any) {
   let fallidos = 0
 
   for (const p of prestamos) {
-    const msg = `Hola ${p.cliente.nombre}, tu préstamo ${p.codigo} tiene una cuota en mora. Por favor contáctanos para regularizar y evitar recargos adicionales.`
+    const msg = `Hola ${p.cliente.nombre}, tu solicitud ${p.codigo} tiene una cuota en mora. Por favor contáctanos para regularizar y evitar recargos adicionales.`
     if (!p.cliente.telefono) {
       fallidos++
       continue

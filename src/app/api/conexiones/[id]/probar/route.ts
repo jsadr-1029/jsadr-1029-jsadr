@@ -202,7 +202,7 @@ export async function POST(
             const res = await fetch(conexion.url, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ test: true, message: 'Prueba de conexión desde sistema de préstamos' }),
+              body: JSON.stringify({ test: true, message: 'Prueba de conexión desde sistema de solicitudes' }),
               signal: AbortSignal.timeout(10000),
             })
             if (res.ok) {

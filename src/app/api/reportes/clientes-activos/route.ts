@@ -1,5 +1,5 @@
 // /api/reportes/clientes-activos v4.13
-// Reporte de clientes activos con # préstamos y # pagos.
+// Reporte de clientes activos con # solicitudes y # pagos.
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { requireRole } from '@/lib/auth-guard'
@@ -29,7 +29,7 @@ export async function GET(req: NextRequest) {
       orderBy: { createdAt: 'desc' },
     })
 
-    // Para cada cliente, contar pagos aplicados (excluyendo pagos de préstamos de prueba)
+    // Para cada cliente, contar pagos aplicados (excluyendo pagos de solicitudes de prueba)
     const clienteIds = clientes.map((c) => c.id)
     const pagosPorCliente = await db.pago.groupBy({
       by: ['prestamoId'],
@@ -49,7 +49,7 @@ export async function GET(req: NextRequest) {
     const resultado = clientes.map((c) => {
       const prestamosActivos = c.prestamos.length
       const saldoTotal = c.prestamos.reduce((s, p) => s + p.saldoTotal, 0)
-      // Sumar pagos de todos los préstamos del cliente
+      // Sumar pagos de todos los solicitudes del cliente
       let numeroPagos = 0
       let totalPagos = 0
       for (const p of c.prestamos) {

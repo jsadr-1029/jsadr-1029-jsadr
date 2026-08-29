@@ -70,8 +70,8 @@ export async function POST(
     if (!envioExitoso && notif.prestamo?.cliente?.email) {
       try {
         const asunto = notif.tipo === 'MORA'
-          ? `⚠️ Aviso de mora - Préstamo ${notif.prestamo.codigo}`
-          : `⏰ Recordatorio de pago - Préstamo ${notif.prestamo.codigo}`
+          ? `⚠️ Aviso de mora - Solicitud ${notif.prestamo.codigo}`
+          : `⏰ Recordatorio de pago - Solicitud ${notif.prestamo.codigo}`
 
         const emailResult = await enviarEmail({
           to: notif.prestamo.cliente.email,

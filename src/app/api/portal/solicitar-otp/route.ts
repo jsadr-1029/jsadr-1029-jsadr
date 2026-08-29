@@ -4,7 +4,7 @@ import { generarCodigoOtp, registrarOtp, obtenerIp, obtenerUserAgent, validarEma
 import { enviarEmail } from '@/lib/email'
 
 // POST /api/portal/solicitar-otp
-// Solicita OTP para firma de un préstamo desde el portal del cliente.
+// Solicita OTP para firma de un solicitud desde el portal del cliente.
 //
 // Fixes aplicados:
 //  - db.firma → db.firmaElectronica
@@ -17,7 +17,7 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
     // FIXED v5.0: el OTP del portal SIEMPRE se envía por correo electrónico.
-    // La modalidad (WhatsApp/Email/Ambos) SOLO aplica a OTPs de préstamos.
+    // La modalidad (WhatsApp/Email/Ambos) SOLO aplica a OTPs de solicitudes.
     // El parámetro `canal` del body se ignora para forzar canal=EMAIL.
     const canal = 'EMAIL'
     const { firmaId } = body
@@ -34,7 +34,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Firma no encontrada' }, { status: 404 })
     }
     if (!firma.prestamo || !firma.prestamo.cliente) {
-      return NextResponse.json({ error: 'Préstamo/cliente asociado a la firma no encontrado' }, { status: 404 })
+      return NextResponse.json({ error: 'Solicitud/cliente asociado a la firma no encontrado' }, { status: 404 })
     }
 
     // Verificar intentos previos
@@ -99,7 +99,7 @@ export async function POST(req: NextRequest) {
       destinatario: canalEf === 'EMAIL' ? email : telefono,
       tipo: 'FIRMA_PORTAL',
       entidadRefId: firma.id,
-      descripcion: `OTP firma TyC préstamo ${firma.prestamo.codigo}`,
+      descripcion: `OTP firma TyC solicitud ${firma.prestamo.codigo}`,
       maxIntentos: firma.maxIntentos,
       expiraEnMinutos: 5,
       ipSolicitud: ip,
@@ -150,7 +150,7 @@ Si no solicitaste este código, ignora este correo.
   <p style="color: #6b7280; font-size: 13px;">Este código expira en <strong>5 minutos</strong>. No lo compartas con nadie.</p>
   <p style="color: #6b7280; font-size: 13px;">Si no solicitaste este código, ignora este correo.</p>
   <hr style="border: 0; border-top: 1px solid #e5e7eb; margin: 24px 0;">
-  <p style="color: #9ca3af; font-size: 12px;">Jo*** Se*** Al*** D** R** v5.0 — Sistema de préstamos</p>
+  <p style="color: #9ca3af; font-size: 12px;">Jo*** Se*** Al*** D** R** v5.0 — Sistema de solicitudes</p>
 </div>`,
     })
     envioEmail = resultado.success
@@ -164,7 +164,7 @@ Si no solicitaste este código, ignora este correo.
         prestamoId: firma.prestamoId,
         clienteTelefono: telefono,
         tipo: 'OTP',
-        mensaje: `OTP solicitado vía EMAIL para firma de préstamo ${firma.prestamo.codigo}`,
+        mensaje: `OTP solicitado vía EMAIL para firma de solicitud ${firma.prestamo.codigo}`,
         estado: envioEmail ? 'ENVIADO' : 'FALLIDO',
         fechaEnvio: new Date(),
       },

@@ -5,7 +5,7 @@ import { registrarAuditLog, getClientInfo, rateLimit } from '@/lib/security'
 import { requireRole } from '@/lib/auth-guard'
 import { sanitizeError } from '@/lib/error-handler'
 
-// POST - recalcular saldos del préstamo
+// POST - recalcular saldos del solicitud
 // Se puede llamar manualmente para corregir inconsistencias históricas
 export async function POST(
   req: NextRequest,
@@ -29,7 +29,7 @@ export async function POST(
     const prestamo = await db.prestamo.findUnique({ where: { id } })
     if (!prestamo) {
       return NextResponse.json(
-        { success: false, error: 'Préstamo no encontrado' },
+        { success: false, error: 'Solicitud no encontrado' },
         { status: 404 }
       )
     }
@@ -49,7 +49,7 @@ export async function POST(
 
     return NextResponse.json({
       success: true,
-      mensaje: `Préstamo ${prestamo.codigo} recalculado correctamente`,
+      mensaje: `Solicitud ${prestamo.codigo} recalculado correctamente`,
       data: estadisticas,
     })
   } catch (error: any) {

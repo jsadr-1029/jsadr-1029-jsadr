@@ -228,7 +228,7 @@ export function LineaTiempoView() {
     setFecha(fechaInput(d))
   }
 
-  // === Filtro de préstamos ===
+  // === Filtro de solicitudes ===
   const prestamosFiltrados = useMemo(() => {
     if (!cartera) return []
     return cartera.prestamos.filter(p => {
@@ -285,7 +285,7 @@ export function LineaTiempoView() {
           <div>
             <div className="flex items-center gap-2 text-violet-300 text-sm font-medium mb-2">
               <Sparkles className="w-4 h-4" />
-              <span>PRÉSTAMOS</span>
+              <span>SOLICITUDES</span>
               <ChevronRight className="w-3 h-3" />
               <span className="text-white/70">Línea de tiempo 360°</span>
             </div>
@@ -627,7 +627,7 @@ function CheckIcon(props: any) {
 }
 
 // =====================================================
-// Lista de préstamos históricos
+// Lista de solicitudes históricos
 // =====================================================
 function ListaPrestamosHistoricos(props: {
   prestamos: PrestamoHistorico[]
@@ -781,7 +781,7 @@ function ListaPrestamosHistoricos(props: {
 }
 
 // =====================================================
-// Modal: Línea de tiempo de un préstamo
+// Modal: Línea de tiempo de un solicitud
 // =====================================================
 function PrestamoTimelineModal(props: {
   prestamoId: string
@@ -958,7 +958,7 @@ function ClienteTimelineModal(props: {
         <div className="space-y-4">
           {/* Resumen del cliente */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-            <Stat label="Total préstamos" value={data.estadisticas.totalPrestamos.toString()} />
+            <Stat label="Total solicitudes" value={data.estadisticas.totalPrestamos.toString()} />
             <Stat label="Activos" value={data.estadisticas.prestamosActivos.toString()} />
             <Stat label="Cancelados" value={data.estadisticas.prestamosCanceladosHistorico.toString()} />
             <Stat label="En mora" value={data.estadisticas.prestamosEnMora.toString()} />
@@ -980,7 +980,7 @@ function ClienteTimelineModal(props: {
             </div>
           </div>
 
-          {/* Préstamos del cliente */}
+          {/* Solicitudes del cliente */}
           <div>
             <h4 className="font-semibold text-sm text-slate-700 dark:text-slate-200 mb-2">
               Créditos al {fmt(fechaCorte)}

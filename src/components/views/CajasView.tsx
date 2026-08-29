@@ -314,7 +314,7 @@ export function CajasView({ onChanged }: { onChanged: () => void }) {
                 id="referencia"
                 value={referencia}
                 onChange={(e) => setReferencia(e.target.value)}
-                placeholder="Código de préstamo, factura, etc."
+                placeholder="Código de solicitud, factura, etc."
               />
             </div>
             <DialogFooter>

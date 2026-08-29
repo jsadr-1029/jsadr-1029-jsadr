@@ -33,7 +33,7 @@ export async function POST(req: NextRequest) {
     const { prestamoId, descripcion } = body
 
     const existe = await db.casoJuridico.findUnique({ where: { prestamoId } })
-    if (existe) return NextResponse.json({ error: 'Ya existe un caso para este préstamo' }, { status: 400 })
+    if (existe) return NextResponse.json({ error: 'Ya existe un caso para este solicitud' }, { status: 400 })
 
     const caso = await db.casoJuridico.create({
       data: {

@@ -328,7 +328,7 @@ export function PortalAdminView() {
             <CardContent className="p-2.5">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-[10px] text-muted-foreground uppercase">Préstamos activos</p>
+                  <p className="text-[10px] text-muted-foreground uppercase">Solicitudes activos</p>
                   <p className="text-base font-bold text-violet-400">
                     {stats.resumen?.prestamosActivos || 0}
                   </p>
@@ -374,7 +374,7 @@ export function PortalAdminView() {
               <div className="mt-2 space-y-1 text-xs text-muted-foreground/70">
                 <p>"Registra un gasto de $50.000 en transporte"</p>
                 <p>"¿Cómo va el balance del mes?"</p>
-                <p>"Muéstrame los préstamos en mora"</p>
+                <p>"Muéstrame los solicitudes en mora"</p>
                 <p>"Crea un evento para pagar la tarjeta el 30"</p>
               </div>
             </div>

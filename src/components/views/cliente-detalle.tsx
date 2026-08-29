@@ -64,12 +64,12 @@ export function ClienteDetalle({ id, navigate }: { id: string; navigate: (v: any
           </div>
         </Card>
 
-        {/* Préstamos */}
+        {/* Solicitudes */}
         <div className="lg:col-span-2 space-y-4">
           <div className="grid grid-cols-3 gap-3">
             <Card className="text-center">
               <p className="text-2xl font-bold text-slate-900">{totalPrestamos}</p>
-              <p className="text-xs text-slate-500">Préstamos totales</p>
+              <p className="text-xs text-slate-500">Solicitudes totales</p>
             </Card>
             <Card className="text-center">
               <p className="text-2xl font-bold text-emerald-600">{prestamosActivos}</p>
@@ -81,9 +81,9 @@ export function ClienteDetalle({ id, navigate }: { id: string; navigate: (v: any
             </Card>
           </div>
 
-          <Card title="Préstamos del Cliente" subtitle={`${totalPrestamos} registros`}>
+          <Card title="Solicitudes del Cliente" subtitle={`${totalPrestamos} registros`}>
             {!cliente.prestamos?.length ? (
-              <EmptyState icon={FileText} title="Sin préstamos" description="Este cliente no tiene préstamos registrados." />
+              <EmptyState icon={FileText} title="Sin solicitudes" description="Este cliente no tiene solicitudes registrados." />
             ) : (
               <div className="space-y-2">
                 {cliente.prestamos.map((p: any) => (

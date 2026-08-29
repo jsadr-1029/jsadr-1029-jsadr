@@ -100,7 +100,7 @@ export async function GET(
       )
     }
 
-    // Para cada préstamo activo, preparar la información de cuenta de recaudo
+    // Para cada solicitud activo, preparar la información de cuenta de recaudo
     // donde el cliente debe pagar
     const prestamosConCuenta = cliente.prestamos.map((p) => {
       const cuentaRecaudo = p.categoria?.cuentaRecaudo || cliente.categoria?.cuentaRecaudo || null

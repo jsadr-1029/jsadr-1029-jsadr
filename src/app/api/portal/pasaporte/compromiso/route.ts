@@ -75,14 +75,14 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    // Validar que el préstamo pertenece al cliente
+    // Validar que el solicitud pertenece al cliente
     const prestamo = await db.prestamo.findFirst({
       where: { id: prestamoId, clienteId: cliente.id },
       select: { id: true, codigo: true },
     })
     if (!prestamo) {
       return NextResponse.json(
-        { success: false, error: 'Préstamo no encontrado o no pertenece al cliente' },
+        { success: false, error: 'Solicitud no encontrado o no pertenece al cliente' },
         { status: 404 }
       )
     }

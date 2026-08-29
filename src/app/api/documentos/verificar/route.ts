@@ -5,12 +5,12 @@
 // mediante un código de verificación único.
 //
 // Acepta TRES formatos de código:
-//   1. Código guardado en préstamo.tycToken (formato legacy)
+//   1. Código guardado en solicitud.tycToken (formato legacy)
 //   2. Código derivado del hash SHA-256 de la firma
 //      (formato usado por el certificado de firma electrónica):
 //        codigoVer = sha256(firmaId + '|' + createdAt + '|certificado')
 //                    .substring(0,4) + '-' + .substring(4,8) + '-' + ...
-//   3. Código derivado del hash SHA-256 del préstamo + tipoDoc
+//   3. Código derivado del hash SHA-256 del solicitud + tipoDoc
 //      (formato usado por el QR del pagaré/carta de instrucciones):
 //        codigoVer = sha256(prestamoId + '|' + tipoDoc + '|' + codigo + '|' + montoPrincipal + '|' + createdAt)
 //                    .substring(0,4) + '-' + .substring(4,8) + '-' + ...
@@ -19,7 +19,7 @@
 // Si el código no matchea ninguno, devuelve 404 + autentico:false.
 //
 // RESPONSE DATA (cuando es auténtico) incluye:
-//   - Datos del documento (tipo, código préstamo, estado, monto)
+//   - Datos del documento (tipo, código solicitud, estado, monto)
 //   - Datos del cliente (nombre, cédula, teléfono, email, dirección)
 //   - Datos del crédito (modalidad, tasa, plazo, cuotas, frecuencia,
 //     fechas de solicitud/desembolso/vencimiento, saldo)
@@ -77,7 +77,7 @@ function construirDatosCliente(cliente: any) {
   }
 }
 
-// Construye el objeto "credito" con todos los datos del préstamo
+// Construye el objeto "credito" con todos los datos del solicitud
 function construirDatosCredito(prestamo: any) {
   if (!prestamo) return null
   return {
@@ -144,7 +144,7 @@ export async function GET(req: NextRequest) {
       )
     }
 
-    // === Intento 1: buscar por préstamo.tycToken (formato legacy) ===
+    // === Intento 1: buscar por solicitud.tycToken (formato legacy) ===
     const prestamoLegacy = await db.prestamo.findFirst({
       where: { tycToken: codigo },
       include: {
@@ -188,7 +188,7 @@ export async function GET(req: NextRequest) {
       })
     }
 
-    // === Intento 2: buscar por hash de préstamo + tipoDoc (formato pagaré/carta) ===
+    // === Intento 2: buscar por hash de solicitud + tipoDoc (formato pagaré/carta) ===
     // Este es el formato que usa el QR que se imprime en el pagaré diligenciado,
     // pagaré en blanco y carta de instrucciones.
     //
@@ -196,7 +196,7 @@ export async function GET(req: NextRequest) {
     //   sha256(prestamoId + '|' + tipoDoc + '|' + prestamo.codigo + '|' + montoPrincipal + '|' + createdAtISO)
     //   y se toman los primeros 16 hex en 4 grupos de 4 separados por '-'
     //
-    // Iteramos todos los préstamos y comparamos el código generado para cada tipoDoc.
+    // Iteramos todos los solicitudes y comparamos el código generado para cada tipoDoc.
     // Traemos createdAt incluido en la consulta para poder regenerar el hash.
     const prestamosParaQR = await db.prestamo.findMany({
       select: {
@@ -266,7 +266,7 @@ export async function GET(req: NextRequest) {
       for (const tipoDoc of TIPOS_DOC_QR) {
         const codigoEsperado = generarCodigoDoc(prestamo, tipoDoc).toLowerCase()
         if (codigoEsperado === codigo) {
-          // Match — el código es del préstamo para este tipoDoc
+          // Match — el código es del solicitud para este tipoDoc
           const firma = prestamo.firmas?.[0] || null
           const tipoDocLabel =
             tipoDoc === 'pagare-blanco' ? 'Pagaré en Blanco' :

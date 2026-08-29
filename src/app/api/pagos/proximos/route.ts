@@ -25,7 +25,7 @@ export async function GET(req: NextRequest) {
     fechaFin.setDate(fechaFin.getDate() + diasAdelante)
     fechaFin.setHours(23, 59, 59, 999)
 
-    // Buscar préstamos activos o en mora
+    // Buscar solicitudes activos o en mora
     const prestamos = await db.prestamo.findMany({
       where: {
         estado: { in: ['ACTIVO', 'EN_MORA'] },
@@ -85,7 +85,7 @@ export async function GET(req: NextRequest) {
       // v4.0: si la cuota está APLAZADA, NO se cobra mora mientras tanto
       // (el cliente ya pagó los intereses).
       const diasMora = cuotaAplazada ? 0 : calcularDiasMora(cuotaPendiente.fechaVencimiento)
-      // Mora compuesta diaria sobre capital inicial del préstamo
+      // Mora compuesta diaria sobre capital inicial del solicitud
       const moraActual = diasMora > 0
         ? calcularMoraCompuesta(p.montoPrincipal, p.tasaMoraDiaria, diasMora)
         : 0

@@ -33,7 +33,7 @@ export async function GET(req: NextRequest) {
   }
 }
 
-// POST - crear caso jurídico (o derivar préstamo a jurídico)
+// POST - crear caso jurídico (o derivar solicitud a jurídico)
 export async function POST(req: NextRequest) {
   try {
     const auth = requireRole(req, ['ADMIN', 'GESTOR'])
@@ -67,14 +67,14 @@ export async function POST(req: NextRequest) {
 
     if (!prestamo) {
       return NextResponse.json(
-        { success: false, error: 'Préstamo no encontrado' },
+        { success: false, error: 'Solicitud no encontrado' },
         { status: 404 }
       )
     }
 
     if (prestamo.casoJuridico) {
       return NextResponse.json(
-        { success: false, error: 'Ya existe un caso jurídico para este préstamo' },
+        { success: false, error: 'Ya existe un caso jurídico para este solicitud' },
         { status: 400 }
       )
     }
@@ -96,7 +96,7 @@ export async function POST(req: NextRequest) {
       },
     })
 
-    // Actualizar estado del préstamo
+    // Actualizar estado del solicitud
     await db.prestamo.update({
       where: { id: prestamoId },
       data: { estado: 'JURIDICO' },

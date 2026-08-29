@@ -3,7 +3,7 @@
 // =====================================================
 // Permite que cada bot recuerde:
 //   • Los últimos N mensajes de la conversación actual (CONTEXTO)
-//   • Hechos clave del usuario (HECHO): "tiene 2 préstamos activos"
+//   • Hechos clave del usuario (HECHO): "tiene 2 solicitudes activos"
 //   • Preferencias (PREFERENCIA): "prefiere trato formal, llamarlo por nombre"
 //   • Resúmenes de conversaciones anteriores (RESUMEN)
 //
@@ -352,10 +352,10 @@ const PATRONES_HECHO: Array<{ regex: RegExp; categoria: string; plantilla: (m: R
   { regex: /(?:tengo|debo|pago|prest[ée]|recib[íi])\s+(?:un|una)?\s*(\d[\d.,]*)\s*(?:pesos|cop|\$)?/i,
     categoria: 'MONTO_MENCIONADO',
     plantilla: (m) => `Usuario mencionó monto: ${m[1]}` },
-  // Menciones de préstamo/crédito
+  // Menciones de solicitud/crédito
   { regex: /(?:mi|del|con)\s+(?:prestamo|cr[eé]dito|obligaci[oó]n)\s+(?:n[uú]mero|c[oó]digo)?\s*#?\s*([A-Z0-9-]{3,})/i,
     categoria: 'PRESTAMO_MENCIONADO',
-    plantilla: (m) => `Usuario tiene préstamo con código: ${m[1]}` },
+    plantilla: (m) => `Usuario tiene solicitud con código: ${m[1]}` },
   // Menciones de problema financiero
   { regex: /(?:no puedo pagar|no tengo (?:dinero|plata)|estoy (?:mora|atrasado|estresado|preocupado))/i,
     categoria: 'SITUACION_FINANCIERA',

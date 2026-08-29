@@ -8,11 +8,11 @@
 //
 // Matriz:
 //   ADMIN     → acceso total (operación + sistema + config)
-//   GESTOR    → operación diaria (préstamos, pagos, clientes,
+//   GESTOR    → operación diaria (solicitudes, pagos, clientes,
 //               jurídico, cajas, campañas, comunicaciones,
 //               buzones, portal, notificaciones, exportar,
 //               simulador, manual-sin-config)
-//   CONSULTOR → solo lectura (dashboard, préstamos, pagos,
+//   CONSULTOR → solo lectura (dashboard, solicitudes, pagos,
 //               clientes, jurídico, portal, comunicaciones,
 //               exportar, manual-sin-config)
 //   ABOGADO   → NO usa este menú; ingresa por /juridico

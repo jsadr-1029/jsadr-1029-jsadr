@@ -219,7 +219,7 @@ export function GestorDocumentalView() {
             Gestor Documental
           </h3>
           <p className="text-xs text-muted-foreground mt-0.5">
-            Fotos de clientes, pantallazos de conversaciones y documentos vinculados a préstamos
+            Fotos de clientes, pantallazos de conversaciones y documentos vinculados a solicitudes
           </p>
         </div>
         <Button size="sm" onClick={() => setModalSubir(true)}>
@@ -230,7 +230,7 @@ export function GestorDocumentalView() {
       <div className="flex flex-col sm:flex-row gap-3">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <Input placeholder="Buscar por título, cliente, préstamo..." value={busqueda} onChange={(e) => setBusqueda(e.target.value)} className="pl-9" />
+          <Input placeholder="Buscar por título, cliente, solicitud..." value={busqueda} onChange={(e) => setBusqueda(e.target.value)} className="pl-9" />
         </div>
         <Select value={filtroTipo} onValueChange={setFiltroTipo}>
           <SelectTrigger className="w-full sm:w-48"><SelectValue placeholder="Tipo" /></SelectTrigger>
@@ -242,9 +242,9 @@ export function GestorDocumentalView() {
           </SelectContent>
         </Select>
         <Select value={filtroPrestamo} onValueChange={setFiltroPrestamo}>
-          <SelectTrigger className="w-full sm:w-56"><SelectValue placeholder="Préstamo" /></SelectTrigger>
+          <SelectTrigger className="w-full sm:w-56"><SelectValue placeholder="Solicitud" /></SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">Todos los préstamos</SelectItem>
+            <SelectItem value="all">Todos los solicitudes</SelectItem>
             {prestamos.map((p) => (
               <SelectItem key={p.id} value={p.id}>{p.codigo} — {p.cliente?.nombre}</SelectItem>
             ))}
@@ -259,7 +259,7 @@ export function GestorDocumentalView() {
               <TableRow>
                 <TableHead>Tipo</TableHead>
                 <TableHead>Título</TableHead>
-                <TableHead>Préstamo / Cliente</TableHead>
+                <TableHead>Solicitud / Cliente</TableHead>
                 <TableHead>Archivo</TableHead>
                 <TableHead>Fecha</TableHead>
                 <TableHead className="text-right">Acciones</TableHead>
@@ -319,14 +319,14 @@ export function GestorDocumentalView() {
           </DialogHeader>
           <div className="space-y-4">
             <div className="space-y-2">
-              <Label>Préstamo relacionado (opcional)</Label>
+              <Label>Solicitud relacionado (opcional)</Label>
               <Select value={prestamoSel} onValueChange={setPrestamoSel}>
-                <SelectTrigger><SelectValue placeholder="Selecciona un préstamo..." /></SelectTrigger>
+                <SelectTrigger><SelectValue placeholder="Selecciona un solicitud..." /></SelectTrigger>
                 <SelectContent>
                   {prestamos.map((p) => (<SelectItem key={p.id} value={p.id}>{p.codigo} — {p.cliente?.nombre}</SelectItem>))}
                 </SelectContent>
               </Select>
-              <p className="text-xs text-muted-foreground">Si seleccionas un préstamo, el documento se registrará en su bitácora.</p>
+              <p className="text-xs text-muted-foreground">Si seleccionas un solicitud, el documento se registrará en su bitácora.</p>
             </div>
             <div className="space-y-2">
               <Label>Tipo de documento *</Label>
@@ -382,7 +382,7 @@ export function GestorDocumentalView() {
             <div className="space-y-3">
               <div className="grid grid-cols-2 gap-2 text-sm p-3 rounded bg-muted/50">
                 <div><span className="text-muted-foreground">Tipo:</span> <strong>{TIPO_CONFIG[modalVer.tipo]?.label || modalVer.tipo}</strong></div>
-                <div><span className="text-muted-foreground">Préstamo:</span> <strong className="font-mono">{modalVer.prestamoCodigo || '—'}</strong></div>
+                <div><span className="text-muted-foreground">Solicitud:</span> <strong className="font-mono">{modalVer.prestamoCodigo || '—'}</strong></div>
                 <div><span className="text-muted-foreground">Cliente:</span> <strong>{modalVer.clienteNombre || '—'}</strong></div>
                 <div><span className="text-muted-foreground">Subido por:</span> <strong>{modalVer.subidoPor || '—'}</strong></div>
                 <div className="col-span-2"><span className="text-muted-foreground">Fecha:</span> <strong>{formatearFechaHora(modalVer.fechaSubida)}</strong></div>

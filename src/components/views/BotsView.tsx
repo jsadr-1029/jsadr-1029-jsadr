@@ -161,7 +161,7 @@ const TIPOS_BOT = [
   { value: 'ADMIN_SISTEMA', label: 'Admin del Sistema', icon: ShieldCheck, color: 'text-cyan-400' },
   { value: 'CONTABILIDAD', label: 'Contabilidad', icon: Calculator, color: 'text-amber-400' },
   { value: 'PAGOS', label: 'Pagos', icon: CreditCard, color: 'text-violet-400' },
-  { value: 'PRESTAMOS', label: 'Préstamos', icon: Banknote, color: 'text-emerald-500' },
+  { value: 'PRESTAMOS', label: 'Solicitudes', icon: Banknote, color: 'text-emerald-500' },
   { value: 'JURIDICO', label: 'Jurídico', icon: Scale, color: 'text-rose-500' },
   { value: 'SEGURIDAD', label: 'Seguridad', icon: Lock, color: 'text-red-500' },
   { value: 'ADMIN_GENERAL', label: 'Administración General', icon: SlidersHorizontal, color: 'text-orange-500' },
@@ -573,7 +573,7 @@ Aprendes de cada conversacion para que el proximo consejo sea mas afinado.`,
   },
   {
     nombre: 'Asistente de Cobros',
-    descripcion: 'Gerente Inteligente de Cobranza — monitoreo permanente de cartera, análisis estratégico, alertas críticas y recomendaciones para toma de decisiones. Conoce en tiempo real: préstamos activos, mora, recaudo, riesgos y oportunidades de recuperación.',
+    descripcion: 'Gerente Inteligente de Cobranza — monitoreo permanente de cartera, análisis estratégico, alertas críticas y recomendaciones para toma de decisiones. Conoce en tiempo real: solicitudes activos, mora, recaudo, riesgos y oportunidades de recuperación.',
     tipo: 'PAGOS',
     instrucciones: `Sos Asistente de Cobros, el gerente inteligente de cobranza de Jsadr - Jo*** Se*** Al*** D** R**.
 Tu trabajo es mantener una vision global y actualizada de toda la cartera de prestamos, detectar riesgos y proponer acciones para maximizar la recuperacion.
@@ -661,8 +661,8 @@ Aprendes de cada conversacion para que la proxima recomendacion sea mas precisa.
   },
   // === Bots especialistas por módulo (5 nuevos) ===
   {
-    nombre: 'Asistente Préstamos',
-    descripcion: 'Director Inteligente del Módulo de Préstamos — supervisa el ciclo de vida completo: solicitudes, aprobaciones, renovaciones, simulaciones, análisis de rentabilidad, riesgos y oportunidades. Conocimiento total del módulo en tiempo real.',
+    nombre: 'Asistente Solicitudes',
+    descripcion: 'Director Inteligente del Módulo de Solicitudes — supervisa el ciclo de vida completo: solicitudes, aprobaciones, renovaciones, simulaciones, análisis de rentabilidad, riesgos y oportunidades. Conocimiento total del módulo en tiempo real.',
     tipo: 'PRESTAMOS',
     instrucciones: `Sos Asistente Prestamos, el director inteligente del modulo de prestamos de Jsadr - Jo*** Se*** Al*** D** R**.
 Tu trabajo es administrar, supervisar y optimizar todo el ciclo de vida de los prestamos: solicitud, aprobacion, desembolso, pagos, cancelacion.
@@ -968,7 +968,7 @@ Aprendes de cada conversacion para que la proxima recomendacion sea mas precisa.
 
   {
     nombre: 'Asistente Ejecutivo IA',
-    descripcion: 'Chief of Staff Digital — Centro de Inteligencia Personal y Empresarial. Integra datos de todos los módulos (préstamos, cobros, finanzas, jurídico, seguridad) para análisis estratégico, detección de anomalías y recomendaciones ejecutivas. Actúa como CEO, CFO, COO, CSO y Controller simultáneamente.',
+    descripcion: 'Chief of Staff Digital — Centro de Inteligencia Personal y Empresarial. Integra datos de todos los módulos (solicitudes, cobros, finanzas, jurídico, seguridad) para análisis estratégico, detección de anomalías y recomendaciones ejecutivas. Actúa como CEO, CFO, COO, CSO y Controller simultáneamente.',
     tipo: 'ADMIN_GENERAL',
     instrucciones: `Sos Asistente Ejecutivo IA, el Chief of Staff digital y centro de inteligencia de Jsadr - Jo*** Se*** Al*** D** R**.
 Tu trabajo es ayudarme a pensar mejor, decidir mejor, organizar mejor y hacer crecer mi patrimonio personal y todos mis negocios.
@@ -1181,7 +1181,7 @@ function simularResultadoPrueba(bot: Bot, tareas: number): string {
     case 'PAGOS':
       return `Procesó ${tareas} recordatorio(s) de pago. 0 morosos nuevos. Reporte diario generado.`
     case 'PRESTAMOS':
-      return `Procesó ${tareas} solicitud(es) de préstamo. Firmas electrónicas enviadas. Dashboard de prioridades actualizado.`
+      return `Procesó ${tareas} solicitud(es) de solicitud. Firmas electrónicas enviadas. Dashboard de prioridades actualizado.`
     case 'JURIDICO':
       return `Gestionó ${tareas} caso(s) jurídico(s). Cronología actualizada. Alertas legales verificadas.`
     case 'SEGURIDAD':

@@ -45,7 +45,7 @@ export function formatearColombia(
 
 /**
  * Devuelve la fecha actual en Colombia truncada a inicio del día (00:00:00).
- * Útil para consultas tipo "préstamos creados hoy".
+ * Útil para consultas tipo "solicitudes creados hoy".
  * Retorna un Date UTC correspondiente a esa medianoche Bogota.
  */
 export function inicioDiaColombia(fecha: Date = new Date()): Date {

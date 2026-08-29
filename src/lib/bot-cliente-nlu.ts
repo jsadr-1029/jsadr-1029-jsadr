@@ -7,7 +7,7 @@
 //  • Detección de entidades (monto, fecha, número de cuota, código)
 //  • Confidence scoring con umbral adaptativo
 //  • Fallback a LLM cuando ningún intent supera 0.55
-//  • Manejo de contexto (saludo previo, préstamo activo, en mora)
+//  • Manejo de contexto (saludo previo, solicitud activo, en mora)
 // =====================================================
 
 import { db } from '@/lib/db'
@@ -205,9 +205,9 @@ Escribe el número o tu pregunta.`
     keywords: ['saldo', 'debo', 'deuda', 'pendiente', 'falta'],
     responder: async (ctx) => {
       if (ctx.prestamosActivos.length === 0) {
-        return `Hola ${primerNombre(ctx.cliente.nombre)}, actualmente no tienes préstamos activos. 💡 Si deseas información sobre un nuevo crédito, escribe "requisitos".`
+        return `Hola ${primerNombre(ctx.cliente.nombre)}, actualmente no tienes solicitudes activos. 💡 Si deseas información sobre un nuevo crédito, escribe "requisitos".`
       }
-      let resp = `💰 **Saldo de tu préstamo${ctx.prestamosActivos.length > 1 ? 's' : ''}** — ${primerNombre(ctx.cliente.nombre)}:\n\n`
+      let resp = `💰 **Saldo de tu solicitud${ctx.prestamosActivos.length > 1 ? 's' : ''}** — ${primerNombre(ctx.cliente.nombre)}:\n\n`
       let total = 0
       ctx.prestamosActivos.forEach((p, i) => {
         resp += `${i + 1}. Crédito ${p.codigo}\n`
@@ -239,7 +239,7 @@ Para descargar tu estado de cuenta en PDF:
 
 1. Ingresa al Portal del Cliente
 2. Ve a la sección "Créditos"
-3. Selecciona tu préstamo activo
+3. Selecciona tu solicitud activo
 4. Haz clic en "Estado de Cuenta" o "Descargar PDF"
 
 💡 El PDF incluye: saldo, cuotas pagadas, próximos vencimientos y movimientos detallados.`
@@ -258,7 +258,7 @@ Para descargar tu estado de cuenta en PDF:
     keywords: ['fecha', 'vencimiento', 'proximo', 'cuando pago', 'cuando vence'],
     responder: async (ctx) => {
       if (ctx.prestamosActivos.length === 0) {
-        return `No tienes préstamos activos. Tu próxima fecha de pago se mostrará en el Portal cuando tengas un crédito activo.`
+        return `No tienes solicitudes activos. Tu próxima fecha de pago se mostrará en el Portal cuando tengas un crédito activo.`
       }
       let resp = `📅 **Próximos pagos** — ${primerNombre(ctx.cliente.nombre)}:\n\n`
       ctx.prestamosActivos.forEach((p, i) => {
@@ -287,7 +287,7 @@ Para descargar tu estado de cuenta en PDF:
     ],
     keywords: ['pagadas', 'historial', 'progreso', 'avance', 'he pagado'],
     responder: async (ctx) => {
-      if (ctx.prestamosActivos.length === 0) return `No tienes préstamos activos para mostrar historial.`
+      if (ctx.prestamosActivos.length === 0) return `No tienes solicitudes activos para mostrar historial.`
       let resp = `📊 **Estado de cuotas** — ${primerNombre(ctx.cliente.nombre)}:\n\n`
       ctx.prestamosActivos.forEach((p, i) => {
         const progreso = (p.cuotasPagadas / p.numeroCuotas) * 100
@@ -358,7 +358,7 @@ Para pagar desde tu casa:
 💡 PSE funciona 24/7 y acredita el pago en minutos.`
   },
 
-  // === PRÉSTAMO ===
+  // === SOLICITUD ===
   {
     id: 'RENOVACION',
     categoria: 'PRESTAMO',
@@ -374,7 +374,7 @@ Para pagar desde tu casa:
       'necesito mas dinero', 'mas monto', 'aumentar monto', 'subir monto'],
     responder: () => `🔄 **Renovación de crédito**
 
-Para renovar tu préstamo:
+Para renovar tu solicitud:
 
 1. Ingresa al Portal del Cliente
 2. Ve a "Solicitar crédito"
@@ -385,7 +385,7 @@ Para renovar tu préstamo:
 7. El sistema calcula el excedente a entregarte
 8. Firma los nuevos TyC con OTP
 
-💡 **Requisitos:** Estar al día en tus pagos (sin mora). La renovación reemplaza el préstamo actual.`
+💡 **Requisitos:** Estar al día en tus pagos (sin mora). La renovación reemplaza el solicitud actual.`
   },
   {
     id: 'REQUISITOS',
@@ -458,7 +458,7 @@ Puedes simular tu crédito antes de solicitarlo:
         const p = ctx.prestamosActivos[0]
         return `📊 **Tu tasa de interés** — Crédito ${p.codigo}:
 
-• Tasa aplicada a tu préstamo: ver detalle en el Portal → Créditos → ${p.codigo}
+• Tasa aplicada a tu solicitud: ver detalle en el Portal → Créditos → ${p.codigo}
 • La tasa es fija sobre el capital inicial
 • El interés moratorio se aplica solo sobre cuotas vencidas
 
@@ -467,8 +467,8 @@ Puedes simular tu crédito antes de solicitarlo:
       return `📊 **Tasas de interés**
 
 Las tasas varían según la categoría del crédito:
-• Préstamos básicos: tasa estándar
-• Préstamos premium: tasa preferencial
+• Solicitudes básicos: tasa estándar
+• Solicitudes premium: tasa preferencial
 • Tasa moratoria: se aplica sobre cuotas vencidas
 
 💡 Para conocer la tasa exacta de un crédito que vas a solicitar, usa el Simulador en el Portal.`
@@ -532,14 +532,14 @@ Usa el Simulador del Portal para ver opciones.`
     keywords: ['garantia', 'fondo', 'seguro'],
     responder: () => `🛡️ **Fondo de garantía**
 
-El fondo de garantía es **opcional** — lo activa el gestor al crear el crédito. No todos los préstamos lo llevan.
+El fondo de garantía es **opcional** — lo activa el gestor al crear el crédito. No todos los solicitudes lo llevan.
 
 • Si tu crédito lo tiene activado: se cobra por separado al iniciar (no se descuenta del desembolso)
 • Se guarda en una caja exclusiva (CAJA-GARANTIA)
-• Se te devuelve al finalizar el préstamo (previa verificación de cumplimiento)
+• Se te devuelve al finalizar el solicitud (previa verificación de cumplimiento)
 • Si tu crédito NO lo tiene: no se te cobra nada por este concepto
 
-💡 El fondo protege tanto al cliente como a la empresa en caso de impago. Para saber si tu préstamo lo tiene, revisa el detalle del crédito en el Portal o pregunta a tu asesor.`
+💡 El fondo protege tanto al cliente como a la empresa en caso de impago. Para saber si tu solicitud lo tiene, revisa el detalle del crédito en el Portal o pregunta a tu asesor.`
   },
 
   // === MORA ===
@@ -652,7 +652,7 @@ Por seguridad, el PIN no se puede recuperar automáticamente (es un dato cifrado
     keywords: ['entrar', 'accedo', 'registro', 'ingresar', 'login', 'iniciar sesion'],
     responder: () => `🚪 **Acceso al Portal del Cliente**
 
-1. Entra a la URL del portal (te la enviamos por WhatsApp al registrar tu primer préstamo)
+1. Entra a la URL del portal (te la enviamos por WhatsApp al registrar tu primer solicitud)
 2. Digita tu **cédula** (sin puntos ni espacios)
 3. Digita tu **PIN** de 4-6 dígitos
 4. Haz clic en "Ingresar"
@@ -723,7 +723,7 @@ Por seguridad, después de 5 intentos fallidos de PIN, la cuenta se bloquea por 
 • 📧 Correo: jsa@jsadr.com.co
 • 🌐 Portal del Cliente: accede desde el enlace que te enviamos por WhatsApp
 
-💡 Para consultas sobre tu préstamo, ten siempre a mano tu número de cédula.`
+💡 Para consultas sobre tu solicitud, ten siempre a mano tu número de cédula.`
   },
   {
     id: 'UBICACION',
@@ -823,9 +823,9 @@ El codeudor es opcional pero recomendado para:
       'donde me depositan', 'cuenta para desembolso', 'tiempo de desembolso',
     ],
     keywords: ['desembolso', 'depositan', 'recibo el dinero'],
-    responder: () => `💵 **Desembolso del préstamo**
+    responder: () => `💵 **Desembolso del solicitud**
 
-Una vez aprobado y firmado tu préstamo:
+Una vez aprobado y firmado tu solicitud:
 
 • ⏱️ Tiempo: máximo 24 horas hábiles
 • 🏦 Cuenta: la que registraste en la solicitud
@@ -836,7 +836,7 @@ Una vez aprobado y firmado tu préstamo:
 2. Revisa si hay retenciones en tu banco
 3. Escribe "asesor" si el problema persiste
 
-💡 Si tu crédito tiene fondo de garantía activado (lo define el gestor al crearlo), el monto se cobra por separado y se guarda en CAJA-GARANTIA. Se te devuelve al finalizar el préstamo.`
+💡 Si tu crédito tiene fondo de garantía activado (lo define el gestor al crearlo), el monto se cobra por separado y se guarda en CAJA-GARANTIA. Se te devuelve al finalizar el solicitud.`
   },
   {
     id: 'CANCELAR_PRESTAMO',
@@ -848,9 +848,9 @@ Una vez aprobado y firmado tu préstamo:
     ],
     keywords: ['cancelar', 'anular', 'desistir', 'arrepenti'],
     escalar: true,
-    responder: () => `❌ **Cancelar préstamo**
+    responder: () => `❌ **Cancelar solicitud**
 
-La cancelación depende del estado del préstamo:
+La cancelación depende del estado del solicitud:
 
 • **SOLICITUD** (no aprobado): se puede cancelar sin costo desde el Portal
 • **PENDIENTE_ACEPTACION** (aprobado, sin firmar): se puede cancelar, pero se registra en tu historial
@@ -870,7 +870,7 @@ La cancelación depende del estado del préstamo:
     escalar: true,
     responder: () => `💰 **Pago anticipado**
 
-Puedes pagar tu préstamo antes del plazo:
+Puedes pagar tu solicitud antes del plazo:
 
 • **Pago total:** saldas toda la deuda de una vez
 • **Abono a capital:** pagas un monto extra que reduce el capital pendiente
@@ -891,7 +891,7 @@ Puedes pagar tu préstamo antes del plazo:
     responder: () => `🏦 **Cuenta bancaria**
 
 Tu cuenta registrada se usa para:
-• Recibir el desembolso del préstamo
+• Recibir el desembolso del solicitud
 • Recibir reembolsos (fondo de garantía, saldos a favor)
 
 **Para actualizar tu cuenta:**
@@ -935,7 +935,7 @@ Estoy aquí para ayudarte cuando necesites. Recuerda:
     keywords: ['quien eres', 'como te llamas', 'que eres', 'que tal', 'como estas', 'como te va'],
     responder: () => `🤖 Soy el **Asistente Virtual** del Portal del Cliente.
 
-Estoy aquí para ayudarte 24/7 con consultas sobre tu préstamo, pagos, requisitos y más.
+Estoy aquí para ayudarte 24/7 con consultas sobre tu solicitud, pagos, requisitos y más.
 
 No soy una persona, pero puedo responder la mayoría de tus preguntas. Si necesitas atención humana, escribe "asesor" y te conectaré con un asesor real. 😊`
   },
@@ -949,7 +949,7 @@ No soy una persona, pero puedo responder la mayoría de tus preguntas. Si necesi
     keywords: ['sitio web', 'pagina web', 'web'],
     responder: () => `🌐 **Sitio web**
 
-Puedes acceder al **Portal del Cliente** desde el enlace que te enviamos por WhatsApp al registrar tu primer préstamo.
+Puedes acceder al **Portal del Cliente** desde el enlace que te enviamos por WhatsApp al registrar tu primer solicitud.
 
 Si perdiste el enlace:
 1. Revisa tus mensajes de WhatsApp con nosotros
@@ -991,10 +991,10 @@ Tus datos están protegidos:
 Sí, otra persona puede pagar tu cuota:
 
 1. Que la persona haga la transferencia/consignación a nuestra cuenta (la encuentras en el Portal → Métodos de pago)
-2. En el concepto/referencia, debe poner tu **cédula** y **número de préstamo**
+2. En el concepto/referencia, debe poner tu **cédula** y **número de solicitud**
 3. Una vez confirmado el pago, se aplica a tu cuenta
 
-💡 Solo el titular del préstamo puede ver el estado de cuenta y firmar TyC. El pago puede hacerlo cualquiera.`
+💡 Solo el titular del solicitud puede ver el estado de cuenta y firmar TyC. El pago puede hacerlo cualquiera.`
   },
   {
     id: 'DESEMPENO_3',
@@ -1010,7 +1010,7 @@ Sí, otra persona puede pagar tu cuota:
 Puedes descargar:
 
 • **Certificado de pagos del año:** Portal → Historial → "Descargar certificado"
-• **Paz y salvo:** disponible cuando terminas de pagar tu préstamo
+• **Paz y salvo:** disponible cuando terminas de pagar tu solicitud
 • **Estado de cuenta:** Portal → Créditos → "Descargar PDF"
 
 💡 Los certificados se generan automáticamente y tienen validez oficial.`
@@ -1143,7 +1143,7 @@ export interface RespuestaBot {
  * CONVERSACIONAL GENERATIVO (no más menús lineales).
  *
  * Flujo:
- *  1. Cargar contexto del cliente (préstamos, pagos)
+ *  1. Cargar contexto del cliente (solicitudes, pagos)
  *  2. Registrar mensaje en la sesión conversacional
  *  3. Detectar intent con NLU (palabras clave + similitud)
  *  4. Si detecta referencia anafórica ("eso", "el anterior"), reutiliza
@@ -1260,7 +1260,7 @@ export async function responderMensajeBot(
       const llmContext = {
         botNombre: 'Asistente Clientes',
         botTipo: 'CHAT_CLIENTES',
-        instrucciones: `Eres el asistente virtual del Portal del Cliente de Jsadr (sistema de préstamos).
+        instrucciones: `Eres el asistente virtual del Portal del Cliente de Jsadr (sistema de solicitudes).
 Atiendes a ${ctx.cliente.nombre} (cédula ${ctx.cliente.cedula}).
 Responde en español colombiano, de forma cordial y concisa (máx 3 párrafos).
 NO uses listas numeradas con emojis 1️⃣2️⃣3️⃣. Prefiere prosa natural o bullets cortos (máx 3).

@@ -200,7 +200,7 @@ export async function enviarWhatsappPlantilla(
   return { success: envio.exito, error: envio.error, usadaPlantilla: true }
 }
 
-// === Helper para construir variables comunes desde un préstamo + cliente ===
+// === Helper para construir variables comunes desde un solicitud + cliente ===
 export function construirVarsPrestamo(prestamo: any, cliente: any, extra: PlantillaVars = {}): PlantillaVars {
   return {
     clienteNombre: cliente?.nombre || '',

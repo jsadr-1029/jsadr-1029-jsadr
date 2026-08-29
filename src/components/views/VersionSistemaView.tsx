@@ -1107,7 +1107,7 @@ function BackupsPanel() {
               <br />
               Vas a restaurar el backup <strong className="text-foreground">{restaurando?.nombre}</strong>.
               Esta operación sobrescribirá los datos actuales del sistema (clientes,
-              préstamos, pagos, configuración).
+              solicitudes, pagos, configuración).
               <br />
               <br />
               Se recomienda generar un backup del estado actual antes de continuar.
@@ -1135,7 +1135,7 @@ function FichaTecnicaPanel() {
 
   const verHTML = () => {
     if (!codigo) {
-      alert('Ingresa un código de préstamo o ID primero.')
+      alert('Ingresa un código de solicitud o ID primero.')
       return
     }
     const param = codigo.match(/^[0-9a-f]{8,}$/i) ? 'prestamoId' : 'codigo'
@@ -1144,7 +1144,7 @@ function FichaTecnicaPanel() {
 
   const descargarJSON = () => {
     if (!codigo) {
-      alert('Ingresa un código de préstamo o ID primero.')
+      alert('Ingresa un código de solicitud o ID primero.')
       return
     }
     const param = codigo.match(/^[0-9a-f]{8,}$/i) ? 'prestamoId' : 'codigo'
@@ -1166,7 +1166,7 @@ function FichaTecnicaPanel() {
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="space-y-2">
-            <Label>Código o ID del préstamo</Label>
+            <Label>Código o ID del solicitud</Label>
             <Input
               value={codigo}
               onChange={(e) => setCodigo(e.target.value)}
@@ -1286,7 +1286,7 @@ function FichaTecnicaPanel() {
             <div className="space-y-2">
               <h4 className="font-semibold text-foreground">✅ Buenas prácticas</h4>
               <ul className="text-xs text-muted-foreground space-y-1.5">
-                <li>• Genera la ficha técnica antes de cualquier modificación al préstamo.</li>
+                <li>• Genera la ficha técnica antes de cualquier modificación al solicitud.</li>
                 <li>• Usa el formato HTML para imprimir o compartir con el cliente.</li>
                 <li>• El formato JSON es ideal para integraciones y respaldos.</li>
                 <li>• La ficha refleja el estado actual al momento de la consulta.</li>
@@ -1297,7 +1297,7 @@ function FichaTecnicaPanel() {
               <ul className="text-xs text-muted-foreground space-y-1.5">
                 <li>• La ficha HTML puede compartirse mediante enlace firmado.</li>
                 <li>• No incluye datos sensibles como tokens o contraseñas.</li>
-                <li>• Valida siempre el código del préstamo antes de generar.</li>
+                <li>• Valida siempre el código del solicitud antes de generar.</li>
                 <li>• Archiva las fichas en el expediente del cliente.</li>
               </ul>
             </div>

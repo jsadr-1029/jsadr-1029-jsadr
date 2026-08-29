@@ -8,7 +8,7 @@ import { hashOtp, verificarOtp } from '@/lib/otp'
 import { esCodigoHasheado } from '@/lib/prestamo-codigo'
 
 // =====================================================
-// GET - Consultar estado de verificación de códigos del préstamo.
+// GET - Consultar estado de verificación de códigos del solicitud.
 // Útil para que la UI muestre qué roles ya están verificados y cuáles faltan.
 // =====================================================
 export async function GET(
@@ -35,7 +35,7 @@ export async function GET(
     })
 
     if (!prestamo) {
-      return NextResponse.json({ success: false, error: 'Préstamo no encontrado' }, { status: 404 })
+      return NextResponse.json({ success: false, error: 'Solicitud no encontrado' }, { status: 404 })
     }
 
     const requiereCodeudor =
@@ -96,11 +96,11 @@ export async function GET(
 // =====================================================
 // Verificación de código(s) de confirmación por correo.
 //
-// REGLA DE NEGOCIO (préstamos con codeudor):
+// REGLA DE NEGOCIO (solicitudes con codeudor):
 //   El gestor envía el `rol` junto con el `codigo`:
 //     { codigo: "ABC123", rol: "DEUDOR" }
 //     { codigo: "XYZ789", rol: "CODEUDOR" }
-//   El sistema marca ese rol como verificado. El préstamo se
+//   El sistema marca ese rol como verificado. El solicitud se
 //   activa ÚNICAMENTE cuando todos los roles requeridos estén
 //   verificados:
 //     - Sin codeudor: basta con DEUDOR verificado.
@@ -134,22 +134,22 @@ export async function POST(
     }
 
     // El rol es obligatorio para distinguir a quién pertenece el código.
-    // Si no se envía, se asume 'DEUDOR' por retrocompatibilidad (préstamos
+    // Si no se envía, se asume 'DEUDOR' por retrocompatibilidad (solicitudes
     // antiguos generados antes de la lógica dual).
     let rol = normalizarRol(body.rol)
     if (!rol) rol = 'DEUDOR'
 
-    // === Cargar el préstamo para saber si requiere codeudor ===
+    // === Cargar el solicitud para saber si requiere codeudor ===
     const prestamo = await db.prestamo.findUnique({
       where: { id },
       include: { cliente: true },
     })
 
     if (!prestamo) {
-      return NextResponse.json({ success: false, error: 'Préstamo no encontrado' }, { status: 404 })
+      return NextResponse.json({ success: false, error: 'Solicitud no encontrado' }, { status: 404 })
     }
 
-    // Validar que el rol sea coherente con el préstamo:
+    // Validar que el rol sea coherente con el solicitud:
     const requiereCodeudor =
       prestamo.tieneCodeudor === true &&
       typeof prestamo.codeudorEmail === 'string' &&
@@ -157,7 +157,7 @@ export async function POST(
 
     if (rol === 'CODEUDOR' && !requiereCodeudor) {
       return NextResponse.json(
-        { success: false, error: 'Este préstamo NO tiene codeudor. Verifica el código con rol DEUDOR.' },
+        { success: false, error: 'Este solicitud NO tiene codeudor. Verifica el código con rol DEUDOR.' },
         { status: 400 }
       )
     }
@@ -178,11 +178,11 @@ export async function POST(
     }
 
     if (codigoConfirmacion.verificado) {
-      // Ya estaba verificado: comprobar si ya se puede activar el préstamo
+      // Ya estaba verificado: comprobar si ya se puede activar el solicitud
       const estadoVerificacion = await obtenerEstadoVerificacion(id, requiereCodeudor)
       if (estadoVerificacion.todosVerificados) {
         return NextResponse.json(
-          { success: true, mensaje: `Este rol (${rol}) ya estaba verificado y el préstamo ya fue activado.` },
+          { success: true, mensaje: `Este rol (${rol}) ya estaba verificado y el solicitud ya fue activado.` },
           { status: 200 }
         )
       }
@@ -269,7 +269,7 @@ export async function POST(
       const estadoVerificacion = await obtenerEstadoVerificacion(id, requiereCodeudor)
       if (estadoVerificacion.todosVerificados) {
         return NextResponse.json(
-          { success: true, mensaje: `Este rol (${rol}) fue verificado concurrentemente y el préstamo ya fue activado.` },
+          { success: true, mensaje: `Este rol (${rol}) fue verificado concurrentemente y el solicitud ya fue activado.` },
           { status: 200 }
         )
       }
@@ -307,7 +307,7 @@ export async function POST(
       return NextResponse.json({
         success: true,
         activado: false,
-        mensaje: `✅ Código de ${rol} verificado correctamente. Pendiente: falta verificar ${estado.faltantes.join(', ')} para activar el préstamo.`,
+        mensaje: `✅ Código de ${rol} verificado correctamente. Pendiente: falta verificar ${estado.faltantes.join(', ')} para activar el solicitud.`,
         data: {
           prestamoCodigo: prestamo.codigo,
           estadoPrestamo: prestamo.estado,
@@ -320,14 +320,14 @@ export async function POST(
       })
     }
 
-    // === TODOS VERIFICADOS → activar el préstamo ATÓMICAMENTE ===
-    // RACE CONDITION FIX (C7): envolver update préstamo + audit log + bitácora
+    // === TODOS VERIFICADOS → activar el solicitud ATÓMICAMENTE ===
+    // RACE CONDITION FIX (C7): envolver update solicitud + audit log + bitácora
     // en una transacción para que la activación sea atómica. Si la bitácora
-    // falla, el préstamo NO se activa (rollback) — antes podía quedar activado
+    // falla, el solicitud NO se activa (rollback) — antes podía quedar activado
     // sin registro histórico.
     //
     // Además, doble-verificación de estado previo a la activación: si otra
-    // llamada concurrente ya activó el préstamo, no duplicar la activación.
+    // llamada concurrente ya activó el solicitud, no duplicar la activación.
     const fechaDesembolso = new Date()
     const calculo = calcularPrestamo({
       montoPrincipal: prestamo.montoPrincipal,
@@ -339,7 +339,7 @@ export async function POST(
     })
 
     const activacionResult = await db.$transaction(async (tx) => {
-      // Atomic conditional update: SOLO actualiza si el préstamo sigue
+      // Atomic conditional update: SOLO actualiza si el solicitud sigue
       // en estado pendiente. Si otra llamada ya lo activó, count=0 y no
       // duplicamos la activación ni los logs.
       const updated = await tx.prestamo.updateMany({
@@ -354,7 +354,7 @@ export async function POST(
       })
 
       if (updated.count === 0) {
-        // El préstamo ya fue activado por otra llamada concurrente.
+        // El solicitud ya fue activado por otra llamada concurrente.
         return { yaActivado: true }
       }
 
@@ -382,12 +382,12 @@ export async function POST(
           usuarioNombre: 'Sistema',
           tipo: 'OTRO',
           titulo: requiereCodeudor
-            ? 'Préstamo confirmado con códigos de correo (deudor + codeudor)'
-            : 'Préstamo confirmado con código de correo',
+            ? 'Solicitud confirmado con códigos de correo (deudor + codeudor)'
+            : 'Solicitud confirmado con código de correo',
           descripcion: requiereCodeudor
-            ? `El préstamo fue confirmado mediante doble verificación OTP: el DEUDOR (${estado.verificados.DEUDOR?.email}) y el CODEUDOR (${estado.verificados.CODEUDOR?.email}) verificaron su código. El préstamo fue activado y desembolsado.`
-            : `El cliente verificó el préstamo mediante código de confirmación enviado a ${estado.verificados.DEUDOR?.email}. El préstamo fue activado y desembolsado.`,
-          resultado: 'Préstamo ACTIVO',
+            ? `El solicitud fue confirmado mediante doble verificación OTP: el DEUDOR (${estado.verificados.DEUDOR?.email}) y el CODEUDOR (${estado.verificados.CODEUDOR?.email}) verificaron su código. El solicitud fue activado y desembolsado.`
+            : `El cliente verificó el solicitud mediante código de confirmación enviado a ${estado.verificados.DEUDOR?.email}. El solicitud fue activado y desembolsado.`,
+          resultado: 'Solicitud ACTIVO',
         },
       })
 
@@ -395,12 +395,12 @@ export async function POST(
     })
 
     if (activacionResult.yaActivado) {
-      // El préstamo ya estaba activo (otra llamada concurrente lo activó).
+      // El solicitud ya estaba activo (otra llamada concurrente lo activó).
       // Responder como éxito idempotente para no confundir al gestor.
       return NextResponse.json({
         success: true,
         activado: true,
-        mensaje: `El préstamo ${prestamo.codigo} ya estaba activado (verificación concurrente).`,
+        mensaje: `El solicitud ${prestamo.codigo} ya estaba activado (verificación concurrente).`,
         data: {
           prestamoCodigo: prestamo.codigo,
           estado: 'ACTIVO',
@@ -415,7 +415,7 @@ export async function POST(
     return NextResponse.json({
       success: true,
       activado: true,
-      mensaje: `✅ Todos los códigos requeridos fueron verificados. El préstamo ${prestamo.codigo} ha sido activado y desembolsado.`,
+      mensaje: `✅ Todos los códigos requeridos fueron verificados. El solicitud ${prestamo.codigo} ha sido activado y desembolsado.`,
       data: {
         prestamoCodigo: prestamo.codigo,
         estado: 'ACTIVO',

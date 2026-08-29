@@ -198,7 +198,7 @@ export function PortalClienteModal({
   const [vista, setVista] = useState<'hub' | HubItemId | 'avisos' | 'campanas'>('hub')
 
   // === Pila de navegación para botón "Atrás" real ===
-  // Cada vez que el cliente entra a una sección (simulador, préstamos, etc.)
+  // Cada vez que el cliente entra a una sección (simulador, solicitudes, etc.)
   // empujamos un estado al historial del navegador. Cuando el cliente presiona
   // "Atrás" en el navegador/celular, interceptamos popstate y volvemos a la
   // vista anterior del portal en lugar de cerrar la sesión.
@@ -526,7 +526,7 @@ export function PortalClienteModal({
         toast({
           title: '¡Términos aceptados!',
           description:
-            'Tu préstamo ha sido activado. Se guardaron tu foto de cédula y selfie como respaldo de firma.',
+            'Tu solicitud ha sido activado. Se guardaron tu foto de cédula y selfie como respaldo de firma.',
         })
         cerrarFlujoTyC()
         cargar()
@@ -551,7 +551,7 @@ export function PortalClienteModal({
       if (json.success) {
         toast({
           title: '¡Términos aceptados!',
-          description: 'Tu préstamo ha sido activado. Recibirás el desembolso pronto.',
+          description: 'Tu solicitud ha sido activado. Recibirás el desembolso pronto.',
         })
         cargar()
       } else {
@@ -562,8 +562,8 @@ export function PortalClienteModal({
     }
   }
 
-  // Generar paz y salvo para préstamos cancelados
-  // Si el préstamo NO está saldado/cancelado, mostrar mensaje al cliente
+  // Generar paz y salvo para solicitudes cancelados
+  // Si el solicitud NO está saldado/cancelado, mostrar mensaje al cliente
   // indicando que el crédito aún se encuentra vigente.
   const generarPazYSalvo = (prestamoId: string, codigo: string, estado?: string, saldoTotal?: number, cuotasPagadas?: number, numeroCuotas?: number) => {
     // Validación local: el endpoint ya valida, pero damos feedback
@@ -585,7 +585,7 @@ export function PortalClienteModal({
     window.open(`/api/paz-y-salvo?prestamoId=${prestamoId}&codigo=${codigo}${tokenParam}&auto=1`, '_blank')
   }
 
-  // Descargar estado de cuenta (global o por préstamo)
+  // Descargar estado de cuenta (global o por solicitud)
   const descargarEstadoCuenta = (prestamoId?: string) => {
     const tokenParam = token ? `&token=${encodeURIComponent(token)}` : ''
     const url = prestamoId
@@ -704,7 +704,7 @@ export function PortalClienteModal({
       gradient: 'from-amber-400 via-amber-600 to-orange-700',
       // Posición 4 (~154°, bottom-right)
       position: { x: 48, y: 99 },
-      // Badge: cuenta préstamos pendientes de aceptación ( TyC ) que requieren firma electrónica
+      // Badge: cuenta solicitudes pendientes de aceptación ( TyC ) que requieren firma electrónica
       badge: prestamos.filter(p => p.estado === 'PENDIENTE_ACEPTACION').length || undefined,
     },
     {
@@ -860,7 +860,7 @@ export function PortalClienteModal({
 
           {vista === 'prestamos' && (
             <PrestamosView
-              // FILTRO: préstamos PENDIENTE_ACEPTACION ya NO se muestran en Créditos.
+              // FILTRO: solicitudes PENDIENTE_ACEPTACION ya NO se muestran en Créditos.
               // Se muestran únicamente en la vista de Solicitudes.
               prestamos={prestamos.filter(p => p.estado !== 'PENDIENTE_ACEPTACION')}
               onAbrirTyC={abrirFlujoTyC}
@@ -1256,12 +1256,12 @@ export function PortalClienteModal({
                     {tycGuardando ? (
                       <>
                         <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                        Activando préstamo...
+                        Activando solicitud...
                       </>
                     ) : (
                       <>
                         <ShieldCheck className="w-4 h-4 mr-2" />
-                        Confirmar y activar préstamo
+                        Confirmar y activar solicitud
                       </>
                     )}
                   </Button>
@@ -1795,7 +1795,7 @@ function PrestamosView({
                     Requiere tu aceptación
                   </p>
                   <p className="text-[10px] text-amber-100/80 mb-2">
-                    Activa tu préstamo con verificación OTP + foto selfie con cédula.
+                    Activa tu solicitud con verificación OTP + foto selfie con cédula.
                   </p>
                   <Button
                     size="sm"
@@ -1917,7 +1917,7 @@ function ProximosPagosView({
                 ⏰ Recordatorio: cuota vence {new Date(proximoUrgente.fechaVencimiento).toDateString() === hoy.toDateString() ? 'hoy' : 'mañana'}
               </p>
               <p className="text-[10px] text-amber-100/80 mt-0.5">
-                Préstamo <span className="font-mono font-bold">{proximoUrgente.prestamo.codigo}</span> · Cuota {proximoUrgente.numeroCuota} · <span className="font-bold">{formatearMoneda(proximoUrgente.montoTotal)}</span>
+                Solicitud <span className="font-mono font-bold">{proximoUrgente.prestamo.codigo}</span> · Cuota {proximoUrgente.numeroCuota} · <span className="font-bold">{formatearMoneda(proximoUrgente.montoTotal)}</span>
               </p>
               <p className="text-[10px] text-amber-100/70 mt-1">
                 Recuerda que enviamos un recordatorio automático el día anterior al vencimiento a tu correo y WhatsApp según tus preferencias.
@@ -2452,7 +2452,7 @@ function SimuladorCredito({
     // === FIX (2026-08-21): usar la fecha actual como fecha de desembolso, NO fechaPrimerPago ===
     // Antes se usaba fechaPrimerPago como fechaDesembolso, lo que hacía que el
     // sistema contara desde esa fecha como si el crédito empezara ese día.
-    // Ahora: fechaDesembolso = hoy (cuando se solicita el préstamo).
+    // Ahora: fechaDesembolso = hoy (cuando se solicita el solicitud).
     // fechaPrimerPago se usa solo como referencia para el primer vencimiento,
     // pero el cálculo de la tabla de amortización empieza desde hoy.
     const fechaDesembolso = new Date()
@@ -3347,7 +3347,7 @@ function MisSolicitudesPanel({
       if (json.success && json.data?.linkFirma) {
         toast({
           title: 'Abriendo firma electrónica',
-          description: `Préstamo ${codigo} — completing los 4 pasos en una nueva pestaña.`,
+          description: `Solicitud ${codigo} — completing los 4 pasos en una nueva pestaña.`,
         })
         // Abrir el flujo de firma en una nueva pestaña
         window.open(json.data.linkFirma, '_blank', 'noopener,noreferrer')
@@ -3421,7 +3421,7 @@ function MisSolicitudesPanel({
         </Card>
       </div>
 
-      {/* === SECCIÓN NUEVA: Préstamos pendientes de aceptación de TyC === */}
+      {/* === SECCIÓN NUEVA: Solicitudes pendientes de aceptación de TyC === */}
       {prestamosPendientes.length > 0 && (
         <div className="space-y-2">
           <div className="flex items-center gap-2 px-1">
@@ -3557,7 +3557,7 @@ function MisSolicitudesPanel({
                 </div>
 
                 {/* === Flujo de firma del cliente (cuando la solicitud fue aprobada) === */}
-                {/* Cuando el admin aprueba/crea préstamo, el cliente debe: */}
+                {/* Cuando el admin aprueba/crea solicitud, el cliente debe: */}
                 {/* 1) Cargar fotos (cédula + selfie) */}
                 {/* 2) Firma manuscrita */}
                 {/* 3) Código OTP */}
@@ -3622,7 +3622,7 @@ function MisSolicitudesPanel({
 
 // =====================================================
 // Componente: Flujo de firma del cliente (cargue fotos + firma + OTP)
-// Se muestra cuando una solicitud fue aprobada y se creó el préstamo.
+// Se muestra cuando una solicitud fue aprobada y se creó el solicitud.
 // El cliente debe completar 3 pasos:
 //   1. Cargar foto de cédula + selfie
 //   2. Dibujar firma manuscrita
@@ -3837,7 +3837,7 @@ function FlujoFirmaClient({
     }
   }
 
-  // === Paso 3b: Validar OTP y activar préstamo ===
+  // === Paso 3b: Validar OTP y activar solicitud ===
   const validarOTP = async () => {
     if (!otpValor || otpValor.length !== 6) {
       toast({ title: 'Código inválido', description: 'Ingresa los 6 dígitos.', variant: 'destructive' })
@@ -3862,7 +3862,7 @@ function FlujoFirmaClient({
         toast({ title: 'OTP inválido', description: jsonVal.error || 'Verifica el código e intenta nuevamente', variant: 'destructive' })
         return
       }
-      // 2. Confirmar (activa el préstamo)
+      // 2. Confirmar (activa el solicitud)
       const resConf = await fetch(`/api/prestamos/${prestamoId}/aceptar-tyc-otp`, {
         method: 'POST',
         headers,
@@ -3870,7 +3870,7 @@ function FlujoFirmaClient({
       })
       const jsonConf = await resConf.json()
       if (jsonConf.success) {
-        toast({ title: '¡Préstamo activado!', description: 'Tu crédito ha sido activado correctamente.' })
+        toast({ title: '¡Solicitud activado!', description: 'Tu crédito ha sido activado correctamente.' })
         setPaso(4)
         onCompletado?.()
       } else {
@@ -4058,7 +4058,7 @@ function FlujoFirmaClient({
             </div>
             <p className="text-sm font-bold text-emerald-300">¡Crédito activado!</p>
             <p className="text-[10px] text-muted-foreground mt-1">
-              Tu préstamo fue activado correctamente. Ya puedes verlo en la sección "Mis Préstamos".
+              Tu solicitud fue activado correctamente. Ya puedes verlo en la sección "Mis Solicitudes".
             </p>
           </div>
         )}

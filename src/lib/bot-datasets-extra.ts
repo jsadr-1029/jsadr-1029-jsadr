@@ -232,7 +232,7 @@ export const DATASET_CHAT_CLIENTES_EXTRA: ItemEntrenamiento[] = [
       'tasa fija', 'tasa variable', 'EA', 'tasa efectiva',
     ],
   },
-  // MONTO PRÉSTAMO (variantes)
+  // MONTO SOLICITUD (variantes)
   {
     id: 'CC-MONTO-EXTRA',
     categoria: 'PRESTAMO',
@@ -444,12 +444,12 @@ export const DATASET_ADMIN_BOTS_EXTRA: ItemEntrenamiento[] = [
     ],
   },
 
-  // ASISTENTE PRÉSTAMOS
+  // ASISTENTE SOLICITUDES
   {
     id: 'PR-SIMULAR-EXTRA',
     categoria: 'SIMULACION',
     pregunta: 'simular prestamo',
-    respuesta: 'Puedo simular un préstamo. Dime: monto, plazo en meses, frecuencia (quincenal/mensual) y tasa. Te calculo cuota, interés total y total a pagar.',
+    respuesta: 'Puedo simular un solicitud. Dime: monto, plazo en meses, frecuencia (quincenal/mensual) y tasa. Te calculo cuota, interés total y total a pagar.',
     sinonimos: [
       'simular', 'simulacion', 'simular prestamo', 'simular credito',
       'calcular cuota', 'cuanto seria la cuota', 'cuanto pagaria',
@@ -461,7 +461,7 @@ export const DATASET_ADMIN_BOTS_EXTRA: ItemEntrenamiento[] = [
     id: 'PR-RENTABILIDAD-EXTRA',
     categoria: 'RENTABILIDAD',
     pregunta: 'como va la rentabilidad',
-    respuesta: 'La rentabilidad del portafolio está en Préstamos → Rentabilidad. Incluye interés devengado, mora cobrada y rentabilidad efectiva. ¿Quieres verlo por categoría de crédito?',
+    respuesta: 'La rentabilidad del portafolio está en Solicitudes → Rentabilidad. Incluye interés devengado, mora cobrada y rentabilidad efectiva. ¿Quieres verlo por categoría de crédito?',
     sinonimos: [
       'rentabilidad', 'como va la rentabilidad', 'rentabilidad del mes',
       'interes devengado', 'ganancia', 'utilidad',

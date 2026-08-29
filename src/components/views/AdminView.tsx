@@ -59,7 +59,7 @@ export function AdminView({ onChanged }: { onChanged: () => void }) {
   const [tab, setTab] = useState('reportes')
   const { toast } = useToast()
 
-  // Función que abre un préstamo despachando un CustomEvent global.
+  // Función que abre un solicitud despachando un CustomEvent global.
   // El componente page.tsx (o cualquier listener) puede capturar este evento
   // para mostrar el modal de detalle.
   const abrirPrestamo = (id: string) => {
@@ -906,10 +906,10 @@ function ControlPanel() {
               <strong>DIAS_JURIDICO:</strong> Días de mora para iniciar automáticamente el cobro jurídico (default: 60).
             </li>
             <li>
-              <strong>TASA_MORA_DEFAULT:</strong> Tasa moratoria anual por defecto para nuevos préstamos.
+              <strong>TASA_MORA_DEFAULT:</strong> Tasa moratoria anual por defecto para nuevos solicitudes.
             </li>
             <li>
-              <strong>FONDO_GARANTIA_PCT:</strong> Porcentaje del primer préstamo que se carga al Fondo de Garantía (default: 5%).
+              <strong>FONDO_GARANTIA_PCT:</strong> Porcentaje del primer solicitud que se carga al Fondo de Garantía (default: 5%).
             </li>
             <li>
               <strong>MORA_COMPUESTA:</strong> Activa el cálculo de mora compuesta diaria (recomendado: true).

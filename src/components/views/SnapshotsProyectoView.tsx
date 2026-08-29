@@ -531,7 +531,7 @@ export function SnapshotsProyectoView() {
               <Input
                 value={form.nombre}
                 onChange={(e) => setForm({ ...form, nombre: e.target.value })}
-                placeholder="Ej: Antes de modificar el módulo de préstamos"
+                placeholder="Ej: Antes de modificar el módulo de solicitudes"
               />
             </div>
             <div className="space-y-2">

@@ -155,7 +155,7 @@ export function HistorialPagosModal({
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    // Cargar los pagos del préstamo desde la API del portal
+    // Cargar los pagos del solicitud desde la API del portal
     fetch(`/api/portal/prestamos?token=${token}`)
       .then(r => r.json())
       .then(d => {

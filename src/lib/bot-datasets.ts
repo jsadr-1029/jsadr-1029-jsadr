@@ -7,26 +7,26 @@ import type { ItemEntrenamiento } from './bot-fuzzy-matcher'
 
 // =====================================================
 // 1. CHAT_CLIENTES — Bot de Atención al Cliente
-// Especialidad: préstamos, saldos, fechas, requisitos
+// Especialidad: solicitudes, saldos, fechas, requisitos
 // =====================================================
 export const DATASET_CHAT_CLIENTES: ItemEntrenamiento[] = [
   // SALDOS
   {
     id: 'CC-001', categoria: 'SALDOS',
-    pregunta: '¿Cuál es el saldo de mi préstamo?',
-    respuesta: 'Tu saldo actual es el monto total que debes hasta la fecha, incluyendo capital pendiente e intereses generados. Puedes verlo en detalle en la sección "Mi Préstamo" del portal. Si necesitas el desglose exacto (capital, intereses, mora), te lo puedo mostrar.',
+    pregunta: '¿Cuál es el saldo de mi solicitud?',
+    respuesta: 'Tu saldo actual es el monto total que debes hasta la fecha, incluyendo capital pendiente e intereses generados. Puedes verlo en detalle en la sección "Mi Solicitud" del portal. Si necesitas el desglose exacto (capital, intereses, mora), te lo puedo mostrar.',
     sinonimos: ['cuanto debo', 'saldo pendiente', 'mi deuda', 'lo que debo', 'saldo actual', 'cuanto me queda por pagar', 'saldo de mi prestamo', 'mi obligacion', 'saldo deudor', 'monto pendiente'],
   },
   {
     id: 'CC-002', categoria: 'SALDOS',
     pregunta: '¿Cuánto capital he pagado?',
-    respuesta: 'El capital pagado es la porción de tus pagos que se aplica directamente al monto del préstamo (no incluye intereses). Puedes ver el detalle en tu historial de pagos en el portal.',
+    respuesta: 'El capital pagado es la porción de tus pagos que se aplica directamente al monto del solicitud (no incluye intereses). Puedes ver el detalle en tu historial de pagos en el portal.',
     sinonimos: ['capital abonado', 'cuanto he abonado al capital', 'capital pagado', 'abono a capital', 'cuanto capital he cancelado'],
   },
   {
     id: 'CC-003', categoria: 'SALDOS',
     pregunta: '¿Cuánto interés he pagado?',
-    respuesta: 'Los intereses pagados corresponden al costo financiero del préstamo durante el período. Se calculan sobre el capital pendiente según la tasa pactada. El detalle está en tu historial de pagos.',
+    respuesta: 'Los intereses pagados corresponden al costo financiero del solicitud durante el período. Se calculan sobre el capital pendiente según la tasa pactada. El detalle está en tu historial de pagos.',
     sinonimos: ['intereses pagados', 'cuanto he pagado de intereses', 'intereses cancelados', 'monto en intereses'],
   },
   // FECHAS DE PAGO
@@ -52,7 +52,7 @@ export const DATASET_CHAT_CLIENTES: ItemEntrenamiento[] = [
   {
     id: 'CC-021', categoria: 'CUOTAS',
     pregunta: '¿Cuál es el valor de mi cuota?',
-    respuesta: 'El valor de tu cuota fue pactado al firmar el préstamo e incluye capital + intereses. Si tu préstamo tiene cuota fija, el valor se mantiene; si es variable, puede ajustarse. El detalle está en tu contrato.',
+    respuesta: 'El valor de tu cuota fue pactado al firmar el solicitud e incluye capital + intereses. Si tu solicitud tiene cuota fija, el valor se mantiene; si es variable, puede ajustarse. El detalle está en tu contrato.',
     sinonimos: ['valor cuota', 'monto de cuota', 'cuanto es la cuota', 'cuota mensual', 'cuota semanal', 'cuota quincenal', 'pago de cada cuota'],
   },
   {
@@ -64,7 +64,7 @@ export const DATASET_CHAT_CLIENTES: ItemEntrenamiento[] = [
   // REQUISITOS
   {
     id: 'CC-030', categoria: 'REQUISITOS',
-    pregunta: '¿Qué requisitos necesito para un préstamo?',
+    pregunta: '¿Qué requisitos necesito para un solicitud?',
     respuesta: 'Los requisitos básicos son: 1) Cédula de ciudadanía vigente, 2) Comprobante de ingresos (últimos 3 meses), 3) Referencia personal, 4) Verificación de identidad por OTP. Montos mayores pueden requerir codeudor o garantía.',
     sinonimos: ['que necesito', 'requisitos para prestamo', 'documentos', 'que piden', 'tramites', 'como solicito', 'que me piden', 'documentacion necesaria', 'requisitos credito'],
   },
@@ -77,8 +77,8 @@ export const DATASET_CHAT_CLIENTES: ItemEntrenamiento[] = [
   // RENOVACIÓN
   {
     id: 'CC-040', categoria: 'RENOVACION',
-    pregunta: '¿Puedo renovar mi préstamo?',
-    respuesta: 'Sí, puedes renovar tu préstamo si tienes buen historial de pagos (al menos 50% de cuotas pagadas y sin mora superior a 30 días). La renovación puede incluir un aumento del monto. Solicítalo en el portal o con un asesor.',
+    pregunta: '¿Puedo renovar mi solicitud?',
+    respuesta: 'Sí, puedes renovar tu solicitud si tienes buen historial de pagos (al menos 50% de cuotas pagadas y sin mora superior a 30 días). La renovación puede incluir un aumento del monto. Solicítalo en el portal o con un asesor.',
     sinonimos: ['renovacion', 'renovar', 'nuevo prestamo', 'ampliar credito', 'refinanciar', 'renuevo', 'ampliar prestamo', 'otro prestamo'],
   },
   {
@@ -150,7 +150,7 @@ export const DATASET_CHAT_CLIENTES: ItemEntrenamiento[] = [
   {
     id: 'CC-100', categoria: 'INFO',
     pregunta: '¿Quiénes somos?',
-    respuesta: 'Somos Jsadr, una plataforma de préstamos que ofrece créditos ágiles y transparentes. Trabajamos con tasas justas, dentro del marco legal colombiano, y nos enfocamos en construir relaciones de confianza con nuestros clientes.',
+    respuesta: 'Somos Jsadr, una plataforma de solicitudes que ofrece créditos ágiles y transparentes. Trabajamos con tasas justas, dentro del marco legal colombiano, y nos enfocamos en construir relaciones de confianza con nuestros clientes.',
     sinonimos: ['quienes son', 'que es jsadr', 'informacion de la empresa', 'quien es jsadr', 'sobre la empresa', 'acerca de'],
   },
   {
@@ -375,7 +375,7 @@ export const DATASET_CONTABILIDAD: ItemEntrenamiento[] = [
   {
     id: 'CO-012', categoria: 'ANALISIS',
     pregunta: '¿Cuál es mi patrimonio neto?',
-    respuesta: 'Tu patrimonio neto = activos - pasivos. Activos: efectivo, bancos, inversiones, bienes. Pasivos: deudas, préstamos, tarjetas. Te muestro el desglose y cómo ha evolucionado en los últimos 6 meses.',
+    respuesta: 'Tu patrimonio neto = activos - pasivos. Activos: efectivo, bancos, inversiones, bienes. Pasivos: deudas, solicitudes, tarjetas. Te muestro el desglose y cómo ha evolucionado en los últimos 6 meses.',
     sinonimos: ['patrimonio neto', 'patrimonio', 'mis activos', 'riqueza', 'valor neto', 'net worth'],
   },
   {
@@ -406,19 +406,19 @@ export const DATASET_PAGOS: ItemEntrenamiento[] = [
   {
     id: 'PA-001', categoria: 'CARTERA',
     pregunta: '¿Cómo está la cartera hoy?',
-    respuesta: 'Te muestro el resumen ejecutivo: 1) Total préstamos activos, 2) Préstamos al día vs en mora, 3) Tasa de mora, 4) Recaudo del día, 5) Alertas críticas. ¿Quieres ver el detalle de algún indicador?',
+    respuesta: 'Te muestro el resumen ejecutivo: 1) Total solicitudes activos, 2) Solicitudes al día vs en mora, 3) Tasa de mora, 4) Recaudo del día, 5) Alertas críticas. ¿Quieres ver el detalle de algún indicador?',
     sinonimos: ['estado cartera', 'cartera hoy', 'como esta la cartera', 'resumen cartera', 'panorama cartera', 'cartera actual'],
   },
   {
     id: 'PA-002', categoria: 'CARTERA',
-    pregunta: '¿Cuántos préstamos activos hay?',
-    respuesta: 'Te muestro: 1) Total préstamos activos, 2) Distribución por estado (al día, en mora, jurídico), 3) Capital prestado total, 4) Capital pendiente de recuperar. ¿Quieres ver la lista detallada?',
+    pregunta: '¿Cuántos solicitudes activos hay?',
+    respuesta: 'Te muestro: 1) Total solicitudes activos, 2) Distribución por estado (al día, en mora, jurídico), 3) Capital prestado total, 4) Capital pendiente de recuperar. ¿Quieres ver la lista detallada?',
     sinonimos: ['prestamos activos', 'cuantos prestamos', 'total prestamos', 'cantidad de prestamos', 'prestamos vigentes'],
   },
   {
     id: 'PA-003', categoria: 'CARTERA',
     pregunta: '¿Cuál es la tasa de mora?',
-    respuesta: 'La tasa de mora = (préstamos en mora / préstamos activos) × 100. Saludable: <10%. Aceptable: 10-20%. Crítico: >20%. Te muestro tu tasa actual y la comparación con el mes anterior.',
+    respuesta: 'La tasa de mora = (solicitudes en mora / solicitudes activos) × 100. Saludable: <10%. Aceptable: 10-20%. Crítico: >20%. Te muestro tu tasa actual y la comparación con el mes anterior.',
     sinonimos: ['tasa de mora', 'indice de mora', 'porcentaje de mora', 'mora actual', 'mora', 'cartera vencida'],
   },
   {
@@ -430,7 +430,7 @@ export const DATASET_PAGOS: ItemEntrenamiento[] = [
   {
     id: 'PA-005', categoria: 'CARTERA',
     pregunta: '¿Cuánto capital está pendiente por cobrar?',
-    respuesta: 'Calculo el capital pendiente: suma de saldos totales de préstamos activos. Te muestro: 1) Total capital pendiente, 2) Capital + intereses por cobrar, 3) Mora acumulada, 4) Distribución por cliente.',
+    respuesta: 'Calculo el capital pendiente: suma de saldos totales de solicitudes activos. Te muestro: 1) Total capital pendiente, 2) Capital + intereses por cobrar, 3) Mora acumulada, 4) Distribución por cliente.',
     sinonimos: ['capital pendiente', 'por cobrar', 'cuanto me deben', 'saldo por cobrar', 'cartera por cobrar', 'capital por recuperar'],
   },
   {
@@ -448,19 +448,19 @@ export const DATASET_PAGOS: ItemEntrenamiento[] = [
   {
     id: 'PA-012', categoria: 'MORA',
     pregunta: '¿Qué clientes son reincidentes en mora?',
-    respuesta: 'Reincidentes = clientes con más de 1 préstamo en mora. Te muestro: nombre, número de préstamos en mora, monto total. Recomiendo: restringir nuevos créditos a estos clientes hasta que regularicen.',
+    respuesta: 'Reincidentes = clientes con más de 1 solicitud en mora. Te muestro: nombre, número de solicitudes en mora, monto total. Recomiendo: restringir nuevos créditos a estos clientes hasta que regularicen.',
     sinonimos: ['reincidentes', 'clientes reincidentes', 'reincidencia en mora', 'clientes problematicos', 'habituales'],
   },
   {
     id: 'PA-020', categoria: 'VENCIMIENTOS',
     pregunta: '¿Qué cuotas vencen hoy?',
-    respuesta: 'Te muestro los préstamos con cuota que vence hoy. Para cada uno: cliente, monto de cuota, saldo, teléfono. ¿Quieres que envíe recordatorios por WhatsApp a todos?',
+    respuesta: 'Te muestro los solicitudes con cuota que vence hoy. Para cada uno: cliente, monto de cuota, saldo, teléfono. ¿Quieres que envíe recordatorios por WhatsApp a todos?',
     sinonimos: ['vencen hoy', 'vencimientos de hoy', 'cuotas de hoy', 'pagan hoy', 'vencimiento hoy'],
   },
   {
     id: 'PA-021', categoria: 'VENCIMIENTOS',
     pregunta: '¿Qué cuotas vencen en los próximos 7 días?',
-    respuesta: 'Te muestro los préstamos con cuota que vence en los próximos 7 días. Para cada uno: cliente, fecha de vencimiento, monto. ¿Quieres programar recordatorios automáticos por WhatsApp?',
+    respuesta: 'Te muestro los solicitudes con cuota que vence en los próximos 7 días. Para cada uno: cliente, fecha de vencimiento, monto. ¿Quieres programar recordatorios automáticos por WhatsApp?',
     sinonimos: ['proximos vencimientos', 'vencen en 7 dias', 'vencimientos semanales', 'cuotas proximas'],
   },
   {
@@ -502,7 +502,7 @@ export const DATASET_PAGOS: ItemEntrenamiento[] = [
   {
     id: 'PA-043', categoria: 'ESTRATEGIA',
     pregunta: '¿Qué clientes tienen excelente comportamiento?',
-    respuesta: 'Te muestro los clientes al día con varios préstamos pagados. Para cada uno: nombre, préstamos pagados, progreso actual. Recomiendo: ofrecer renovación con mejores tasas como recompensa.',
+    respuesta: 'Te muestro los clientes al día con varios solicitudes pagados. Para cada uno: nombre, solicitudes pagados, progreso actual. Recomiendo: ofrecer renovación con mejores tasas como recompensa.',
     sinonimos: ['buenos clientes', 'excelente comportamiento', 'clientes puntuales', 'buenos pagadores', 'clientes destacados'],
   },
   {
@@ -526,14 +526,14 @@ export const DATASET_PAGOS: ItemEntrenamiento[] = [
 ]
 
 // =====================================================
-// 5. PRESTAMOS — Asistente Préstamos
+// 5. PRESTAMOS — Asistente Solicitudes
 // Especialidad: solicitudes, simulación, rentabilidad
 // =====================================================
 export const DATASET_PRESTAMOS: ItemEntrenamiento[] = [
   {
     id: 'PR-001', categoria: 'ESTADO',
-    pregunta: '¿Cuántos préstamos activos hay?',
-    respuesta: 'Te muestro: 1) Total préstamos activos, 2) Distribución por estado, 3) Capital prestado total, 4) Capital pendiente, 5) Promedio por préstamo. ¿Quieres ver la lista detallada?',
+    pregunta: '¿Cuántos solicitudes activos hay?',
+    respuesta: 'Te muestro: 1) Total solicitudes activos, 2) Distribución por estado, 3) Capital prestado total, 4) Capital pendiente, 5) Promedio por solicitud. ¿Quieres ver la lista detallada?',
     sinonimos: ['prestamos activos', 'cuantos prestamos activos', 'total prestamos activos', 'prestamos vigentes'],
   },
   {
@@ -545,7 +545,7 @@ export const DATASET_PRESTAMOS: ItemEntrenamiento[] = [
   {
     id: 'PR-003', categoria: 'ESTADO',
     pregunta: '¿Cuánto capital está prestado?',
-    respuesta: 'Capital prestado total = suma de montos principales de préstamos activos. Te muestro: 1) Capital total prestado, 2) Capital recuperado, 3) Capital pendiente, 4) Tasa de recuperación.',
+    respuesta: 'Capital prestado total = suma de montos principales de solicitudes activos. Te muestro: 1) Capital total prestado, 2) Capital recuperado, 3) Capital pendiente, 4) Tasa de recuperación.',
     sinonimos: ['capital prestado', 'cuanto dinero hay prestado', 'capital colocado', 'monto prestado'],
   },
   {
@@ -569,13 +569,13 @@ export const DATASET_PRESTAMOS: ItemEntrenamiento[] = [
   {
     id: 'PR-020', categoria: 'RENTABILIDAD',
     pregunta: '¿Cuál es la utilidad del mes?',
-    respuesta: 'Utilidad del mes = intereses cobrados en el mes. Te muestro: 1) Intereses cobrados este mes, 2) Comparativa con mes anterior, 3) Distribución por préstamo, 4) Margen de rentabilidad.',
+    respuesta: 'Utilidad del mes = intereses cobrados en el mes. Te muestro: 1) Intereses cobrados este mes, 2) Comparativa con mes anterior, 3) Distribución por solicitud, 4) Margen de rentabilidad.',
     sinonimos: ['utilidad mensual', 'ganancia del mes', 'cuanto ganamos este mes', 'rentabilidad del mes', 'ingresos por intereses'],
   },
   {
     id: 'PR-021', categoria: 'RENTABILIDAD',
-    pregunta: '¿Qué préstamos son más rentables?',
-    respuesta: 'Te muestro los préstamos ordenados por rentabilidad (intereses generados). Para cada uno: cliente, monto, tasa, intereses generados, rentabilidad %. Los más rentables suelen ser de tasa más alta y plazo más largo.',
+    pregunta: '¿Qué solicitudes son más rentables?',
+    respuesta: 'Te muestro los solicitudes ordenados por rentabilidad (intereses generados). Para cada uno: cliente, monto, tasa, intereses generados, rentabilidad %. Los más rentables suelen ser de tasa más alta y plazo más largo.',
     sinonimos: ['prestamos mas rentables', 'mejores prestamos', 'prestamos rentables', 'cual es el prestamo mas rentable'],
   },
   {
@@ -598,8 +598,8 @@ export const DATASET_PRESTAMOS: ItemEntrenamiento[] = [
   },
   {
     id: 'PR-040', categoria: 'RIESGO',
-    pregunta: '¿Qué préstamos tienen mayor riesgo?',
-    respuesta: 'Identifico préstamos de alto riesgo: 1) Clientes con mora actual, 2) Reincidentes, 3) Concentración en un cliente (>%20 cartera), 4) Plazos muy largos con tasa baja. Te muestro la lista para monitorear.',
+    pregunta: '¿Qué solicitudes tienen mayor riesgo?',
+    respuesta: 'Identifico solicitudes de alto riesgo: 1) Clientes con mora actual, 2) Reincidentes, 3) Concentración en un cliente (>%20 cartera), 4) Plazos muy largos con tasa baja. Te muestro la lista para monitorear.',
     sinonimos: ['prestamos de riesgo', 'mayor riesgo', 'riesgos de cartera', 'prestamos problematicos', 'cartera en riesgo'],
   },
   {
@@ -611,19 +611,19 @@ export const DATASET_PRESTAMOS: ItemEntrenamiento[] = [
   {
     id: 'PR-050', categoria: 'DOCUMENTOS',
     pregunta: 'Genera pagaré',
-    respuesta: 'Genero el pagaré con los datos del préstamo: monto, tasa, plazo, frecuencia, cliente, codeudores (si aplica). Diligenciado y listo para firma. ¿Para qué préstamo lo necesitas?',
+    respuesta: 'Genero el pagaré con los datos del solicitud: monto, tasa, plazo, frecuencia, cliente, codeudores (si aplica). Diligenciado y listo para firma. ¿Para qué solicitud lo necesitas?',
     sinonimos: ['generar pagare', 'pagare', 'crear pagare', 'documento pagare', 'pagare diligenciado'],
   },
   {
     id: 'PR-051', categoria: 'DOCUMENTOS',
     pregunta: 'Genera estado de cuenta',
-    respuesta: 'Genero el estado de cuenta del préstamo: saldo actual, cuotas pagadas, cuotas pendientes, próximos vencimientos, historial de pagos. ¿Para qué préstamo lo necesitas?',
+    respuesta: 'Genero el estado de cuenta del solicitud: saldo actual, cuotas pagadas, cuotas pendientes, próximos vencimientos, historial de pagos. ¿Para qué solicitud lo necesitas?',
     sinonimos: ['estado de cuenta', 'generar estado cuenta', 'extracto', 'resumen de cuenta', 'extracto de prestamo'],
   },
   {
     id: 'PR-052', categoria: 'DOCUMENTOS',
     pregunta: 'Genera paz y salvo',
-    respuesta: 'Genero paz y salvo para préstamos totalmente pagados: confirma que el cliente no tiene obligaciones pendientes. Solo se puede generar si el saldo es $0. ¿Para qué préstamo lo necesitas?',
+    respuesta: 'Genero paz y salvo para solicitudes totalmente pagados: confirma que el cliente no tiene obligaciones pendientes. Solo se puede generar si el saldo es $0. ¿Para qué solicitud lo necesitas?',
     sinonimos: ['paz y salvo', 'generar paz y salvo', 'certificado paz y salvo', 'paz salvo'],
   },
 ]
@@ -648,7 +648,7 @@ export const DATASET_JURIDICO: ItemEntrenamiento[] = [
   {
     id: 'JU-003', categoria: 'CASOS',
     pregunta: '¿Cuáles son los candidatos a jurídico?',
-    respuesta: 'Candidatos = préstamos con 60+ días de mora sin caso jurídico abierto. Te muestro: cliente, días de mora, saldo, severidad. Para los de 90+ días, recomiendo demandar inmediatamente.',
+    respuesta: 'Candidatos = solicitudes con 60+ días de mora sin caso jurídico abierto. Te muestro: cliente, días de mora, saldo, severidad. Para los de 90+ días, recomiendo demandar inmediatamente.',
     sinonimos: ['candidatos juridico', 'posibles casos', 'para escalar juridico', 'candidatos a cobro juridico'],
   },
   {
@@ -725,7 +725,7 @@ export const DATASET_JURIDICO: ItemEntrenamiento[] = [
   },
   {
     id: 'JU-041', categoria: 'CONTRATOS',
-    pregunta: '¿Qué cláusulas no pueden faltar en un contrato de préstamo?',
+    pregunta: '¿Qué cláusulas no pueden faltar en un contrato de solicitud?',
     respuesta: 'Cláusulas esenciales: 1) Identificación de partes, 2) Monto y moneda, 3) Tasa de interés (dentro del límite legal), 4) Plazo y forma de pago, 5) Sistema de amortización, 6) Causales de mora, 7) Intereses moratorios, 8) Garantías (codeudor, hipoteca), 9) Foro/jurisdicción, 10) Autorización de reporte a centrales.',
     sinonimos: ['clausulas contrato', 'contrato prestamo clausulas', 'que clausulas incluir', 'contrato de credito'],
   },
@@ -896,7 +896,7 @@ export const DATASET_CONFIGURACION: ItemEntrenamiento[] = [
   {
     id: 'DO-010', categoria: 'BASE_DATOS',
     pregunta: '¿Cuántos registros hay en la BD?',
-    respuesta: 'Te muestro el conteo de registros por tabla: clientes, préstamos, pagos, conversaciones, mensajes, audit logs, backups, snapshots, usuarios, casos jurídicos, FAQs, bots. También te muestro el tamaño físico del archivo de BD.',
+    respuesta: 'Te muestro el conteo de registros por tabla: clientes, solicitudes, pagos, conversaciones, mensajes, audit logs, backups, snapshots, usuarios, casos jurídicos, FAQs, bots. También te muestro el tamaño físico del archivo de BD.',
     sinonimos: ['registros bd', 'cuantos registros', 'tamano base datos', 'datos almacenados', 'registros base de datos'],
   },
   {
@@ -993,13 +993,13 @@ export const DATASET_ADMIN_GENERAL: ItemEntrenamiento[] = [
   {
     id: 'AG-001', categoria: 'DASHBOARD',
     pregunta: 'Muéstrame el dashboard ejecutivo',
-    respuesta: 'Te muestro el dashboard consolidado: 1) KPIs de cartera (préstamos, mora, recaudo), 2) KPIs financieros (ingresos, gastos, balance), 3) KPIs operativos (clientes, conversaciones, respuestas bot), 4) Alertas críticas. ¿Quieres profundizar en algún área?',
+    respuesta: 'Te muestro el dashboard consolidado: 1) KPIs de cartera (solicitudes, mora, recaudo), 2) KPIs financieros (ingresos, gastos, balance), 3) KPIs operativos (clientes, conversaciones, respuestas bot), 4) Alertas críticas. ¿Quieres profundizar en algún área?',
     sinonimos: ['dashboard ejecutivo', 'dashboard consolidado', 'panel ejecutivo', 'kpi ejecutivos', 'resumen ejecutivo', 'panorama general'],
   },
   {
     id: 'AG-002', categoria: 'DASHBOARD',
     pregunta: '¿Cómo está el negocio hoy?',
-    respuesta: 'Resumen ejecutivo del día: 1) Cartera: X préstamos activos, Y% mora, $Z recaudo hoy, 2) Finanzas: ingresos vs gastos del día, 3) Operación: N conversaciones activas, M respuestas automáticas, 4) Alertas críticas detectadas. ¿Quieres el detalle?',
+    respuesta: 'Resumen ejecutivo del día: 1) Cartera: X solicitudes activos, Y% mora, $Z recaudo hoy, 2) Finanzas: ingresos vs gastos del día, 3) Operación: N conversaciones activas, M respuestas automáticas, 4) Alertas críticas detectadas. ¿Quieres el detalle?',
     sinonimos: ['como esta el negocio', 'estado del negocio', 'resumen del dia', 'como vamos hoy', 'estado actual'],
   },
   {
@@ -1029,7 +1029,7 @@ export const DATASET_ADMIN_GENERAL: ItemEntrenamiento[] = [
   {
     id: 'AG-020', categoria: 'KPIs',
     pregunta: '¿Cuál es la tasa de mora?',
-    respuesta: 'La tasa de mora = (préstamos en mora / préstamos activos) × 100. Saludable: <10%. Crítico: >20%. Te muestro tu tasa actual, comparativa con mes anterior y tendencia. Si está alta, te doy 3 acciones correctivas priorizadas.',
+    respuesta: 'La tasa de mora = (solicitudes en mora / solicitudes activos) × 100. Saludable: <10%. Crítico: >20%. Te muestro tu tasa actual, comparativa con mes anterior y tendencia. Si está alta, te doy 3 acciones correctivas priorizadas.',
     sinonimos: ['tasa mora', 'indice mora', 'mora', 'porcentaje mora', 'cartera vencida'],
   },
   {
@@ -1041,7 +1041,7 @@ export const DATASET_ADMIN_GENERAL: ItemEntrenamiento[] = [
   {
     id: 'AG-022', categoria: 'KPIs',
     pregunta: '¿Cuántos clientes activos hay?',
-    respuesta: 'Te muestro: 1) Total clientes, 2) Clientes con préstamo activo, 3) Clientes al día, 4) Clientes en mora, 5) Nuevos clientes del mes. ¿Quieres ver la lista?',
+    respuesta: 'Te muestro: 1) Total clientes, 2) Clientes con solicitud activo, 3) Clientes al día, 4) Clientes en mora, 5) Nuevos clientes del mes. ¿Quieres ver la lista?',
     sinonimos: ['clientes activos', 'cuantos clientes', 'total clientes', 'base de clientes'],
   },
   {
@@ -1181,7 +1181,7 @@ export function getNombreEspecialidad(tipoBot: string): string {
     ADMIN_SISTEMA: 'Asistente Financiero Personal y Empresarial (Personal CFO)',
     CONTABILIDAD: 'Asesor Financiero Experto (CFO + Asesor Patrimonial)',
     PAGOS: 'Gerente de Cobranza Inteligente',
-    PRESTAMOS: 'Director del Módulo de Préstamos',
+    PRESTAMOS: 'Director del Módulo de Solicitudes',
     JURIDICO: 'Asesor Jurídico Senior (25 años de experiencia · Especialista en Derecho Comercial · Magíster en Derecho Financiero y de los Negocios)',
     SEGURIDAD: 'CISO Inteligente (SOC AI)',
     CONFIGURACION: 'SRE + DevOps IA (Sentinel Always-On)',

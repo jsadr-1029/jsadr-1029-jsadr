@@ -22,7 +22,7 @@ export async function obtenerEstadoCartera() {
   const inicioMes = new Date(ahora.getFullYear(), ahora.getMonth(), 1)
   const inicioAnio = new Date(ahora.getFullYear(), 0, 1)
 
-  // === 1. Préstamos por estado ===
+  // === 1. Solicitudes por estado ===
   const [
     totalActivos,
     totalPendientes,
@@ -39,7 +39,7 @@ export async function obtenerEstadoCartera() {
     db.prestamo.count(),
   ])
 
-  // === 2. Detalle de préstamos activos ===
+  // === 2. Detalle de solicitudes activos ===
   const prestamosActivos = await db.prestamo.findMany({
     where: { estado: { in: ['ACTIVO', 'EN_MORA'] } },
     include: {
@@ -144,7 +144,7 @@ export async function obtenerEstadoCartera() {
     ? Math.round(morosos.reduce((s, m) => s + m.diasMora, 0) / morosos.length)
     : 0
 
-  // === 9. Clientes reincidentes (más de 1 préstamo en mora) ===
+  // === 9. Clientes reincidentes (más de 1 solicitud en mora) ===
   const moraPorCliente: Record<string, number> = {}
   morosos.forEach((m) => {
     moraPorCliente[m.cedula] = (moraPorCliente[m.cedula] || 0) + 1
@@ -157,7 +157,7 @@ export async function obtenerEstadoCartera() {
       nombre: morosos.find((m) => m.cedula === cedula)?.cliente || 'N/A',
     }))
 
-  // === 10. Clientes con excelente comportamiento (al día con varios préstamos pagados) ===
+  // === 10. Clientes con excelente comportamiento (al día con varios solicitudes pagados) ===
   const clientesAlDia = prestamosActivos
     .filter((p) => p.diasMora === 0 && p.cuotasPagadas > 0)
     .map((p) => ({
@@ -220,7 +220,7 @@ export async function obtenerEstadoCartera() {
     alertas.push({
       severidad: 'MEDIA',
       titulo: `🔁 ${reincidentes.length} cliente(s) reincidente(s) en mora`,
-      descripcion: `Clientes con más de un préstamo en mora. Considerar restricción de nuevos créditos.`,
+      descripcion: `Clientes con más de un solicitud en mora. Considerar restricción de nuevos créditos.`,
     })
   }
 
@@ -286,7 +286,7 @@ export async function generarResumenEjecutivo() {
   let texto = `💼 RESUMEN EJECUTIVO DE CARTERA — ${new Date().toLocaleString('es-CO')}\n\n`
 
   texto += `═══ PANORAMA GENERAL ═══\n`
-  texto += `Total préstamos: ${r.totalPrestamos}\n`
+  texto += `Total solicitudes: ${r.totalPrestamos}\n`
   texto += `• Activos: ${r.totalActivos}\n`
   texto += `• Pendientes: ${r.totalPendientes}\n`
   texto += `• Al día: ${r.totalAlDia}\n`

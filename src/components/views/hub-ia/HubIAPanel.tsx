@@ -579,7 +579,7 @@ export function HubIAPanel() {
                   </p>
                   <div className="mt-3 grid grid-cols-1 gap-1 text-[11px] text-slate-500">
                     <p>• "¿Cuántos clientes están en mora?"</p>
-                    <p>• "Analiza el módulo de préstamos"</p>
+                    <p>• "Analiza el módulo de solicitudes"</p>
                     <p>• "Genera un reporte de cartera"</p>
                     <p>• "Detecta errores de las últimas 24h"</p>
                     <p>• "Crea una alerta sobre riesgo de liquidez"</p>

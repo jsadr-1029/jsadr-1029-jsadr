@@ -185,7 +185,7 @@ export async function POST(req: NextRequest) {
       },
     })
 
-    // Si fue aprobado, recalcular saldos del préstamo
+    // Si fue aprobado, recalcular saldos del solicitud
     if (nuevoEstado === 'APLICADO' && pago.prestamoId) {
       try {
         await recalcularSaldosPrestamo(pago.prestamoId)

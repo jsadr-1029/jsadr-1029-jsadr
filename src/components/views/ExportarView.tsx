@@ -44,15 +44,15 @@ export function ExportarView() {
     {
       titulo: 'Exportación JSON Completa',
       descripcion:
-        'Descarga toda la base de datos en formato JSON estructurado. Incluye: clientes, préstamos, pagos, casos jurídicos, cronología, documentos, alertas, notificaciones, OTP de Firma Electrónica, hashes de PIN del portal y accesos del portal con sus relaciones.',
+        'Descarga toda la base de datos en formato JSON estructurado. Incluye: clientes, solicitudes, pagos, casos jurídicos, cronología, documentos, alertas, notificaciones, OTP de Firma Electrónica, hashes de PIN del portal y accesos del portal con sus relaciones.',
       icon: FileJson,
       color: 'bg-violet-500/15 text-violet-300',
       accion: () => descargar('json'),
       boton: 'Descargar JSON',
       incluye: [
         'Datos de clientes (nombre, cédula, contacto, salario)',
-        'Préstamos con todas las variables bancarias',
-        'Tabla de amortización completa por préstamo',
+        'Solicitudes con todas las variables bancarias',
+        'Tabla de amortización completa por solicitud',
         'Historial de pagos detallado',
         'Casos jurídicos con cronología y alertas',
         'Log de notificaciones WhatsApp enviadas',
@@ -73,7 +73,7 @@ export function ExportarView() {
       boton: 'Descargar CSV',
       incluye: [
         'Clientes con todos sus campos',
-        'Préstamos con saldos y estado',
+        'Solicitudes con saldos y estado',
         'Pagos con método y referencia',
         'Casos jurídicos con abogado y estado',
         'Notificaciones enviadas',
@@ -155,7 +155,7 @@ export function ExportarView() {
             <p className="font-semibold mb-1">Backup completo de información</p>
             <p className="text-muted-foreground">
               La exportación incluye todas las variables registradas en el sistema:
-              datos de clientes, préstamos con su cálculo financiero completo, historial de pagos,
+              datos de clientes, solicitudes con su cálculo financiero completo, historial de pagos,
               casos jurídicos con su seguimiento cronológico, alertas, documentos, notificaciones
               WhatsApp enviadas, firmas electrónicas con OTP, accesos al portal y tokens de sesión.
               El archivo se descarga con la fecha de exportación en el nombre.
@@ -249,7 +249,7 @@ export function ExportarView() {
               </p>
             </div>
             <div className="p-3 bg-muted/30 rounded-md border border-white/10">
-              <p className="font-semibold">Préstamos</p>
+              <p className="font-semibold">Solicitudes</p>
               <p className="text-xs text-muted-foreground mt-1">
                 Variables bancarias: monto principal, tasa anual fija, tasa moratoria, plazo,
                 frecuencia, número de cuotas, cuota fija calculada, total interés, total a pagar,

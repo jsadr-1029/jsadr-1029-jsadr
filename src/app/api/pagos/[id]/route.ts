@@ -93,7 +93,7 @@ export async function DELETE(
 
     return NextResponse.json({
       success: true,
-      mensaje: `Pago anulado (soft-delete). Préstamo ${pago.prestamo.codigo} recalculado: saldo ${estadisticas.saldoTotal} COP, ${estadisticas.cuotasPagadas} cuota(s) pagada(s).`,
+      mensaje: `Pago anulado (soft-delete). Solicitud ${pago.prestamo.codigo} recalculado: saldo ${estadisticas.saldoTotal} COP, ${estadisticas.cuotasPagadas} cuota(s) pagada(s).`,
       saldosRecalculados: estadisticas,
     })
   } catch (error: any) {

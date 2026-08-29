@@ -49,7 +49,7 @@ export async function POST(req: NextRequest) {
     let notificacionesEnviadasEmail = 0  // fallback WhatsApp→Email
     const resultados: any[] = []
 
-    // Obtener préstamos activos
+    // Obtener solicitudes activos
     const prestamosActivos = await db.prestamo.findMany({
       where: { estado: { in: ['ACTIVO', 'EN_MORA'] } },
       include: { cliente: true, pagos: true },
@@ -108,7 +108,7 @@ export async function POST(req: NextRequest) {
         })
         tipoNotificacion = 'MORA'
 
-        // Actualizar estado del préstamo a EN_MORA si corresponde
+        // Actualizar estado del solicitud a EN_MORA si corresponde
         if (prestamo.estado !== 'EN_MORA') {
           await db.prestamo.update({
             where: { id: prestamo.id },
@@ -217,8 +217,8 @@ export async function POST(req: NextRequest) {
       if (!envioExitoso && prestamo.cliente.email) {
         try {
           const asunto = tipoNotificacion === 'MORA'
-            ? `⚠️ Aviso de mora - Préstamo ${prestamo.codigo}`
-            : `⏰ Recordatorio de pago - Préstamo ${prestamo.codigo}`
+            ? `⚠️ Aviso de mora - Solicitud ${prestamo.codigo}`
+            : `⏰ Recordatorio de pago - Solicitud ${prestamo.codigo}`
 
           const emailResult = await enviarEmail({
             to: prestamo.cliente.email,

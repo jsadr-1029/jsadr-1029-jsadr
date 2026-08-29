@@ -50,7 +50,7 @@ export async function GET(
 
     if (!prestamoHistorico) {
       return NextResponse.json(
-        { success: false, error: 'Préstamo no encontrado' },
+        { success: false, error: 'Solicitud no encontrado' },
         { status: 404 }
       )
     }

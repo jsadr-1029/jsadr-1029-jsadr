@@ -66,7 +66,7 @@ async function construirSystemPrompt(ctx: ContextoBot): Promise<string> {
         partes.push(`- Teléfono: ${cliente.telefono}`)
         if (cliente.email) partes.push(`- Email: ${cliente.email}`)
 
-        // Préstamos activos del cliente
+        // Solicitudes activos del cliente
         const prestamos = await db.prestamo.findMany({
           where: { clienteId: cliente.id, estado: { in: ['ACTIVO', 'EN_MORA'] } },
           select: {
@@ -79,7 +79,7 @@ async function construirSystemPrompt(ctx: ContextoBot): Promise<string> {
         })
 
         if (prestamos.length > 0) {
-          partes.push('\n### PRÉSTAMOS ACTIVOS DEL CLIENTE\n')
+          partes.push('\n### SOLICITUDES ACTIVOS DEL CLIENTE\n')
           prestamos.forEach((p, i) => {
             partes.push(
               `${i + 1}. Crédito ${p.codigo}:\n` +
@@ -91,7 +91,7 @@ async function construirSystemPrompt(ctx: ContextoBot): Promise<string> {
             )
           })
         } else {
-          partes.push('\n### PRÉSTAMOS ACTIVOS: el cliente no tiene préstamos activos actualmente.')
+          partes.push('\n### SOLICITUDES ACTIVOS: el cliente no tiene solicitudes activos actualmente.')
         }
 
         // Últimos pagos del cliente (para contexto)
@@ -145,8 +145,8 @@ async function construirSystemPrompt(ctx: ContextoBot): Promise<string> {
   partes.push('\n\n## REGLAS DE ESCALAMIENTO\n')
   partes.push('Si la consulta del cliente es sobre:')
   partes.push('- Quejas, reclamos o disputas')
-  partes.push('- Modificación de saldos, pagos o estados de préstamo (NUNCA lo hagas)')
-  partes.push('- Aprobación de préstamos (NUNCA apruebes)')
+  partes.push('- Modificación de saldos, pagos o estados de solicitud (NUNCA lo hagas)')
+  partes.push('- Aprobación de solicitudes (NUNCA apruebes)')
   partes.push('- Datos personales sensibles que no seas del cliente actual')
   partes.push('- Temas fuera del alcance de Jsadr (compras externas, otros bancos, etc.)')
   partes.push('- Información que no tengas en el contexto anterior')

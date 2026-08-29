@@ -63,7 +63,7 @@ export function ConciliacionBancariaModal({ abierto, onCerrar, onAplicado }: Pro
   const [resultado, setResultado] = useState<any>(null)
   const { toast } = useToast()
 
-  // ---------- Acción: buscar préstamos ----------
+  // ---------- Acción: buscar solicitudes ----------
   const buscarPrestamos = async () => {
     setLoading(true)
     setError('')
@@ -85,7 +85,7 @@ export function ConciliacionBancariaModal({ abierto, onCerrar, onAplicado }: Pro
       if (lista.length === 0) {
         setError(
           data.data.mensaje ||
-          `No se encontraron préstamos activos con cuotas pendientes para ese ${criterio === 'codigo' ? 'código' : 'cédula'}`
+          `No se encontraron solicitudes activos con cuotas pendientes para ese ${criterio === 'codigo' ? 'código' : 'cédula'}`
         )
         return
       }
@@ -103,7 +103,7 @@ export function ConciliacionBancariaModal({ abierto, onCerrar, onAplicado }: Pro
     }
   }
 
-  // ---------- Helper: seleccionar préstamo y pre-seleccionar todos sus pagos ----------
+  // ---------- Helper: seleccionar solicitud y pre-seleccionar todos sus pagos ----------
   const seleccionarPrestamo = (p: PrestamoResumen) => {
     setError('')
     setPrestamoSel(p)
@@ -199,7 +199,7 @@ export function ConciliacionBancariaModal({ abierto, onCerrar, onAplicado }: Pro
 
         {/* ===== Indicador de pasos ===== */}
         <div className="flex items-center gap-2 text-[11px] text-slate-500 mb-2 flex-wrap">
-          <span className={paso === 'buscar' ? 'font-bold text-sky-700' : ''}>1. Buscar préstamo</span>
+          <span className={paso === 'buscar' ? 'font-bold text-sky-700' : ''}>1. Buscar solicitud</span>
           <ArrowRight className="w-3 h-3" />
           <span className={paso === 'seleccionar' ? 'font-bold text-sky-700' : ''}>2. Seleccionar</span>
           <ArrowRight className="w-3 h-3" />
@@ -208,13 +208,13 @@ export function ConciliacionBancariaModal({ abierto, onCerrar, onAplicado }: Pro
           <span className={paso === 'resultado' ? 'font-bold text-sky-700' : ''}>4. Resultado</span>
         </div>
 
-        {/* ===== PASO 1: BUSCAR PRÉSTAMO ===== */}
+        {/* ===== PASO 1: BUSCAR SOLICITUD ===== */}
         {paso === 'buscar' && (
           <div className="space-y-4">
             <Alert className="bg-sky-50 border-sky-200">
               <AlertDescription className="text-sky-800 text-xs">
-                Para conciliar, primero identifica el <strong>préstamo</strong>. Puedes buscar por
-                <strong> código del préstamo</strong> o por <strong>cédula del cliente</strong>.
+                Para conciliar, primero identifica el <strong>solicitud</strong>. Puedes buscar por
+                <strong> código del solicitud</strong> o por <strong>cédula del cliente</strong>.
                 Si el cliente tiene varios créditos activos, te mostraremos la lista para que elijas cuál aplicar.
                 El sistema <strong>cargará automáticamente</strong> las cuotas pendientes y solo tendrás
                 que confirmar cuáles aplicar.
@@ -234,7 +234,7 @@ export function ConciliacionBancariaModal({ abierto, onCerrar, onAplicado }: Pro
                   }`}
                 >
                   <Hash className="w-3.5 h-3.5" />
-                  Código del préstamo
+                  Código del solicitud
                 </button>
                 <button
                   type="button"
@@ -253,7 +253,7 @@ export function ConciliacionBancariaModal({ abierto, onCerrar, onAplicado }: Pro
 
             <div className="space-y-2">
               <Label className="text-xs font-semibold text-slate-700">
-                {criterio === 'codigo' ? 'Código del préstamo' : 'Cédula del cliente'}
+                {criterio === 'codigo' ? 'Código del solicitud' : 'Cédula del cliente'}
               </Label>
               <div className="flex gap-2">
                 <Input
@@ -283,12 +283,12 @@ export function ConciliacionBancariaModal({ abierto, onCerrar, onAplicado }: Pro
           </div>
         )}
 
-        {/* ===== PASO 2: SELECCIONAR PRÉSTAMO ===== */}
+        {/* ===== PASO 2: SELECCIONAR SOLICITUD ===== */}
         {paso === 'seleccionar' && (
           <div className="space-y-3">
             <Alert className="bg-amber-50 border-amber-200">
               <AlertDescription className="text-amber-800 text-xs">
-                Se encontraron <strong>{prestamos.length} préstamos activos</strong> con cuotas pendientes
+                Se encontraron <strong>{prestamos.length} solicitudes activos</strong> con cuotas pendientes
                 para {criterio === 'codigo' ? 'ese código' : 'esa cédula'}. Selecciona cuál quieres conciliar.
               </AlertDescription>
             </Alert>
@@ -342,7 +342,7 @@ export function ConciliacionBancariaModal({ abierto, onCerrar, onAplicado }: Pro
         {/* ===== PASO 3: CONFIRMAR PAGOS ===== */}
         {paso === 'confirmar' && prestamoSel && (
           <div className="space-y-3">
-            {/* Resumen del préstamo seleccionado */}
+            {/* Resumen del solicitud seleccionado */}
             <div className="p-3 rounded-lg border border-sky-200 bg-sky-50/40">
               <div className="flex items-center gap-2 mb-1">
                 <CreditCard className="w-4 h-4 text-sky-600" />
@@ -365,7 +365,7 @@ export function ConciliacionBancariaModal({ abierto, onCerrar, onAplicado }: Pro
               <AlertDescription className="text-emerald-800 text-xs flex items-start gap-2">
                 <CheckCircle2 className="w-4 h-4 flex-shrink-0 mt-0.5" />
                 <div>
-                  El sistema <strong>cargó automáticamente</strong> las cuotas pendientes de este préstamo.
+                  El sistema <strong>cargó automáticamente</strong> las cuotas pendientes de este solicitud.
                   Todas están pre-seleccionadas. Si quieres excluir alguna, desmárcala; si no, solo da clic en
                   <strong> Aplicar ({seleccionados.size})</strong> para confirmar la conciliación.
                 </div>
@@ -394,7 +394,7 @@ export function ConciliacionBancariaModal({ abierto, onCerrar, onAplicado }: Pro
 
               {prestamoSel.pagosPendientes.length === 0 ? (
                 <div className="p-6 text-center text-sm text-slate-500">
-                  Este préstamo no tiene cuotas pendientes para conciliar.
+                  Este solicitud no tiene cuotas pendientes para conciliar.
                 </div>
               ) : (
                 <div className="max-h-64 overflow-y-auto">
@@ -511,7 +511,7 @@ export function ConciliacionBancariaModal({ abierto, onCerrar, onAplicado }: Pro
               <h3 className="text-lg font-bold text-slate-800">Conciliación completada</h3>
               {resultado.prestamo && (
                 <p className="text-xs text-slate-500 mt-1">
-                  Préstamo <strong className="font-mono">{resultado.prestamo.codigo}</strong> · {resultado.prestamo.cliente}
+                  Solicitud <strong className="font-mono">{resultado.prestamo.codigo}</strong> · {resultado.prestamo.cliente}
                 </p>
               )}
             </div>

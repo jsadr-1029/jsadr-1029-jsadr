@@ -10,15 +10,15 @@ import { formatearMoneda } from '@/lib/finanzas'
 // Devuelve la "Hoja de Vida" completa del cliente:
 //   - Datos personales
 //   - Fotos de registro (cédula frente/reverso + selfie)
-//   - Lista de préstamos (con estado, saldo, fechas)
+//   - Lista de solicitudes (con estado, saldo, fechas)
 //   - Historial de pagos (cronológico)
 //   - Comportamiento de pagos (puntualidad, promedio, días de mora promedio)
-//   - Estadísticas agregadas (total prestado, total pagado, # préstamos, # atrasos)
+//   - Estadísticas agregadas (total prestado, total pagado, # solicitudes, # atrasos)
 //   - Bitácora de eventos del cliente
-//   - Estado de mora actual (¿tiene préstamos en EN_MORA o JURIDICO?)
+//   - Estado de mora actual (¿tiene solicitudes en EN_MORA o JURIDICO?)
 //
 // Esta API alimenta el modal "Hoja de Vida del Cliente" que se abre al
-// seleccionar un cliente desde Préstamos > Clientes.
+// seleccionar un cliente desde Solicitudes > Clientes.
 export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -55,7 +55,7 @@ export async function GET(
           },
           orderBy: { fechaSubida: 'desc' },
         },
-        // Préstamos del cliente (todos los estados)
+        // Solicitudes del cliente (todos los estados)
         prestamos: {
           select: {
             id: true,
@@ -92,7 +92,7 @@ export async function GET(
       )
     }
 
-    // === Cargar todos los pagos de todos los préstamos del cliente ===
+    // === Cargar todos los pagos de todos los solicitudes del cliente ===
     const prestamoIds = cliente.prestamos.map((p) => p.id)
     const pagosRaw = prestamoIds.length > 0
       ? await db.pago.findMany({
@@ -120,7 +120,7 @@ export async function GET(
         })
       : []
 
-    // Adjuntar el código del préstamo a cada pago para mostrarlo en la UI
+    // Adjuntar el código del solicitud a cada pago para mostrarlo en la UI
     const prestamoCodigoMap = new Map(cliente.prestamos.map((p) => [p.id, p.codigo]))
     const pagos = pagosRaw.map((p) => ({
       ...p,
@@ -175,7 +175,7 @@ export async function GET(
     const tieneMoraActiva = prestamosEnMora.length > 0 || prestamosJuridico.length > 0
     const saldoTotalActivos = prestamosActivos.reduce((sum, p) => sum + (p.saldoTotal || 0), 0)
 
-    // === Distribución de préstamos por estado ===
+    // === Distribución de solicitudes por estado ===
     const distribucionEstados = cliente.prestamos.reduce((acc, p) => {
       acc[p.estado] = (acc[p.estado] || 0) + 1
       return acc
@@ -183,7 +183,7 @@ export async function GET(
 
     // === Bitácora (eventos del cliente) ===
     // Combinamos:
-    //   - BitácoraPrestamo (notas, llamadas, visitas, etc. de sus préstamos)
+    //   - BitácoraPrestamo (notas, llamadas, visitas, etc. de sus solicitudes)
     //   - AccesosPortal (logs de ingreso al portal)
     const bitacoraPrestamos = prestamoIds.length > 0
       ? await db.bitacoraPrestamo.findMany({
@@ -280,7 +280,7 @@ export async function GET(
             ? 'MEDIO'
             : 'BAJO',
         descripcion: tieneMoraActiva
-          ? 'Cliente con mora activa en al menos un préstamo.'
+          ? 'Cliente con mora activa en al menos un solicitud.'
           : puntualidad >= 80
             ? 'Cliente con excelente comportamiento de pagos.'
             : puntualidad >= 50

@@ -44,7 +44,7 @@ export async function GET(req: NextRequest) {
       }
     })
 
-    // Agregar categorías sin préstamos
+    // Agregar categorías sin solicitudes
     for (const cat of categorias) {
       if (!porCategoria.some((g) => g.categoriaId === cat.id)) {
         resultado.push({

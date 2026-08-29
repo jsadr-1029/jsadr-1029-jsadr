@@ -14,7 +14,7 @@ import { sanitizeError } from '@/lib/error-handler'
 import { requireRole } from '@/lib/auth-guard'
 import { buildAbsoluteUrl } from '@/lib/url'
 
-// GET - listar préstamos
+// GET - listar solicitudes
 export async function GET(req: NextRequest) {
   const auth = requireRole(req, ['ADMIN', 'GESTOR', 'CONSULTOR'])
   if (auth instanceof NextResponse) return auth
@@ -60,7 +60,7 @@ export async function GET(req: NextRequest) {
   }
 }
 
-// POST - crear solicitud de préstamo
+// POST - crear solicitud de solicitud
 export async function POST(req: NextRequest) {
   const auth = requireRole(req, ['ADMIN', 'GESTOR'])
   if (auth instanceof NextResponse) return auth
@@ -114,14 +114,14 @@ export async function POST(req: NextRequest) {
       codeudorTelefono,
       codeudorEmail,
       codeudorDireccion,
-      // === Fecha del préstamo (fecha asignada) ===
-      // Permite registrar el préstamo con una fecha distinta a la actual del sistema.
+      // === Fecha del solicitud (fecha asignada) ===
+      // Permite registrar el solicitud con una fecha distinta a la actual del sistema.
       // Todos los documentos generados (pagaré, carta, tabla de amortización) y el
-      // código del préstamo usarán esta fecha como base.
+      // código del solicitud usarán esta fecha como base.
       fechaPrestamo,
       // === Periodo de corte + días causados antes del corte ===
       // Caso de uso: cliente solicita crédito ANTES de la fecha de corte.
-      // Ej: préstamo 2/08/2026, periodo "5-20" → corte = 5/08/2026.
+      // Ej: solicitud 2/08/2026, periodo "5-20" → corte = 5/08/2026.
       // El sistema cobra 3 días de interés anticipado (valorDiasCausados) y
       // las cuotas se programan desde el 5/08/2026 (fechaPrimerCorte).
       periodoCorte,
@@ -149,12 +149,12 @@ export async function POST(req: NextRequest) {
       // === Fondo de Garantía (opcional, tasa configurable) ===
       // El gestor decide si el crédito lleva o no fondo de garantía.
       // Si lleva, se especifica la tasa como decimal (0.05 = 5%).
-      // Ya NO se activa automáticamente en el primer préstamo.
+      // Ya NO se activa automáticamente en el primer solicitud.
       incluirFondoGarantia,
       tasaFondoGarantia,
       // === Cobro de Pagaré + Carta de Instrucciones ===
       // Cargo editable (por defecto $19.900 COP) cobrado UNA sola vez al cliente
-      // cuando el préstamo incluye generar pagare + carta de instrucciones.
+      // cuando el solicitud incluye generar pagare + carta de instrucciones.
       cobroPagareCarta,
       valorPagareCarta,
       // === Tarifa de Uso de Plataforma (Tarea U) ===
@@ -172,12 +172,12 @@ export async function POST(req: NextRequest) {
       solicitudWebOrigenId,
     } = body
 
-    // === Resolver la fecha del préstamo ===
+    // === Resolver la fecha del solicitud ===
     // Si no se proporciona fechaPrestamo, se usa la fecha actual del sistema (default).
     // Si se proporciona, se parsea como fecha local (sin zona horaria) y se usa para:
     //   - fechaSolicitud (reemplaza el @default(now()) de Prisma)
     //   - fechaDesembolso
-    //   - fechaStr del código del préstamo
+    //   - fechaStr del código del solicitud
     //   - fechaVencimiento de cada cuota en la tabla de amortización
     let fechaBasePrestamo: Date = new Date()
     if (fechaPrestamo) {
@@ -221,10 +221,10 @@ export async function POST(req: NextRequest) {
     //      Calculamos `fechaInicio = fechaPrimerCuota - 1 periodo` (según
     //      frecuencia: MENSUAL=1 mes, QUINCENAL=15 días, SEMANAL=7 días, DIARIO=1 día)
     //      para que la cuota #1 caiga EXACTAMENTE en fechaPrimerCuota.
-    //   3. fechaBasePrestamo → comportamiento por defecto (cuotas desde la fecha del préstamo)
+    //   3. fechaBasePrestamo → comportamiento por defecto (cuotas desde la fecha del solicitud)
     //
     // NOTA: fechaBasePrestamo se sigue usando para fechaSolicitud, fechaDesembolso
-    // y el código del préstamo (representa la fecha real en que se entregó el dinero).
+    // y el código del solicitud (representa la fecha real en que se entregó el dinero).
     // Solo la tabla de amortización cambia su fecha base.
     let fechaBaseParaAmortizacion: Date = fechaBasePrestamo
     if (periodoCorte && fechaPrimerCorte) {
@@ -312,13 +312,13 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, error: 'Cliente no encontrado' }, { status: 404 })
     }
 
-    // === BLOQUEO DE NUEVOS PRÉSTAMOS PARA CLIENTES CON MORA ACTIVA ===
-    // Si el cliente tiene al menos un préstamo en estado EN_MORA o JURIDICO,
-    // NO se permite crear un nuevo préstamo. El gestor debe primero resolver
+    // === BLOQUEO DE NUEVOS SOLICITUDES PARA CLIENTES CON MORA ACTIVA ===
+    // Si el cliente tiene al menos un solicitud en estado EN_MORA o JURIDICO,
+    // NO se permite crear un nuevo solicitud. El gestor debe primero resolver
     // la mora (renegociar, pagar, etc.) antes de otorgar nuevo crédito.
     //
     // Excepción: si `forzarBloqueoMora === true` en el body, se omite el bloqueo.
-    // Esto permite al ADMIN crear el préstamo con confirmación explícita del riesgo.
+    // Esto permite al ADMIN crear el solicitud con confirmación explícita del riesgo.
     const forzarBloqueoMora = body.forzarBloqueoMora === true
     const prestamosEnMora = await db.prestamo.findMany({
       where: {
@@ -341,7 +341,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(
         {
           success: false,
-          error: `Cliente bloqueado para nuevos préstamos: tiene ${prestamosEnMora.length} crédito(s) en mora o jurídico. Debe resolver la mora antes de crear un nuevo préstamo. Detalle: ${detalle}`,
+          error: `Cliente bloqueado para nuevos solicitudes: tiene ${prestamosEnMora.length} crédito(s) en mora o jurídico. Debe resolver la mora antes de crear un nuevo solicitud. Detalle: ${detalle}`,
           codigo: 'CLIENTE_EN_MORA_BLOQUEADO',
           prestamosEnMora,
         },
@@ -389,7 +389,7 @@ export async function POST(req: NextRequest) {
     }
 
     // === Validación de monto por categoría ===
-    // Resuelve la categoría: la pasada en el body, o la del cliente, o la del préstamo anterior
+    // Resuelve la categoría: la pasada en el body, o la del cliente, o la del solicitud anterior
     let categoriaValidar: Awaited<ReturnType<typeof db.categoriaCliente.findUnique>> = null
     if (categoriaId) {
       categoriaValidar = await db.categoriaCliente.findUnique({ where: { id: categoriaId } })
@@ -404,7 +404,7 @@ export async function POST(req: NextRequest) {
         return NextResponse.json(
           {
             success: false,
-            error: `El monto del préstamo (${montoNumValidar.toLocaleString('es-CO')}) supera el máximo permitido para la categoría "${categoriaValidar.nombre}" (${montoMaxCat.toLocaleString('es-CO')}). Para prestar un monto mayor, asigne al cliente una categoría superior.`,
+            error: `El monto del solicitud (${montoNumValidar.toLocaleString('es-CO')}) supera el máximo permitido para la categoría "${categoriaValidar.nombre}" (${montoMaxCat.toLocaleString('es-CO')}). Para prestar un monto mayor, asigne al cliente una categoría superior.`,
             codigo: 'MONTO_EXCEDE_CATEGORIA',
           },
           { status: 400 }
@@ -414,7 +414,7 @@ export async function POST(req: NextRequest) {
         return NextResponse.json(
           {
             success: false,
-            error: `El monto del préstamo (${montoNumValidar.toLocaleString('es-CO')}) es inferior al mínimo permitido para la categoría "${categoriaValidar.nombre}" (${montoMinCat.toLocaleString('es-CO')}).`,
+            error: `El monto del solicitud (${montoNumValidar.toLocaleString('es-CO')}) es inferior al mínimo permitido para la categoría "${categoriaValidar.nombre}" (${montoMinCat.toLocaleString('es-CO')}).`,
             codigo: 'MONTO_INFERIOR_CATEGORIA',
           },
           { status: 400 }
@@ -436,7 +436,7 @@ export async function POST(req: NextRequest) {
       const nCuotas = parseInt(numeroCuotasPersonalizada)
       const cuota = parseFloat(montoCuotaPersonalizada)
       tasaAnualFinal = tasaMen * 12
-      // Default unificado: si no se especifica mora, usar la tasa de interés anual del préstamo
+      // Default unificado: si no se especifica mora, usar la tasa de interés anual del solicitud
       tasaMoraFinal = parseFloat(tasaMoraAnual || tasaAnualFinal.toString())
       plazoFinal = frecuencia === 'MENSUAL' ? nCuotas : Math.ceil(nCuotas / (frecuencia === 'QUINCENAL' ? 2 : 4))
       cuotaFinal = cuota
@@ -501,7 +501,7 @@ export async function POST(req: NextRequest) {
       const nCuotas = parseInt(numeroCuotasFija)
 
       tasaAnualFinal = tasaMen * 12
-      // Default unificado: si no se especifica mora, usar la tasa de interés anual del préstamo
+      // Default unificado: si no se especifica mora, usar la tasa de interés anual del solicitud
       tasaMoraFinal = parseFloat(tasaMoraAnual || tasaAnualFinal.toString())
       // Calcular plazo en meses según la frecuencia
       if (frecuencia === 'MENSUAL') plazoFinal = nCuotas
@@ -564,7 +564,7 @@ export async function POST(req: NextRequest) {
       cuotaFinal = interesFijo
       nCuotasFinal = 0  // Sin cuotas programadas
 
-      // Fecha de la próxima cuota de interés (un mes después del préstamo)
+      // Fecha de la próxima cuota de interés (un mes después del solicitud)
       const proximaCuota = new Date(fechaBaseParaAmortizacion.getTime())
       proximaCuota.setMonth(proximaCuota.getMonth() + 1)
 
@@ -614,33 +614,33 @@ export async function POST(req: NextRequest) {
       nCuotasFinal = calculo.numeroCuotas
     }
 
-    // === Generar código del préstamo con estructura completa ===
+    // === Generar código del solicitud con estructura completa ===
     // Formato: INICIALES-CC-CEDULA-FECHA-NUMPRESTAMO
-    // Ej: JG-CC-1020509876-20260725-01 (Carlos Gómez, primer préstamo del día)
-    // Ej: JG-CC-1020509876-20260725-02 (Carlos Gómez, segundo préstamo del día)
+    // Ej: JG-CC-1020509876-20260725-01 (Carlos Gómez, primer solicitud del día)
+    // Ej: JG-CC-1020509876-20260725-02 (Carlos Gómez, segundo solicitud del día)
     //
     // Esto permite identificar rápidamente:
     //   - INICIALES: nombre y apellido del cliente
     //   - CC: tipo de documento (cédula de ciudadanía)
     //   - CEDULA: número de cédula
     //   - FECHA: fecha de creación (YYYYMMDD)
-    //   - NUMPRESTAMO: número del préstamo activo del cliente (01, 02, 03, etc.)
+    //   - NUMPRESTAMO: número del solicitud activo del cliente (01, 02, 03, etc.)
     // ============================================================================
 
-    // === Generar código del préstamo con estructura completa ===
+    // === Generar código del solicitud con estructura completa ===
     // Formato: INICIALES-CC-CEDULA-FECHA-NUMPRESTAMO
-    // Ej: JG-CC-1020509876-20260725-01 (Carlos Gómez, primer préstamo del día)
-    // Ej: JG-CC-1020509876-20260725-02 (Carlos Gómez, segundo préstamo del día)
+    // Ej: JG-CC-1020509876-20260725-01 (Carlos Gómez, primer solicitud del día)
+    // Ej: JG-CC-1020509876-20260725-02 (Carlos Gómez, segundo solicitud del día)
     //
     // Esto permite identificar rápidamente:
     //   - INICIALES: nombre y apellido del cliente
     //   - CC: tipo de documento (cédula de ciudadanía)
     //   - CEDULA: número de cédula
     //   - FECHA: fecha de creación (YYYYMMDD) — usa fechaBasePrestamo si se proporciona
-    //   - NUMPRESTAMO: número del préstamo activo del cliente (01, 02, 03, etc.)
+    //   - NUMPRESTAMO: número del solicitud activo del cliente (01, 02, 03, etc.)
     // ============================================================================
 
-    // Usar la fecha del préstamo (asignada) si se proporciona, si no, la fecha actual.
+    // Usar la fecha del solicitud (asignada) si se proporciona, si no, la fecha actual.
     const fechaCodigo = fechaBasePrestamo
     const fechaStr = `${fechaCodigo.getFullYear()}${(fechaCodigo.getMonth() + 1).toString().padStart(2, '0')}${fechaCodigo.getDate().toString().padStart(2, '0')}`
 
@@ -655,14 +655,14 @@ export async function POST(req: NextRequest) {
     // Cédula sin caracteres no numéricos
     const cedulaCliente = cliente.cedula.replace(/\D/g, '')
 
-    // Calcular el número del préstamo para este cliente (basado en préstamos previos + 1)
+    // Calcular el número del solicitud para este cliente (basado en solicitudes previos + 1)
     const prestamosPreviosCliente = await db.prestamo.count({ where: { clienteId } })
     const numPrestamo = (prestamosPreviosCliente + 1).toString().padStart(2, '0')
 
     // Construir código base
     const codigoBase = `${iniciales}-CC-${cedulaCliente}-${fechaStr}-${numPrestamo}`
 
-    // Verificar si ya existe un préstamo con ese código (caso edge: mismo cliente, mismo día)
+    // Verificar si ya existe un solicitud con ese código (caso edge: mismo cliente, mismo día)
     let codigo = codigoBase
     const existeCodigo = await db.prestamo.findUnique({ where: { codigo } })
     if (existeCodigo) {
@@ -687,8 +687,8 @@ export async function POST(req: NextRequest) {
       ? Math.round(parseFloat(montoPrincipal) * fondoGarantiaTasaDecimal * 100) / 100
       : 0
 
-    // === Crear préstamo + (si aplica) cerrar préstamo anterior en $transaction ===
-    // Si la renovación falla, NO se crea el préstamo nuevo (rollback atómico).
+    // === Crear solicitud + (si aplica) cerrar solicitud anterior en $transaction ===
+    // Si la renovación falla, NO se crea el solicitud nuevo (rollback atómico).
     const prestamo = await db.$transaction(async (tx) => {
       const nuevo = await tx.prestamo.create({
         data: {
@@ -714,7 +714,7 @@ export async function POST(req: NextRequest) {
           estado: aprobarYEnviarTyC ? 'PENDIENTE_ACEPTACION' : 'SOLICITUD',
           // === Fechas basadas en fechaBasePrestamo (fecha asignada) ===
           // fechaSolicitud reemplaza el @default(now()) de Prisma.
-          // fechaDesembolso se setea si el préstamo se aprueba y envía TyC directamente.
+          // fechaDesembolso se setea si el solicitud se aprueba y envía TyC directamente.
           fechaSolicitud: fechaBasePrestamo,
           fechaDesembolso: aprobarYEnviarTyC ? fechaBasePrestamo : null,
           fechaVencimiento: calculo.fechaVencimiento || null,
@@ -755,11 +755,11 @@ export async function POST(req: NextRequest) {
             : null,
           // === Fondo de Garantía (condicional) ===
           // Solo se marca como CARGADO si el gestor lo activó explícitamente.
-          // Si incluirFondoGarantia=false, el préstamo NO lleva fondo de garantía
+          // Si incluirFondoGarantia=false, el solicitud NO lleva fondo de garantía
           // y no se muestra ni se cobra en ningún flujo (estado de cuenta, pagos, caja).
           // Si incluirFondoGarantia=true, se marca cargado desde el inicio para que:
           //   - Aparezca como concepto en el estado de cuenta
-          //   - Se cargue automáticamente a CAJA-GARANTIA al activar el préstamo
+          //   - Se cargue automáticamente a CAJA-GARANTIA al activar el solicitud
           //   - Se refleje en el saldo total
           fondoGarantiaCargado: !!incluirFondoGarantia && fondoGarantiaMonto > 0,
           fondoGarantiaMonto: fondoGarantiaMonto,
@@ -803,13 +803,13 @@ export async function POST(req: NextRequest) {
           // === Renovación Anticipada (beneficio opcional del simulador del portal) ===
           // Cobro único de $9.900 COP cuando el cliente activa este beneficio.
           // El cobro se registra automáticamente en CAJA-RENOVACIONES al activarse
-          // el préstamo tras la aceptación de T&C.
+          // el solicitud tras la aceptación de T&C.
           renovacionAnticipada: !!renovacionAnticipada,
           renovacionAnticipadaCosto: renovacionAnticipada
             ? (Number(renovacionAnticipadaCosto) > 0 ? Number(renovacionAnticipadaCosto) : 9900)
             : 0,
           // === RENOVACIÓN DIFERIDA (Tarea T) ===
-          // Si es renovación, marcamos el nuevo préstamo como pendiente de T&C y
+          // Si es renovación, marcamos el nuevo solicitud como pendiente de T&C y
           // guardamos la referencia al crédito anterior. El crédito anterior NO se
           // cancela aquí — se cancela cuando el cliente acepta los T&C del nuevo
           // (ver /api/prestamos/[id]/aceptar-tyc-otp -> confirmarConFoto y
@@ -823,7 +823,7 @@ export async function POST(req: NextRequest) {
 
       // === Si es renovación, registrar trazabilidad SIN cancelar el anterior ===
       // (Tarea T) El crédito anterior se mantiene ACTIVO hasta que el cliente acepte
-      // los T&C del nuevo préstamo. Solo se registran bitácoras y el RenovacionPrestamo.
+      // los T&C del nuevo solicitud. Solo se registran bitácoras y el RenovacionPrestamo.
       // La cancelación real ocurre en /api/prestamos/[id]/aceptar-tyc-otp cuando
       // el cliente completa el flujo de firma (OTP + fotos + firma manuscrita).
       if (esRenovacion && prestamoARenovarId) {
@@ -839,12 +839,12 @@ export async function POST(req: NextRequest) {
           const diferencia = saldoAnterior - capitalNuevo
 
           // === NOTA IMPORTANTE ===
-          // NO se modifica el estado del préstamo anterior aquí.
+          // NO se modifica el estado del solicitud anterior aquí.
           // Queda en su estado actual (ACTIVO/EN_MORA/JURIDICO) hasta que el cliente
-          // acepte los T&C del nuevo préstamo.
+          // acepte los T&C del nuevo solicitud.
           // La cancelación se ejecuta en aceptar-tyc-otp -> cancelarPrestamoAnteriorSiRenovacion().
 
-          // === Bitácora del préstamo ANTERIOR (aviso de renovación en trámite) ===
+          // === Bitácora del solicitud ANTERIOR (aviso de renovación en trámite) ===
           await tx.bitacoraPrestamo.create({
             data: {
               prestamoId: prestamoARenovarId,
@@ -852,7 +852,7 @@ export async function POST(req: NextRequest) {
               usuarioNombre: 'Sistema',
               tipo: 'OTRO',
               titulo: `RENOVACIÓN EN TRÁMITE (PENDIENTE ACEPTACIÓN T&C)`,
-              descripcion: `Se creó un nuevo préstamo ${codigo} como renovación de este crédito.\n\n` +
+              descripcion: `Se creó un nuevo solicitud ${codigo} como renovación de este crédito.\n\n` +
                 `═══ ESTADO ACTUAL ═══\n` +
                 `• Este crédito sigue ACTIVO hasta que el cliente acepte los T&C del nuevo.\n` +
                 `• Saldo pendiente: ${formatearMoneda(saldoAnterior)}\n` +
@@ -871,7 +871,7 @@ export async function POST(req: NextRequest) {
             },
           })
 
-          // === Bitácora del NUEVO préstamo ===
+          // === Bitácora del NUEVO solicitud ===
           await tx.bitacoraPrestamo.create({
             data: {
               prestamoId: nuevo.id,
@@ -892,7 +892,7 @@ export async function POST(req: NextRequest) {
                   ? `• Cliente abonará la diferencia: ${formatearMoneda(diferencia)}\n`
                   : '') +
                 `\n⏳ El crédito anterior ${prestamoAnterior.codigo} se cancelará automáticamente ` +
-                `cuando el cliente acepte los T&C de este nuevo préstamo.\n\n` +
+                `cuando el cliente acepte los T&C de este nuevo solicitud.\n\n` +
                 `📅 Fecha de creación: ${new Date().toLocaleString('es-CO')}`,
               resultado: `Renovación de ${prestamoAnterior.codigo} (pendiente T&C)`,
               fechaEvento: new Date(),
@@ -947,7 +947,7 @@ export async function POST(req: NextRequest) {
               fechaInicioPago,
               motivoRenovacion: notas
                 ? `Renovación automática desde solicitud. Notas: ${notas}`
-                : 'Renovación automática desde solicitud de préstamo',
+                : 'Renovación automática desde solicitud de solicitud',
               usuarioNombre: 'Sistema',
             },
           })
@@ -958,7 +958,7 @@ export async function POST(req: NextRequest) {
     })
 
     // === Auto-marcar la solicitud web origen como CONVERTIDA ===
-    // Si el préstamo se creó a partir de una solicitud web del portal del cliente,
+    // Si el solicitud se creó a partir de una solicitud web del portal del cliente,
     // marcamos la solicitud como CONVERTIDA y activamos el flujo de firma del lado del cliente.
     // El cliente verá en su portal el flujo: cargue de fotos + firma manuscrita + OTP.
     if (solicitudWebOrigenId) {
@@ -979,7 +979,7 @@ export async function POST(req: NextRequest) {
             estado: 'CONVERTIDA',
             fecha: now.toISOString(),
             usuario: 'Sistema (auto)',
-            observacion: `Convertida automáticamente al crear préstamo ${codigo}. Flujo de firma activado para el cliente.`,
+            observacion: `Convertida automáticamente al crear solicitud ${codigo}. Flujo de firma activado para el cliente.`,
           })
           await db.solicitudWeb.update({
             where: { id: solicitudWebOrigenId },
@@ -994,7 +994,7 @@ export async function POST(req: NextRequest) {
           })
         }
       } catch (e) {
-        // No bloquear la creación del préstamo si falla la actualización de la solicitud
+        // No bloquear la creación del solicitud si falla la actualización de la solicitud
         console.error('[prestamos POST] Error auto-marcando solicitud web como CONVERTIDA:', e)
       }
     }

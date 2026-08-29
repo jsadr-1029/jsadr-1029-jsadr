@@ -77,7 +77,7 @@ interface Plantilla {
 }
 
 const CATEGORIAS = [
-  'PRÉSTAMOS',
+  'SOLICITUDES',
   'PAGOS',
   'FIRMA',
   'SEGURIDAD',

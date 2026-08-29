@@ -143,7 +143,7 @@ function calcularPlazoTotalDias(p: Prestamo): number {
 
 export function calcularConteoVigencia(p: Prestamo, ahora: Date = new Date()): ConteoVigencia {
   // Solo aplica a créditos activos, en mora, jurídicos o cancelados.
-  // No aplica a solicitudes pendientes ni a préstamos rechazados.
+  // No aplica a solicitudes pendientes ni a solicitudes rechazados.
   const estadosValidos = ['ACTIVO', 'EN_MORA', 'JURIDICO', 'CANCELADO']
   if (!estadosValidos.includes(p.estado)) {
     return {
@@ -216,12 +216,12 @@ export function calcularConteoVigencia(p: Prestamo, ahora: Date = new Date()): C
 }
 
 // =====================================================
-// Tipos auxiliares para la vista de Préstamos
+// Tipos auxiliares para la vista de Solicitudes
 // =====================================================
 
 // Parámetros de simulación que se pueden inyectar en el formulario
 // de PrestamosPanel (por ejemplo, al convertir una solicitud web del
-// buzón en un préstamo). Se aplican automáticamente al abrir el modal.
+// buzón en un solicitud). Se aplican automáticamente al abrir el modal.
 export interface SimulacionParams {
   clienteId?: string
   montoPrincipal: string
@@ -261,7 +261,7 @@ export interface SolicitudWebMin {
   // === Fecha de primer pago elegida por el cliente en la simulación ===
   // Se guarda como ISO string en la BD; se reenvía al formulario para
   // que el asesor vea la fecha que pidió el cliente y pueda confirmarla
-  // o cambiarla antes de crear el préstamo.
+  // o cambiarla antes de crear el solicitud.
   primerPagoFecha?: string | null
   // === Campos opcionales para preservar la flexibilidad elegida por el cliente ===
   flexibilidadFinanciera?: boolean
@@ -275,7 +275,7 @@ export interface SolicitudWebMin {
 // =====================================================
 // PrestamosPanel — panel interno de la pestaña "Solicitudes"
 // =====================================================
-// Lista de préstamos + modal para crear una nueva solicitud.
+// Lista de solicitudes + modal para crear una nueva solicitud.
 // Recibe opcionalmente `simulacionInicial` para precargar el formulario
 // (por ejemplo, al convertir una solicitud web del buzón).
 function PrestamosPanel({
@@ -348,8 +348,8 @@ function PrestamosPanel({
   const [tieneCodeudor, setTieneCodeudor] = useState(false)
   const [codeudorId, setCodeudorId] = useState('')
 
-  // === Fecha del préstamo (fecha asignada) ===
-  // Permite registrar una solicitud con la fecha real en que se realizó el préstamo,
+  // === Fecha del solicitud (fecha asignada) ===
+  // Permite registrar una solicitud con la fecha real en que se realizó el solicitud,
   // no la fecha actual del sistema. Todos los documentos generados (pagaré, carta,
   // tabla de amortización) usarán esta fecha como fecha base.
   // Por defecto es hoy (formato YYYY-MM-DD para el input type="date").
@@ -430,7 +430,7 @@ function PrestamosPanel({
 
   // === Renovación Anticipada (beneficio opcional del simulador del portal) ===
   // Cobro único de $9.900 COP cuando el cliente activa este beneficio en el
-  // simulador del portal del cliente. Se persiste en el préstamo y se cobra
+  // simulador del portal del cliente. Se persiste en el solicitud y se cobra
   // automáticamente al activarse tras la aceptación de T&C, registrándose
   // en la caja CAJA-RENOVACIONES.
   const [renovacionAnticipada, setRenovacionAnticipada] = useState(false)
@@ -438,7 +438,7 @@ function PrestamosPanel({
 
   // === Cobro de Pagaré + Carta de Instrucciones ===
   // Cargo editable (por defecto $19.900 COP) que se cobra UNA sola vez al cliente
-  // cuando el préstamo incluye generar pagare + carta de instrucciones.
+  // cuando el solicitud incluye generar pagare + carta de instrucciones.
   // Se explica en el estado de cuenta como concepto "Pagaré + Carta de Instrucciones".
   const [cobroPagareCarta, setCobroPagareCarta] = useState(true)
   const [valorPagareCarta, setValorPagareCarta] = useState<number>(19900)
@@ -452,12 +452,12 @@ function PrestamosPanel({
   const [valorTarifaPlataforma, setValorTarifaPlataforma] = useState<number>(4900)
 
   // === ID de la solicitud web origen (para auto-marcarla como CONVERTIDA) ===
-  // Cuando el admin convierte una solicitud web en préstamo, este ID se pasa
+  // Cuando el admin convierte una solicitud web en solicitud, este ID se pasa
   // al backend para que marque automáticamente la solicitud como CONVERTIDA
   // y active el flujo de firma del lado del cliente.
   const [solicitudWebOrigenId, setSolicitudWebOrigenId] = useState<string | null>(null)
 
-  // === Función: aplicar condiciones de un préstamo al formulario ===
+  // === Función: aplicar condiciones de un solicitud al formulario ===
   // Extraída para reutilizar tanto al seleccionar un crédito a renovar como
   // al pulsar "Restablecer condiciones originales".
   const aplicarCondicionesAlFormulario = (p: any) => {
@@ -522,7 +522,7 @@ function PrestamosPanel({
     }
   }
 
-  // === Función: cargar saldo pendiente del préstamo a renovar + auto-rellenar formulario ===
+  // === Función: cargar saldo pendiente del solicitud a renovar + auto-rellenar formulario ===
   // Cuando el admin selecciona un crédito a renovar, el sistema "arrastra"
   // automáticamente todas las condiciones (tasa, monto, cuotas, frecuencia,
   // modalidad, etc.) para que el admin pueda modificarlas.
@@ -582,7 +582,7 @@ function PrestamosPanel({
         })
       }
     } catch (e: any) {
-      console.error('Error cargando préstamo a renovar:', e)
+      console.error('Error cargando solicitud a renovar:', e)
       toast({
         title: 'Error',
         description: 'No se pudieron cargar las condiciones del crédito',
@@ -788,7 +788,7 @@ function PrestamosPanel({
     //      cuota #1 cae en fechaPrimerCuota, las demás siguen periodicidad.
     //      Para lograrlo, calculamos `fechaInicio = fechaPrimerCuota - 1 periodo`
     //      y lo pasamos como `fechaDesembolso` a la función de amortización.
-    //   3. fechaPrestamo → comportamiento por defecto (cuotas desde hoy/fecha préstamo)
+    //   3. fechaPrestamo → comportamiento por defecto (cuotas desde hoy/fecha solicitud)
     let fechaBaseParaAmortizacion: Date | undefined = undefined
     if (periodoCorte && fechaPrimerCorte) {
       fechaBaseParaAmortizacion = fechaPrimerCorte
@@ -1062,7 +1062,7 @@ function PrestamosPanel({
   }, [requiereDocumentos, clienteId, clientes])
 
   // Aplicar parámetros de simulación inyectados (por ejemplo, al convertir
-  // una solicitud web del buzón en préstamo). Se ejecuta cuando cambia
+  // una solicitud web del buzón en solicitud). Se ejecuta cuando cambia
   // `simulacionInicial` y precarga el formulario abriendo el modal.
   useEffect(() => {
     if (!simulacionInicial) return
@@ -1078,7 +1078,7 @@ function PrestamosPanel({
     // === Preservar ID de la solicitud web origen ===
     setSolicitudWebOrigenId(simulacionInicial.solicitudWebId || null)
     // === Precargar fecha de primera cuota (la que pidió el cliente en el simulador) ===
-    // El asesor puede confirmarla, cambiarla o borrarla antes de crear el préstamo.
+    // El asesor puede confirmarla, cambiarla o borrarla antes de crear el solicitud.
     if (simulacionInicial.fechaPrimerCuota) {
       try {
         const d = new Date(simulacionInicial.fechaPrimerCuota)
@@ -1329,8 +1329,8 @@ function PrestamosPanel({
         docsDatosAdicionales,
         aprobarYEnviarTyC,
         notas,
-        // === Fecha del préstamo (fecha asignada) ===
-        // Se envía al backend para que el código del préstamo, fechaSolicitud,
+        // === Fecha del solicitud (fecha asignada) ===
+        // Se envía al backend para que el código del solicitud, fechaSolicitud,
         // fechaDesembolso y todos los documentos usen esta fecha como base.
         fechaPrestamo,
       }
@@ -1400,7 +1400,7 @@ function PrestamosPanel({
       }
 
       // === ID de la solicitud web origen (para auto-marcarla como CONVERTIDA) ===
-      // Cuando se crea el préstamo, el backend marca la solicitud web como CONVERTIDA
+      // Cuando se crea el solicitud, el backend marca la solicitud web como CONVERTIDA
       // y activa el flujo de firma del lado del cliente.
       if (solicitudWebOrigenId) {
         body.solicitudWebOrigenId = solicitudWebOrigenId
@@ -1481,11 +1481,11 @@ function PrestamosPanel({
               const clienteNombre = jsonFirma.data.cliente.nombre
               const linkFirma = jsonFirma.data.linkFirma
               const telefono = jsonFirma.data.cliente.telefono
-              const mensajeFirma = `🔐 *FIRMA ELECTRÓNICA - PRÉSTAMO ${json.data.codigo}*
+              const mensajeFirma = `🔐 *FIRMA ELECTRÓNICA - SOLICITUD ${json.data.codigo}*
 
 Hola *${clienteNombre}*,
 
-Como *DEUDOR* del préstamo, necesitas firmar electrónicamente:
+Como *DEUDOR* del solicitud, necesitas firmar electrónicamente:
 
 📋 *Pasos a seguir:*
 1. Ingresa al siguiente enlace:
@@ -1507,11 +1507,11 @@ ${linkFirma}
                 const codeudorNombre = jsonFirma.data.codeudor.nombre
                 const codeudorTelefono = jsonFirma.data.codeudor.telefono
                 const linkFirmaCodeudor = jsonFirma.data.linkFirmaCodeudor
-                const mensajeFirmaCodeudor = `🔐 *FIRMA ELECTRÓNICA - PRÉSTAMO ${json.data.codigo}*
+                const mensajeFirmaCodeudor = `🔐 *FIRMA ELECTRÓNICA - SOLICITUD ${json.data.codigo}*
 
 Hola *${codeudorNombre}*,
 
-Como *CODEUDOR* del préstamo, necesitas firmar electrónicamente:
+Como *CODEUDOR* del solicitud, necesitas firmar electrónicamente:
 
 📋 *Pasos a seguir:*
 1. Ingresa al siguiente enlace:
@@ -1532,7 +1532,7 @@ ${linkFirmaCodeudor}
                 }, 1500)
 
                 toast({
-                  title: '✅ Préstamo creado + Firmas enviadas a DEUDOR y CODEUDOR',
+                  title: '✅ Solicitud creado + Firmas enviadas a DEUDOR y CODEUDOR',
                   description: `Código ${json.data.codigo}. Se abrieron 2 ventanas de WhatsApp: una para ${clienteNombre} (deudor) y otra para ${codeudorNombre} (codeudor). Ambos deben firmar con OTP por ${canalFirma === 'EMAIL' ? 'correo' : canalFirma === 'WHATSAPP' ? 'WhatsApp' : 'WhatsApp o correo'}.`,
                   duration: 12000,
                 })
@@ -1548,7 +1548,7 @@ ${linkFirmaCodeudor}
               } else {
                 // Sin codeudor: solo deudor
                 toast({
-                  title: '✅ Préstamo creado + Solicitud de firma electrónica enviada',
+                  title: '✅ Solicitud creado + Solicitud de firma electrónica enviada',
                   description: `Código ${json.data.codigo}. Se abrió WhatsApp con el link de firma. El cliente debe: subir foto del documento, selfie con cédula, dibujar firma y validar código ${canalFirma === 'EMAIL' ? 'por correo' : canalFirma === 'WHATSAPP' ? 'por WhatsApp' : 'por WhatsApp o correo'}.`,
                   duration: 10000,
                 })
@@ -1564,7 +1564,7 @@ ${linkFirmaCodeudor}
               }
             } else {
               toast({
-                title: '⚠️ Préstamo creado pero no se pudo iniciar firma',
+                title: '⚠️ Solicitud creado pero no se pudo iniciar firma',
                 description: jsonFirma.error || 'Error desconocido',
                 variant: 'destructive',
                 duration: 8000,
@@ -1581,20 +1581,20 @@ ${linkFirmaCodeudor}
           // Abrir WhatsApp automáticamente con el mensaje de T&C
           window.open(json.linkTycWaMe, '_blank', 'noopener,noreferrer')
           toast({
-            title: '✅ Préstamo creado - Abre WhatsApp para enviar T&C',
+            title: '✅ Solicitud creado - Abre WhatsApp para enviar T&C',
             description: `Código ${json.data.codigo}. Se abrió WhatsApp con el mensaje de T&C. Haz clic en enviar desde WhatsApp para que el cliente reciba el link de aceptación.`,
             duration: 8000,
           })
         } else if (json.linkSolicitudWaMe) {
           window.open(json.linkSolicitudWaMe, '_blank', 'noopener,noreferrer')
           toast({
-            title: 'Préstamo creado - Abre WhatsApp',
+            title: 'Solicitud creado - Abre WhatsApp',
             description: `Código ${json.data.codigo}. Se abrió WhatsApp con el mensaje de solicitud.`,
             duration: 6000,
           })
         } else {
           toast({
-            title: 'Préstamo creado',
+            title: 'Solicitud creado',
             description: `Código ${json.data.codigo}.`,
           })
         }
@@ -1603,7 +1603,7 @@ ${linkFirmaCodeudor}
         cargar()
         onChanged()
         // === ORDEN OBLIGATORIA 3: Abrir vista previa siempre que se termine un proceso ===
-        // Después de crear el préstamo, abrir automáticamente el modal de detalle
+        // Después de crear el solicitud, abrir automáticamente el modal de detalle
         // para que el usuario vea el resultado (código, cuotas, documentos generados, etc.)
         if (json.data?.id) {
           setTimeout(() => {
@@ -1613,7 +1613,7 @@ ${linkFirmaCodeudor}
       } else {
         // === Manejo específico del bloqueo por mora ===
         // Si el cliente tiene créditos en mora, la API devuelve codigo=CLIENTE_EN_MORA_BLOQUEADO
-        // y el detalle de los préstamos en mora. Mostramos un toast detallado y permitimos
+        // y el detalle de los solicitudes en mora. Mostramos un toast detallado y permitimos
         // al admin decidir si forzar la creación con confirmación explícita.
         if (json.codigo === 'CLIENTE_EN_MORA_BLOQUEADO' && json.prestamosEnMora?.length > 0) {
           const detalleMora = json.prestamosEnMora.map((p: any) =>
@@ -1621,7 +1621,7 @@ ${linkFirmaCodeudor}
           ).join('\n')
           toast({
             title: '🚫 Cliente bloqueado por mora',
-            description: `El cliente tiene ${json.prestamosEnMora.length} crédito(s) en mora.\n${detalleMora}\n\nResuelva la mora antes de crear un nuevo préstamo.`,
+            description: `El cliente tiene ${json.prestamosEnMora.length} crédito(s) en mora.\n${detalleMora}\n\nResuelva la mora antes de crear un nuevo solicitud.`,
             variant: 'destructive',
             duration: 12000,
           })
@@ -1655,7 +1655,7 @@ ${linkFirmaCodeudor}
     setDireccion('')
     setAprobarYEnviarTyC(true)
     setNotas('')
-    // Reset fecha del préstamo a hoy
+    // Reset fecha del solicitud a hoy
     const hoy = new Date()
     const yyyy = hoy.getFullYear()
     const mm = String(hoy.getMonth() + 1).padStart(2, '0')
@@ -1701,7 +1701,7 @@ ${linkFirmaCodeudor}
     }
   }
 
-  // === ELIMINAR PRÉSTAMO (borra todo el registro) ===
+  // === ELIMINAR SOLICITUD (borra todo el registro) ===
   const [prestamoAEliminar, setPrestamoAEliminar] = useState<Prestamo | null>(null)
   const [motivoEliminacion, setMotivoEliminacion] = useState('')
   const [eliminandoPrestamo, setEliminandoPrestamo] = useState(false)
@@ -1716,7 +1716,7 @@ ${linkFirmaCodeudor}
     if (motivoEliminacion.trim().length < 5) {
       toast({
         title: 'Motivo requerido',
-        description: 'Explica por qué eliminas el préstamo (mínimo 5 caracteres)',
+        description: 'Explica por qué eliminas el solicitud (mínimo 5 caracteres)',
         variant: 'destructive',
       })
       return
@@ -1730,7 +1730,7 @@ ${linkFirmaCodeudor}
       const json = await res.json()
       if (json.success) {
         toast({
-          title: '🗑️ Préstamo eliminado',
+          title: '🗑️ Solicitud eliminado',
           description: json.mensaje,
           duration: 8000,
         })
@@ -1751,7 +1751,7 @@ ${linkFirmaCodeudor}
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Préstamos"
+        title="Solicitudes"
         subtitle="Solicitudes y créditos vigentes"
         icon={<FileText className="w-5 h-5" />}
         actions={
@@ -1790,7 +1790,7 @@ ${linkFirmaCodeudor}
       {clientes.length === 0 && (
         <Card className="border-amber-200 bg-amber-50">
           <CardContent className="p-4 text-sm text-amber-800">
-            ⚠️ Para crear un préstamo primero debes registrar al menos un cliente en la sección Clientes.
+            ⚠️ Para crear un solicitud primero debes registrar al menos un cliente en la sección Clientes.
           </CardContent>
         </Card>
       )}
@@ -1853,7 +1853,7 @@ ${linkFirmaCodeudor}
               ) : prestamosFiltrados.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={12} className="text-center py-8 text-muted-foreground">
-                    No hay préstamos registrados.
+                    No hay solicitudes registrados.
                   </TableCell>
                 </TableRow>
               ) : (
@@ -1864,7 +1864,7 @@ ${linkFirmaCodeudor}
                       {p.cliente?.esPrueba && (
                         <span
                           className="ml-1 inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-100 text-amber-800 border border-amber-300 align-middle"
-                          title="Préstamo de cliente de prueba: no se contabiliza en saldos reales"
+                          title="Solicitud de cliente de prueba: no se contabiliza en saldos reales"
                         >
                           PRUEBA
                         </span>
@@ -1996,7 +1996,7 @@ ${linkFirmaCodeudor}
                         </Button>
                         {/* === Otros Síes — ver / descargar Otros Síes firmados === */}
                         {/* Dropdown con lazy-load: al abrir, hace fetch de los Otros Síes */}
-                        {/* del préstamo y habilita Ver / Descargar para los FIRMADO. */}
+                        {/* del solicitud y habilita Ver / Descargar para los FIRMADO. */}
                         <OtroSiAccionesDropdown
                           prestamoId={p.id}
                           prestamoCodigo={p.codigo}
@@ -2025,7 +2025,7 @@ ${linkFirmaCodeudor}
                           <Shield className="w-4 h-4" />
                         </Button>
                         {/* === ¿QUÉ CAMBIÓ? — Análisis de comportamiento de pagos === */}
-                        {/* Solo se muestra para préstamos con pagos (ACTIVO/EN_MORA/JURIDICO/CANCELADO). */}
+                        {/* Solo se muestra para solicitudes con pagos (ACTIVO/EN_MORA/JURIDICO/CANCELADO). */}
                         {/* Compara el comportamiento actual vs anterior y muestra los */}
                         {/* cambios detectados: pagos menores, atrasos, ritmo de pago, etc. */}
                         {['ACTIVO', 'EN_MORA', 'JURIDICO', 'CANCELADO'].includes(p.estado) && (
@@ -2060,7 +2060,7 @@ ${linkFirmaCodeudor}
                                     const codigos = json.data?.codigos || []
                                     const esDual = json.data?.requiereCodeudor
                                     const desc = esDual
-                                      ? `Doble OTP: 1 al TITULAR (${codigos[0]?.email}) y 1 al CODEUDOR (${codigos[1]?.email}). El préstamo se activa solo cuando el gestor verifique AMBOS códigos.`
+                                      ? `Doble OTP: 1 al TITULAR (${codigos[0]?.email}) y 1 al CODEUDOR (${codigos[1]?.email}). El solicitud se activa solo cuando el gestor verifique AMBOS códigos.`
                                       : `Al correo ${codigos[0]?.email || json.data.email}. Revisa y pide el código al cliente.`
                                     toast({
                                       title: esDual ? '🔐 Doble código enviado' : '🔐 Código enviado',
@@ -2094,13 +2094,13 @@ ${linkFirmaCodeudor}
                             </Button>
                           </>
                         )}
-                        {/* === Botón ELIMINAR préstamo (siempre disponible) === */}
+                        {/* === Botón ELIMINAR solicitud (siempre disponible) === */}
                         <Button
                           size="sm"
                           variant="ghost"
                           className="text-red-700 hover:text-red-800 hover:bg-red-50"
                           onClick={() => eliminarPrestamo(p)}
-                          title="Eliminar préstamo (borra TODO el registro)"
+                          title="Eliminar solicitud (borra TODO el registro)"
                         >
                           <Trash2 className="w-4 h-4" />
                         </Button>
@@ -2114,13 +2114,13 @@ ${linkFirmaCodeudor}
         </CardContent>
       </Card>
 
-      {/* === MODAL ELIMINAR PRÉSTAMO === */}
+      {/* === MODAL ELIMINAR SOLICITUD === */}
       <Dialog open={!!prestamoAEliminar} onOpenChange={(open) => !open && setPrestamoAEliminar(null)}>
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-red-700">
               <Trash2 className="w-5 h-5" />
-              Eliminar Préstamo
+              Eliminar Solicitud
             </DialogTitle>
           </DialogHeader>
           {prestamoAEliminar && (
@@ -2128,10 +2128,10 @@ ${linkFirmaCodeudor}
               <div className="p-3 rounded bg-red-50 border border-red-200 text-sm space-y-1">
                 <p className="text-red-900 font-semibold">⚠️ Esta acción NO se puede deshacer</p>
                 <p className="text-red-800">
-                  Se borrará permanentemente el préstamo y TODOS sus registros asociados:
+                  Se borrará permanentemente el solicitud y TODOS sus registros asociados:
                 </p>
                 <ul className="list-disc list-inside text-xs text-red-700 ml-2">
-                  <li>Préstamo: <strong>{prestamoAEliminar.codigo}</strong></li>
+                  <li>Solicitud: <strong>{prestamoAEliminar.codigo}</strong></li>
                   <li>Cliente: <strong>{prestamoAEliminar.cliente.nombre}</strong></li>
                   <li>Estado: <strong>{prestamoAEliminar.estado}</strong></li>
                   <li>Monto: <strong>{formatearMoneda(prestamoAEliminar.montoPrincipal)}</strong></li>
@@ -2144,7 +2144,7 @@ ${linkFirmaCodeudor}
                   <li>Firmas electrónicas (con fotos y OTP)</li>
                   <li>Notificaciones enviadas</li>
                   <li>Documentos del gestor vinculados</li>
-                  <li>Bitácora del préstamo</li>
+                  <li>Bitácora del solicitud</li>
                   <li>Caso jurídico (si existe)</li>
                 </ul>
               </div>
@@ -2196,7 +2196,7 @@ ${linkFirmaCodeudor}
       <Dialog open={modalAbierto} onOpenChange={setModalAbierto}>
         <DialogContent className="max-w-3xl max-h-[95vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Nueva Solicitud de Préstamo</DialogTitle>
+            <DialogTitle>Nueva Solicitud de Solicitud</DialogTitle>
           </DialogHeader>
           <form onSubmit={handleSubmit} className="space-y-4">
             {/* === Tipo de solicitud: Nuevo o Renovación === */}
@@ -2222,7 +2222,7 @@ ${linkFirmaCodeudor}
                     Crédito Nuevo
                   </div>
                   <div className="text-xs text-muted-foreground mt-1">
-                    Solicitud de préstamo sin relación a créditos anteriores
+                    Solicitud de solicitud sin relación a créditos anteriores
                   </div>
                 </button>
                 <button
@@ -2245,16 +2245,16 @@ ${linkFirmaCodeudor}
               </div>
             </div>
 
-            {/* === FECHA DEL PRÉSTAMO (fecha asignada) ===
-                Permite registrar la fecha real en que se realizó el préstamo.
+            {/* === FECHA DEL SOLICITUD (fecha asignada) ===
+                Permite registrar la fecha real en que se realizó el solicitud.
                 Todos los documentos generados (pagaré, carta, tabla de amortización)
                 usarán esta fecha como fecha base.
-                Ej: si el préstamo se hizo el 2/08/2026 y se carga el 5/08/2026,
+                Ej: si el solicitud se hizo el 2/08/2026 y se carga el 5/08/2026,
                 todos los documentos empezarán desde el 2/08/2026. */}
             <div className="space-y-2 p-3 rounded-md bg-emerald-50 dark:bg-emerald-900/60 border-2 border-emerald-300 dark:border-emerald-500 shadow-sm">
               <Label htmlFor="fechaPrestamo" className="text-sm font-semibold flex items-center gap-1.5 text-emerald-900 dark:text-emerald-100">
                 <Calendar className="w-3.5 h-3.5 text-emerald-700 dark:text-emerald-300" />
-                Fecha del préstamo *
+                Fecha del solicitud *
               </Label>
               <Input
                 id="fechaPrestamo"
@@ -2271,7 +2271,7 @@ ${linkFirmaCodeudor}
                 })()}
               />
               <p className="text-xs text-emerald-900 dark:text-emerald-100 font-medium">
-                📅 Esta será la fecha base del préstamo. Todos los documentos generados (pagaré, carta, tabla de amortización) y el código del préstamo usarán esta fecha, no la fecha actual del sistema.
+                📅 Esta será la fecha base del solicitud. Todos los documentos generados (pagaré, carta, tabla de amortización) y el código del solicitud usarán esta fecha, no la fecha actual del sistema.
               </p>
               {fechaPrestamo !== (() => {
                 const hoy = new Date()
@@ -2281,19 +2281,19 @@ ${linkFirmaCodeudor}
                 return `${yyyy}-${mm}-${dd}`
               })() && (
                 <p className="text-xs text-amber-900 dark:text-amber-200 font-semibold bg-amber-100 dark:bg-amber-900/60 p-2 rounded border border-amber-300 dark:border-amber-700">
-                  ⚠️ Estás registrando un préstamo con fecha retroactiva ({fechaPrestamo}). Verifica que sea correcto.
+                  ⚠️ Estás registrando un solicitud con fecha retroactiva ({fechaPrestamo}). Verifica que sea correcto.
                 </p>
               )}
             </div>
 
             {/* === FECHA DE LA PRIMERA CUOTA (opcional, modificable por el asesor) ===
-                Permite definir cuándo vence la PRIMERA cuota del préstamo.
+                Permite definir cuándo vence la PRIMERA cuota del solicitud.
                 Casos de uso:
                 - El cliente pidió una fecha específica en el simulador del portal
                   (campo `primerPagoFecha` de la SolicitudWeb). Esa fecha se
                   precarga acá cuando el asesor convierte una solicitud del buzón.
                 - El asesor quiere manualmente definir el primer vencimiento
-                  (ej: préstamo el 17/08 pero primer pago el 25/08 en lugar
+                  (ej: solicitud el 17/08 pero primer pago el 25/08 en lugar
                   del 17/09 que sería el cálculo estándar de "hoy + 1 mes").
 
                 Comportamiento:
@@ -2317,7 +2317,7 @@ ${linkFirmaCodeudor}
                     onClick={() => setFechaPrimerCuota('')}
                     className="text-xs text-sky-800 dark:text-sky-200 hover:underline font-medium"
                   >
-                    Usar fecha del préstamo
+                    Usar fecha del solicitud
                   </button>
                 )}
               </div>
@@ -2335,7 +2335,7 @@ ${linkFirmaCodeudor}
                 ) : fechaPrimerCuota ? (
                   <>📅 La <strong>primera cuota</strong> vencerá el <strong>{formatearFecha(new Date(fechaPrimerCuota + 'T12:00:00'))}</strong>. Las demás cuotas seguirán la periodicidad ({frecuencia.toLowerCase()}) desde esa fecha.</>
                 ) : (
-                  <>💡 Por defecto, la primera cuota vence <strong>1 periodo</strong> después de la fecha del préstamo. Si el cliente pidió una fecha específica en el simulador del portal, aparecerá acá automáticamente — puedes confirmarla, cambiarla o dejarla vacía.</>
+                  <>💡 Por defecto, la primera cuota vence <strong>1 periodo</strong> después de la fecha del solicitud. Si el cliente pidió una fecha específica en el simulador del portal, aparecerá acá automáticamente — puedes confirmarla, cambiarla o dejarla vacía.</>
                 )}
               </p>
             </div>
@@ -2343,7 +2343,7 @@ ${linkFirmaCodeudor}
             {/* === PLAN DE AMORTIZACIÓN (vista previa dinámica) ===
                 Se actualiza automáticamente al cambiar:
                 - Monto, tasa, plazo, frecuencia, modalidad
-                - Fecha del préstamo, fecha primera cuota, periodo de corte
+                - Fecha del solicitud, fecha primera cuota, periodo de corte
                 - Cargos iniciales (pagaré, tarifa plataforma, flexibilidad, fondo garantía)
 
                 Muestra tabla completa de cuotas con fechas, capital, interés y saldo,
@@ -2362,11 +2362,11 @@ ${linkFirmaCodeudor}
 
             {/* === PERIODO DE CORTE + DÍAS CAUSADOS ANTES DEL CORTE ===
                 Caso de uso: cliente solicita crédito ANTES de la fecha de corte.
-                Ej: préstamo 2/08/2026, periodo "5-20" → corte más cercano = 5/08/2026.
+                Ej: solicitud 2/08/2026, periodo "5-20" → corte más cercano = 5/08/2026.
                 El sistema cobra 3 días de interés anticipado (valorDiasCausados) y
                 las cuotas se programan desde el 5/08/2026 (fechaPrimerCorte).
 
-                Si no se selecciona periodo, el préstamo se comporta normalmente
+                Si no se selecciona periodo, el solicitud se comporta normalmente
                 (las cuotas se programan desde fechaPrestamo).
             */}
             <div className="space-y-3 p-3 rounded-md bg-indigo-50 dark:bg-indigo-900/60 border-2 border-indigo-300 dark:border-indigo-500 shadow-sm">
@@ -2423,7 +2423,7 @@ ${linkFirmaCodeudor}
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
                     <div className="space-y-1 p-2 rounded bg-indigo-50 dark:bg-indigo-950/80 border border-indigo-200 dark:border-indigo-800">
                       <div className="text-indigo-900 dark:text-indigo-200 font-semibold flex items-center gap-1">
-                        📅 Fecha del préstamo
+                        📅 Fecha del solicitud
                       </div>
                       <div className="font-bold text-slate-900 dark:text-white text-sm">
                         {formatearFecha(new Date(fechaPrestamo + 'T12:00:00'))}
@@ -2451,7 +2451,7 @@ ${linkFirmaCodeudor}
                     <div className="text-xs text-indigo-950 dark:text-indigo-50 bg-indigo-100 dark:bg-indigo-800 rounded p-2.5 border border-indigo-300 dark:border-indigo-600 font-medium">
                       {diasCausadosAntes > 0 ? (
                         <>
-                          📊 El préstamo se entrega el{' '}
+                          📊 El solicitud se entrega el{' '}
                           <strong className="text-indigo-950 dark:text-white">{formatearFecha(new Date(fechaPrestamo + 'T12:00:00'))}</strong>{' '}
                           pero el corte más cercano es el{' '}
                           <strong className="text-indigo-950 dark:text-white">{formatearFecha(fechaPrimerCorte)}</strong>. El sistema cobrará{' '}
@@ -2461,7 +2461,7 @@ ${linkFirmaCodeudor}
                         </>
                       ) : (
                         <>
-                          ✅ La fecha del préstamo cae <strong className="text-indigo-950 dark:text-white">justo en un día de corte</strong>{' '}
+                          ✅ La fecha del solicitud cae <strong className="text-indigo-950 dark:text-white">justo en un día de corte</strong>{' '}
                           ({formatearFecha(fechaPrimerCorte)}). No hay días causados adicionales y
                           las cuotas se programarán desde esta fecha.
                         </>
@@ -2539,7 +2539,7 @@ ${linkFirmaCodeudor}
                     <div className="p-2.5 rounded-md bg-emerald-100 dark:bg-emerald-700/80 border-2 border-emerald-400 dark:border-emerald-400 text-xs text-emerald-950 dark:text-emerald-50 font-medium">
                       💰 Se cobrarán <strong>{formatearMoneda(valorDiasCausados)}</strong> adicionales
                       por {diasCausadosAntes} día{diasCausadosAntes === 1 ? '' : 's'} de interés anticipado.
-                      Este valor se suma al total a pagar del préstamo.
+                      Este valor se suma al total a pagar del solicitud.
                     </div>
                   )}
                 </div>
@@ -2585,7 +2585,7 @@ ${linkFirmaCodeudor}
                   <p className="text-[11px] text-blue-900 dark:text-blue-200 font-medium bg-blue-100 dark:bg-blue-800/80 p-2 rounded border border-blue-300 dark:border-blue-600">
                     💡 Se cobrarán <strong className="text-blue-950 dark:text-white">{formatearMoneda((parseFloat(montoPrincipal) || 0) * (tasaFondoGarantia / 100))}</strong> adicionales
                     por concepto de fondo de garantía ({tasaFondoGarantia}% del monto principal).
-                    Este valor se suma al total a pagar del préstamo.
+                    Este valor se suma al total a pagar del solicitud.
                   </p>
                 </div>
               )}
@@ -2625,7 +2625,7 @@ ${linkFirmaCodeudor}
                   </p>
                 </div>
 
-                {/* === Info del préstamo a renovar + condiciones originales === */}
+                {/* === Info del solicitud a renovar + condiciones originales === */}
                 {infoPrestamoRenovacion && (
                   <div className="p-3 rounded-md bg-amber-100 dark:bg-amber-900/30 border border-amber-400 dark:border-amber-600 text-xs space-y-3">
                     <div className="flex items-center justify-between gap-2">
@@ -2731,7 +2731,7 @@ ${linkFirmaCodeudor}
                       </p>
                       <ul className="list-disc list-inside mt-1 space-y-0.5 text-amber-800 dark:text-amber-200">
                         <li>El crédito anterior se <strong>cierra</strong> (estado: CANCELADO, saldos en 0)</li>
-                        <li>El nuevo préstamo se crea por el <strong>capital que ingreses</strong></li>
+                        <li>El nuevo solicitud se crea por el <strong>capital que ingreses</strong></li>
                         <li>El saldo anterior se descuenta del nuevo capital</li>
                         <li>Si el capital nuevo &gt; saldo anterior → entregas el <strong>excedente</strong> en efectivo</li>
                         <li>Si el capital nuevo &lt; saldo anterior → cliente abona la <strong>diferencia</strong></li>
@@ -2779,7 +2779,7 @@ ${linkFirmaCodeudor}
                   </div>
                 </div>
                 <div className="pt-2 border-t border-blue-300 dark:border-blue-700 text-blue-700 dark:text-blue-300">
-                  <p>📋 El nuevo préstamo se creará por <strong>{formatearMoneda(parseFloat(montoPrincipal) || 0)}</strong> de capital.</p>
+                  <p>📋 El nuevo solicitud se creará por <strong>{formatearMoneda(parseFloat(montoPrincipal) || 0)}</strong> de capital.</p>
                   <p>💸 El crédito anterior se cierra y el cliente recibe <strong>{formatearMoneda(Math.max(0, (parseFloat(montoPrincipal) || 0) - saldoPendienteRenovacion))}</strong> en efectivo.</p>
                   {(parseFloat(montoPrincipal) || 0) < saldoPendienteRenovacion && (
                     <p className="text-amber-700 dark:text-amber-300 font-medium mt-1">
@@ -2926,7 +2926,7 @@ ${linkFirmaCodeudor}
                 <span>
                   Este cliente <strong>no tiene tasa personalizada</strong> en su ficha.
                   Se usará la tasa que definas abajo (categoría o manual).
-                  Para asignarle una tasa fija permanente, edítalo en el módulo <strong>Préstamos → Clientes</strong>.
+                  Para asignarle una tasa fija permanente, edítalo en el módulo <strong>Solicitudes → Clientes</strong>.
                 </span>
               </div>
             )}
@@ -2951,7 +2951,7 @@ ${linkFirmaCodeudor}
                   <AlertDescription className="text-xs">
                     <strong>Modalidad especial:</strong> El cliente paga SOLO intereses fijos mensuales
                     mientras mantenga deuda de capital. El capital se abona aparte mediante pagos
-                    extraordinarios acordados. El saldo real del préstamo = capital − abonos extraordinarios.
+                    extraordinarios acordados. El saldo real del solicitud = capital − abonos extraordinarios.
                     Los intereses se generan mes a mes hasta que el capital quede en $0.
                   </AlertDescription>
                 </Alert>
@@ -3340,7 +3340,7 @@ ${linkFirmaCodeudor}
                       <p className="text-[11px] text-purple-700 dark:text-purple-300 mt-2">
                         El cliente paga la cuota mensual fija de intereses hasta que el capital quede en $0.
                         El capital se abona aparte mediante pagos extraordinarios acordados con el gestor.
-                        El saldo real del préstamo = capital − abonos extraordinarios.
+                        El saldo real del solicitud = capital − abonos extraordinarios.
                       </p>
                     </div>
                   )}
@@ -3405,7 +3405,7 @@ ${linkFirmaCodeudor}
                       <p className="text-xs text-purple-900 dark:text-purple-100">
                         <strong>💡 Funcionamiento:</strong> El cliente paga <strong>{formatearMoneda(calculo.montoCuota)}</strong> cada mes
                         (solo intereses). El capital de <strong>{formatearMoneda(parseFloat(montoPrincipal) || 0)}</strong> se abona aparte mediante
-                        pagos extraordinarios. El saldo real del préstamo = capital − abonos extraordinarios.
+                        pagos extraordinarios. El saldo real del solicitud = capital − abonos extraordinarios.
                         Los intereses se siguen pagando mes a mes hasta que el capital quede en $0.
                       </p>
                       {(calculo as any).proximaCuotaInteresFecha && (
@@ -3764,7 +3764,7 @@ ${linkFirmaCodeudor}
                   </ul>
                   <p className="mt-2 pt-1.5 border-t border-amber-300 dark:border-amber-800">
                     El cobro de <strong>{formatearMoneda(RENOVACION_ANTICIPADA_COSTO)}</strong> se hará
-                    una sola vez al activarse el préstamo tras la aceptación de T&C,
+                    una sola vez al activarse el solicitud tras la aceptación de T&C,
                     y se registrará automáticamente en la caja <strong>CAJA-RENOVACIONES</strong>.
                   </p>
                 </div>
@@ -4128,7 +4128,7 @@ ${linkFirmaCodeudor}
                 </div>
                 <p className="text-xs text-violet-700 dark:text-violet-300">
                   {tieneCodeudor
-                    ? '✅ Activo: el codeudor firmará electrónicamente el pagaré y respaldará el préstamo.'
+                    ? '✅ Activo: el codeudor firmará electrónicamente el pagaré y respaldará el solicitud.'
                     : 'Si activas esta opción, podrás seleccionar un cliente como codeudor.'}
                 </p>
                 {tieneCodeudor && (
@@ -4260,7 +4260,7 @@ ${linkFirmaCodeudor}
                         💡 Recomendado: <strong>Ambos</strong>. El cliente recibirá el código por WhatsApp y correo para mayor seguridad.
                       </p>
                       <div className="bg-purple-100/50 p-2 rounded text-[11px] text-purple-900">
-                        📋 Flujo: 1) Cliente recibe link → 2) Sube foto del documento → 3) Sube selfie con cédula → 4) Dibuja firma → 5) Recibe código OTP → 6) Confirma código → 7) Préstamo se activa automáticamente
+                        📋 Flujo: 1) Cliente recibe link → 2) Sube foto del documento → 3) Sube selfie con cédula → 4) Dibuja firma → 5) Recibe código OTP → 6) Confirma código → 7) Solicitud se activa automáticamente
                       </div>
                     </div>
                   )}
@@ -4307,7 +4307,7 @@ ${linkFirmaCodeudor}
 // =====================================================
 // SimuladorPanel — wrapper interno de SimuladorView
 // =====================================================
-// Reutiliza el SimuladorView standalone dentro de la pestaña de préstamos.
+// Reutiliza el SimuladorView standalone dentro de la pestaña de solicitudes.
 // Mantener un wrapper propio permite inyectar props adicionales (por
 // ejemplo, parámetros precargados) en el futuro sin romper la API pública.
 function SimuladorPanel() {
@@ -4317,7 +4317,7 @@ function SimuladorPanel() {
 // =====================================================
 // PrestamosView — wrapper con pestañas internas
 // =====================================================
-// Vista principal de Préstamos que agrupa 8 pestañas:
+// Vista principal de Solicitudes que agrupa 8 pestañas:
 //   1. Solicitudes     -> PrestamosPanel (lista + crear solicitud)
 //   2. Clientes        -> ClientesView
 //   3. Simulador       -> SimuladorPanel
@@ -4341,7 +4341,7 @@ export function PrestamosView({
   onChanged: () => void
   onCambiarVista?: (vista: string) => void
   // Solicitud web inyectada desde fuera (ej: BuzonSolicitudesView montado
-  // en page.tsx) que debe convertirse en préstamo. Cuando cambia, se
+  // en page.tsx) que debe convertirse en solicitud. Cuando cambia, se
   // precarga el formulario y se abre el modal.
   solicitudPendiente?: SolicitudWebMin | null
   // Callback opcional para que el padre sepa que la solicitud ya fue
@@ -4355,7 +4355,7 @@ export function PrestamosView({
   // === Procesar solicitudPendiente inyectada desde page.tsx ===
   // Esto permite que el Buzón de Solicitudes montado como vista directa
   // en page.tsx (no como tab interno) pueda disparar la creación de
-  // préstamo al hacer clic en el botón "Préstamo".
+  // solicitud al hacer clic en el botón "Solicitud".
   useEffect(() => {
     if (!solicitudPendiente) return
     const solicitud = solicitudPendiente
@@ -4379,7 +4379,7 @@ export function PrestamosView({
     setTab('solicitudes')
     toast({
       title: 'Solicitud cargada',
-      description: `Se precargó el formulario con los datos de la solicitud ${solicitud.codigo}. Completa la información restante para crear el préstamo. Al crear, la solicitud se marcará como CONVERTIDA y el cliente verá el flujo de firma en su portal.`,
+      description: `Se precargó el formulario con los datos de la solicitud ${solicitud.codigo}. Completa la información restante para crear el solicitud. Al crear, la solicitud se marcará como CONVERTIDA y el cliente verá el flujo de firma en su portal.`,
       duration: 7000,
     })
     // Avisar al padre que ya consumió la solicitud para que limpie su estado
@@ -4387,7 +4387,7 @@ export function PrestamosView({
   }, [solicitudPendiente, onSolicitudConsumida])
 
   // Convertir una solicitud web en una simulación precargada en la pestaña
-  // "Solicitudes" para que el operador complete la creación del préstamo.
+  // "Solicitudes" para que el operador complete la creación del solicitud.
   const convertirSolicitudWeb = (solicitud: SolicitudWebMin) => {
     const params: SimulacionParams = {
       clienteId: solicitud.clienteId,
@@ -4412,7 +4412,7 @@ export function PrestamosView({
     setTab('solicitudes')
     toast({
       title: 'Solicitud cargada',
-      description: `Se precargó el formulario con los datos de la solicitud ${solicitud.codigo}. Completa la información restante para crear el préstamo. Al crear, la solicitud se marcará como CONVERTIDA y el cliente verá el flujo de firma en su portal.`,
+      description: `Se precargó el formulario con los datos de la solicitud ${solicitud.codigo}. Completa la información restante para crear el solicitud. Al crear, la solicitud se marcará como CONVERTIDA y el cliente verá el flujo de firma en su portal.`,
       duration: 7000,
     })
   }
@@ -4420,7 +4420,7 @@ export function PrestamosView({
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Préstamos"
+        title="Solicitudes"
         subtitle="Solicitudes, clientes, simulador, cajas y más"
         icon={<FileText className="w-5 h-5" />}
       />

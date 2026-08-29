@@ -10,7 +10,7 @@ import { formatearMoneda, formatearFecha } from '@/lib/finanzas'
 // /api/pagos/recibo/fidelizacion — Mensaje de fidelización
 // -----------------------------------------------------
 // Genera mensajes personalizados para enviar al cliente
-// cuando se aplica la ÚLTIMA cuota del préstamo.
+// cuando se aplica la ÚLTIMA cuota del solicitud.
 //
 // POST body:
 //   accion: "generar_plantillas"  → devuelve plantillas predefinidas
@@ -23,13 +23,13 @@ const PLANTILLAS_FIDELIZACION = [
     id: 'gracias_renovacion',
     titulo: 'Gracias + Invitación a renovar',
     emoji: '🎉',
-    asunto: '¡Felicidades! Has terminado tu préstamo',
+    asunto: '¡Felicidades! Has terminado tu solicitud',
     generar: (ctx: { nombre: string; codigo: string; montoTotal: string; proximoMonto?: string }) =>
       `¡Hola ${ctx.nombre}! 🎉\n\n` +
-      `Queremos felicitarte porque hoy has finalizado tu préstamo ${ctx.codigo} ` +
+      `Queremos felicitarte porque hoy has finalizado tu solicitud ${ctx.codigo} ` +
       `con un cumplimiento del 100%. Tu responsabilidad financiera es un ejemplo. 🙌\n\n` +
       `Como cliente cumplido, tienes disponible una línea de crédito pre-aprobada ` +
-      `con tasas preferenciales. ¿Te interesa un nuevo préstamo?\n\n` +
+      `con tasas preferenciales. ¿Te interesa un nuevo solicitud?\n\n` +
       `Respóndeme y con gusto te asesoro. 🚀`,
   },
   {
@@ -39,7 +39,7 @@ const PLANTILLAS_FIDELIZACION = [
     asunto: 'Gracias por confiar en nosotros',
     generar: (ctx: { nombre: string; codigo: string; montoTotal: string }) =>
       `Hola ${ctx.nombre},\n\n` +
-      `Hoy se ha completado el pago de tu préstamo ${ctx.codigo} y queremos darte las gracias ` +
+      `Hoy se ha completado el pago de tu solicitud ${ctx.codigo} y queremos darte las gracias ` +
       `de corazón. 🙏\n\n` +
       `Confianzas como la tuya son las que nos impulsan a seguir creciendo. ` +
       `Esperamos seguir siendo tu aliado financiero en el futuro.\n\n` +
@@ -52,8 +52,8 @@ const PLANTILLAS_FIDELIZACION = [
     asunto: 'Nueva oportunidad con monto mayor',
     generar: (ctx: { nombre: string; codigo: string; montoTotal: string }) =>
       `¡Hola ${ctx.nombre}! 📈\n\n` +
-      `Por tu excelente historial de pago en el préstamo ${ctx.codigo}, ` +
-      `tu línea de crédito acaba de aumentar. Tienes disponible un nuevo préstamo ` +
+      `Por tu excelente historial de pago en el solicitud ${ctx.codigo}, ` +
+      `tu línea de crédito acaba de aumentar. Tienes disponible un nuevo solicitud ` +
       `con un monto mayor y una tasa más baja. 💰\n\n` +
       `¿Te interesa conocer los detalles? Estoy para servirte. 🤝`,
   },
@@ -64,10 +64,10 @@ const PLANTILLAS_FIDELIZACION = [
     asunto: 'Eres cliente VIP',
     generar: (ctx: { nombre: string; codigo: string; montoTotal: string }) =>
       `Hola ${ctx.nombre}, ⭐\n\n` +
-      `Tu excelente comportamiento de pago en el préstamo ${ctx.codigo} te ha convertido ` +
+      `Tu excelente comportamiento de pago en el solicitud ${ctx.codigo} te ha convertido ` +
       `en cliente VIP de Jsadr · Jo*** Se*** Al*** D** R**.\n\n` +
       `A partir de hoy tienes acceso a:\n` +
-      `• Aprobación prioritaria de nuevos préstamos 🚀\n` +
+      `• Aprobación prioritaria de nuevos solicitudes 🚀\n` +
       `• Tasas preferenciales exclusivas 💎\n` +
       `• Asesoría financiera personalizada sin costo 📊\n\n` +
       `¿Gustas aprovechar estos beneficios? 🎁`,
@@ -79,8 +79,8 @@ const PLANTILLAS_FIDELIZACION = [
     asunto: 'Gana por recomendar',
     generar: (ctx: { nombre: string; codigo: string; montoTotal: string }) =>
       `¡Hola ${ctx.nombre}! 🤝\n\n` +
-      `Has terminado tu préstamo ${ctx.codigo} y queremos devolverte el cariño. ` +
-      `Por cada amigo o familiar que refieras y adquiera un préstamo con nosotros, ` +
+      `Has terminado tu solicitud ${ctx.codigo} y queremos devolverte el cariño. ` +
+      `Por cada amigo o familiar que refieras y adquiera un solicitud con nosotros, ` +
       `recibirás un bono especial. 💰\n\n` +
       `¿Conoces a alguien que necesite un crédito? Solo pásame su contacto. 📲`,
   },

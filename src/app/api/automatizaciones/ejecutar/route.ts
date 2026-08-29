@@ -103,7 +103,7 @@ async function ejecutarAutomatizacion(
       case 'ESCALACION_MORA':
         const escalados = await ejecutarEscalacionMora()
         entidadesAfectadas = escalados
-        resultado = `${escalados} préstamos escalados a jurídico`
+        resultado = `${escalados} solicitudes escalados a jurídico`
         break
 
       case 'COBRO_AUTOMATICO':
@@ -189,7 +189,7 @@ async function ejecutarAutomatizacion(
 }
 
 /**
- * Ejecuta recordatorios de pago: cuenta préstamos con cuotas
+ * Ejecuta recordatorios de pago: cuenta solicitudes con cuotas
  * vencidas en los próximos 3 días.
  */
 async function ejecutarRecordatoriosPago(): Promise<number> {
@@ -216,7 +216,7 @@ async function ejecutarRecordatoriosPago(): Promise<number> {
 }
 
 /**
- * Ejecuta escalación de mora: marca como JURIDICO los préstamos
+ * Ejecuta escalación de mora: marca como JURIDICO los solicitudes
  * con más de 60 días de mora y sin caso jurídico abierto.
  */
 async function ejecutarEscalacionMora(): Promise<number> {

@@ -425,7 +425,7 @@ export function PagosView({ onChanged }: { onChanged: () => void }) {
   // FIX (2026-08-20): usar los valores REALES de capital e interés de la cuota
   // pendiente (devueltos por el API en `cuotaPendiente`), en lugar de las
   // aproximaciones anteriores (30% interés / 70% capital) que eran incorrectas
-  // para préstamos TASA_FIJA (donde el interés es constante del 20% mensual).
+  // para solicitudes TASA_FIJA (donde el interés es constante del 20% mensual).
   const desglosePago = (() => {
     if (!prestamoSeleccionadoAplicar || !montoRecibido) return null
     const monto = parseFloat(montoRecibido)
@@ -444,9 +444,9 @@ export function PagosView({ onChanged }: { onChanged: () => void }) {
     const moraPendienteCuota = p.moraPendiente
     // === FIX (2026-08-20): usar los valores reales de la cuota pendiente ===
     // El API devuelve cuotaPendiente con capital e interés exactos según la
-    // modalidad del préstamo (TASA_FIJA: constantes; FRANCES: variables).
+    // modalidad del solicitud (TASA_FIJA: constantes; FRANCES: variables).
     // Antes se usaba p.cuotaBase * 0.3 (interés) y p.cuotaBase * 0.7 (capital)
-    // como aproximación, lo que era incorrecto para préstamos TASA_FIJA.
+    // como aproximación, lo que era incorrecto para solicitudes TASA_FIJA.
     const interesCuota = p.cuotaPendiente?.interes ?? (p.cuotaBase * 0.3)
     const capitalCuota = p.cuotaPendiente?.capital ?? (p.cuotaBase * 0.7)
     // Interés pendiente = interés de la cuota - ya pagado
@@ -497,7 +497,7 @@ export function PagosView({ onChanged }: { onChanged: () => void }) {
     if (!prestamoSeleccionadoAplicar) return
 
     // === Caso especial: Abono extraordinario al capital ===
-    // Si el préstamo es INTERES_FIJO_SIN_CAPITAL y el gestor marcó "Abonar al capital",
+    // Si el solicitud es INTERES_FIJO_SIN_CAPITAL y el gestor marcó "Abonar al capital",
     // enviamos una acción diferente al backend (accion: 'abonar_capital') que registra
     // el pago como abono extraordinario y actualiza el saldo real sin tocar la cuota mensual.
     if (abonarAlCapital) {
@@ -730,9 +730,9 @@ export function PagosView({ onChanged }: { onChanged: () => void }) {
           description: json.mensaje,
         })
         setModalRenegociarMora(false)
-        // Recargar el préstamo seleccionado para reflejar la nueva mora
+        // Recargar el solicitud seleccionado para reflejar la nueva mora
         await buscarPrestamosAplicar(busquedaAplicar)
-        // Actualizar el préstamo seleccionado
+        // Actualizar el solicitud seleccionado
         const actualizado = await fetch(
           `/api/pagos/aplicar?q=${encodeURIComponent(prestamoSeleccionadoAplicar.codigo)}`
         )
@@ -1038,7 +1038,7 @@ export function PagosView({ onChanged }: { onChanged: () => void }) {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Fecha</TableHead>
-                    <TableHead>Préstamo</TableHead>
+                    <TableHead>Solicitud</TableHead>
                     <TableHead>Cliente</TableHead>
                     <TableHead>Cuota</TableHead>
                     <TableHead>Capital</TableHead>
@@ -1259,7 +1259,7 @@ export function PagosView({ onChanged }: { onChanged: () => void }) {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Estado</TableHead>
-                    <TableHead>Préstamo / Cliente</TableHead>
+                    <TableHead>Solicitud / Cliente</TableHead>
                     <TableHead>Cuota</TableHead>
                     <TableHead>Vencimiento</TableHead>
                     <TableHead>Días mora</TableHead>
@@ -1382,7 +1382,7 @@ Hola *${p.cliente.nombre}*,
 Te recordamos tu próximo pago:
 
 📋 *Detalle:*
-• Préstamo: ${p.codigo}
+• Solicitud: ${p.codigo}
 • Cuota: ${p.proximaCuota}/${p.totalCuotas}
 • Fecha de vencimiento: ${formatearFecha(p.fechaVencimiento)}
 ${p.diasMora > 0 ? `• Días de mora: ${p.diasMora}\n` : ''}• Valor a pagar: ${formatearMoneda(p.totalCuotaConMora)}
@@ -1605,7 +1605,7 @@ Si ya realizaste el pago, ignora este mensaje.`
                         <TableHeader className="sticky top-0 bg-card">
                           <TableRow>
                             <TableHead>Cliente</TableHead>
-                            <TableHead>Préstamo</TableHead>
+                            <TableHead>Solicitud</TableHead>
                             <TableHead>Cuota</TableHead>
                             <TableHead>Vencimiento</TableHead>
                             <TableHead>Días mora</TableHead>
@@ -1646,7 +1646,7 @@ Hola *${m.clienteNombre}*,
 Te recordamos que tienes un pago pendiente:
 
 📋 *Detalle:*
-• Préstamo: ${m.codigo}
+• Solicitud: ${m.codigo}
 • Cuota #: ${m.cuotaPendiente}
 • Fecha de vencimiento: ${formatearFecha(m.fechaVencimiento)}
 • Días de mora: ${m.diasMora}
@@ -1812,7 +1812,7 @@ Si ya realizaste el pago, ignora este mensaje.`
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                 <Card>
                   <CardContent className="p-4">
-                    <p className="text-xs text-muted-foreground">Préstamos activos</p>
+                    <p className="text-xs text-muted-foreground">Solicitudes activos</p>
                     <p className="text-xl font-bold text-emerald-700">{informe.cartera.prestamosActivos}</p>
                   </CardContent>
                 </Card>
@@ -1931,10 +1931,10 @@ Si ya realizaste el pago, ignora este mensaje.`
 
               <div className="max-h-[60vh] overflow-y-auto">
                 {loadingAplicar ? (
-                  <div className="text-center py-8 text-muted-foreground">Cargando préstamos...</div>
+                  <div className="text-center py-8 text-muted-foreground">Cargando solicitudes...</div>
                 ) : prestamosAplicar.length === 0 ? (
                   <div className="text-center py-8 text-muted-foreground">
-                    No hay préstamos activos con cuotas pendientes.
+                    No hay solicitudes activos con cuotas pendientes.
                   </div>
                 ) : (
                   <div className="space-y-2">
@@ -1981,7 +1981,7 @@ Si ya realizaste el pago, ignora este mensaje.`
             </div>
           ) : (
             <div className="space-y-4">
-              {/* Info del préstamo seleccionado */}
+              {/* Info del solicitud seleccionado */}
               <div className="p-3 rounded-md bg-muted/50 border">
                 <div className="flex items-start justify-between">
                   <div>
@@ -2162,7 +2162,7 @@ Si ya realizaste el pago, ignora este mensaje.`
                 )}
 
                 {/* === TAREA Q: Banner de Flexibilidad Financiera === */}
-                {/* Si el préstamo tiene el beneficio activado, mostrar banner con estado */}
+                {/* Si el solicitud tiene el beneficio activado, mostrar banner con estado */}
                 {prestamoSeleccionadoAplicar.flexibilidadFinanciera && (
                   <div className={`mt-3 p-3 rounded-md border-2 ${
                     prestamoSeleccionadoAplicar.flexibilidadElegible
@@ -2246,7 +2246,7 @@ Si ya realizaste el pago, ignora este mensaje.`
                   {abonarAlCapital ? (
                     <div className="pl-7 space-y-2">
                       <p className="text-xs text-purple-700 dark:text-purple-300">
-                        Ingresa el valor del abono al capital. Este pago reducirá el saldo real del préstamo
+                        Ingresa el valor del abono al capital. Este pago reducirá el saldo real del solicitud
                         sin modificar la cuota mensual de intereses ({formatearMoneda(prestamoSeleccionadoAplicar.interesFijoMensual || 0)}).
                       </p>
                       <div className="space-y-1">
@@ -2279,7 +2279,7 @@ Si ya realizaste el pago, ignora este mensaje.`
                         <div className="text-xs p-2 rounded bg-white/60 dark:bg-purple-950/40 border border-purple-200 dark:border-purple-700">
                           {parseFloat(montoAbonoCapital) >= (prestamoSeleccionadoAplicar.saldoReal || prestamoSeleccionadoAplicar.montoPrincipal || 0) ? (
                             <span className="text-emerald-700 dark:text-emerald-300 font-semibold">
-                              ✅ Este abono saldará el préstamo por completo. El préstamo pasará a estado CANCELADO.
+                              ✅ Este abono saldará el solicitud por completo. El solicitud pasará a estado CANCELADO.
                             </span>
                           ) : (
                             <span className="text-purple-900 dark:text-purple-100">
@@ -2321,7 +2321,7 @@ Si ya realizaste el pago, ignora este mensaje.`
                   />
                   {abonarAlCapital && (
                     <p className="text-[11px] text-purple-700 dark:text-purple-300">
-                      💡 El abono al capital NO cambia la cuota mensual de intereses. Solo reduce el saldo real del préstamo.
+                      💡 El abono al capital NO cambia la cuota mensual de intereses. Solo reduce el saldo real del solicitud.
                     </p>
                   )}
                 </div>
@@ -2465,7 +2465,7 @@ Si ya realizaste el pago, ignora este mensaje.`
           {pagoAReversar && (
             <div className="space-y-3">
               <div className="p-3 rounded bg-muted/50 text-sm space-y-1">
-                <p><strong>Préstamo:</strong> {pagoAReversar.prestamo.codigo}</p>
+                <p><strong>Solicitud:</strong> {pagoAReversar.prestamo.codigo}</p>
                 <p><strong>Cliente:</strong> {pagoAReversar.prestamo.cliente.nombre}</p>
                 <p><strong>Cuota:</strong> {pagoAReversar.numeroCuota}</p>
                 <p><strong>Monto:</strong> <span className="font-bold text-red-700">{formatearMoneda(pagoAReversar.montoTotal)}</span></p>
@@ -2475,7 +2475,7 @@ Si ya realizaste el pago, ignora este mensaje.`
                 <p><strong>⚠️ Atención:</strong> Al reversar este pago:</p>
                 <ul className="list-disc list-inside space-y-0.5">
                   <li>El pago queda marcado como REVERSADO (no se borra)</li>
-                  <li>Se descuenta del saldo del préstamo</li>
+                  <li>Se descuenta del saldo del solicitud</li>
                   <li>La cuota vuelve a quedar pendiente</li>
                   <li>Se mantiene el registro para auditoría</li>
                 </ul>
@@ -2529,7 +2529,7 @@ Si ya realizaste el pago, ignora este mensaje.`
           {pagoAEliminar && (
             <div className="space-y-3">
               <div className="p-3 rounded bg-muted/50 text-sm space-y-1">
-                <p><strong>Préstamo:</strong> {pagoAEliminar.prestamo.codigo}</p>
+                <p><strong>Solicitud:</strong> {pagoAEliminar.prestamo.codigo}</p>
                 <p><strong>Cliente:</strong> {pagoAEliminar.prestamo.cliente.nombre}</p>
                 <p><strong>Cuota:</strong> {pagoAEliminar.numeroCuota}</p>
                 <p><strong>Monto:</strong> <span className="font-bold">{formatearMoneda(pagoAEliminar.montoTotal)}</span></p>
@@ -2540,7 +2540,7 @@ Si ya realizaste el pago, ignora este mensaje.`
                 <ul className="list-disc list-inside space-y-0.5">
                   <li><strong>Eliminar</strong>: Borra el pago COMPLETAMENTE de la BD</li>
                   <li>No queda rastro del pago (excepto en audit log)</li>
-                  <li>El préstamo se recalcula automáticamente</li>
+                  <li>El solicitud se recalcula automáticamente</li>
                   <li>Usa esta opción solo para errores obvios (pago duplicado, dato equivocado)</li>
                 </ul>
                 <p className="mt-2"><strong>Recomendación:</strong> Usa "Reversar" si quieres mantener el historial.</p>
@@ -2584,7 +2584,7 @@ Si ya realizaste el pago, ignora este mensaje.`
           </DialogHeader>
           {prestamoSeleccionadoAplicar && (
             <div className="space-y-4">
-              {/* Info del préstamo */}
+              {/* Info del solicitud */}
               <div className="p-3 rounded-md bg-muted/50 border">
                 <div className="font-semibold">{prestamoSeleccionadoAplicar.cliente.nombre}</div>
                 <div className="text-xs text-muted-foreground">
@@ -2718,7 +2718,7 @@ Si ya realizaste el pago, ignora este mensaje.`
                   minLength={10}
                 />
                 <p className="text-xs text-muted-foreground">
-                  Esta observación quedará registrada en la bitácora del préstamo y en el audit log
+                  Esta observación quedará registrada en la bitácora del solicitud y en el audit log
                   inmutable del sistema. Explica claramente el acuerdo tomado con el cliente.
                 </p>
               </div>
@@ -2837,7 +2837,7 @@ Si ya realizaste el pago, ignora este mensaje.`
           </DialogHeader>
           {prestamoSeleccionadoAplicar && (
             <div className="space-y-4">
-              {/* Info del préstamo */}
+              {/* Info del solicitud */}
               <div className="p-3 rounded-md bg-emerald-50/60 border-2 border-emerald-200 space-y-2">
                 <div className="flex items-start justify-between">
                   <div>

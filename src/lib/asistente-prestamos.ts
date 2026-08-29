@@ -1,5 +1,5 @@
 // =====================================================
-// asistente-prestamos.ts — Director Inteligente del Módulo de Préstamos
+// asistente-prestamos.ts — Director Inteligente del Módulo de Solicitudes
 // Función principal: obtenerEstadoModuloPrestamos() — visión 360° del módulo
 // =====================================================
 
@@ -7,7 +7,7 @@ import { db } from '@/lib/db'
 import { formatearMoneda } from '@/lib/finanzas'
 
 // =====================================================
-// Obtener estado completo del módulo de préstamos
+// Obtener estado completo del módulo de solicitudes
 // =====================================================
 export async function obtenerEstadoModuloPrestamos() {
   const ahora = new Date()
@@ -40,7 +40,7 @@ export async function obtenerEstadoModuloPrestamos() {
     db.prestamo.count(),
   ])
 
-  // === 2. Préstamos activos con detalle ===
+  // === 2. Solicitudes activos con detalle ===
   const prestamosActivos = await db.prestamo.findMany({
     where: { estado: { in: ['ACTIVO', 'EN_MORA'] } },
     include: {
@@ -76,7 +76,7 @@ export async function obtenerEstadoModuloPrestamos() {
   })
   const utilidadAnio = pagosAnio.reduce((s, p) => s + (p.montoInteres || 0) + (p.montoMora || 0), 0)
 
-  // === 6. Préstamos creados hoy ===
+  // === 6. Solicitudes creados hoy ===
   const creadosHoy = await db.prestamo.count({
     where: { createdAt: { gte: inicioHoy, lte: finHoy } },
   })
@@ -111,7 +111,7 @@ export async function obtenerEstadoModuloPrestamos() {
     }))
     .sort((a, b) => b.progreso - a.progreso)
 
-  // === 10. Préstamos más rentables (mayor interés generado) ===
+  // === 10. Solicitudes más rentables (mayor interés generado) ===
   const masRentables = [...prestamosActivos]
     .map((p) => ({
       codigo: p.codigo,
@@ -125,7 +125,7 @@ export async function obtenerEstadoModuloPrestamos() {
     .sort((a, b) => b.interesGenerado - a.interesGenerado)
     .slice(0, 5)
 
-  // === 11. Préstamos de mayor riesgo (mayor mora/días) ===
+  // === 11. Solicitudes de mayor riesgo (mayor mora/días) ===
   const mayorRiesgo = [...prestamosActivos]
     .filter((p) => p.diasMora > 0)
     .map((p) => ({
@@ -172,7 +172,7 @@ export async function obtenerEstadoModuloPrestamos() {
       alertas.push({
         severidad: 'ALTA',
         titulo: `Tasa de mora elevada (${pctMora}%)`,
-        descripcion: 'Revisar políticas de otorgamiento de préstamos.',
+        descripcion: 'Revisar políticas de otorgamiento de solicitudes.',
       })
     }
   }
@@ -252,11 +252,11 @@ export async function generarDashboardEjecutivo() {
   const estado = await obtenerEstadoModuloPrestamos()
   const r = estado.resumen
 
-  let texto = `📋 DASHBOARD EJECUTIVO — MÓDULO PRÉSTAMOS\n`
+  let texto = `📋 DASHBOARD EJECUTIVO — MÓDULO SOLICITUDES\n`
   texto += `${new Date().toLocaleString('es-CO')}\n\n`
 
   texto += `═══ PANORAMA GENERAL ═══\n`
-  texto += `Total préstamos: ${r.totalPrestamos}\n`
+  texto += `Total solicitudes: ${r.totalPrestamos}\n`
   texto += `• Solicitudes pendientes: ${r.totalSolicitudes}\n`
   texto += `• Activos: ${r.totalActivos}\n`
   texto += `• Finalizados: ${r.totalFinalizados}\n`
@@ -301,7 +301,7 @@ export async function generarDashboardEjecutivo() {
   }
 
   if (estado.masRentables.length > 0) {
-    texto += `═══ PRÉSTAMOS MÁS RENTABLES ═══\n`
+    texto += `═══ SOLICITUDES MÁS RENTABLES ═══\n`
     estado.masRentables.forEach((p, i) => {
       texto += `${i + 1}. ${p.codigo} — ${p.cliente}\n`
       texto += `   Capital: ${formatearMoneda(p.capital)} | Interés: ${formatearMoneda(p.interesGenerado)} (${p.rentabilidadPct}%)\n`
@@ -321,7 +321,7 @@ export async function generarDashboardEjecutivo() {
 }
 
 // =====================================================
-// Simular préstamo (3 modalidades)
+// Simular solicitud (3 modalidades)
 // =====================================================
 export function simularPrestamo(params: {
   capital: number
@@ -442,7 +442,7 @@ export async function generarAnalisisRentabilidad() {
   const estado = await obtenerEstadoModuloPrestamos()
   const r = estado.resumen
 
-  let texto = `📊 ANÁLISIS DE RENTABILIDAD — MÓDULO PRÉSTAMOS\n\n`
+  let texto = `📊 ANÁLISIS DE RENTABILIDAD — MÓDULO SOLICITUDES\n\n`
 
   texto += `═══ RENTABILIDAD ACTUAL ═══\n`
   texto += `Capital prestado: ${formatearMoneda(r.capitalPrestado)}\n`
@@ -454,11 +454,11 @@ export async function generarAnalisisRentabilidad() {
   texto += `═══ CONCENTRACIÓN DE CARTERA ═══\n`
   estado.porCategoria.forEach((c) => {
     const pct = r.capitalPrestado > 0 ? Math.round((c.monto / r.capitalPrestado) * 100) : 0
-    texto += `• ${c.categoria}: ${c.count} préstamos, ${formatearMoneda(c.monto)} (${pct}%)\n`
+    texto += `• ${c.categoria}: ${c.count} solicitudes, ${formatearMoneda(c.monto)} (${pct}%)\n`
   })
   texto += `\n`
 
-  texto += `═══ PRÉSTAMOS MÁS RENTABLES ═══\n`
+  texto += `═══ SOLICITUDES MÁS RENTABLES ═══\n`
   estado.masRentables.forEach((p, i) => {
     texto += `${i + 1}. ${p.codigo} — ${p.cliente}\n`
     texto += `   Capital: ${formatearMoneda(p.capital)} → Interés: ${formatearMoneda(p.interesGenerado)} (${p.rentabilidadPct}%)\n`

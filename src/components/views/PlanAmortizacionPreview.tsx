@@ -29,9 +29,9 @@ interface PlanAmortizacionPreviewProps {
 /**
  * PlanAmortizacionPreview
  *
- * Tabla de amortización que se muestra en el formulario de creación de préstamo,
+ * Tabla de amortización que se muestra en el formulario de creación de solicitud,
  * justo después del campo "Fecha de la primera cuota". Se actualiza dinámicamente
- * al cambiar cualquier condición del préstamo (monto, tasa, plazo, frecuencia,
+ * al cambiar cualquier condición del solicitud (monto, tasa, plazo, frecuencia,
  * modalidad, fecha primera cuota, periodo de corte, cargos iniciales).
  *
  * Muestra:
@@ -183,7 +183,7 @@ export function PlanAmortizacionPreview({
 
         <p style="font-size:10px;color:#94a3b8;margin-top:24px;text-align:center">
           Este plan es una vista previa basada en las condiciones actuales del formulario.
-          Los valores finales pueden variar al confirmar el préstamo.
+          Los valores finales pueden variar al confirmar el solicitud.
         </p>
 
         <script>
@@ -403,7 +403,7 @@ export function PlanAmortizacionPreview({
           <div className="text-[11px] text-violet-700 dark:text-violet-300 bg-violet-100 dark:bg-violet-900/50 p-2 rounded border border-violet-200 dark:border-violet-700 flex items-start gap-1.5">
             <Info className="w-3 h-3 mt-0.5 flex-shrink-0" />
             <span>
-              Este plan se actualiza automáticamente al cambiar cualquier condición del préstamo
+              Este plan se actualiza automáticamente al cambiar cualquier condición del solicitud
               (monto, tasa, plazo, frecuencia, fecha primera cuota, periodo de corte, cargos iniciales).
               {fechaPrimerCuota && (
                 <> La primera cuota vence el <strong>{formatearFecha(new Date(fechaPrimerCuota + 'T12:00:00'))}</strong>.</>

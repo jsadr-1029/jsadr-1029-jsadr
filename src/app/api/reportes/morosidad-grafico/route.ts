@@ -17,7 +17,7 @@ export async function GET(req: NextRequest) {
     const dias = rango === '7d' ? 7 : rango === '90d' ? 90 : 30
     const fechaInicio = new Date(Date.now() - dias * 24 * 60 * 60 * 1000)
 
-    // Cargar préstamos EN_MORA con sus fechas (excluyendo clientes de prueba)
+    // Cargar solicitudes EN_MORA con sus fechas (excluyendo clientes de prueba)
     const prestamosMora = await db.prestamo.findMany({
       where: {
         estado: 'EN_MORA',
@@ -77,7 +77,7 @@ export async function GET(req: NextRequest) {
         labels,
         datasets: [
           {
-            label: 'Cantidad de préstamos en mora',
+            label: 'Cantidad de solicitudes en mora',
             data: dataCount,
             borderColor: '#dc2626',
             backgroundColor: 'rgba(220, 38, 38, 0.1)',

@@ -60,7 +60,7 @@ export async function GET(
       )
     }
 
-    // Validar que el Otro Sí pertenece a un préstamo del cliente autenticado
+    // Validar que el Otro Sí pertenece a un solicitud del cliente autenticado
     if (otroSi.prestamo.clienteId !== cliente.id) {
       return NextResponse.json(
         { success: false, error: 'No autorizado para ver este Otro Sí' },

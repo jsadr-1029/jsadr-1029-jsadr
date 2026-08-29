@@ -1080,7 +1080,7 @@ async function escanearSeguridad() {
     explicacion: devLogGitignored && customDbGitignored
       ? 'Archivos sensibles no se commitean'
       : 'dev.log puede contener queries SQL con PII. custom.db contiene TODA la BD.',
-    escenario: devLogGitignored && customDbGitignored ? 'N/A' : 'Commit accidental de custom.db → expone todos los clientes y préstamos',
+    escenario: devLogGitignored && customDbGitignored ? 'N/A' : 'Commit accidental de custom.db → expone todos los clientes y solicitudes',
     recomendacion: devLogGitignored && customDbGitignored
       ? 'Mantener. Verificar que no haya archivos sensibles ya commiteados.'
       : 'Agregar "*.log, *.db, /db/" a .gitignore. Si ya fueron commiteados, hacer git rm --cached.',

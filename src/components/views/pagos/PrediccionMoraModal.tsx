@@ -107,7 +107,7 @@ export function PrediccionMoraModal({ abierto, onCerrar }: Props) {
             <div className="rounded-lg bg-purple-50 border border-purple-200 p-3">
               <p className="text-xs text-purple-800">
                 <strong>Promedio de riesgo:</strong> {resumen.promedioRiesgo}/100 ·{' '}
-                <strong>{resumen.altoRiesgo}</strong> préstamo(s) en riesgo alto o crítico que requieren
+                <strong>{resumen.altoRiesgo}</strong> solicitud(s) en riesgo alto o crítico que requieren
                 acción inmediata.
               </p>
             </div>

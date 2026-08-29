@@ -78,7 +78,7 @@ function extraerVars(ctx: ContextoCliente): VarsComunes {
 
   let estadoMoraMensaje: string
   if (!p) {
-    estadoMoraMensaje = 'Actualmente no tienes préstamos activos.'
+    estadoMoraMensaje = 'Actualmente no tienes solicitudes activos.'
   } else if (estadoPrestamo === 'EN_MORA') {
     estadoMoraMensaje = `⚠️ Tu crédito ${codigoPrestamo} tiene ${diasMora} días de mora. Se están generando intereses moratorios diarios sobre la cuota vencida.`
   } else {
@@ -121,10 +121,10 @@ export const PLANTILLAS_SALUDO: PlantillasIntent = {
   intent: 'SALUDO',
   plantillas: [
     '¡Hola, ${cliente}! 👋 Cuéntame qué necesitas. Puedo ayudarte con tu saldo, fechas de pago, renovaciones, requisitos para nuevos créditos y trámites del portal. ¿Qué quieres saber?',
-    '¡Buenas, ${cliente}! Aquí estoy. ¿Tienes alguna consulta sobre tu préstamo o quieres hacer un trámite?',
+    '¡Buenas, ${cliente}! Aquí estoy. ¿Tienes alguna consulta sobre tu solicitud o quieres hacer un trámite?',
     'Holaa ${cliente} 😊 ¿En qué te ayudo hoy? Puedo revisar tu saldo, próximos pagos, o lo que necesites.',
     '¡Hey ${cliente}! Listo para ayudarte. Dime, ¿qué necesitas?',
-    'Hola, ${cliente}. Tengo acceso a tu información de préstamo, pagos y trámites del portal. ¿Qué quieres revisar?',
+    'Hola, ${cliente}. Tengo acceso a tu información de solicitud, pagos y trámites del portal. ¿Qué quieres revisar?',
   ],
 }
 
@@ -135,10 +135,10 @@ export const PLANTILLAS_SALUDO: PlantillasIntent = {
 export const PLANTILLAS_SALDO: PlantillasIntent = {
   intent: 'SALDO',
   plantillas: [
-    // Sin préstamos activos
-    '${cliente}, actualmente no tienes préstamos activos. Si quieres información para sacar uno nuevo, dime "requisitos" y te explico.',
+    // Sin solicitudes activos
+    '${cliente}, actualmente no tienes solicitudes activos. Si quieres información para sacar uno nuevo, dime "requisitos" y te explico.',
     'Veo que no tienes créditos activos en este momento, ${cliente}. ¿Quieres que te cuente qué necesitas para solicitar uno?',
-    // Con un préstamo
+    // Con un solicitud
     'Tu saldo pendiente en el crédito ${codigoPrestamo} es de ${saldoTotal}. De eso, ${saldoCapital} es capital y ${saldoInteres} son intereses. Vas en ${cuotasPagadas} de ${numeroCuotas} cuotas (${progreso}%).',
     'Mira ${cliente}, tu crédito ${codigoPrestamo} tiene un saldo de ${saldoTotal}. El capital que te falta es ${saldoCapital} y los intereses devengados son ${saldoInteres}. Llevas ${cuotasPagadas} de ${numeroCuotas} cuotas pagadas.',
     'En el crédito ${codigoPrestamo} debes ${saldoTotal} hasta hoy. Eso se compone de ${saldoCapital} de capital más ${saldoInteres} de interés. Tu avance es del ${progreso}% (${cuotasPagadas}/${numeroCuotas} cuotas).',
@@ -201,8 +201,8 @@ export const PLANTILLAS_RENOVACION: PlantillasIntent = {
   plantillas: [
     'Para renovar tu crédito: entra al Portal → Solicitar crédito → Renovación. El sistema trae tu saldo pendiente automáticamente y calcula el excedente que te toca. Requisito: estar al día (sin mora). Firmas los TyC con OTP por WhatsApp y listo.',
     '${cliente}, la renovación se hace desde el Portal: vas a "Solicitar crédito" → "Renovación", eliges el crédito actual, pones el nuevo monto que necesitas, y el sistema te dice cuánto te queda libre tras pagar el saldo anterior. Firma con OTP y se desembolsa en 24h.',
-    'La renovación reemplaza tu préstamo actual por uno nuevo con el monto que pidas. Se hace desde el Portal → Renovación. Trae tu saldo automáticamente, calcula el excedente, firmas con OTP y se desembolsa. Necesitas estar al día en pagos.',
-    'Si estás al día, puedes renovar desde el Portal: Solicitar crédito → Renovación. El sistema paga tu saldo pendiente con parte del nuevo préstamo y te entrega el resto. Firma con OTP por WhatsApp y se desembolsa en 24h hábiles.',
+    'La renovación reemplaza tu solicitud actual por uno nuevo con el monto que pidas. Se hace desde el Portal → Renovación. Trae tu saldo automáticamente, calcula el excedente, firmas con OTP y se desembolsa. Necesitas estar al día en pagos.',
+    'Si estás al día, puedes renovar desde el Portal: Solicitar crédito → Renovación. El sistema paga tu saldo pendiente con parte del nuevo solicitud y te entrega el resto. Firma con OTP por WhatsApp y se desembolsa en 24h hábiles.',
   ],
 }
 
@@ -247,7 +247,7 @@ export const PLANTILLAS_TASA_INTERES: PlantillasIntent = {
 }
 
 // =====================================================
-// MONTO PRÉSTAMO
+// MONTO SOLICITUD
 // =====================================================
 
 export const PLANTILLAS_MONTO_PRESTAMO: PlantillasIntent = {
@@ -279,9 +279,9 @@ export const PLANTILLAS_PLAZO: PlantillasIntent = {
 export const PLANTILLAS_FONDO_GARANTIA: PlantillasIntent = {
   intent: 'FONDO_GARANTIA',
   plantillas: [
-    'El fondo de garantía es opcional — lo activa el gestor al crear el crédito, no todos los préstamos lo llevan. Cuando aplica, se cobra por separado (no se descuenta del desembolso) y se guarda en una caja exclusiva (CAJA-GARANTIA). Se devuelve al finalizar el préstamo previa verificación de cumplimiento de tus obligaciones.',
-    '${cliente}, el fondo de garantía NO es obligatorio. Lo define el gestor crédito por crédito. Si tu préstamo lo tiene activado, el monto (habitualmente 5% del capital) se cobra aparte al iniciar el crédito y se guarda en una caja separada. Se te devuelve al terminar de pagar todas las cuotas.',
-    'El fondo de garantía es una protección opcional. No todos los créditos lo llevan: solo los que el gestor determine. Si tu crédito lo tiene, el monto se guarda en CAJA-GARANTIA y se devuelve al finalizar el préstamo. Si tu crédito no lo tiene, no se te cobra nada por este concepto.',
+    'El fondo de garantía es opcional — lo activa el gestor al crear el crédito, no todos los solicitudes lo llevan. Cuando aplica, se cobra por separado (no se descuenta del desembolso) y se guarda en una caja exclusiva (CAJA-GARANTIA). Se devuelve al finalizar el solicitud previa verificación de cumplimiento de tus obligaciones.',
+    '${cliente}, el fondo de garantía NO es obligatorio. Lo define el gestor crédito por crédito. Si tu solicitud lo tiene activado, el monto (habitualmente 5% del capital) se cobra aparte al iniciar el crédito y se guarda en una caja separada. Se te devuelve al terminar de pagar todas las cuotas.',
+    'El fondo de garantía es una protección opcional. No todos los créditos lo llevan: solo los que el gestor determine. Si tu crédito lo tiene, el monto se guarda en CAJA-GARANTIA y se devuelve al finalizar el solicitud. Si tu crédito no lo tiene, no se te cobra nada por este concepto.',
   ],
 }
 
@@ -319,9 +319,9 @@ export const PLANTILLAS_RENEGOCIACION: PlantillasIntent = {
 export const PLANTILLAS_ESTADO_CUENTA: PlantillasIntent = {
   intent: 'ESTADO_CUENTA',
   plantillas: [
-    'Para descargar tu estado de cuenta en PDF: entra al Portal → Créditos → tu préstamo activo → "Estado de Cuenta" o "Descargar PDF". El PDF trae saldo, cuotas pagadas, próximos vencimientos y movimientos detallados.',
-    '${cliente}, el estado de cuenta lo descargas desde el Portal: ve a Créditos, selecciona tu préstamo y dale a "Descargar PDF". Incluye todos los movimientos y el saldo al día.',
-    'El PDF del estado de cuenta está en el Portal → Créditos → tu préstamo → botón "Estado de Cuenta". Trae el detalle completo: saldo, cuotas pagadas, próximos vencimientos y movimientos.',
+    'Para descargar tu estado de cuenta en PDF: entra al Portal → Créditos → tu solicitud activo → "Estado de Cuenta" o "Descargar PDF". El PDF trae saldo, cuotas pagadas, próximos vencimientos y movimientos detallados.',
+    '${cliente}, el estado de cuenta lo descargas desde el Portal: ve a Créditos, selecciona tu solicitud y dale a "Descargar PDF". Incluye todos los movimientos y el saldo al día.',
+    'El PDF del estado de cuenta está en el Portal → Créditos → tu solicitud → botón "Estado de Cuenta". Trae el detalle completo: saldo, cuotas pagadas, próximos vencimientos y movimientos.',
   ],
 }
 
@@ -355,8 +355,8 @@ export const PLANTILLAS_PIN_OLVIDO: PlantillasIntent = {
 export const PLANTILLAS_ACCESO_PORTAL: PlantillasIntent = {
   intent: 'ACCESO_PORTAL',
   plantillas: [
-    'Para entrar al Portal: usa la URL que te enviamos por WhatsApp al registrar tu primer préstamo. Digitas tu cédula (sin puntos ni espacios) y tu PIN de 4-6 dígitos. Si te sale "Cédula no encontrada", revisa que sea la misma con la que te registraste. Si falla el PIN 5 veces, se bloquea 15 min automáticamente.',
-    '${cliente}, entras al Portal con la URL que te mandamos por WhatsApp al primer préstamo. Pones cédula (sin puntos) y PIN. Si te bloquea por intentos, espera 15 minutos y vuelve a intentar. Si no tienes PIN, escríbeme "asesor" para que te lo asignen.',
+    'Para entrar al Portal: usa la URL que te enviamos por WhatsApp al registrar tu primer solicitud. Digitas tu cédula (sin puntos ni espacios) y tu PIN de 4-6 dígitos. Si te sale "Cédula no encontrada", revisa que sea la misma con la que te registraste. Si falla el PIN 5 veces, se bloquea 15 min automáticamente.',
+    '${cliente}, entras al Portal con la URL que te mandamos por WhatsApp al primer solicitud. Pones cédula (sin puntos) y PIN. Si te bloquea por intentos, espera 15 minutos y vuelve a intentar. Si no tienes PIN, escríbeme "asesor" para que te lo asignen.',
     'Para acceder: URL del Portal (te la enviamos por WhatsApp), cédula sin puntos ni espacios, y PIN. Si después de 5 intentos falla, se bloquea 15 minutos. Si no recuerdas tu PIN, dime "olvidé mi pin" y te escalo con un asesor.',
   ],
 }
@@ -390,7 +390,7 @@ export const PLANTILLAS_HORARIOS: PlantillasIntent = {
 export const PLANTILLAS_CONTACTO: PlantillasIntent = {
   intent: 'CONTACTO',
   plantillas: [
-    'Puedes contactarnos por WhatsApp al 3103674546, por correo a jsa@jsadr.com.co, o por el Portal del Cliente. Para consultas específicas sobre tu préstamo, ten siempre a mano tu cédula.',
+    'Puedes contactarnos por WhatsApp al 3103674546, por correo a jsa@jsadr.com.co, o por el Portal del Cliente. Para consultas específicas sobre tu solicitud, ten siempre a mano tu cédula.',
     '${cliente}, WhatsApp 3103674546, correo jsa@jsadr.com.co. El Portal del Cliente también está disponible 24/7 para autoservicio.',
     'Datos de contacto: WhatsApp 3103674546 (más rápido), correo jsa@jsadr.com.co, o entra al Portal del Cliente. Para cualquier consulta, ten lista tu cédula.',
   ],
@@ -444,7 +444,7 @@ export const PLANTILLAS_CODEUDOR: PlantillasIntent = {
 export const PLANTILLAS_DESEMBOLSO: PlantillasIntent = {
   intent: 'DESEMBOLSO',
   plantillas: [
-    'Una vez aprobado y firmado tu préstamo, el desembolso se hace en máximo 24 horas hábiles a la cuenta que registraste. Te avisamos por WhatsApp cuando se haga. Si no recibes el dinero en 24h, verifica tus datos bancarios en el Portal o escríbeme "asesor".',
+    'Una vez aprobado y firmado tu solicitud, el desembolso se hace en máximo 24 horas hábiles a la cuenta que registraste. Te avisamos por WhatsApp cuando se haga. Si no recibes el dinero en 24h, verifica tus datos bancarios en el Portal o escríbeme "asesor".',
     '${cliente}, el desembolso tarda máximo 24 horas hábiles después de la firma. Va a la cuenta que registraste en la solicitud. Te mandamos confirmación por WhatsApp al hacer la transferencia. Si pasan 24h y no recibes, revisa los datos de tu cuenta en el Portal.',
     'Tras la firma con OTP, se desembolsa en 24 horas hábiles máximo a tu cuenta registrada. Si tu crédito tiene fondo de garantía activado (lo define el gestor al crearlo), el monto del fondo se cobra por separado y se guarda en una caja exclusiva. Te avisamos por WhatsApp al concretarse la transferencia.',
   ],
@@ -478,7 +478,7 @@ export const PLANTILLAS_CUENTA_BANCARIA: PlantillasIntent = {
 }
 
 // =====================================================
-// CANCELAR PRÉSTAMO
+// CANCELAR SOLICITUD
 // =====================================================
 
 export const PLANTILLAS_CANCELAR_PRESTAMO: PlantillasIntent = {
@@ -524,9 +524,9 @@ export const PLANTILLAS_UBICACION: PlantillasIntent = {
 export const PLANTILLAS_CERTIFICADO: PlantillasIntent = {
   intent: 'CERTIFICADO',
   plantillas: [
-    'Puedes descargar el certificado de pagos del año desde el Portal → Historial → "Descargar certificado". El paz y salvo aparece cuando terminas de pagar todas las cuotas del préstamo. El estado de cuenta en PDF está en Créditos → tu préstamo → "Descargar PDF". Todos tienen validez oficial.',
-    '${cliente}, los certificados se generan automáticamente: el de pagos del año en Portal → Historial, el paz y salvo cuando terminas tu préstamo, y el estado de cuenta en Créditos → tu préstamo. Todos con validez oficial.',
-    'Certificado de pagos: Portal → Historial → Descargar. Paz y salvo: disponible al finalizar el préstamo. Estado de cuenta PDF: Créditos → tu préstamo. Todos son válidos oficialmente.',
+    'Puedes descargar el certificado de pagos del año desde el Portal → Historial → "Descargar certificado". El paz y salvo aparece cuando terminas de pagar todas las cuotas del solicitud. El estado de cuenta en PDF está en Créditos → tu solicitud → "Descargar PDF". Todos tienen validez oficial.',
+    '${cliente}, los certificados se generan automáticamente: el de pagos del año en Portal → Historial, el paz y salvo cuando terminas tu solicitud, y el estado de cuenta en Créditos → tu solicitud. Todos con validez oficial.',
+    'Certificado de pagos: Portal → Historial → Descargar. Paz y salvo: disponible al finalizar el solicitud. Estado de cuenta PDF: Créditos → tu solicitud. Todos son válidos oficialmente.',
   ],
 }
 

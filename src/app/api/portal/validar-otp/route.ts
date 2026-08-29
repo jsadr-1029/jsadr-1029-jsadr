@@ -131,7 +131,7 @@ export async function POST(req: NextRequest) {
       },
     })
 
-    // Marcar TyC como aceptado en el préstamo
+    // Marcar TyC como aceptado en el solicitud
     if (firma.prestamoId) {
       await db.prestamo.update({
         where: { id: firma.prestamoId },
@@ -141,7 +141,7 @@ export async function POST(req: NextRequest) {
         },
       })
 
-      // Bitácora del préstamo (modelo correcto: BitacoraPrestamo)
+      // Bitácora del solicitud (modelo correcto: BitacoraPrestamo)
       await db.bitacoraPrestamo.create({
         data: {
           prestamoId: firma.prestamoId,
@@ -166,7 +166,7 @@ export async function POST(req: NextRequest) {
           userAgent: ua,
           accion: 'FIRMA_COMPLETADA',
           exito: true,
-          detalle: `OTP validado, firma completada para préstamo ${firma.prestamo?.codigo || 'N/A'}`,
+          detalle: `OTP validado, firma completada para solicitud ${firma.prestamo?.codigo || 'N/A'}`,
           metadata: firma.prestamoId ? JSON.stringify({ prestamoId: firma.prestamoId }) : null,
         },
       })

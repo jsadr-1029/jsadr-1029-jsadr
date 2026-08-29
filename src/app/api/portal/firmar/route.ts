@@ -3,7 +3,7 @@ import { db } from '@/lib/db'
 import { obtenerIp, obtenerUserAgent } from '@/lib/otp'
 
 // POST /api/portal/firmar
-// Inicia el flujo de firma para un préstamo desde el portal del cliente.
+// Inicia el flujo de firma para un solicitud desde el portal del cliente.
 //
 // Fixes aplicados:
 //  - db.firma → db.firmaElectronica
@@ -26,7 +26,7 @@ export async function POST(req: NextRequest) {
       include: { firmas: true },
     })
     if (!prestamo) {
-      return NextResponse.json({ error: 'Préstamo no encontrado' }, { status: 404 })
+      return NextResponse.json({ error: 'Solicitud no encontrado' }, { status: 404 })
     }
     if (prestamo.clienteId !== cliente.id) {
       return NextResponse.json({ error: 'No autorizado' }, { status: 403 })
@@ -60,7 +60,7 @@ export async function POST(req: NextRequest) {
         userAgent: obtenerUserAgent(req),
         accion: 'FIRMA_INICIADA',
         exito: true,
-        detalle: `Inicio firma TyC préstamo ${prestamo.codigo}`,
+        detalle: `Inicio firma TyC solicitud ${prestamo.codigo}`,
         metadata: JSON.stringify({ prestamoId }),
       },
     })

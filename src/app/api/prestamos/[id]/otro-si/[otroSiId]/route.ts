@@ -51,10 +51,10 @@ export async function GET(
       )
     }
 
-    // Validar que el Otro Sí pertenezca al préstamo indicado
+    // Validar que el Otro Sí pertenezca al solicitud indicado
     if (otroSi.prestamoId !== prestamoId) {
       return NextResponse.json(
-        { success: false, error: 'El Otro Sí no pertenece al préstamo indicado' },
+        { success: false, error: 'El Otro Sí no pertenece al solicitud indicado' },
         { status: 400 }
       )
     }
@@ -112,7 +112,7 @@ export async function GET(
           titulo: `OTRO SÍ ${descargar ? 'DESCARGADO' : 'VISUALIZADO'}: ${otroSi.codigo}`,
           descripcion:
             `Se ${descargar ? 'descargó' : 'visualizó'} el Otro Sí ${otroSi.codigo} ` +
-            `del préstamo ${prestamo.codigo}.\n` +
+            `del solicitud ${prestamo.codigo}.\n` +
             `Estado del Otro Sí: ${otroSi.estado}\n` +
             `Tipo de modificación: ${otroSi.tipoModificacion}\n` +
             `Modificaciones: ${modificaciones.length} cuota(s)\n` +

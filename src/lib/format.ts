@@ -1,4 +1,4 @@
-// Utilidades de formato para el sistema de préstamos
+// Utilidades de formato para el sistema de solicitudes
 import { ZONA_HORARIA_COLOMBIA } from './timezone'
 
 export function formatCOP(value: number | null | undefined, opts?: { decimals?: boolean }): string {
@@ -69,7 +69,7 @@ export function diasEntre(fecha1: Date | string, fecha2: Date | string = new Dat
   return Math.floor(diff / (1000 * 60 * 60 * 24))
 }
 
-// Estado de préstamo a color Tailwind
+// Estado de solicitud a color Tailwind
 export function estadoPrestamoColor(estado: string): string {
   const map: Record<string, string> = {
     SOLICITADO: 'bg-slate-100 text-slate-700 border-slate-300',

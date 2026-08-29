@@ -842,12 +842,12 @@ function CasoDetalleDialog({
                   </CardContent>
                 </Card>
 
-                {/* Préstamo */}
+                {/* Solicitud */}
                 <Card className="py-3">
                   <CardHeader className="px-4 pb-2">
                     <CardTitle className="text-sm flex items-center gap-2">
                       <CircleDollarSign className="size-4" />
-                      Préstamo
+                      Solicitud
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="px-4 space-y-1 text-sm">

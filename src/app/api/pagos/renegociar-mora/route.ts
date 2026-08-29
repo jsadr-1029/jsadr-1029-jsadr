@@ -12,13 +12,13 @@ import { requireRole as requireRoleAuth } from '@/lib/auth-guard'
 // =====================================================
 // POST /api/pagos/renegociar-mora
 // =====================================================
-// Permite al gestor ANULAR o NEGOCIAR la mora acumulada de un préstamo.
+// Permite al gestor ANULAR o NEGOCIAR la mora acumulada de un solicitud.
 // - ANULAR: fija la mora renegociada en 0 (elimina toda la mora pendiente)
 // - NEGOCIAR: fija la mora renegociada en un valor acordado con el cliente
 //
 // Registra:
 //  1. Audit log inmutable con el acuerdo
-//  2. Bitácora del préstamo con la observación del gestor
+//  2. Bitácora del solicitud con la observación del gestor
 //  3. Snapshot de la mora original calculada al momento de renegociar
 //
 // El valor queda almacenado en Prestamo.moraRenegociada y reemplaza
@@ -75,7 +75,7 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    // === Buscar el préstamo ===
+    // === Buscar el solicitud ===
     const prestamo = await db.prestamo.findUnique({
       where: { id: prestamoId },
       include: {
@@ -88,13 +88,13 @@ export async function POST(req: NextRequest) {
     })
     if (!prestamo) {
       return NextResponse.json(
-        { success: false, error: 'Préstamo no encontrado' },
+        { success: false, error: 'Solicitud no encontrado' },
         { status: 404 }
       )
     }
     if (!['ACTIVO', 'EN_MORA'].includes(prestamo.estado)) {
       return NextResponse.json(
-        { success: false, error: `No se puede renegociar la mora de un préstamo en estado ${prestamo.estado}` },
+        { success: false, error: `No se puede renegociar la mora de un solicitud en estado ${prestamo.estado}` },
         { status: 400 }
       )
     }
@@ -137,7 +137,7 @@ export async function POST(req: NextRequest) {
     // === Determinar el valor final de la mora renegociada ===
     const valorFinalMora = accion === 'ANULAR' ? 0 : Number(nuevaMora)
 
-    // === Transacción: actualizar préstamo + crear bitácora + crear audit log ===
+    // === Transacción: actualizar solicitud + crear bitácora + crear audit log ===
     const fechaAhora = new Date()
     const descripcionBitacora =
       accion === 'ANULAR'
@@ -156,7 +156,7 @@ export async function POST(req: NextRequest) {
           `• Observación del gestor: ${observacion.trim()}`
 
     const [prestamoActualizado] = await db.$transaction([
-      // 1. Actualizar préstamo con la mora renegociada
+      // 1. Actualizar solicitud con la mora renegociada
       db.prestamo.update({
         where: { id: prestamoId },
         data: {
@@ -167,11 +167,11 @@ export async function POST(req: NextRequest) {
           moraRenegociadaPorNombre: user.nombre,
           moraRenegociadaObservacion: observacion.trim(),
           moraRenegociadaMoraOriginal: moraCalculadaActual,
-          // Si se anula la mora y el préstamo estaba en EN_MORA, volver a ACTIVO
+          // Si se anula la mora y el solicitud estaba en EN_MORA, volver a ACTIVO
           estado: accion === 'ANULAR' && prestamo.estado === 'EN_MORA' ? 'ACTIVO' : prestamo.estado,
         },
       }),
-      // 2. Crear entrada en bitácora del préstamo
+      // 2. Crear entrada en bitácora del solicitud
       db.bitacoraPrestamo.create({
         data: {
           prestamoId,
@@ -233,8 +233,8 @@ export async function POST(req: NextRequest) {
       },
       mensaje:
         accion === 'ANULAR'
-          ? `Mora anulada para el préstamo ${prestamo.codigo}. El cliente ya no debe mora pendiente.`
-          : `Mora renegociada a ${formatCOP(valorFinalMora)} para el préstamo ${prestamo.codigo}.`,
+          ? `Mora anulada para el solicitud ${prestamo.codigo}. El cliente ya no debe mora pendiente.`
+          : `Mora renegociada a ${formatCOP(valorFinalMora)} para el solicitud ${prestamo.codigo}.`,
     })
   } catch (error: any) {
     console.error('[renegociar-mora] error:', error)
@@ -271,13 +271,13 @@ export async function DELETE(req: NextRequest) {
     })
     if (!prestamo) {
       return NextResponse.json(
-        { success: false, error: 'Préstamo no encontrado' },
+        { success: false, error: 'Solicitud no encontrado' },
         { status: 404 }
       )
     }
     if (prestamo.moraRenegociada === null) {
       return NextResponse.json(
-        { success: false, error: 'Este préstamo no tiene una renegociación activa' },
+        { success: false, error: 'Este solicitud no tiene una renegociación activa' },
         { status: 400 }
       )
     }
@@ -304,7 +304,7 @@ export async function DELETE(req: NextRequest) {
           tipo: 'OTRO',
           titulo: 'Reversión de renegociación de mora',
           descripcion:
-            `Se revirtió la renegociación de mora del préstamo.\n` +
+            `Se revirtió la renegociación de mora del solicitud.\n` +
             `• Mora renegociada previa: ${formatCOP(prestamo.moraRenegociada || 0)}\n` +
             `• Acción previa: ${prestamo.moraRenegociadaAccion}\n` +
             `• Observación previa: ${prestamo.moraRenegociadaObservacion || '(sin observación)'}\n` +
@@ -334,7 +334,7 @@ export async function DELETE(req: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      mensaje: `Renegociación de mora revertida para el préstamo ${prestamo.codigo}. La mora vuelve a calcularse automáticamente.`,
+      mensaje: `Renegociación de mora revertida para el solicitud ${prestamo.codigo}. La mora vuelve a calcularse automáticamente.`,
     })
   } catch (error: any) {
     console.error('[renegociar-mora DELETE] error:', error)

@@ -29,7 +29,7 @@ import {
 
 // =====================================================
 // DocumentosPrestamosView
-// Gestor documental integrado en el módulo Préstamos.
+// Gestor documental integrado en el módulo Solicitudes.
 // Muestra en pestañas separadas:
 //  1. Documentos subidos manualmente (DocumentoGestor)
 //  2. Firmas electrónicas con fotos selfie + firma dibujada (FirmaElectronica)
@@ -147,10 +147,10 @@ export function DocumentosPrestamosView() {
         <div>
           <h3 className="text-sm font-semibold flex items-center gap-2">
             <FolderOpen className="w-4 h-4 text-primary" />
-            Gestor Documental de Préstamos
+            Gestor Documental de Solicitudes
           </h3>
           <p className="text-xs text-muted-foreground mt-0.5">
-            Pagarés, cartas, fotos selfie, firmas electrónicas y documentos vinculados a préstamos
+            Pagarés, cartas, fotos selfie, firmas electrónicas y documentos vinculados a solicitudes
           </p>
         </div>
         <Button
@@ -399,7 +399,7 @@ function GestorDocumentosTab() {
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <Input
-            placeholder="Buscar por título, cliente, préstamo..."
+            placeholder="Buscar por título, cliente, solicitud..."
             value={busqueda}
             onChange={(e) => setBusqueda(e.target.value)}
             className="pl-9"
@@ -420,10 +420,10 @@ function GestorDocumentosTab() {
         </Select>
         <Select value={filtroPrestamo} onValueChange={setFiltroPrestamo}>
           <SelectTrigger className="w-full sm:w-56">
-            <SelectValue placeholder="Préstamo" />
+            <SelectValue placeholder="Solicitud" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">Todos los préstamos</SelectItem>
+            <SelectItem value="all">Todos los solicitudes</SelectItem>
             {prestamos.map((p) => (
               <SelectItem key={p.id} value={p.id}>
                 {p.codigo} — {p.cliente?.nombre || 'N/A'}
@@ -447,7 +447,7 @@ function GestorDocumentosTab() {
               <TableRow>
                 <TableHead>Tipo</TableHead>
                 <TableHead>Título</TableHead>
-                <TableHead>Préstamo / Cliente</TableHead>
+                <TableHead>Solicitud / Cliente</TableHead>
                 <TableHead>Archivo</TableHead>
                 <TableHead>Subido por</TableHead>
                 <TableHead>Fecha</TableHead>
@@ -555,10 +555,10 @@ function GestorDocumentosTab() {
           </DialogHeader>
           <div className="space-y-4">
             <div className="space-y-2">
-              <Label>Préstamo relacionado (opcional)</Label>
+              <Label>Solicitud relacionado (opcional)</Label>
               <Select value={prestamoSel} onValueChange={setPrestamoSel}>
                 <SelectTrigger>
-                  <SelectValue placeholder="Selecciona un préstamo..." />
+                  <SelectValue placeholder="Selecciona un solicitud..." />
                 </SelectTrigger>
                 <SelectContent>
                   {prestamos.map((p) => (
@@ -569,7 +569,7 @@ function GestorDocumentosTab() {
                 </SelectContent>
               </Select>
               <p className="text-xs text-muted-foreground">
-                Si seleccionas un préstamo, el documento se registrará en su bitácora y se vinculará al cliente.
+                Si seleccionas un solicitud, el documento se registrará en su bitácora y se vinculará al cliente.
               </p>
             </div>
             <div className="space-y-2">
@@ -684,7 +684,7 @@ function GestorDocumentosTab() {
                   <strong>{TIPO_CONFIG[modalVer.tipo]?.label || modalVer.tipo}</strong>
                 </div>
                 <div>
-                  <span className="text-muted-foreground">Préstamo:</span>{' '}
+                  <span className="text-muted-foreground">Solicitud:</span>{' '}
                   <strong className="font-mono">{modalVer.prestamoCodigo || '—'}</strong>
                 </div>
                 <div>
@@ -875,7 +875,7 @@ function FirmasElectronicasTab() {
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <Input
-            placeholder="Buscar por cliente, cédula, código de préstamo, firmante..."
+            placeholder="Buscar por cliente, cédula, código de solicitud, firmante..."
             value={busqueda}
             onChange={(e) => setBusqueda(e.target.value)}
             className="pl-9"
@@ -905,7 +905,7 @@ function FirmasElectronicasTab() {
             <TableHeader>
               <TableRow>
                 <TableHead>Cliente / Firmante</TableHead>
-                <TableHead>Préstamo</TableHead>
+                <TableHead>Solicitud</TableHead>
                 <TableHead>Rol</TableHead>
                 <TableHead>Estado</TableHead>
                 <TableHead>Selfie / Doc / Firma</TableHead>
@@ -1086,7 +1086,7 @@ function FirmasElectronicasTab() {
                   {/* Info */}
                   <div className="grid grid-cols-2 gap-2 text-sm p-3 rounded bg-muted/50">
                     <div>
-                      <span className="text-muted-foreground">Préstamo:</span>{' '}
+                      <span className="text-muted-foreground">Solicitud:</span>{' '}
                       <strong className="font-mono">{detalleFirma.prestamo?.codigo || '—'}</strong>
                     </div>
                     <div>
@@ -1271,7 +1271,7 @@ function GenerarDocumentosTab() {
 
   const generar = () => {
     if (!prestamoSel) {
-      toast({ title: 'Error', description: 'Selecciona un préstamo', variant: 'destructive' })
+      toast({ title: 'Error', description: 'Selecciona un solicitud', variant: 'destructive' })
       return
     }
     const url = `/api/documentos?prestamoId=${prestamoSel}&tipo=${tipoDoc}`
@@ -1294,9 +1294,9 @@ function GenerarDocumentosTab() {
             <div className="text-sm text-blue-900">
               <p className="font-semibold mb-1">Generación de pagarés y cartas de instrucciones</p>
               <p className="text-xs">
-                Selecciona un préstamo y el tipo de documento a generar. El documento se abrirá en una nueva
+                Selecciona un solicitud y el tipo de documento a generar. El documento se abrirá en una nueva
                 pestaña con formato HTML imprimible, incluyendo firmas electrónicas verificadas (con foto selfie,
-                firma dibujada, OTP validado y QR de verificación) cuando el préstamo ya haya sido firmado.
+                firma dibujada, OTP validado y QR de verificación) cuando el solicitud ya haya sido firmado.
               </p>
             </div>
           </div>
@@ -1310,10 +1310,10 @@ function GenerarDocumentosTab() {
         <CardContent className="space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label>Préstamo *</Label>
+              <Label>Solicitud *</Label>
               <Select value={prestamoSel} onValueChange={setPrestamoSel}>
                 <SelectTrigger>
-                  <SelectValue placeholder="Selecciona un préstamo..." />
+                  <SelectValue placeholder="Selecciona un solicitud..." />
                 </SelectTrigger>
                 <SelectContent>
                   {loading ? (
@@ -1353,7 +1353,7 @@ function GenerarDocumentosTab() {
           {prestamoSeleccionado && (
             <div className="p-3 rounded bg-muted/50 border text-sm space-y-1">
               <div>
-                <span className="text-muted-foreground">Préstamo seleccionado:</span>{' '}
+                <span className="text-muted-foreground">Solicitud seleccionado:</span>{' '}
                 <strong className="font-mono">{prestamoSeleccionado.codigo}</strong>
               </div>
               <div>
@@ -1389,7 +1389,7 @@ function GenerarDocumentosTab() {
             <FileCheck className="w-8 h-8 text-rose-600" />
             <h4 className="font-semibold text-sm">Pagaré diligenciado</h4>
             <p className="text-xs text-muted-foreground">
-              Documento legal con todos los datos del préstamo (monto, tasa, cuotas, fechas). Incluye firma
+              Documento legal con todos los datos del solicitud (monto, tasa, cuotas, fechas). Incluye firma
               electrónica verificada del deudor y codeudor (si aplica), con foto selfie, OTP validado y QR de
               verificación anti-falsificación.
             </p>
@@ -1400,7 +1400,7 @@ function GenerarDocumentosTab() {
             <FileText className="w-8 h-8 text-amber-600" />
             <h4 className="font-semibold text-sm">Pagaré en blanco</h4>
             <p className="text-xs text-muted-foreground">
-              Pagaré con campos vacíos para diligenciar manualmente. Útil cuando el préstamo se formaliza
+              Pagaré con campos vacíos para diligenciar manualmente. Útil cuando el solicitud se formaliza
               presencialmente y se llenan los datos a mano. Mantiene las firmas electrónicas verificadas si ya
               existen.
             </p>

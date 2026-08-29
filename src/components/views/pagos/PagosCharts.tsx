@@ -70,7 +70,7 @@ export function PagosCharts({ periodo }: { periodo: string }) {
           icon={DollarSign}
           label="Saldo cartera"
           value={formatearMoneda(data.cartera?.saldoTotalActivos || 0)}
-          sub={`${data.cartera?.prestamosActivos || 0} préstamos activos`}
+          sub={`${data.cartera?.prestamosActivos || 0} solicitudes activos`}
           color="emerald"
         />
         <KpiCard

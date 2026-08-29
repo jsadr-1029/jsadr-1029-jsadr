@@ -560,7 +560,7 @@ function RegisterPageContent() {
                 <SectionTitle
                   icon={Landmark}
                   title="Datos de tu cuenta bancaria"
-                  subtitle="Todos los campos son obligatorios. Esta cuenta se usará para disbursar tus préstamos."
+                  subtitle="Todos los campos son obligatorios. Esta cuenta se usará para disbursar tus solicitudes."
                 />
                 <Alert className="bg-indigo-500/10 border-indigo-500/30 text-indigo-200">
                   <Wallet className="h-4 w-4" />
@@ -609,7 +609,7 @@ function RegisterPageContent() {
                 <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-3">
                   <p className="text-xs text-amber-200 flex items-start gap-2">
                     <Lock className="h-4 w-4 mt-0.5 flex-shrink-0" />
-                    <span>Verifica muy bien el número de cuenta. Si el préstamo se disbursa a una cuenta incorrecta por error de digitación, el proceso de reversión puede demorar varios días hábiles.</span>
+                    <span>Verifica muy bien el número de cuenta. Si el solicitud se disbursa a una cuenta incorrecta por error de digitación, el proceso de reversión puede demorar varios días hábiles.</span>
                   </p>
                 </div>
               </div>

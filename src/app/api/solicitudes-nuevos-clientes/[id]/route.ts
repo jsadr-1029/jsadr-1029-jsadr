@@ -151,7 +151,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
               <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 20px 0;" />
               <p style="margin: 0; color: #9ca3af; font-size: 11px; text-align: center;">
                 Este es un mensaje automático. No respondas a este correo.<br/>
-                © ${new Date().getFullYear()} JSADR — Sistema de Préstamos
+                © ${new Date().getFullYear()} JSADR — Sistema de Solicitudes
               </p>
             </div>
           </div>
@@ -307,7 +307,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
               <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 20px 0;" />
               <p style="margin: 0; color: #9ca3af; font-size: 11px; text-align: center;">
                 Este es un mensaje automático. No respondas a este correo.<br/>
-                © ${new Date().getFullYear()} JSADR — Sistema de Préstamos
+                © ${new Date().getFullYear()} JSADR — Sistema de Solicitudes
               </p>
             </div>
           </div>

@@ -79,15 +79,15 @@ export async function POST(req: NextRequest) {
 
     if (!prestamo) {
       return NextResponse.json(
-        { success: false, error: 'Préstamo no encontrado', code: 'NOT_FOUND' },
+        { success: false, error: 'Solicitud no encontrado', code: 'NOT_FOUND' },
         { status: 404 }
       )
     }
 
-    // Si es sesión portal, validar que el préstamo pertenezca al cliente
+    // Si es sesión portal, validar que el solicitud pertenezca al cliente
     if (clienteId && prestamo.clienteId !== clienteId) {
       return NextResponse.json(
-        { success: false, error: 'No autorizado para pagar este préstamo', code: 'FORBIDDEN' },
+        { success: false, error: 'No autorizado para pagar este solicitud', code: 'FORBIDDEN' },
         { status: 403 }
       )
     }
@@ -174,7 +174,7 @@ export async function POST(req: NextRequest) {
         referencia: referenciaComercio,
         monto: parseFloat(monto),
         moneda: 'COP',
-        descripcion: descripcion || `Pago préstamo ${prestamo.codigo}`,
+        descripcion: descripcion || `Pago solicitud ${prestamo.codigo}`,
         emailCliente,
         telefonoCliente,
         redirectUrl: redirectUrlAbsoluta,
@@ -231,7 +231,7 @@ export async function POST(req: NextRequest) {
         referencia: referenciaComercio,
         monto: pago.montoTotal,
         moneda: 'COP',
-        descripcion: descripcion || `Pago préstamo ${prestamo.codigo}`,
+        descripcion: descripcion || `Pago solicitud ${prestamo.codigo}`,
         // Si es llamada real, redirectUrl = URL absoluta de Bancolombia.
         // Si es modo simulado, redirectUrl = ruta interna de redirect.
         redirectUrl: redirectUrlFrontend,

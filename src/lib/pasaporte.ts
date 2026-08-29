@@ -236,7 +236,7 @@ export async function obtenerConfigPasaporte() {
 // =====================================================
 
 export async function calcularIndicadores(clienteId: string): Promise<IndicadoresTrayectoria> {
-  // Obtener todos los préstamos del cliente con sus pagos aplicados
+  // Obtener todos los solicitudes del cliente con sus pagos aplicados
   const prestamos = await db.prestamo.findMany({
     where: { clienteId },
     include: {
@@ -282,7 +282,7 @@ export async function calcularIndicadores(clienteId: string): Promise<Indicadore
     }
   }
 
-  // Antigüedad: desde el primer préstamo hasta hoy
+  // Antigüedad: desde el primer solicitud hasta hoy
   const primerPrestamo = prestamos[0]
   const antiguedadMeses = primerPrestamo
     ? Math.max(0, diferenciaMeses(primerPrestamo.fechaSolicitud, hoyEnColombia()))
@@ -669,7 +669,7 @@ export async function detectarNovedades(clienteId: string, config: any): Promise
   const novedades: NovedadPago[] = []
   const hoy = hoyEnColombia()
 
-  // Obtener préstamos activos del cliente
+  // Obtener solicitudes activos del cliente
   const prestamos = await db.prestamo.findMany({
     where: {
       clienteId,

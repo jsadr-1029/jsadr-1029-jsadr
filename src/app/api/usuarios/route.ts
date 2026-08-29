@@ -26,7 +26,7 @@ export const PERMISOS_ROLES = {
   },
   GESTOR: {
     label: 'Gestor',
-    descripcion: 'Gestión operativa de préstamos, pagos y casos jurídicos',
+    descripcion: 'Gestión operativa de solicitudes, pagos y casos jurídicos',
     permisos: [
       'dashboard.ver',
       'clientes.crear', 'clientes.editar',

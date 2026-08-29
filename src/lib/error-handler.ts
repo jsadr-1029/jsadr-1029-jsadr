@@ -342,7 +342,7 @@ export function errorResponse(context: string, error: unknown, extra?: Record<st
  *
  * Uso:
  *   throw new AppError('SAFE:No autorizado', 401, 'AUTH_REQUIRED')
- *   throw new AppError('Recurso no encontrado', 404, 'NOT_FOUND', 'Préstamo xyz no existe')
+ *   throw new AppError('Recurso no encontrado', 404, 'NOT_FOUND', 'Solicitud xyz no existe')
  */
 export class AppError extends Error {
   public readonly httpStatus: number

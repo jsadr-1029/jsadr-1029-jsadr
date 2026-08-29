@@ -125,7 +125,7 @@ interface Cliente {
   // === Preferencia de notificación (v4.4) ===
   preferenciaNotificacion?: 'WHATSAPP' | 'EMAIL' | 'AMBOS' | 'NINGUNO' | null
   // === Cliente de prueba (v4.14) ===
-  // Si esPrueba=true, este cliente y todos sus préstamos/pagos se excluyen
+  // Si esPrueba=true, este cliente y todos sus solicitudes/pagos se excluyen
   // automáticamente de los agregados de saldos reales del sistema.
   esPrueba?: boolean
   fechaMarcadoPrueba?: string | null
@@ -201,7 +201,7 @@ export function ClientesView({ onChanged }: { onChanged: () => void }) {
   const [loading, setLoading] = useState(true)
   const [busqueda, setBusqueda] = useState('')
   const [filtroActivo, setFiltroActivo] = useState<'todos' | 'activos' | 'inactivos'>('todos')
-  // === Filtro adicional: clientes con mora activa o con préstamos activos ===
+  // === Filtro adicional: clientes con mora activa o con solicitudes activos ===
   const [filtroMora, setFiltroMora] = useState<'todos' | 'conMora' | 'sinMora' | 'conPrestamos'>('todos')
   const [modalAbierto, setModalAbierto] = useState(false)
   const [modalDetalle, setModalDetalle] = useState(false)
@@ -593,7 +593,7 @@ export function ClientesView({ onChanged }: { onChanged: () => void }) {
             <SelectItem value="todos">Todos los clientes</SelectItem>
             <SelectItem value="conMora">🚫 Con mora activa</SelectItem>
             <SelectItem value="sinMora">✅ Sin mora</SelectItem>
-            <SelectItem value="conPrestamos">Con préstamos</SelectItem>
+            <SelectItem value="conPrestamos">Con solicitudes</SelectItem>
           </SelectContent>
         </Select>
       </div>
@@ -611,7 +611,7 @@ export function ClientesView({ onChanged }: { onChanged: () => void }) {
                 <TableHead>Referido por</TableHead>
                 <TableHead>Tasa</TableHead>
                 <TableHead>Estado</TableHead>
-                <TableHead>Préstamos</TableHead>
+                <TableHead>Solicitudes</TableHead>
                 <TableHead className="text-right">Acciones</TableHead>
               </TableRow>
             </TableHeader>
@@ -714,7 +714,7 @@ export function ClientesView({ onChanged }: { onChanged: () => void }) {
                           className="ml-1 bg-amber-100 text-amber-800 hover:bg-amber-100 border border-amber-300"
                           title={
                             c.motivoPrueba ||
-                            'Cliente de prueba: sus préstamos y pagos se excluyen automáticamente de los saldos reales del sistema.'
+                            'Cliente de prueba: sus solicitudes y pagos se excluyen automáticamente de los saldos reales del sistema.'
                           }
                         >
                           PRUEBA
@@ -729,7 +729,7 @@ export function ClientesView({ onChanged }: { onChanged: () => void }) {
                     <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
                       <div className="flex justify-end gap-1">
                         {/* === Hoja de Vida del Cliente — botón destacado === */}
-                        {/* Abre un modal completo con perfil, préstamos, pagos, */}
+                        {/* Abre un modal completo con perfil, solicitudes, pagos, */}
                         {/* comportamiento, fotos y bitácora del cliente. */}
                         <Button
                           size="sm"
@@ -1639,7 +1639,7 @@ export function ClientesView({ onChanged }: { onChanged: () => void }) {
       </Dialog>
 
       {/* === Hoja de Vida del Cliente (modal completo) === */}
-      {/* Modal con pestañas: Perfil / Préstamos / Comportamiento / Pagos / Fotos / Bitácora */}
+      {/* Modal con pestañas: Perfil / Solicitudes / Comportamiento / Pagos / Fotos / Bitácora */}
       <HojaVidaClienteModal
         clienteId={clienteHojaVidaId}
         open={modalHojaVida}

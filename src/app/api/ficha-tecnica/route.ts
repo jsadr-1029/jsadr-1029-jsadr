@@ -1,5 +1,5 @@
 // =====================================================
-// /api/ficha-tecnica — Genera ficha técnica del préstamo v3.0
+// /api/ficha-tecnica — Genera ficha técnica del solicitud v3.0
 // GET: genera HTML imprimible o JSON según ?formato=
 // Esta ruta es pública (whitelist en proxy) para que el
 // cliente pueda verla desde el portal sin autenticación.
@@ -49,7 +49,7 @@ export async function GET(req: NextRequest) {
 
     if (!prestamo) {
       return NextResponse.json(
-        { success: false, error: 'Préstamo no encontrado', code: 'NOT_FOUND' },
+        { success: false, error: 'Solicitud no encontrado', code: 'NOT_FOUND' },
         { status: 404 }
       )
     }
@@ -163,7 +163,7 @@ function generarFichaHTML(ficha: any): string {
 <html lang="es">
 <head>
 <meta charset="UTF-8">
-<title>Ficha Técnica - Préstamo ${p.codigo}</title>
+<title>Ficha Técnica - Solicitud ${p.codigo}</title>
 <style>
   @page { size: A4; margin: 1.5cm; }
   body { font-family: Arial, sans-serif; color: #1f2937; margin: 0; padding: 20px; font-size: 11px; line-height: 1.4; }
@@ -195,7 +195,7 @@ function generarFichaHTML(ficha: any): string {
 <body>
   <button class="print-button" onclick="window.print()">🖨️ Imprimir / PDF</button>
   <div class="header">
-    <h1>FICHA TÉCNICA DEL PRÉSTAMO</h1>
+    <h1>FICHA TÉCNICA DEL SOLICITUD</h1>
     <p class="subtitle">Código: ${p.codigo} — Estado: ${p.estado}</p>
     <p class="fecha-gen">Generado el ${fechaGen}</p>
   </div>

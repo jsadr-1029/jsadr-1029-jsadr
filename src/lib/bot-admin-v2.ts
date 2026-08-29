@@ -91,7 +91,7 @@ const SINONIMOS: Record<string, string[]> = {
   negocio: ['negocio', 'empresa', 'labor', 'trabajo', 'sistema', 'plataforma', 'jsadr', 'oficina', 'comercial'],
   personal: ['personal', 'mio', 'mío', 'familia', 'casa', 'privado', 'propio'],
   // Entidades del sistema
-  prestamo: ['préstamo', 'prestamo', 'préstamos', 'prestamos', 'crédito', 'credito', 'créditos', 'creditos', 'loan', 'loans'],
+  prestamo: ['solicitud', 'prestamo', 'solicitudes', 'prestamos', 'crédito', 'credito', 'créditos', 'creditos', 'loan', 'loans'],
   cliente: ['cliente', 'clientes', 'usuario', 'usuarios', 'beneficiario', 'beneficiarios', 'deudor', 'deudores'],
   pago: ['pago', 'pagos', 'abono', 'abonos', 'cuota', 'cuotas', 'installment', 'payment'],
   mora: ['mora', 'moroso', 'morosos', 'atrasado', 'atrasados', 'vencido', 'vencidos', 'deuda', 'deudas', 'impago', 'impagados'],
@@ -503,13 +503,13 @@ export const COMANDOS: ComandoBot[] = [
   {
     id: 8,
     categoria: 'SISTEMA',
-    nombre: 'Estado de préstamos',
-    descripcion: 'Cuántos préstamos activos, en mora, vencidos',
+    nombre: 'Estado de solicitudes',
+    descripcion: 'Cuántos solicitudes activos, en mora, vencidos',
     ejemplo: '8',
     ejecutar: async () => {
       const estado = await obtenerEstadoModuloPrestamos()
       return {
-        texto: `🏦 **ESTADO DE PRÉSTAMOS**\n\n${typeof estado.resumen === 'string' ? estado.resumen : JSON.stringify(estado.resumen || estado, null, 2)}`,
+        texto: `🏦 **ESTADO DE SOLICITUDES**\n\n${typeof estado.resumen === 'string' ? estado.resumen : JSON.stringify(estado.resumen || estado, null, 2)}`,
         tipo: 'REPORTE',
       }
     },
@@ -517,8 +517,8 @@ export const COMANDOS: ComandoBot[] = [
   {
     id: 9,
     categoria: 'SISTEMA',
-    nombre: 'Préstamos en mora',
-    descripcion: 'Lista de préstamos con cuotas vencidas',
+    nombre: 'Solicitudes en mora',
+    descripcion: 'Lista de solicitudes con cuotas vencidas',
     ejemplo: '9',
     ejecutar: async () => {
       const enMora = await db.prestamo.findMany({
@@ -534,13 +534,13 @@ export const COMANDOS: ComandoBot[] = [
         take: 20,
       })
       if (enMora.length === 0) {
-        return { texto: '✅ No hay préstamos en mora actualmente.', tipo: 'REPORTE' }
+        return { texto: '✅ No hay solicitudes en mora actualmente.', tipo: 'REPORTE' }
       }
       const lineas = enMora.map((p, i) =>
         `${i + 1}. ${p.cliente.nombre} (cc ${p.cliente.cedula}) — Saldo: ${formatearMoneda(p.saldoTotal || p.montoPrincipal)} | ${p.diasMora || 0} días de mora`
       ).join('\n')
       return {
-        texto: `⚠️ **PRÉSTAMOS EN MORA (${enMora.length})**\n\n${lineas}`,
+        texto: `⚠️ **SOLICITUDES EN MORA (${enMora.length})**\n\n${lineas}`,
         tipo: 'REPORTE',
       }
     },
@@ -567,7 +567,7 @@ export const COMANDOS: ComandoBot[] = [
         }
       } catch (e: any) {
         return {
-          texto: `💼 **ESTADO DE CARTERA**\n\nError al generar el resumen: ${e.message}\n\nIntenta de nuevo o usa el comando **9** para ver préstamos en mora.`,
+          texto: `💼 **ESTADO DE CARTERA**\n\nError al generar el resumen: ${e.message}\n\nIntenta de nuevo o usa el comando **9** para ver solicitudes en mora.`,
           tipo: 'REPORTE',
         }
       }
@@ -832,12 +832,12 @@ export const COMANDOS: ComandoBot[] = [
 export function generarMenuBienvenida(): string {
   return `👋 ¡Hola! Soy tu asistente del Portal Admin.
 
-Puedo ayudarte con **finanzas**, **préstamos**, **cobros**, **seguridad**, **auditoría** y mucho más. No estoy limitado a un menú fijo: háblame en lenguaje natural y te entiendo.
+Puedo ayudarte con **finanzas**, **solicitudes**, **cobros**, **seguridad**, **auditoría** y mucho más. No estoy limitado a un menú fijo: háblame en lenguaje natural y te entiendo.
 
 💡 **Ejemplos rápidos:**
 • "Registra un gasto de 50.000 por comida"
 • "¿Cómo va el balance del mes?"
-• "Muéstrame los préstamos en mora"
+• "Muéstrame los solicitudes en mora"
 • "Auditoría reciente"
 • "Recomendaciones financieras"
 
@@ -1083,7 +1083,7 @@ async function _procesarMensajeAdminInternal(
   // 3. Si es saludo, responder amablemente (sin menú gigante)
   if (SINONIMOS.saludo.some((s) => mensajeNorm === normalizar(s) || mensajeNorm.startsWith(normalizar(s) + ' '))) {
     return {
-      texto: `👋 ¡Hola! Soy tu asistente del Portal Admin.\n\nPuedo ayudarte con finanzas, préstamos, cobros, seguridad y más. Escribe en lenguaje natural lo que necesites, o escribe **menu** para ver todos los comandos disponibles.\n\n💡 Ejemplo: *"balance del mes"*, *"préstamos en mora"*, *"registrar gasto de 50.000 por comida"*.`,
+      texto: `👋 ¡Hola! Soy tu asistente del Portal Admin.\n\nPuedo ayudarte con finanzas, solicitudes, cobros, seguridad y más. Escribe en lenguaje natural lo que necesites, o escribe **menu** para ver todos los comandos disponibles.\n\n💡 Ejemplo: *"balance del mes"*, *"solicitudes en mora"*, *"registrar gasto de 50.000 por comida"*.`,
       tipo: 'TEXTO',
     }
   }
@@ -1176,7 +1176,7 @@ async function _procesarMensajeAdminInternal(
   // 9. Fallback inteligente — sugerir comandos similares
   const sugerencias = sugerirComandos(mensaje)
   return {
-    texto: `🤔 No estoy seguro de qué necesitas. ${sugerencias ? `¿Quizás querías alguno de estos?\n\n${sugerencias}` : ''}\n\n💡 Escribe **menu** para ver todos los comandos disponibles, o pruébame con frases como:\n• *"balance del mes"*\n• *"préstamos en mora"*\n• *"registrar gasto de 50.000 por comida"*\n• *"auditoría reciente"*\n• *"qué seguridad tiene la plataforma"*\n• *"qué cajas tiene el sistema"*\n• *"cómo entro al portal jurídico"`,
+    texto: `🤔 No estoy seguro de qué necesitas. ${sugerencias ? `¿Quizás querías alguno de estos?\n\n${sugerencias}` : ''}\n\n💡 Escribe **menu** para ver todos los comandos disponibles, o pruébame con frases como:\n• *"balance del mes"*\n• *"solicitudes en mora"*\n• *"registrar gasto de 50.000 por comida"*\n• *"auditoría reciente"*\n• *"qué seguridad tiene la plataforma"*\n• *"qué cajas tiene el sistema"*\n• *"cómo entro al portal jurídico"`,
     tipo: 'TEXTO',
   }
 }

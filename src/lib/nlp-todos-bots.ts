@@ -17,7 +17,7 @@ const INTENTS_POR_BOT: Record<string, IntentBot[]> = {
   CHAT_CLIENTES: [
     {
       id: 'SALDO',
-      sinonimos: ['saldo', 'deuda', 'cuánto debo', 'cuanto debo', 'cuánto pago', 'cuanto pago', 'mi préstamo', 'mi prestamo', 'cuánto me queda', 'cuanto me queda', 'lo que debo', 'mi obligación', 'mi obligacion'],
+      sinonimos: ['saldo', 'deuda', 'cuánto debo', 'cuanto debo', 'cuánto pago', 'cuanto pago', 'mi solicitud', 'mi prestamo', 'cuánto me queda', 'cuanto me queda', 'lo que debo', 'mi obligación', 'mi obligacion'],
     },
     {
       id: 'FECHA_PAGO',
@@ -29,7 +29,7 @@ const INTENTS_POR_BOT: Record<string, IntentBot[]> = {
     },
     {
       id: 'RENOVACION',
-      sinonimos: ['renovación', 'renovacion', 'renovar', 'renuevo', 'refinanciar', 'ampliar crédito', 'ampliar credito', 'nuevo préstamo', 'nuevo prestamo'],
+      sinonimos: ['renovación', 'renovacion', 'renovar', 'renuevo', 'refinanciar', 'ampliar crédito', 'ampliar credito', 'nuevo solicitud', 'nuevo prestamo'],
     },
     {
       id: 'REQUISITOS',
@@ -49,7 +49,7 @@ const INTENTS_POR_BOT: Record<string, IntentBot[]> = {
     },
     {
       id: 'ESTADO_CUENTA',
-      sinonimos: ['estado de cuenta', 'extracto', 'resumen', 'detalle de mi préstamo', 'detalle de mi prestamo', 'movimientos', 'historial completo'],
+      sinonimos: ['estado de cuenta', 'extracto', 'resumen', 'detalle de mi solicitud', 'detalle de mi prestamo', 'movimientos', 'historial completo'],
     },
   ],
 
@@ -147,11 +147,11 @@ const INTENTS_POR_BOT: Record<string, IntentBot[]> = {
     },
   ],
 
-  // === PRESTAMOS (Asistente Préstamos) ===
+  // === PRESTAMOS (Asistente Solicitudes) ===
   PRESTAMOS: [
     {
       id: 'DASHBOARD_PRESTAMOS',
-      sinonimos: ['dashboard', 'estado', 'resumen', 'panorama', 'cómo van los préstamos', 'como van los prestamos', 'overview', 'kpi', 'indicadores del módulo'],
+      sinonimos: ['dashboard', 'estado', 'resumen', 'panorama', 'cómo van los solicitudes', 'como van los prestamos', 'overview', 'kpi', 'indicadores del módulo'],
     },
     {
       id: 'SOLICITUDES_PENDIENTES',
@@ -159,11 +159,11 @@ const INTENTS_POR_BOT: Record<string, IntentBot[]> = {
     },
     {
       id: 'PRESTAMOS_ACTIVOS',
-      sinonimos: ['activos', 'préstamos activos', 'prestamos activos', 'vigentes', 'en curso', 'cuántos préstamos activos', 'cuantos prestamos activos', 'préstamos vigentes', 'prestamos vigentes'],
+      sinonimos: ['activos', 'solicitudes activos', 'prestamos activos', 'vigentes', 'en curso', 'cuántos solicitudes activos', 'cuantos prestamos activos', 'solicitudes vigentes', 'prestamos vigentes'],
     },
     {
       id: 'MORA_PRESTAMOS',
-      sinonimos: ['mora', 'morosos', 'en mora', 'atrasados', 'incumplidos', 'deudores', 'préstamos en mora', 'prestamos en mora'],
+      sinonimos: ['mora', 'morosos', 'en mora', 'atrasados', 'incumplidos', 'deudores', 'solicitudes en mora', 'prestamos en mora'],
     },
     {
       id: 'VENCIMIENTOS_PRESTAMOS',
@@ -179,11 +179,11 @@ const INTENTS_POR_BOT: Record<string, IntentBot[]> = {
     },
     {
       id: 'MAS_RENTABLES',
-      sinonimos: ['más rentables', 'mas rentables', 'préstamos más rentables', 'prestamos mas rentables', 'mejores préstamos', 'mejores prestamos', 'top rentables', 'más ganancia', 'mas ganancia'],
+      sinonimos: ['más rentables', 'mas rentables', 'solicitudes más rentables', 'prestamos mas rentables', 'mejores solicitudes', 'mejores prestamos', 'top rentables', 'más ganancia', 'mas ganancia'],
     },
     {
       id: 'MAYOR_RIESGO',
-      sinonimos: ['mayor riesgo', 'más riesgo', 'mas riesgo', 'peligrosos', 'préstamos de riesgo', 'prestamos de riesgo', 'alto riesgo', 'críticos', 'criticos', 'atención urgente', 'atencion urgente'],
+      sinonimos: ['mayor riesgo', 'más riesgo', 'mas riesgo', 'peligrosos', 'solicitudes de riesgo', 'prestamos de riesgo', 'alto riesgo', 'críticos', 'criticos', 'atención urgente', 'atencion urgente'],
     },
     {
       id: 'SIMULAR',
@@ -196,7 +196,7 @@ const INTENTS_POR_BOT: Record<string, IntentBot[]> = {
     },
     {
       id: 'CREADOS_HOY',
-      sinonimos: ['creados hoy', 'nuevos hoy', 'desembolsados hoy', 'préstamos de hoy', 'prestamos de hoy', 'qué se desembolsó hoy', 'que se desembolso hoy', 'actividad de hoy'],
+      sinonimos: ['creados hoy', 'nuevos hoy', 'desembolsados hoy', 'solicitudes de hoy', 'prestamos de hoy', 'qué se desembolsó hoy', 'que se desembolso hoy', 'actividad de hoy'],
     },
   ],
 

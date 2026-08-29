@@ -117,7 +117,7 @@ export async function GET(req: NextRequest) {
         where: { estado: { in: ['ACTIVO', 'EN_MORA'] }, ...filtroPrestamo },
         _sum: { saldoTotal: true },
       }),
-      // === Préstamos activos para calcular proyecciones ===
+      // === Solicitudes activos para calcular proyecciones ===
       db.prestamo.findMany({
         where: { estado: { in: ['ACTIVO', 'EN_MORA'] }, ...filtroPrestamo },
         include: {

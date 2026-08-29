@@ -83,7 +83,7 @@ const PREGUNTAS_CHAT_CLIENTES: PreguntasBot = {
             '3. Cuotas pagadas\n' +
             '4. Estado de cuenta\n' +
             '5. Renovación de crédito\n' +
-            '6. Requisitos para nuevo préstamo\n' +
+            '6. Requisitos para nuevo solicitud\n' +
             '7. Hablar con asesor\n' +
             'Escribe el número o la opción que necesites.',
         },
@@ -126,7 +126,7 @@ const PREGUNTAS_CHAT_CLIENTES: PreguntasBot = {
           pregunta: '¿Cuánto debo actualmente?',
           sinonimos: ['saldo', 'cuanto debo', 'mi deuda', 'lo que debo', 'mi obligacion', 'saldo pendiente', 'cuanto me queda', 'saldo actual'],
           respuesta:
-            'Para consultar tu saldo actual necesito verificar tu identidad. Por favor confirma tu número de cédula y te muestro el saldo de tu préstamo, la cuota y la fecha del próximo pago.',
+            'Para consultar tu saldo actual necesito verificar tu identidad. Por favor confirma tu número de cédula y te muestro el saldo de tu solicitud, la cuota y la fecha del próximo pago.',
         },
         {
           pregunta: '¿Cuánto me falta para terminar de pagar?',
@@ -144,7 +144,7 @@ const PREGUNTAS_CHAT_CLIENTES: PreguntasBot = {
           pregunta: '¿Cuál es mi cuota mensual?',
           sinonimos: ['cuota', 'valor de la cuota', 'cuanto es la cuota', 'pago mensual', 'cuota mensual', 'cuota quincenal', 'mi cuota'],
           respuesta:
-            'Tu cuota depende del monto, la tasa y el plazo de tu préstamo. Confirma tu cédula y te indico el valor exacto de la cuota y la frecuencia pactada (mensual, quincenal o semanal).',
+            'Tu cuota depende del monto, la tasa y el plazo de tu solicitud. Confirma tu cédula y te indico el valor exacto de la cuota y la frecuencia pactada (mensual, quincenal o semanal).',
         },
         {
           pregunta: '¿Por qué mi saldo subió?',
@@ -153,10 +153,10 @@ const PREGUNTAS_CHAT_CLIENTES: PreguntasBot = {
             'El saldo puede subir por intereses generados días de mora, gastos de cobranza o seguros. Si estás al día, debería mantenerse o bajar con cada pago. Cuéntame si tu pago está al corriente y reviso tu caso.',
         },
         {
-          pregunta: '¿Qué pasa si no tengo préstamos activos?',
+          pregunta: '¿Qué pasa si no tengo solicitudes activos?',
           sinonimos: ['no tengo prestamo', 'sin prestamos', 'no debo nada', 'no tengo creditos', 'cero prestamos'],
           respuesta:
-            'Si no tienes préstamos activos, ¡felicitaciones por estar al día! Si quieres solicitar uno nuevo, puedo informarte sobre los requisitos y montos disponibles. ¿Te interesa?',
+            'Si no tienes solicitudes activos, ¡felicitaciones por estar al día! Si quieres solicitar uno nuevo, puedo informarte sobre los requisitos y montos disponibles. ¿Te interesa?',
         },
         {
           pregunta: '¿Puedo ver el detalle de los intereses?',
@@ -196,7 +196,7 @@ const PREGUNTAS_CHAT_CLIENTES: PreguntasBot = {
           pregunta: '¿Puedo pagar antes de la fecha?',
           sinonimos: ['pagar antes', 'pago anticipado', 'adelantar pago', 'abonar antes', 'pago adelantado'],
           respuesta:
-            '¡Claro! El pago anticipado es bienvenido y puede reducir los intereses. Puedes abonar el monto de la cuota o más. Si quieres cancelar el préstamo por completo, te calculo el saldo a fecha de hoy.',
+            '¡Claro! El pago anticipado es bienvenido y puede reducir los intereses. Puedes abonar el monto de la cuota o más. Si quieres cancelar el solicitud por completo, te calculo el saldo a fecha de hoy.',
         },
         {
           pregunta: '¿Qué pasa si pago tarde?',
@@ -225,7 +225,7 @@ const PREGUNTAS_CHAT_CLIENTES: PreguntasBot = {
           pregunta: '¿Ya puedo renovar mi crédito?',
           sinonimos: ['renovar', 'renovacion', 'renuevo', 'ya puedo renovar', 'refinanciar', 'ampliar credito'],
           respuesta:
-            'La renovación suele estar disponible cuando has pagado al menos el 50% del préstamo y estás al día. Confirma tu cédula y te digo si ya calificas y por qué monto.',
+            'La renovación suele estar disponible cuando has pagado al menos el 50% del solicitud y estás al día. Confirma tu cédula y te digo si ya calificas y por qué monto.',
         },
         {
           pregunta: '¿Cuánto me pueden prestar?',
@@ -234,7 +234,7 @@ const PREGUNTAS_CHAT_CLIENTES: PreguntasBot = {
             'El monto depende de tu capacidad de pago, historial y referencia. En general ofrecemos desde $200.000 hasta $5.000.000. Si me das tu cédula, te puedo dar una pre-aprobación estimada.',
         },
         {
-          pregunta: '¿Cuáles son los requisitos para un nuevo préstamo?',
+          pregunta: '¿Cuáles son los requisitos para un nuevo solicitud?',
           sinonimos: ['requisitos', 'que necesito', 'documentos', 'que piden', 'tramite', 'como solicito'],
           respuesta:
             'Requisitos básicos:\n' +
@@ -257,7 +257,7 @@ const PREGUNTAS_CHAT_CLIENTES: PreguntasBot = {
             'La aprobación toma entre 2 y 24 horas hábiles desde que recibimos la documentación completa. Si todo está en orden, el desembolso se realiza el mismo día de la aprobación.',
         },
         {
-          pregunta: '¿Hacen préstamos sin codeudor?',
+          pregunta: '¿Hacen solicitudes sin codeudor?',
           sinonimos: ['sin codeudor', 'sin fiador', 'sin aval', 'solo yo', 'sin respaldo', 'libre inversion'],
           respuesta:
             'Para montos hasta $1.500.000 con buen historial, podemos aprobar sin codeudor. Para montos mayores, normalmente requerimos un codeudor con capacidad de pago. ¿Qué monto tienes pensado solicitar?',
@@ -302,7 +302,7 @@ const PREGUNTAS_CHAT_CLIENTES: PreguntasBot = {
             'Sí, aceptamos pensionados con pensión vigente. Necesitamos comprobante de pensión (colpensiones o fondo privado) y cédula. El monto máximo se calcula sobre la pensión mensual.',
         },
         {
-          pregunta: '¿Préstamos a desempleados?',
+          pregunta: '¿Solicitudes a desempleados?',
           sinonimos: ['desempleado', 'sin empleo', 'sin trabajo', 'sin ingresos', 'no trabajo'],
           respuesta:
             'Para clientes sin ingresos comprobables, evaluamos con un codeudor que sí cumpla los requisitos. También existen modalidades con garantía real (vehículo, por ejemplo). ¿Tienes algún codeudor en mente?',
@@ -367,10 +367,10 @@ const PREGUNTAS_CHAT_CLIENTES: PreguntasBot = {
             'Te responderemos en máximo 5 días hábiles según la ley.',
         },
         {
-          pregunta: 'Mi préstamo no aparece en el sistema',
+          pregunta: 'Mi solicitud no aparece en el sistema',
           sinonimos: ['no aparece', 'no veo mi prestamo', 'desaparecio', 'no encuentro', 'no existe'],
           respuesta:
-            'Esto puede deberse a que el préstamo ya está cancelado, o a un error temporal. Confirma tu cédula y el código del préstamo para verificar en el sistema. Si hay error, lo escalamos al área técnica.',
+            'Esto puede deberse a que el solicitud ya está cancelado, o a un error temporal. Confirma tu cédula y el código del solicitud para verificar en el sistema. Si hay error, lo escalamos al área técnica.',
         },
         {
           pregunta: '¿Cómo reporto un fraude?',
@@ -426,10 +426,10 @@ const PREGUNTAS_CHAT_CLIENTES: PreguntasBot = {
             'Si pagaste a una cuenta errónea, escríbenos inmediatamente con el comprobante. Iniciamos un proceso de devolución que toma de 5 a 15 días hábiles según el banco.',
         },
         {
-          pregunta: '¿Puedo tener dos préstamos al tiempo?',
+          pregunta: '¿Puedo tener dos solicitudes al tiempo?',
           sinonimos: ['dos prestamos', 'varios creditos', 'prestamos multiples', 'mas de uno'],
           respuesta:
-            'Sí, es posible tener más de un préstamo siempre que tu capacidad de pago lo permita (cuota total no debe superar el 30% de tu ingreso). Si tienes uno activo y quieres otro, evaluamos tu capacidad.',
+            'Sí, es posible tener más de un solicitud siempre que tu capacidad de pago lo permita (cuota total no debe superar el 30% de tu ingreso). Si tienes uno activo y quieres otro, evaluamos tu capacidad.',
         },
       ],
     },
@@ -443,10 +443,10 @@ const PREGUNTAS_CHAT_CLIENTES: PreguntasBot = {
             'Sí aceptamos tarjetas de crédito vía Wompi. Recargo del 4% por uso de tarjeta (comisión bancaria). Para pagos recurrentes recomendamos PSE (sin recargo) o efectivo.',
         },
         {
-          pregunta: '¿El préstamo tiene seguro de vida?',
+          pregunta: '¿El solicitud tiene seguro de vida?',
           sinonimos: ['seguro vida', 'seguro', 'seguro desgravamen', 'muerte saldo'],
           respuesta:
-            'Todos nuestros préstamos incluyen seguro de desgravamen que cubre el saldo en caso de fallecimiento. Costo: 0.15% mensual sobre saldo. Opcional: seguro de invalidez (+0.10%) y seguro de desempleo (+0.20%).',
+            'Todos nuestros solicitudes incluyen seguro de desgravamen que cubre el saldo en caso de fallecimiento. Costo: 0.15% mensual sobre saldo. Opcional: seguro de invalidez (+0.10%) y seguro de desempleo (+0.20%).',
         },
         {
           pregunta: '¿Me descuentan de la nómina?',
@@ -461,13 +461,13 @@ const PREGUNTAS_CHAT_CLIENTES: PreguntasBot = {
             'El paz y salvo se genera automáticamente al cancelar el 100% del saldo. Se envía por correo en máximo 5 días hábiles con firma digital del representante legal. Si no lo recibes, escríbenos.',
         },
         {
-          pregunta: '¿El préstamo aparece en mi reporte?',
+          pregunta: '¿El solicitud aparece en mi reporte?',
           sinonimos: ['aparece reporte', 'datacredito', 'central riesgo', 'reporte positivo'],
           respuesta:
             'Sí, reportamos a Datacrédito mensualmente. Si pagas bien: aparece como cuenta al día (positivo para tu historial). Si tienes mora >30 días: reporte negativo. Los reportes positivos mejoran tu score.',
         },
         {
-          pregunta: '¿Puedo sacar otro préstamo en otro banco?',
+          pregunta: '¿Puedo sacar otro solicitud en otro banco?',
           sinonimos: ['otro banco', 'otra entidad', 'otro prestamo externo', 'segundo banco'],
           respuesta:
             'Sí, pero ten en cuenta que el otro banco consultará tu carga financiera en Datacrédito. Si tu nivel de endeudamiento supera el 30%, te pueden negar. Te recomiendo esperar a reducir tu saldo con Jsadr.',
@@ -479,13 +479,13 @@ const PREGUNTAS_CHAT_CLIENTES: PreguntasBot = {
             'La libranza es un crédito que se descuenta directamente de tu salario. Requiere convenio entre Jsadr y tu empleador. Ventajas: tasa más baja, no te preocupa la fecha de pago. Desventaja: descuento obligatorio.',
         },
         {
-          pregunta: '¿Cuándo puedo pedir el segundo préstamo?',
+          pregunta: '¿Cuándo puedo pedir el segundo solicitud?',
           sinonimos: ['segundo prestamo', 'cuando pido otro', 'nuevo credito', 'otro credito'],
           respuesta:
-            'Puedes solicitar un segundo préstamo cuando: llevas 3+ meses pagando el actual, estás al día, y tu capacidad de pago lo permite. Calificas automáticamente al pagar el 30% del actual. ¿Quieres que revise tu caso?',
+            'Puedes solicitar un segundo solicitud cuando: llevas 3+ meses pagando el actual, estás al día, y tu capacidad de pago lo permite. Calificas automáticamente al pagar el 30% del actual. ¿Quieres que revise tu caso?',
         },
         {
-          pregunta: '¿Hacen préstamos para véhicule?',
+          pregunta: '¿Hacen solicitudes para véhicule?',
           sinonimos: ['vehiculo', 'carro', 'moto', 'prestamo vehiculo', 'automotor'],
           respuesta:
             'Sí, tenemos crédito vehicular con tasa preferencial (1.0% mensual). El vehículo queda en prenda. Requisitos: prima mínima 20%, seguro obligatorio, y revisión técnica. ¿Quieres simulación para un vehículo específico?',
@@ -707,7 +707,7 @@ const PREGUNTAS_ADMIN_SISTEMA: PreguntasBot = {
           respuesta:
             'Patrimonio neto estimado:\n' +
             '• Activos: $45.500.000 (ahorros + inversiones + vehículo)\n' +
-            '• Pasivos: $12.300.000 (préstamo + tarjeta)\n' +
+            '• Pasivos: $12.300.000 (solicitud + tarjeta)\n' +
             '• Patrimonio neto: $33.200.000\n' +
             'Crecimiento anual: 12%.',
         },
@@ -1235,7 +1235,7 @@ const PREGUNTAS_CONTABILIDAD: PreguntasBot = {
             '2. Paga mínimo en todas\n' +
             '3. Destina extra a la más pequeña\n' +
             '4. Al pagarla, repite con la siguiente\n' +
-            'Tus deudas: tarjeta $850K, préstamo Jsadr $1.2M. Empieza por la tarjeta.',
+            'Tus deudas: tarjeta $850K, solicitud Jsadr $1.2M. Empieza por la tarjeta.',
         },
         {
           pregunta: '¿Cómo me preparo para emergencias?',
@@ -1697,7 +1697,7 @@ const PREGUNTAS_PAGOS: PreguntasBot = {
           sinonimos: ['whatsapp factura', 'enviar factura', 'comprobante whatsapp', 'factura por whatsapp'],
           respuesta:
             'Para enviar factura por WhatsApp necesito:\n' +
-            '• ID del préstamo\n' +
+            '• ID del solicitud\n' +
             '• Período a facturar\n' +
             'Te genero el PDF y lo envío al WhatsApp registrado del cliente. ¿Procedo?',
         },
@@ -1935,7 +1935,7 @@ const PREGUNTAS_PAGOS: PreguntasBot = {
           respuesta:
             'Si el cliente pagó pero sigue en mora, reviso:\n' +
             '1. Si el pago fue recibido en cuenta\n' +
-            '2. Si se aplicó al préstamo correcto\n' +
+            '2. Si se aplicó al solicitud correcto\n' +
             '3. Si cubre la totalidad de la cuota\n' +
             'Indícame el cliente y el comprobante. Lo regularizo de inmediato.',
         },
@@ -2061,21 +2061,21 @@ const PREGUNTAS_PAGOS: PreguntasBot = {
 }
 
 // =====================================================
-// 5. PRESTAMOS — Asistente Préstamos (Director de préstamos)
+// 5. PRESTAMOS — Asistente Solicitudes (Director de solicitudes)
 // =====================================================
 const PREGUNTAS_PRESTAMOS: PreguntasBot = {
   tipoBot: 'PRESTAMOS',
-  nombreBot: 'Asistente Préstamos',
-  descripcion: 'Director de préstamos: solicitud, aprobación, seguimiento y renovación de créditos.',
+  nombreBot: 'Asistente Solicitudes',
+  descripcion: 'Director de solicitudes: solicitud, aprobación, seguimiento y renovación de créditos.',
   categorias: [
     {
       nombre: 'Solicitud de Créditos',
       preguntas: [
         {
-          pregunta: '¿Cómo solicito un préstamo?',
+          pregunta: '¿Cómo solicito un solicitud?',
           sinonimos: ['solicitar', 'como pido', 'nuevo credito', 'tramitar', 'solicitud de prestamo'],
           respuesta:
-            'Para solicitar un préstamo:\n' +
+            'Para solicitar un solicitud:\n' +
             '1. Diligencia el formulario (datos personales, laborales, financieros)\n' +
             '2. Adjunta cédula y comprobante de ingresos\n' +
             '3. Sistema valida y pre-aprueba en 5 minutos\n' +
@@ -2127,7 +2127,7 @@ const PREGUNTAS_PRESTAMOS: PreguntasBot = {
             'Al pagar bien la primera, mejoras condiciones.',
         },
         {
-          pregunta: '¿Hacen préstamos a pensionados?',
+          pregunta: '¿Hacen solicitudes a pensionados?',
           sinonimos: ['pensionados', 'jubilados', 'pension', 'tercera edad'],
           respuesta:
             'Sí, aceptamos pensionados:\n' +
@@ -2142,7 +2142,7 @@ const PREGUNTAS_PRESTAMOS: PreguntasBot = {
           sinonimos: ['codeudor', 'fiador', 'aval', 'con aval'],
           respuesta:
             'Sí, aceptamos codeudor para:\n' +
-            '• Aumentar el monto del préstamo\n' +
+            '• Aumentar el monto del solicitud\n' +
             '• Mejorar la tasa\n' +
             '• Compensar ingresos insuficientes\n' +
             'El codeudor debe tener:\n' +
@@ -2219,7 +2219,7 @@ const PREGUNTAS_PRESTAMOS: PreguntasBot = {
             '• Aporta codeudor con buen historial: -0.2%\n' +
             '• Ofrece garantía real (vehículo): -0.3%\n' +
             '• Reduce el plazo a la mitad: -0.2%\n' +
-            '• Tienes préstamos anteriores bien pagados: -0.2%\n' +
+            '• Tienes solicitudes anteriores bien pagados: -0.2%\n' +
             'Combinando todas, puedes llegar a 1.0% mensual.',
         },
         {
@@ -2236,13 +2236,13 @@ const PREGUNTAS_PRESTAMOS: PreguntasBot = {
       ],
     },
     {
-      nombre: 'Seguimiento de Préstamos',
+      nombre: 'Seguimiento de Solicitudes',
       preguntas: [
         {
-          pregunta: '¿Cuántos préstamos activos hay?',
+          pregunta: '¿Cuántos solicitudes activos hay?',
           sinonimos: ['prestamos activos', 'cuantos activos', 'cartera activa', 'cantidad creditos'],
           respuesta:
-            'Préstamos activos: 247\n' +
+            'Solicitudes activos: 247\n' +
             '• Al día: 200 (81%)\n' +
             '• En mora leve (1-30): 28 (11%)\n' +
             '• En mora media (31-60): 12 (5%)\n' +
@@ -2250,19 +2250,19 @@ const PREGUNTAS_PRESTAMOS: PreguntasBot = {
             'Total cartera activa: $145M.',
         },
         {
-          pregunta: '¿Cómo va un préstamo específico?',
+          pregunta: '¿Cómo va un solicitud específico?',
           sinonimos: ['prestamo especifico', 'estado prestamo', 'detalle credito', 'ver prestamo'],
           respuesta:
-            'Para ver un préstamo específico necesito:\n' +
-            '• Código del préstamo (ej. PRS-2024-0123), o\n' +
+            'Para ver un solicitud específico necesito:\n' +
+            '• Código del solicitud (ej. PRS-2024-0123), o\n' +
             '• Cédula del cliente\n' +
             'Te muestro: estado, saldo, cuotas pagadas, próximo vencimiento y días de mora.',
         },
         {
-          pregunta: '¿Cuánto falta para terminar un préstamo?',
+          pregunta: '¿Cuánto falta para terminar un solicitud?',
           sinonimos: ['cuanto falta', 'para terminar', 'restante', 'lo que queda'],
           respuesta:
-            'Indícame el código del préstamo. Te muestro:\n' +
+            'Indícame el código del solicitud. Te muestro:\n' +
             '• Cuotas restantes\n' +
             '• Saldo pendiente\n' +
             '• Fecha de finalización estimada\n' +
@@ -2272,7 +2272,7 @@ const PREGUNTAS_PRESTAMOS: PreguntasBot = {
           pregunta: '¿Cuáles vencen esta semana?',
           sinonimos: ['vencen semana', 'vencimientos proximos', 'cuotas por vencer', 'esta semana'],
           respuesta:
-            'Préstamos con vencimiento esta semana: 18\n' +
+            'Solicitudes con vencimiento esta semana: 18\n' +
             '• Lunes: 3 vencimientos ($340.000)\n' +
             '• Martes: 4 ($520.000)\n' +
             '• Miércoles: 2 ($180.000)\n' +
@@ -2304,10 +2304,10 @@ const PREGUNTAS_PRESTAMOS: PreguntasBot = {
             'Comparado mes anterior: +7%.',
         },
         {
-          pregunta: '¿Cuántos préstamos hay en mora?',
+          pregunta: '¿Cuántos solicitudes hay en mora?',
           sinonimos: ['prestamos mora', 'en mora', 'cartera vencida', 'cuantos en mora'],
           respuesta:
-            'Préstamos en mora: 47\n' +
+            'Solicitudes en mora: 47\n' +
             '• 1-30 días: 28\n' +
             '• 31-60 días: 12\n' +
             '• 61-90 días: 5\n' +
@@ -2325,7 +2325,7 @@ const PREGUNTAS_PRESTAMOS: PreguntasBot = {
           respuesta:
             'Clientes elegibles para renovación: 87\n' +
             'Criterios cumplidos:\n' +
-            '• 50%+ del préstamo pagado\n' +
+            '• 50%+ del solicitud pagado\n' +
             '• Sin mora en los últimos 6 meses\n' +
             '• Al día en el último pago\n' +
             '¿Quieres la lista con sus cupos pre-aprobados?',
@@ -2335,7 +2335,7 @@ const PREGUNTAS_PRESTAMOS: PreguntasBot = {
           sinonimos: ['renovar perez', 'cupo renovacion', 'monto renovacion'],
           respuesta:
             'Para Pérez, Carlos:\n' +
-            '• Préstamo actual: $1.500.000 (saldo $720K)\n' +
+            '• Solicitud actual: $1.500.000 (saldo $720K)\n' +
             '• Historial: excelente, 0 días mora\n' +
             '• Cupo renovación: $1.500.000 adicional\n' +
             '• Tasa: 1.3% mensual (mejoró 0.1% por buen pago)\n' +
@@ -2381,8 +2381,8 @@ const PREGUNTAS_PRESTAMOS: PreguntasBot = {
           sinonimos: ['ampliar monto', 'renovar mas', 'ampliacion cupo', 'mas plata'],
           respuesta:
             'Para ampliar monto en renovación:\n' +
-            '• Se cancela préstamo actual (con saldo)\n' +
-            '• Se desembolsa nuevo préstamo = saldo + ampliación\n' +
+            '• Se cancela solicitud actual (con saldo)\n' +
+            '• Se desembolsa nuevo solicitud = saldo + ampliación\n' +
             '• Cliente recibe solo la ampliación\n' +
             '• Condición: capacidad de pago lo permita\n' +
             'Ejemplo: saldo $720K + nuevo $1.5M → recibe $780K',
@@ -2509,8 +2509,8 @@ const PREGUNTAS_PRESTAMOS: PreguntasBot = {
             'Cliente con score bajo (<550):\n' +
             'Opciones:\n' +
             '• Rechazo directo (riesgo muy alto)\n' +
-            '• Préstamo con codeudor sólido\n' +
-            '• Préstamo con garantía real\n' +
+            '• Solicitud con codeudor sólido\n' +
+            '• Solicitud con garantía real\n' +
             '• Microcrédito $300K máximo, tasa 2%\n' +
             '• Programa de reconstrucción crediticia\n' +
             '¿Qué aplica?',
@@ -2558,7 +2558,7 @@ const PREGUNTAS_PRESTAMOS: PreguntasBot = {
             '2. Contactar banco para reversión\n' +
             '3. Reembolsar si fue de más\n' +
             '4. Comunicar al cliente\n' +
-            '5. Ajustar el préstamo en sistema\n' +
+            '5. Ajustar el solicitud en sistema\n' +
             'Indícame el caso y lo escalo urgente.',
         },
         {
@@ -2587,7 +2587,7 @@ const PREGUNTAS_PRESTAMOS: PreguntasBot = {
           pregunta: 'Análisis de capacidad de pago',
           sinonimos: ['capacidad pago', 'analisis capacidad', 'flujo disponible', 'ratio endeudamiento'],
           respuesta:
-            'Capacidad de pago del cliente:\n• Ingreso neto: $3.500.000\n• Gastos básicos (50%): $1.750.000\n• Deudas actuales: $400.000\n• Disponible: $1.350.000\n• Máx. cuota nueva (30%): $1.050.000\n¿Aprueba préstamo? Sí, hasta cuota $1.05M.',
+            'Capacidad de pago del cliente:\n• Ingreso neto: $3.500.000\n• Gastos básicos (50%): $1.750.000\n• Deudas actuales: $400.000\n• Disponible: $1.350.000\n• Máx. cuota nueva (30%): $1.050.000\n¿Aprueba solicitud? Sí, hasta cuota $1.05M.',
         },
         {
           pregunta: 'Verificación de ingresos',
@@ -2623,7 +2623,7 @@ const PREGUNTAS_PRESTAMOS: PreguntasBot = {
           pregunta: 'Cross-selling',
           sinonimos: ['cross selling', 'venta cruzada', 'oferta adicional', 'complemento'],
           respuesta:
-            'Cross-selling por cliente:\n• Cliente con 1 préstamo al día: ofrecer 2do (60% conversión)\n• Score 750+: oferta seguro vida (-10%)\n• Sin ahorro: producto fondo mutuo\n• Empleado con convenio: libranza\n• Cumpleaños: oferta personalizada\nTasa conversión actual: 18%. Meta: 25%.',
+            'Cross-selling por cliente:\n• Cliente con 1 solicitud al día: ofrecer 2do (60% conversión)\n• Score 750+: oferta seguro vida (-10%)\n• Sin ahorro: producto fondo mutuo\n• Empleado con convenio: libranza\n• Cumpleaños: oferta personalizada\nTasa conversión actual: 18%. Meta: 25%.',
         },
         {
           pregunta: 'Modelo de probabilidad de impago',
@@ -2739,7 +2739,7 @@ const PREGUNTAS_JURIDICO: PreguntasBot = {
           sinonimos: ['iniciar prejuridico', 'gestion previa', 'aviso prejuridico', 'antes de demanda'],
           respuesta:
             'Para iniciar proceso prejurídico necesito:\n' +
-            '• Cliente y código de préstamo\n' +
+            '• Cliente y código de solicitud\n' +
             '• Días de mora (debe ser >30)\n' +
             '• Historial de gestiones previas\n' +
             'Proceso:\n' +
@@ -2807,7 +2807,7 @@ const PREGUNTAS_JURIDICO: PreguntasBot = {
             '• Si no paga: demanda simultánea a ambos\n' +
             '• Estrategia: presión a codeudor suele funcionar\n' +
             '• Codeudor luego cobra al deudor principal\n' +
-            '¿Tienes el código del préstamo?',
+            '¿Tienes el código del solicitud?',
         },
         {
           pregunta: 'Cerrar proceso prejurídico',
@@ -2915,10 +2915,10 @@ const PREGUNTAS_JURIDICO: PreguntasBot = {
       nombre: 'Contratos',
       preguntas: [
         {
-          pregunta: 'Generar contrato de préstamo',
+          pregunta: 'Generar contrato de solicitud',
           sinonimos: ['contrato prestamo', 'generar contrato', 'nuevo contrato', 'pagare'],
           respuesta:
-            'Para generar contrato de préstamo necesito:\n' +
+            'Para generar contrato de solicitud necesito:\n' +
             '• Datos del deudor (cédula, dirección, teléfono)\n' +
             '• Datos del codeudor (si aplica)\n' +
             '• Monto, plazo, tasa, frecuencia\n' +
@@ -2941,7 +2941,7 @@ const PREGUNTAS_JURIDICO: PreguntasBot = {
           pregunta: '¿Qué cláusulas son obligatorias?',
           sinonimos: ['clausulas obligatorias', 'requisitos legales', 'minimo legal', 'que debe tener'],
           respuesta:
-            'Cláusulas obligatorias en contrato de préstamo:\n' +
+            'Cláusulas obligatorias en contrato de solicitud:\n' +
             '• Partes identificadas (deudor, codeudor, acreedor)\n' +
             '• Monto en moneda legal\n' +
             '• Tasa de interés (no exceder máximo legal)\n' +
@@ -2970,7 +2970,7 @@ const PREGUNTAS_JURIDICO: PreguntasBot = {
             'Contrato con garantía real:\n' +
             '• Prenda (vehículo, maquinaria): registro ante CRO\n' +
             '• Hipoteca (inmueble): escritura pública + ORIP\n' +
-            '• Valor garantía: 1.3x valor préstamo\n' +
+            '• Valor garantía: 1.3x valor solicitud\n' +
             '• Póliza de seguro obligatoria\n' +
             '• Costos: notaría + registro = ~3% valor\n' +
             'Reduce tasa 0.3-0.5%. ¿Tienes el bien?',
@@ -3030,7 +3030,7 @@ const PREGUNTAS_JURIDICO: PreguntasBot = {
           respuesta:
             'Paz y salvo generado ✅\n' +
             '• Cliente: [nombre]\n' +
-            '• Préstamo: [código]\n' +
+            '• Solicitud: [código]\n' +
             '• Saldo cancelado: $0\n' +
             '• Fecha: hoy\n' +
             '• Firma digital del representante legal\n' +
@@ -3185,7 +3185,7 @@ const PREGUNTAS_JURIDICO: PreguntasBot = {
           pregunta: 'Código de Comercio aplicable',
           sinonimos: ['codigo comercio', 'comercio', 'ley 510', 'comerciante'],
           respuesta:
-            'Código de Comercio relevante:\n• Art 871-883: mutuo (préstamo)\n• Art 1169-1234: pagaré\n• Art 1182: prescripción 3 años\n• Art 824-873: contratos comerciales\n• Art 1264-1291: intereses (no usura)\nJsadr opera bajo código comercio por ser sociedad comercial.',
+            'Código de Comercio relevante:\n• Art 871-883: mutuo (solicitud)\n• Art 1169-1234: pagaré\n• Art 1182: prescripción 3 años\n• Art 824-873: contratos comerciales\n• Art 1264-1291: intereses (no usura)\nJsadr opera bajo código comercio por ser sociedad comercial.',
         },
         {
           pregunta: 'Ley 1380 de insolvencia',
@@ -3454,7 +3454,7 @@ const PREGUNTAS_SEGURIDAD: PreguntasBot = {
           respuesta:
             'Cambios registrados últimas 24h: 67\n' +
             '• Modificaciones de cliente: 23\n' +
-            '• Modificaciones de préstamo: 18\n' +
+            '• Modificaciones de solicitud: 18\n' +
             '• Cambios de configuración: 5\n' +
             '• Cambios de permisos: 2\n' +
             '• Otros: 19\n' +
@@ -4580,7 +4580,7 @@ const PREGUNTAS_CONFIGURACION: PreguntasBot = {
           respuesta:
             'Próximos deploys programados:\n' +
             '• Hoy 10:00 p.m. — v2.4.8 (fix bugs menores)\n' +
-            '• Mañana 10:00 p.m. — v2.5.0 (nueva feature préstamos)\n' +
+            '• Mañana 10:00 p.m. — v2.5.0 (nueva feature solicitudes)\n' +
             '• Viernes 10:00 p.m. — v2.5.1 (security patches)\n' +
             'Política: no deploys viernes después de 11 p.m. ni fines de semana.',
         },
@@ -4854,7 +4854,7 @@ const PREGUNTAS_CONFIGURACION: PreguntasBot = {
           respuesta:
             'Webhooks activos: 8\n' +
             '• Pago recibido → notifica cliente\n' +
-            '• Préstamo aprobado → dispara desembolso\n' +
+            '• Solicitud aprobado → dispara desembolso\n' +
             '• Cliente nuevo → CRM\n' +
             '• Mora >30 días → cobranza\n' +
             '• WhatsApp recibido → bot\n' +

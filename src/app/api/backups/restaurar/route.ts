@@ -143,7 +143,7 @@ export async function POST(req: NextRequest) {
       statsRestauracion.clientes = data.clientes.length
     }
 
-    // 3. Préstamos
+    // 3. Solicitudes
     if (data.prestamos) {
       if (sobrescribir) await db.prestamo.deleteMany({})
       for (const p of data.prestamos) {

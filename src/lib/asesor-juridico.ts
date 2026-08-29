@@ -69,7 +69,7 @@ export async function obtenerEstadoModuloJuridico() {
     take: 10,
   })
 
-  // === 5. Candidatos a jurídico (préstamos con 60+ días mora sin caso jurídico) ===
+  // === 5. Candidatos a jurídico (solicitudes con 60+ días mora sin caso jurídico) ===
   const prestamosMoraAlta = await db.prestamo.findMany({
     where: {
       estado: 'EN_MORA',
@@ -213,7 +213,7 @@ export async function generarResumenJuridico() {
 
   if (estado.candidatosJuridico.length > 0) {
     texto += `═══ CANDIDATOS A COBRO JURÍDICO (${estado.candidatosJuridico.length}) ═══\n`
-    texto += `Préstamos con 60+ días de mora sin caso jurídico:\n\n`
+    texto += `Solicitudes con 60+ días de mora sin caso jurídico:\n\n`
     estado.candidatosJuridico.forEach((c, i) => {
       texto += `${i + 1}. ${c.cliente} — ${c.diasMora} días mora [${c.severidad}]\n`
       texto += `   Saldo: ${formatearMoneda(c.saldoTotal)} | Mora: ${formatearMoneda(c.montoMora)}\n`
@@ -300,7 +300,7 @@ export async function generarAnalisisCaso(casoId: string) {
   }
 
   if (prestamo) {
-    texto += `═══ PRÉSTAMO ═══\n`
+    texto += `═══ SOLICITUD ═══\n`
     texto += `Código: ${prestamo.codigo}\n`
     texto += `Saldo total: ${formatearMoneda(prestamo.saldoTotal || 0)}\n`
     texto += `Días de mora: ${prestamo.diasMora}\n`

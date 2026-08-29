@@ -6,11 +6,11 @@
 //   - Portales directos (/admin, /juridico, /?portal=cliente, /?view=portal-admin)
 //   - Seguridad (bcrypt, JWT, MFA TOTP+WhatsApp, rate limiting, audit log, CSRF)
 //   - Cajas (4 cajas nuevas: Flexibilidad financiera, Ingresos causados, Pagare+carta, Uso plataforma)
-//   - Tarifa de uso de plataforma ($4,900 en creación de préstamo)
+//   - Tarifa de uso de plataforma ($4,900 en creación de solicitud)
 //   - Firma manuscrita en flujo de firma electrónica
 //   - Portal Admin Companion (P_jsadr — chat admin↔bot)
 //   - Restablecimiento de claves (reset global)
-//   - Módulos: clientes, préstamos, pagos, juridico, cajas, usuarios, seguridad, auditoría
+//   - Módulos: clientes, solicitudes, pagos, juridico, cajas, usuarios, seguridad, auditoría
 //   - Confirmación obligatoria de ámbito (negocio/personal) al registrar gasto/ingreso
 //
 // Este dataset se usa para:
@@ -133,7 +133,7 @@ export const DATASET_CONOCIMIENTO_PLATAFORMA: ItemEntrenamiento[] = [
     categoria: 'CAJAS',
     pregunta: 'que cajas tiene el sistema',
     respuesta:
-      'El sistema tiene 4 cajas principales:\n\n1. 💸 **Flexibilidad financiera** — Caja para movimientos relacionados con flexibilidad de pagos, refinanciaciones, prórrogas y ajustes de cuotas.\n\n2. 💰 **Ingresos causados** — Registra los ingresos ya causados pero pendientes de cobro efectivo (intereses devengados, comisiones generadas).\n\n3. 📄 **Pagaré + carta** — Caja para gastos asociados a la emisión de pagarés formales y cartas de cobro pre-jurídicas.\n\n4. 🌐 **Tarifa de Uso de Plataforma** — $4.900 COP por cada préstamo creado. Se cobra automáticamente al desembolsar. Es la tarifa que cobra Jsadr por usar la plataforma.',
+      'El sistema tiene 4 cajas principales:\n\n1. 💸 **Flexibilidad financiera** — Caja para movimientos relacionados con flexibilidad de pagos, refinanciaciones, prórrogas y ajustes de cuotas.\n\n2. 💰 **Ingresos causados** — Registra los ingresos ya causados pero pendientes de cobro efectivo (intereses devengados, comisiones generadas).\n\n3. 📄 **Pagaré + carta** — Caja para gastos asociados a la emisión de pagarés formales y cartas de cobro pre-jurídicas.\n\n4. 🌐 **Tarifa de Uso de Plataforma** — $4.900 COP por cada solicitud creado. Se cobra automáticamente al desembolsar. Es la tarifa que cobra Jsadr por usar la plataforma.',
     sinonimos: [
       'cajas', 'que cajas hay', 'tipos de caja', 'cajas del sistema',
       'cajas disponibles', 'flexibilidad financiera', 'ingresos causados',
@@ -146,7 +146,7 @@ export const DATASET_CONOCIMIENTO_PLATAFORMA: ItemEntrenamiento[] = [
     categoria: 'CAJAS',
     pregunta: 'cuanto cuesta usar la plataforma',
     respuesta:
-      'Cada vez que se crea un préstamo en la plataforma, se cobra una **Tarifa de Uso de Plataforma de $4.900 COP**. Este monto se descuenta automáticamente al desembolsar el préstamo y se registra en la caja "Tarifa de Uso de Plataforma".\n\nEsta tarifa cubre:\n  • Uso del sistema de firma electrónica\n  • Generación de pagaré digital\n  • Almacenamiento seguro del expediente\n  • Trazabilidad del AuditLog\n  • Soporte del Portal Admin Companion',
+      'Cada vez que se crea un solicitud en la plataforma, se cobra una **Tarifa de Uso de Plataforma de $4.900 COP**. Este monto se descuenta automáticamente al desembolsar el solicitud y se registra en la caja "Tarifa de Uso de Plataforma".\n\nEsta tarifa cubre:\n  • Uso del sistema de firma electrónica\n  • Generación de pagaré digital\n  • Almacenamiento seguro del expediente\n  • Trazabilidad del AuditLog\n  • Soporte del Portal Admin Companion',
     sinonimos: [
       'cuanto cuesta', 'tarifa', 'comision plataforma', 'costo plataforma',
       'precio por prestamo', 'cargo por prestamo', '4900', '4.900',
@@ -162,7 +162,7 @@ export const DATASET_CONOCIMIENTO_PLATAFORMA: ItemEntrenamiento[] = [
     categoria: 'FIRMA',
     pregunta: 'como funciona la firma electronica',
     respuesta:
-      'El flujo de firma electrónica de préstamos tiene estos pasos:\n\n1. **Generación del pagaré digital** — Al crear el préstamo, se genera un PDF con el pagaré y la tabla de amortización.\n\n2. **Confirmación por email** — Se envían códigos de 6 caracteres al deudor (y codeudor si aplica) por email. El cliente debe compartir el código con el gestor para verificar.\n\n3. **Firma manuscrita digital** — Como paso final, el cliente dibuja su firma en pantalla (touch o mouse). Esta firma se incrusta en el PDF.\n\n4. **Activación** — Una vez verificadas las firmas del deudor (y codeudor si aplica), el préstamo se activa y se desembolsa.\n\nTodo el proceso queda registrado en AuditLog con timestamp, IP y dispositivo.',
+      'El flujo de firma electrónica de solicitudes tiene estos pasos:\n\n1. **Generación del pagaré digital** — Al crear el solicitud, se genera un PDF con el pagaré y la tabla de amortización.\n\n2. **Confirmación por email** — Se envían códigos de 6 caracteres al deudor (y codeudor si aplica) por email. El cliente debe compartir el código con el gestor para verificar.\n\n3. **Firma manuscrita digital** — Como paso final, el cliente dibuja su firma en pantalla (touch o mouse). Esta firma se incrusta en el PDF.\n\n4. **Activación** — Una vez verificadas las firmas del deudor (y codeudor si aplica), el solicitud se activa y se desembolsa.\n\nTodo el proceso queda registrado en AuditLog con timestamp, IP y dispositivo.',
     sinonimos: [
       'firma electronica', 'firma digital', 'firma de prestamo',
       'como se firma', 'firmar prestamo', 'pagare firma',
@@ -196,7 +196,7 @@ export const DATASET_CONOCIMIENTO_PLATAFORMA: ItemEntrenamiento[] = [
     categoria: 'USUARIOS',
     pregunta: 'que roles hay en el sistema',
     respuesta:
-      'El sistema maneja estos roles de usuario:\n\n👤 **ADMIN** — Acceso total. Puede gestionar usuarios, configurar el sistema, ver todos los módulos.\n\n👥 **GESTOR** — Crea préstamos, registra pagos, gestiona clientes. No puede gestionar usuarios.\n\n👁️ **CONSULTOR** — Solo lectura. Ve reportes y dashboards pero no puede modificar.\n\n⚖️ **ABOGADO** — Acceso al portal jurídico (/juridico). Ve casos, cronologías, candidatos a cobro jurídico.\n\n🤖 **P_jsadr (Companion)** — Usuario especial (rol GESTOR) que da acceso al Portal Admin Companion. Es el chat directo entre el admin y el bot del sistema.\n\n👤 **CLIENTE** — Acceso al portal de cliente (/?portal=cliente). Solo ve sus propios préstamos y pagos.',
+      'El sistema maneja estos roles de usuario:\n\n👤 **ADMIN** — Acceso total. Puede gestionar usuarios, configurar el sistema, ver todos los módulos.\n\n👥 **GESTOR** — Crea solicitudes, registra pagos, gestiona clientes. No puede gestionar usuarios.\n\n👁️ **CONSULTOR** — Solo lectura. Ve reportes y dashboards pero no puede modificar.\n\n⚖️ **ABOGADO** — Acceso al portal jurídico (/juridico). Ve casos, cronologías, candidatos a cobro jurídico.\n\n🤖 **P_jsadr (Companion)** — Usuario especial (rol GESTOR) que da acceso al Portal Admin Companion. Es el chat directo entre el admin y el bot del sistema.\n\n👤 **CLIENTE** — Acceso al portal de cliente (/?portal=cliente). Solo ve sus propios solicitudes y pagos.',
     sinonimos: [
       'roles', 'que roles hay', 'tipos de usuario', 'jerarquia usuarios',
       'permisos', 'admin', 'gestor', 'consultor', 'abogado', 'cliente',
@@ -212,7 +212,7 @@ export const DATASET_CONOCIMIENTO_PLATAFORMA: ItemEntrenamiento[] = [
     categoria: 'PLATAFORMA',
     pregunta: 'que modulos tiene la plataforma',
     respuesta:
-      'La plataforma Jsadr tiene estos módulos principales:\n\n📊 **Dashboard** — KPIs, resumen ejecutivo, alertas\n👥 **Clientes** — CRUD de clientes, historial crediticio\n💵 **Préstamos** — Creación, firma electrónica, desembolso, seguimiento\n💳 **Pagos** — Registro de pagos, amortización, comprobantes\n⚖️ **Jurídico** — Casos, cronologías, candidatos a cobro judicial\n💰 **Cajas** — 4 cajas: Flexibilidad, Ingresos causados, Pagare+carta, Tarifa plataforma\n📈 **Cobros** — Gestión de cartera, morosos, recordatorios WhatsApp\n📊 **Reportes** — Reportes ejecutivos, rentabilidad, anomalías\n🔐 **Seguridad** — Auditoría, hallazgos, MFA, rate limiting\n⚙️ **Usuarios** — CRUD de usuarios, roles, permisos\n🤖 **Bot Admin** — Chat admin↔sistema (Portal Companion)\n\nCada módulo tiene su bot especializado (Asistente Cobros, Asesor Jurídico, Ciberseguridad, etc.)',
+      'La plataforma Jsadr tiene estos módulos principales:\n\n📊 **Dashboard** — KPIs, resumen ejecutivo, alertas\n👥 **Clientes** — CRUD de clientes, historial crediticio\n💵 **Solicitudes** — Creación, firma electrónica, desembolso, seguimiento\n💳 **Pagos** — Registro de pagos, amortización, comprobantes\n⚖️ **Jurídico** — Casos, cronologías, candidatos a cobro judicial\n💰 **Cajas** — 4 cajas: Flexibilidad, Ingresos causados, Pagare+carta, Tarifa plataforma\n📈 **Cobros** — Gestión de cartera, morosos, recordatorios WhatsApp\n📊 **Reportes** — Reportes ejecutivos, rentabilidad, anomalías\n🔐 **Seguridad** — Auditoría, hallazgos, MFA, rate limiting\n⚙️ **Usuarios** — CRUD de usuarios, roles, permisos\n🤖 **Bot Admin** — Chat admin↔sistema (Portal Companion)\n\nCada módulo tiene su bot especializado (Asistente Cobros, Asesor Jurídico, Ciberseguridad, etc.)',
     sinonimos: [
       'modulos', 'que modulos hay', 'secciones', 'areas del sistema',
       'funcionalidades', 'que hace la plataforma', 'capacidades',
@@ -221,14 +221,14 @@ export const DATASET_CONOCIMIENTO_PLATAFORMA: ItemEntrenamiento[] = [
   },
 
   // =====================================================
-  // PRÉSTAMOS — FLUJO COMPLETO
+  // SOLICITUDES — FLUJO COMPLETO
   // =====================================================
   {
     id: 'PL-PRESTAMO-FLUJO',
     categoria: 'PRESTAMOS',
     pregunta: 'como se crea un prestamo',
     respuesta:
-      'El flujo completo de creación de préstamo:\n\n1. **Datos del cliente** — Seleccionas el cliente (o creas uno nuevo con cédula, nombre, teléfono, email).\n\n2. **Condiciones del préstamo** — Monto, frecuencia (quincenal/mensual), número de cuotas, tasa de interés. El sistema valida que no supere la Ley de Usura (1.5x tasa corriente).\n\n3. **Codeudor (opcional)** — Si el préstamo requiere codeudor, se ingresan sus datos.\n\n4. **Tarifa de plataforma** — Se cobra $4.900 COP automáticamente. Se registra en la caja "Tarifa de Uso de Plataforma".\n\n5. **Generación del pagaré** — Se crea el PDF con pagaré + tabla de amortización.\n\n6. **Confirmación por email** — Se envían códigos de 6 caracteres al deudor (y codeudor). Deben ser verificados por el gestor.\n\n7. **Firma manuscrita** — El cliente dibuja su firma en pantalla. Se incrusta en el PDF.\n\n8. **Activación** — Una vez verificadas todas las firmas, el préstamo pasa a estado ACTIVO y se desembolsa.\n\nTodo queda registrado en AuditLog con timestamps.',
+      'El flujo completo de creación de solicitud:\n\n1. **Datos del cliente** — Seleccionas el cliente (o creas uno nuevo con cédula, nombre, teléfono, email).\n\n2. **Condiciones del solicitud** — Monto, frecuencia (quincenal/mensual), número de cuotas, tasa de interés. El sistema valida que no supere la Ley de Usura (1.5x tasa corriente).\n\n3. **Codeudor (opcional)** — Si el solicitud requiere codeudor, se ingresan sus datos.\n\n4. **Tarifa de plataforma** — Se cobra $4.900 COP automáticamente. Se registra en la caja "Tarifa de Uso de Plataforma".\n\n5. **Generación del pagaré** — Se crea el PDF con pagaré + tabla de amortización.\n\n6. **Confirmación por email** — Se envían códigos de 6 caracteres al deudor (y codeudor). Deben ser verificados por el gestor.\n\n7. **Firma manuscrita** — El cliente dibuja su firma en pantalla. Se incrusta en el PDF.\n\n8. **Activación** — Una vez verificadas todas las firmas, el solicitud pasa a estado ACTIVO y se desembolsa.\n\nTodo queda registrado en AuditLog con timestamps.',
     sinonimos: [
       'crear prestamo', 'nuevo prestamo', 'como se crea',
       'flujo de prestamo', 'desembolso', 'proceso de prestamo',
@@ -260,7 +260,7 @@ export const DATASET_CONOCIMIENTO_PLATAFORMA: ItemEntrenamiento[] = [
     categoria: 'AYUDA',
     pregunta: 'que puedo hacer con el bot',
     respuesta:
-      'Puedes pedirme en lenguaje natural o con comandos numerados:\n\n💰 **FINANZAS**\n  1. Registrar gasto (te preguntaré NEGOCIO/PERSONAL obligatoriamente)\n  2. Registrar ingreso (te preguntaré NEGOCIO/PERSONAL obligatoriamente)\n  3. Balance del mes\n  4. Gastos por categoría\n  5. Crear presupuesto\n  6. Crear meta de ahorro\n  7. Reporte mensual\n\n📊 **SISTEMA**\n  8. Estado de préstamos\n  9. Préstamos en mora\n  10. Estado de cartera\n  11. Auditoría reciente\n  12. Alertas activas\n  13. Crear evento/recordatorio\n  14. Resumen jurídico\n\n📈 **ANÁLISIS**\n  15. Recomendaciones financieras\n  16. Análisis predictivo 90 días\n  17. Comparativo mes anterior\n  18. Dashboard ejecutivo consolidado\n\n🔐 **SEGURIDAD**\n  19. Informe de seguridad\n  20. Estado del sistema (DevOps)\n\n⚙️ **CONFIG**\n  21. Configurar ámbito preferido\n\n❓ **AYUDA**\n  22. Repetir último comando\n  23. Aprender nueva frase\n  0/menu — Ver menú completo\n\nEscribe solo el número (ej: 3) o lenguaje natural (ej: "balance del mes").',
+      'Puedes pedirme en lenguaje natural o con comandos numerados:\n\n💰 **FINANZAS**\n  1. Registrar gasto (te preguntaré NEGOCIO/PERSONAL obligatoriamente)\n  2. Registrar ingreso (te preguntaré NEGOCIO/PERSONAL obligatoriamente)\n  3. Balance del mes\n  4. Gastos por categoría\n  5. Crear presupuesto\n  6. Crear meta de ahorro\n  7. Reporte mensual\n\n📊 **SISTEMA**\n  8. Estado de solicitudes\n  9. Solicitudes en mora\n  10. Estado de cartera\n  11. Auditoría reciente\n  12. Alertas activas\n  13. Crear evento/recordatorio\n  14. Resumen jurídico\n\n📈 **ANÁLISIS**\n  15. Recomendaciones financieras\n  16. Análisis predictivo 90 días\n  17. Comparativo mes anterior\n  18. Dashboard ejecutivo consolidado\n\n🔐 **SEGURIDAD**\n  19. Informe de seguridad\n  20. Estado del sistema (DevOps)\n\n⚙️ **CONFIG**\n  21. Configurar ámbito preferido\n\n❓ **AYUDA**\n  22. Repetir último comando\n  23. Aprender nueva frase\n  0/menu — Ver menú completo\n\nEscribe solo el número (ej: 3) o lenguaje natural (ej: "balance del mes").',
     sinonimos: [
       'que puedo hacer', 'comandos', 'menu', 'ayuda', 'help',
       'opciones', 'funciones del bot', 'para que sirves',

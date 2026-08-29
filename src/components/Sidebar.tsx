@@ -64,7 +64,7 @@ type MenuNode = LeafItem & {
 
 // ---------- Catálogo completo con jerarquía ----------
 // Estructura (simplificada — los submódulos son internos a cada vista):
-//   - Préstamos: tiene internamente Clientes, Cajas, Campañas, Simulador, Documentos, etc.
+//   - Solicitudes: tiene internamente Clientes, Cajas, Campañas, Simulador, Documentos, etc.
 //     (solo "Clientes" se mantiene como acceso rápido en el menú)
 //   - Seguridad: tiene internamente Conexiones API, Usuarios, Código Fuente, Manual,
 //     Auditoría Seguridad y Exportar Base de Datos. NO se muestran como submenú.
@@ -72,7 +72,7 @@ const ALL_ITEMS: MenuNode[] = [
   { key: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, description: 'KPIs y resumen' },
   {
     key: 'prestamos',
-    label: 'Préstamos',
+    label: 'Solicitudes',
     icon: FileText,
     description: 'Solicitudes y créditos',
     children: [

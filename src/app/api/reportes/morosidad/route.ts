@@ -21,7 +21,7 @@ export async function GET(req: NextRequest) {
     const fechaFin = hasta ? new Date(hasta) : new Date()
     fechaFin.setHours(23, 59, 59, 999)
 
-    // Cargar préstamos EN_MORA en el rango (excluyendo clientes de prueba)
+    // Cargar solicitudes EN_MORA en el rango (excluyendo clientes de prueba)
     const prestamosMora = await db.prestamo.findMany({
       where: {
         estado: 'EN_MORA',

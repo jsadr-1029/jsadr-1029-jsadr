@@ -33,7 +33,7 @@ export function JuridicosView({ navigate }: { navigate: (v: any) => void }) {
         {loading ? (
           <LoadingState />
         ) : !data?.casos?.length ? (
-          <EmptyState icon={Scale} title="Sin casos jurídicos" description="Cuando un préstamo entre en cobro jurídico, aparecerá aquí." />
+          <EmptyState icon={Scale} title="Sin casos jurídicos" description="Cuando un solicitud entre en cobro jurídico, aparecerá aquí." />
         ) : (
           <div className="overflow-x-auto -mx-4">
             <table className="w-full text-sm">
@@ -242,7 +242,7 @@ function DetalleCasoModal({ caso, onClose, onUpdated, navigate }: any) {
         </Tabs>
 
         <DialogFooter>
-          <Button variant="outline" onClick={() => navigate({ name: 'prestamo-detalle', id: casoFull.prestamoId })}>Ver préstamo</Button>
+          <Button variant="outline" onClick={() => navigate({ name: 'prestamo-detalle', id: casoFull.prestamoId })}>Ver solicitud</Button>
           <Button onClick={onClose}>Cerrar</Button>
         </DialogFooter>
       </DialogContent>
@@ -279,9 +279,9 @@ function NuevoCasoModal({ open, onClose, onCreated }: any) {
         <DialogHeader><DialogTitle>Nuevo Caso Jurídico</DialogTitle></DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-3">
           <div>
-            <Label>Préstamo *</Label>
+            <Label>Solicitud *</Label>
             <Select value={prestamoId} onValueChange={setPrestamoId}>
-              <SelectTrigger><SelectValue placeholder="Selecciona préstamo..." /></SelectTrigger>
+              <SelectTrigger><SelectValue placeholder="Selecciona solicitud..." /></SelectTrigger>
               <SelectContent>
                 {prestamos.map((p) => (
                   <SelectItem key={p.id} value={p.id}>{p.codigo} - {p.cliente?.nombre}</SelectItem>

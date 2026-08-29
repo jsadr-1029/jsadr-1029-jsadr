@@ -23,9 +23,9 @@ import { formatearMoneda, formatearFecha } from '@/lib/finanzas'
 
 // =====================================================
 // DashboardPrestamos
-// Tablero de control del módulo Préstamos que muestra:
+// Tablero de control del módulo Solicitudes que muestra:
 //  - Solicitudes pendientes (por prioridad)
-//  - Préstamos activos vs en mora
+//  - Solicitudes activos vs en mora
 //  - Notificaciones pendientes
 //  - Acciones prioritarias sugeridas
 //  - Resumen financiero del portafolio
@@ -69,9 +69,9 @@ export function DashboardPrestamos({ onIrA }: { onIrA: (modulo: string, tab?: st
   const cargar = async () => {
     try {
       setErrorCarga(null)
-      // Cargar préstamos
+      // Cargar solicitudes
       const resPrestamos = await fetch('/api/prestamos')
-      if (!resPrestamos.ok) throw new Error(`HTTP ${resPrestamos.status} al cargar préstamos`)
+      if (!resPrestamos.ok) throw new Error(`HTTP ${resPrestamos.status} al cargar solicitudes`)
       const jsonPrestamos = await resPrestamos.json()
       // Cargar notificaciones
       const resNotif = await fetch('/api/notificaciones')
@@ -115,8 +115,8 @@ export function DashboardPrestamos({ onIrA }: { onIrA: (modulo: string, tab?: st
         if (prestamosPendienteAceptacion > 0) {
           prioridades.push({
             nivel: 'ALTA',
-            titulo: 'Préstamos pendientes de aceptación T&C',
-            descripcion: `${prestamosPendienteAceptacion} préstamo(s) esperando que el cliente acepte términos y condiciones`,
+            titulo: 'Solicitudes pendientes de aceptación T&C',
+            descripcion: `${prestamosPendienteAceptacion} solicitud(s) esperando que el cliente acepte términos y condiciones`,
             accion: 'Revisar solicitudes',
             modulo: 'solicitudes',
             cantidad: prestamosPendienteAceptacion,
@@ -126,8 +126,8 @@ export function DashboardPrestamos({ onIrA }: { onIrA: (modulo: string, tab?: st
         if (prestamosEnMora > 0) {
           prioridades.push({
             nivel: 'ALTA',
-            titulo: 'Préstamos en mora',
-            descripcion: `${prestamosEnMora} préstamo(s) en mora con ${formatearMoneda(totalMoraAcumulada)} acumulada`,
+            titulo: 'Solicitudes en mora',
+            descripcion: `${prestamosEnMora} solicitud(s) en mora con ${formatearMoneda(totalMoraAcumulada)} acumulada`,
             accion: 'Gestionar cobro',
             modulo: 'pagos',
             cantidad: prestamosEnMora,
@@ -137,8 +137,8 @@ export function DashboardPrestamos({ onIrA }: { onIrA: (modulo: string, tab?: st
         if (prestamosJuridico > 0) {
           prioridades.push({
             nivel: 'ALTA',
-            titulo: 'Préstamos en cobro jurídico',
-            descripcion: `${prestamosJuridico} préstamo(s) en proceso jurídico activo`,
+            titulo: 'Solicitudes en cobro jurídico',
+            descripcion: `${prestamosJuridico} solicitud(s) en proceso jurídico activo`,
             accion: 'Revisar casos',
             modulo: 'juridico',
             cantidad: prestamosJuridico,
@@ -160,7 +160,7 @@ export function DashboardPrestamos({ onIrA }: { onIrA: (modulo: string, tab?: st
           prioridades.push({
             nivel: 'MEDIA',
             titulo: 'Vencimientos próximos (7 días)',
-            descripcion: `${proximosVencimientos} préstamo(s) con vencimiento en los próximos 7 días`,
+            descripcion: `${proximosVencimientos} solicitud(s) con vencimiento en los próximos 7 días`,
             accion: 'Ver próximos pagos',
             modulo: 'pagos',
             cantidad: proximosVencimientos,
@@ -250,7 +250,7 @@ export function DashboardPrestamos({ onIrA }: { onIrA: (modulo: string, tab?: st
         <div>
           <h3 className="text-lg font-semibold flex items-center gap-2">
             <Target className="w-5 h-5 text-primary" />
-            Tablero de Control — Préstamos
+            Tablero de Control — Solicitudes
           </h3>
           <p className="text-xs text-muted-foreground mt-0.5">
             Estado general del módulo. Enfócate en las prioridades de mayor urgencia.

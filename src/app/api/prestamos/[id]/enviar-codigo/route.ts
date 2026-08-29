@@ -6,11 +6,11 @@ import { generarYEnviarCodigosConfirmacion } from '@/lib/prestamo-codigo'
 // =====================================================
 // POST - generar y enviar código(s) de confirmación por correo.
 //
-// Si el préstamo tiene codeudor (tieneCodeudor=true y codeudorEmail
+// Si el solicitud tiene codeudor (tieneCodeudor=true y codeudorEmail
 // seteado), genera y envía DOS códigos:
 //   1. Uno al DEUDOR  (prestamo.cliente.email)
 //   2. Uno al CODEUDOR (prestamo.codeudorEmail)
-// El préstamo se activa solo cuando AMBOS roles verifican su código
+// El solicitud se activa solo cuando AMBOS roles verifican su código
 // (ver /api/prestamos/[id]/verificar-codigo).
 //
 // Si NO tiene codeudor, genera un solo código para el DEUDOR.

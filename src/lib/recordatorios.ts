@@ -218,7 +218,7 @@ export async function enviarRecordatoriosPago(): Promise<ResultadoRecordatorio> 
             const envioEmail = await enviarEmail({
               to: cliente.email,
               subject: asunto,
-              text: `Hola ${cliente.nombre}, te recordamos que tu cuota ${pago.numeroCuota} del préstamo ${prestamo.codigo} por ${formatearMoneda(pago.montoTotal)} vence el ${formatearFecha(pago.fechaVencimiento)}. Evita moratorios pagando a tiempo.`,
+              text: `Hola ${cliente.nombre}, te recordamos que tu cuota ${pago.numeroCuota} del solicitud ${prestamo.codigo} por ${formatearMoneda(pago.montoTotal)} vence el ${formatearFecha(pago.fechaVencimiento)}. Evita moratorios pagando a tiempo.`,
               html,
             })
 
@@ -260,7 +260,7 @@ export async function enviarRecordatoriosPago(): Promise<ResultadoRecordatorio> 
         estado: 'Enviado',
       })
     } catch (e: any) {
-      resultado.errores.push(`Error procesando pago ${pago.id} (cuota ${pago.numeroCuota} del préstamo ${prestamo.codigo}): ${e?.message || 'desconocido'}`)
+      resultado.errores.push(`Error procesando pago ${pago.id} (cuota ${pago.numeroCuota} del solicitud ${prestamo.codigo}): ${e?.message || 'desconocido'}`)
       resultado.detalle.push({
         cliente: cliente.nombre,
         cedula: cliente.cedula,
@@ -324,7 +324,7 @@ function generarHtmlRecordatorioEmail(d: {
               <tr><td style="padding:16px 20px;">
                 <table width="100%" cellpadding="0" cellspacing="0">
                   <tr>
-                    <td style="font-size:12px;color:#6b7280;padding-bottom:8px;">Préstamo</td>
+                    <td style="font-size:12px;color:#6b7280;padding-bottom:8px;">Solicitud</td>
                     <td style="font-size:12px;color:#6b7280;padding-bottom:8px;text-align:right;">Cuota</td>
                   </tr>
                   <tr>
@@ -362,7 +362,7 @@ function generarHtmlRecordatorioEmail(d: {
         <tr>
           <td style="background:#f9fafb;padding:18px 40px;text-align:center;">
             <p style="margin:0;font-size:11px;color:#9ca3af;">
-              © ${new Date().getFullYear()} JSADR · Sistema de Gestión de Préstamos
+              © ${new Date().getFullYear()} JSADR · Sistema de Gestión de Solicitudes
             </p>
           </td>
         </tr>

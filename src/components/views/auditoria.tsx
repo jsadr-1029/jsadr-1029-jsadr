@@ -25,7 +25,7 @@ export function AuditoriaView() {
           <SelectTrigger className="w-full sm:w-56"><SelectValue placeholder="Filtrar por módulo" /></SelectTrigger>
           <SelectContent>
             <SelectItem value="TODOS">Todos</SelectItem>
-            <SelectItem value="prestamos">Préstamos</SelectItem>
+            <SelectItem value="prestamos">Solicitudes</SelectItem>
             <SelectItem value="pagos">Pagos</SelectItem>
             <SelectItem value="clientes">Clientes</SelectItem>
             <SelectItem value="notificaciones">Notificaciones</SelectItem>

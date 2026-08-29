@@ -272,7 +272,7 @@ export async function GET(req: NextRequest) {
       .sort((a, b) => b.saldoTotal - a.saldoTotal)
       .slice(0, 15)
 
-    // === POR PRÉSTAMO (TOP 20) ===
+    // === POR SOLICITUD (TOP 20) ===
     const porPrestamo = prestamosConCliente
       .map((p) => ({
         id: p.id,
@@ -296,7 +296,7 @@ export async function GET(req: NextRequest) {
       _sum: { saldoTotal: true, montoPrincipal: true },
     })
 
-    // === ALERTAS JURÍDICO (préstamos que superan 60 días de mora) ===
+    // === ALERTAS JURÍDICO (solicitudes que superan 60 días de mora) ===
     const alertasJuridico: any[] = []
     for (const p of prestamosMora) {
       const diasMora = await calcularDiasMoraPrestamo(p.id)

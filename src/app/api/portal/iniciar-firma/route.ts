@@ -6,7 +6,7 @@ import crypto from 'crypto'
  * POST /api/portal/iniciar-firma
  *
  * Genera un TokenFirma para que el cliente pueda firmar electrónicamente
- * un préstamo PENDIENTE_ACEPTACION desde el portal.
+ * un solicitud PENDIENTE_ACEPTACION desde el portal.
  *
  * Body: { prestamoId: string }
  * Header: x-portal-token: <token de sesión del cliente>
@@ -36,14 +36,14 @@ export async function POST(req: NextRequest) {
       include: { cliente: true },
     })
     if (!prestamo) {
-      return NextResponse.json({ success: false, error: 'Préstamo no encontrado' }, { status: 404 })
+      return NextResponse.json({ success: false, error: 'Solicitud no encontrado' }, { status: 404 })
     }
     if (prestamo.clienteId !== cliente.id) {
-      return NextResponse.json({ success: false, error: 'El préstamo no pertenece a este cliente' }, { status: 403 })
+      return NextResponse.json({ success: false, error: 'El solicitud no pertenece a este cliente' }, { status: 403 })
     }
     if (prestamo.estado !== 'PENDIENTE_ACEPTACION') {
       // FIX 2026-08-12: Verificar si hay una firma en progreso.
-      // Si la hay, permitir continuar con el flujo (por ejemplo, si el préstamo
+      // Si la hay, permitir continuar con el flujo (por ejemplo, si el solicitud
       // cambió de estado mientras la firma estaba en curso, o si el cliente
       // necesita reanudar una firma interrumpida).
       const firmaEnProgreso = await db.firmaElectronica.findFirst({
@@ -56,13 +56,13 @@ export async function POST(req: NextRequest) {
       if (!firmaEnProgreso) {
         return NextResponse.json({
           success: false,
-          error: `El préstamo no está pendiente de aceptación (estado actual: ${prestamo.estado}). Solo se puede iniciar firma en préstamos PENDIENTE_ACEPTACION, o que tengan una firma electrónica en progreso.`,
+          error: `El solicitud no está pendiente de aceptación (estado actual: ${prestamo.estado}). Solo se puede iniciar firma en solicitudes PENDIENTE_ACEPTACION, o que tengan una firma electrónica en progreso.`,
         }, { status: 400 })
       }
       // Hay firma en progreso — permitir continuar
     }
 
-    // Si ya existe una firma PENDIENTE para este préstamo, reutilizarla
+    // Si ya existe una firma PENDIENTE para este solicitud, reutilizarla
     const firmaExistente = await db.firmaElectronica.findFirst({
       where: {
         prestamoId: prestamo.id,

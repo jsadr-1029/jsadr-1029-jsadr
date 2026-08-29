@@ -953,7 +953,7 @@ export default function LoginPage() {
             <span className="text-xs font-medium text-slate-300">Plataforma financiera integral</span>
           </div>
           <h2 className="text-4xl xl:text-5xl font-bold text-white leading-tight mb-6">
-            Gestión de préstamos{' '}
+            Gestión de solicitudes{' '}
             <span className="bg-gradient-to-r from-indigo-400 via-purple-400 to-fuchsia-400 bg-clip-text text-transparent">
               inteligente
             </span>{' '}
@@ -1560,7 +1560,7 @@ export default function LoginPage() {
                         {validarResultado.data.codigoPrestamo && (
                           <div className="flex items-center gap-2 text-xs">
                             <Hash className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
-                            <span className="text-slate-400">Préstamo:</span>
+                            <span className="text-slate-400">Solicitud:</span>
                             <span className="text-white font-mono">{validarResultado.data.codigoPrestamo}</span>
                           </div>
                         )}

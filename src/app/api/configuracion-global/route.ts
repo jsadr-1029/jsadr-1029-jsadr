@@ -141,7 +141,7 @@ const VARIABLES_DEFAULT = [
   { clave: 'MONEDA_DEFAULT', valor: 'COP', tipo: 'string', descripcion: 'Moneda por defecto del sistema', categoria: 'general' },
   { clave: 'IDIOMA_DEFAULT', valor: 'es-CO', tipo: 'string', descripcion: 'Idioma por defecto', categoria: 'general' },
   { clave: 'ZONA_HORARIA', valor: 'America/Bogota', tipo: 'string', descripcion: 'Zona horaria del sistema', categoria: 'general' },
-  { clave: 'MAX_PRESTAMOS_CLIENTE', valor: '3', tipo: 'number', descripcion: 'Máximo préstamos activos por cliente', categoria: 'negocio' },
+  { clave: 'MAX_PRESTAMOS_CLIENTE', valor: '3', tipo: 'number', descripcion: 'Máximo solicitudes activos por cliente', categoria: 'negocio' },
   { clave: 'BACKUP_FREQUENCY_HOURS', valor: '24', tipo: 'number', descripcion: 'Frecuencia de backups automáticos (horas)', categoria: 'sistema' },
   { clave: 'SESSION_TIMEOUT_MIN', valor: '60', tipo: 'number', descripcion: 'Tiempo de inactividad de sesión (minutos)', categoria: 'sistema' },
 ]

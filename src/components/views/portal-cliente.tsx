@@ -225,7 +225,7 @@ function PortalHome({ session, onLogout, navigate }: { session: PortalSession; o
 
       <Tabs defaultValue="prestamos">
         <TabsList className="grid w-full grid-cols-6">
-          <TabsTrigger value="prestamos">Préstamos</TabsTrigger>
+          <TabsTrigger value="prestamos">Solicitudes</TabsTrigger>
           <TabsTrigger value="firmar">
             Documentos
             {pendientesFirmaCount > 0 && (
@@ -253,9 +253,9 @@ function PortalHome({ session, onLogout, navigate }: { session: PortalSession; o
         </TabsList>
 
         <TabsContent value="prestamos">
-          <Card title="Préstamos Activos" subtitle={`${data.prestamos?.length || 0} préstamos`}>
+          <Card title="Solicitudes Activos" subtitle={`${data.prestamos?.length || 0} solicitudes`}>
             {!data.prestamos?.length ? (
-              <EmptyState icon={FileCheck} title="Sin préstamos" description="No tienes préstamos registrados." />
+              <EmptyState icon={FileCheck} title="Sin solicitudes" description="No tienes solicitudes registrados." />
             ) : (
               <div className="space-y-3">
                 {data.prestamos.map((p: any) => (
@@ -417,7 +417,7 @@ function PrestamoCard({ prestamo, token, navigate }: any) {
   const [firmarOpen, setFirmarOpen] = useState(false)
   const progreso = prestamo.numeroCuotas > 0 ? (prestamo.cuotasPagadas / prestamo.numeroCuotas) * 100 : 0
 
-  // === Determinar si el préstamo está saldado/cancelado ===
+  // === Determinar si el solicitud está saldado/cancelado ===
   const estaCancelado = prestamo.estado === 'CANCELADO'
   const estaSaldado = prestamo.saldoTotal <= 0 && prestamo.cuotasPagadas >= prestamo.numeroCuotas
   const puedeDescargarPazYSalvo = estaCancelado || estaSaldado
@@ -654,7 +654,7 @@ function FirmarModal({ prestamo, token, onClose, navigate }: any) {
                 <FileCheck className="w-5 h-5" />
               </div>
               <div>
-                <h3 className="font-bold text-slate-900">Firmar TyC del Préstamo</h3>
+                <h3 className="font-bold text-slate-900">Firmar TyC del Solicitud</h3>
                 <p className="text-xs text-slate-500">{prestamo.codigo}</p>
               </div>
             </div>
@@ -668,7 +668,7 @@ function FirmarModal({ prestamo, token, onClose, navigate }: any) {
             </div>
             <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 mb-4">
               <p className="text-xs text-amber-800">
-                Al firmar, aceptas los términos y condiciones del préstamo. El proceso de firma electrónica incluye:
+                Al firmar, aceptas los términos y condiciones del solicitud. El proceso de firma electrónica incluye:
                 verificación OTP por correo, captura de cédula y selfie, y tu firma manuscrita en la pantalla.
                 Tu firma se incluirá en el pagaré y la carta de instrucciones.
               </p>
@@ -785,7 +785,7 @@ function FirmarModal({ prestamo, token, onClose, navigate }: any) {
             </div>
             <h3 className="font-bold text-slate-900 text-lg mb-2">¡Firma completada!</h3>
             <p className="text-sm text-slate-500 mb-4">
-              Has firmado correctamente los términos y condiciones del préstamo {prestamo.codigo}.
+              Has firmado correctamente los términos y condiciones del solicitud {prestamo.codigo}.
               Tu firma manuscrita fue guardada y se incluirá en el pagaré y carta de instrucciones.
               El administrador será notificado para continuar con el proceso.
             </p>
@@ -878,7 +878,7 @@ function DocumentosPorFirmarPanel({ token }: { token: string }) {
                 : 'No tienes documentos pendientes de firma'}
             </p>
             <p className="text-xs text-amber-800 mt-1">
-              Los Otros Síes son acuerdos de modificación de fechas de pago que se anexan a tu préstamo
+              Los Otros Síes son acuerdos de modificación de fechas de pago que se anexan a tu solicitud
               sin modificar el pagaré ni la carta de instrucciones originales. Deben firmarse electrónicamente
               con verificación OTP + selfie.
             </p>
@@ -907,7 +907,7 @@ function DocumentosPorFirmarPanel({ token }: { token: string }) {
                       </span>
                     </div>
                     <p className="text-xs text-slate-600 mb-2">
-                      Préstamo: <span className="font-mono font-semibold">{os.prestamo?.codigo || '—'}</span>
+                      Solicitud: <span className="font-mono font-semibold">{os.prestamo?.codigo || '—'}</span>
                       {' · '}Solicitado: {formatDate(os.fechaSolicitud)}
                     </p>
                     <p className="text-sm text-slate-700 line-clamp-2">{os.descripcion}</p>
@@ -970,7 +970,7 @@ function DocumentosPorFirmarPanel({ token }: { token: string }) {
                       </span>
                     </div>
                     <p className="text-xs text-slate-600 mb-2">
-                      Préstamo: <span className="font-mono font-semibold">{os.prestamo?.codigo || '—'}</span>
+                      Solicitud: <span className="font-mono font-semibold">{os.prestamo?.codigo || '—'}</span>
                       {' · '}Firmado: {os.fechaFirma ? formatDate(os.fechaFirma) : '—'}
                     </p>
                     <p className="text-sm text-slate-700 line-clamp-2">{os.descripcion}</p>
@@ -1067,7 +1067,7 @@ function SimuladorPrestamo({ token }: { token: string }) {
   const totalCargosIniciales = TARIFA_PLATAFORMA + flexCostoSeleccionado
 
   return (
-    <Card title="Simulador de Préstamo">
+    <Card title="Simulador de Solicitud">
       <form onSubmit={simular} className="space-y-3 mb-4">
         <div className="grid grid-cols-2 gap-3">
           <div>
@@ -1371,7 +1371,7 @@ function SimuladorPrestamo({ token }: { token: string }) {
                 </span>
               </div>
               <p className="text-xs text-emerald-800">
-                Al aprobarse tu préstamo, podrás activar el beneficio pagando{' '}
+                Al aprobarse tu solicitud, podrás activar el beneficio pagando{' '}
                 <strong>{formatCOP(resultado.simulacion.flexibilidadCosto ?? flexCostoSeleccionado)}</strong> adicionales. Tendrás derecho a:
               </p>
               <ul className="list-disc list-inside text-xs text-emerald-800 ml-2 space-y-0.5">
@@ -1423,7 +1423,7 @@ function SimuladorPrestamo({ token }: { token: string }) {
           )}
 
           <div className="text-xs text-slate-500 bg-slate-50 p-3 rounded">
-            <p>* Esta es una simulación. El préstamo final está sujeto a aprobación y verificación de capacidad de pago.</p>
+            <p>* Esta es una simulación. El solicitud final está sujeto a aprobación y verificación de capacidad de pago.</p>
           </div>
         </div>
       )}

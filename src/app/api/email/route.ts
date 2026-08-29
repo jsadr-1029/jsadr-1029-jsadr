@@ -104,12 +104,12 @@ export async function POST(req: NextRequest) {
 
       const resultado = await enviarEmail({
         to,
-        subject: 'Correo de prueba - Sistema de Préstamos',
-        text: 'Este es un correo de prueba enviado desde el Sistema de Gestión de Préstamos.',
+        subject: 'Correo de prueba - Sistema de Solicitudes',
+        text: 'Este es un correo de prueba enviado desde el Sistema de Gestión de Solicitudes.',
         html: `
 <div style="font-family: Arial, sans-serif; padding: 20px;">
   <h2 style="color: #1e40af;">Correo de prueba ✅</h2>
-  <p>Este es un correo de prueba enviado desde el Sistema de Gestión de Préstamos.</p>
+  <p>Este es un correo de prueba enviado desde el Sistema de Gestión de Solicitudes.</p>
   <p>Si lo recibiste, la configuración SMTP funciona correctamente.</p>
 </div>`,
       })

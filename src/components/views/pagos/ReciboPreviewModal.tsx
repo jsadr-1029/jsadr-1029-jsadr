@@ -350,7 +350,7 @@ export function ReciboPreviewModal({ abierto, pagoId, onCerrar }: Props) {
                 </div>
                 <div className="space-y-2">
                   <div className="text-[10px] uppercase tracking-wider text-slate-400 font-bold">
-                    Detalles del préstamo
+                    Detalles del solicitud
                   </div>
                   <div className="space-y-1 text-xs">
                     <div className="flex justify-between">
@@ -385,12 +385,12 @@ export function ReciboPreviewModal({ abierto, pagoId, onCerrar }: Props) {
                 </div>
               </div>
 
-              {/* Estado de avance del préstamo */}
+              {/* Estado de avance del solicitud */}
               <div className="mx-6 mb-4 p-3 rounded-lg bg-gradient-to-br from-slate-50 to-slate-100 border border-slate-200">
                 <div className="flex items-center justify-between mb-2">
                   <div className="text-[10px] uppercase tracking-wider text-slate-500 font-bold flex items-center gap-1.5">
                     <Award className="w-3 h-3 text-amber-500" />
-                    Avance del préstamo
+                    Avance del solicitud
                   </div>
                   <div className="text-xs font-bold text-slate-700">{data.porcentajeAvance}%</div>
                 </div>
@@ -415,7 +415,7 @@ export function ReciboPreviewModal({ abierto, pagoId, onCerrar }: Props) {
                   ) : (
                     <div className="flex items-center gap-1.5 text-emerald-700">
                       <CheckCircle2 className="w-3 h-3" />
-                      <span className="font-bold">Préstamo cancelado ✓</span>
+                      <span className="font-bold">Solicitud cancelado ✓</span>
                     </div>
                   )}
                 </div>
@@ -875,7 +875,7 @@ function generarHtmlImprimible(data: DatosRecibo): string {
         <div class="detalle"><strong>Tel:</strong> ${cliente.telefono || '—'}</div>
       </div>
       <div>
-        <div class="col-title">Detalles del préstamo</div>
+        <div class="col-title">Detalles del solicitud</div>
         <div class="detalle"><strong>Código:</strong> <span style="font-family:monospace">${prestamo.codigo || '—'}</span></div>
         <div class="detalle"><strong>Cuota:</strong> #${pago.cuota} de ${data.totalCuotas}</div>
         <div class="detalle"><strong>Fecha pago:</strong> ${formatearFechaHora(pago.fecha)}</div>
@@ -886,7 +886,7 @@ function generarHtmlImprimible(data: DatosRecibo): string {
 
     <div class="avance">
       <div class="avance-head">
-        <div class="avance-title">★ Avance del préstamo</div>
+        <div class="avance-title">★ Avance del solicitud</div>
         <div class="avance-pct">${data.porcentajeAvance}%</div>
       </div>
       <div class="avance-bar"><div class="avance-fill" style="width: ${data.porcentajeAvance}%"></div></div>
@@ -894,7 +894,7 @@ function generarHtmlImprimible(data: DatosRecibo): string {
         <div class="avance-pag">✓ ${data.cuotaActual} cuota(s) pagada(s)</div>
         ${data.cuotasPendientes > 0
           ? `<div class="avance-pend">⏰ ${data.cuotasPendientes} cuota(s) pendiente(s)</div>`
-          : `<div class="avance-pag">✓ Préstamo cancelado</div>`}
+          : `<div class="avance-pag">✓ Solicitud cancelado</div>`}
       </div>
     </div>
 

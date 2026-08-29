@@ -369,7 +369,7 @@ export async function POST(req: NextRequest) {
       },
     })
 
-    // === Determinar tasa y calcular préstamo ===
+    // === Determinar tasa y calcular solicitud ===
     let resultado: ResultadoCalculo
     let tasaUtilizada: number
     let tasaOrigen: string
@@ -649,7 +649,7 @@ export async function PATCH(req: NextRequest) {
           estado: 'CONVERTIDA',
           fecha: now.toISOString(),
           usuario: revisadoPor || auth.nombre,
-          observacion: `Convertida en préstamo ${prestamoCreadoId}. Flujo de firma activado para el cliente.`,
+          observacion: `Convertida en solicitud ${prestamoCreadoId}. Flujo de firma activado para el cliente.`,
         })
         break
       }

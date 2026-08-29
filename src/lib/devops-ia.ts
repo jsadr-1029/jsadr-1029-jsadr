@@ -488,7 +488,7 @@ export async function generarEstadoSistema() {
   texto += `Tamaño: ${audit.baseDatos.tamañoMB} MB\\n`
   texto += `Registros:\\n`
   texto += `• Clientes: ${audit.baseDatos.clientes}\\n`
-  texto += `• Préstamos: ${audit.baseDatos.prestamos}\\n`
+  texto += `• Solicitudes: ${audit.baseDatos.prestamos}\\n`
   texto += `• Pagos: ${audit.baseDatos.pagos}\\n`
   texto += `• Mensajes: ${audit.baseDatos.mensajes}\\n`
   texto += `• Audit logs: ${audit.baseDatos.auditLogs}\\n`

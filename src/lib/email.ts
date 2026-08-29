@@ -58,7 +58,7 @@ async function obtenerConfigSmtp(): Promise<SmtpConfig | null> {
     let host = ''
     let port = 587
     let secure = false
-    let fromName = 'Sistema de Préstamos'
+    let fromName = 'Sistema de Solicitudes'
     let fromEmail = ''
 
     // Parsear configuracionExtra si existe
@@ -160,7 +160,7 @@ async function obtenerConfigSmtpFromCorreoInstitucional(): Promise<SmtpConfig | 
       secure: correo.smtpPort === 465,
       user: correo.smtpUser,
       pass,
-      fromName: correo.nombreRemitente || correo.aliasRemitente || correo.nombre || 'Sistema de Préstamos',
+      fromName: correo.nombreRemitente || correo.aliasRemitente || correo.nombre || 'Sistema de Solicitudes',
       fromEmail: correo.email,
     }
   } catch (error) {
@@ -521,7 +521,7 @@ export async function enviarEmail({
   // === Leer configuración SMTP (para fromName/fromEmail y como fallback) ===
   const config = await obtenerConfigSmtp()
   const correoCfg = config ?? (await obtenerConfigSmtpFromCorreoInstitucional())
-  const fromName = correoCfg?.fromName || 'Sistema de Préstamos'
+  const fromName = correoCfg?.fromName || 'Sistema de Solicitudes'
   const fromEmail = correoCfg?.fromEmail || 'jsa@jsadr.com.co'
   const safeFromName = sanitizeHeader(fromName)
   const safeFromEmail = sanitizeHeader(fromEmail)
