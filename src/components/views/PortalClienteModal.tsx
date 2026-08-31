@@ -52,6 +52,7 @@ import {
   Award,
   CalendarClock,
   Calendar,
+  Info,
   HeartPulse,
   CreditCard,
   FileCheck,
@@ -3034,103 +3035,128 @@ function SimuladorCredito({
             )
           })()}
 
-          {/* === Renovación Anticipada (beneficio opcional, cobro único $9.900) === */}
-          {/* El cliente puede activar este beneficio para reservar su cupo anticipadamente */}
+          {/* === Renovación Anticipada (2026-08-29 rediseñado) === */}
+          {/* Pregunta clara al cliente: ¿Desea generar renovación anticipada? */}
+          {/* Si responde SÍ, se cargan $9.900 y se explica por qué. */}
           <Card className={`premium-card rounded-2xl border-2 transition-colors ${
             renovacionAnticipada
               ? 'border-amber-500/60'
               : 'border-amber-500/20'
           }`}>
-            <CardContent className="p-3 space-y-2">
-              <div className="flex items-center justify-between gap-2">
-                <div className="flex items-center gap-2 min-w-0">
-                  <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${
+            <CardContent className="p-3 space-y-3">
+              {/* === Pregunta principal === */}
+              <div className="flex items-center gap-2">
+                <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${
+                  renovacionAnticipada
+                    ? 'bg-gradient-to-br from-amber-500 to-orange-600'
+                    : 'bg-muted/40'
+                }`}>
+                  <Repeat className={`w-3.5 h-3.5 ${renovacionAnticipada ? 'text-white' : 'text-muted-foreground'}`} />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-bold">
+                    ¿Desea generar renovación anticipada para este crédito?
+                  </p>
+                  <p className="text-[10px] text-muted-foreground">
+                    Reserve su cupo para el siguiente ciclo de crédito
+                  </p>
+                </div>
+              </div>
+
+              {/* === Botones Sí / No === */}
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setRenovacionAnticipada(false)}
+                  className={`p-2.5 rounded-lg text-xs font-semibold transition-all ${
+                    !renovacionAnticipada
+                      ? 'bg-slate-600 text-white border-2 border-slate-400'
+                      : 'bg-muted/30 text-muted-foreground border-2 border-transparent hover:bg-muted/50'
+                  }`}
+                >
+                  No, gracias
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setRenovacionAnticipada(true)}
+                  className={`p-2.5 rounded-lg text-xs font-semibold transition-all ${
                     renovacionAnticipada
-                      ? 'bg-gradient-to-br from-amber-500 to-orange-600'
-                      : 'bg-muted/40'
-                  }`}>
-                    <Repeat className={`w-3.5 h-3.5 ${renovacionAnticipada ? 'text-white' : 'text-muted-foreground'}`} />
-                  </div>
-                  <div className="min-w-0">
-                    <p className="text-xs font-bold flex items-center gap-1.5">
-                      Renovación Anticipada
-                      <Badge
-                        variant="outline"
-                        className={`text-[9px] px-1.5 py-0 ${
-                          renovacionAnticipada
-                            ? 'text-amber-300 border-amber-500/40 bg-amber-500/10'
-                            : 'text-muted-foreground'
-                        }`}
-                      >
-                        {renovacionAnticipada
-                          ? `✨ Activado · +${formatearMoneda(RENOVACION_ANTICIPADA_COSTO)}`
-                          : 'Opcional · $9.900'}
-                      </Badge>
-                    </p>
-                    <p className="text-[10px] text-muted-foreground truncate">
-                      {renovacionAnticipada
-                        ? 'Beneficio activado · Reserva tu cupo para el siguiente crédito'
-                        : 'Reserva tu cupo y obtén beneficios exclusivos'}
-                    </p>
-                  </div>
-                </div>
-                <input
-                  type="checkbox"
-                  id="renovacionAnticipadaPortal"
-                  checked={renovacionAnticipada}
-                  onChange={(e) => setRenovacionAnticipada(e.target.checked)}
-                  className="w-4 h-4 accent-amber-500 shrink-0 cursor-pointer"
-                  aria-label="Activar Renovación Anticipada"
-                />
+                      ? 'bg-gradient-to-r from-amber-500 to-orange-600 text-white border-2 border-amber-300'
+                      : 'bg-muted/30 text-muted-foreground border-2 border-transparent hover:bg-muted/50'
+                  }`}
+                >
+                  <Repeat className="w-3 h-3 inline mr-1" />
+                  Sí, renovar
+                </button>
               </div>
 
-              {/* Mensaje comercial persuasivo */}
-              <div className="mt-2 p-2.5 rounded-md bg-amber-500/10 border border-amber-500/30 text-[10px] text-amber-100 leading-relaxed">
-                <div className="font-semibold mb-1 flex items-center gap-1">
-                  <Zap className="w-3 h-3" /> ¿Por qué tomar Renovación Anticipada?
+              {/* === Explicación del cobro de $9.900 (siempre visible) === */}
+              <div className="p-2.5 rounded-md bg-amber-500/10 border border-amber-500/30 text-[10px] text-amber-100 leading-relaxed space-y-2">
+                <div className="font-semibold flex items-center gap-1">
+                  <Info className="w-3 h-3" /> ¿Qué es la Renovación Anticipada?
                 </div>
-                <ul className="list-disc list-inside space-y-0.5 ml-1">
-                  <li>
-                    <strong>Reserva anticipada de tu cupo:</strong> asegura la
-                    disponibilidad de tu monto para el siguiente ciclo de crédito,
-                    sin depender de aprobaciones tardías.
-                  </li>
-                  <li>
-                    <strong>Prioridad en el procesamiento:</strong> tu próxima
-                    solicitud pasa al frente de la fila, reduciendo tiempos de
-                    espera.
-                  </li>
-                  <li>
-                    <strong>Tasa preferencial mantenida:</strong> conservas la
-                    tasa actual sin re-evaluación, incluso si las condiciones del
-                    mercado cambian.
-                  </li>
-                  <li>
-                    <strong>Desembolso acelerado:</strong> al cancelar tu crédito
-                    actual, el nuevo se desembolsa en menos de 24 horas hábiles.
-                  </li>
-                  <li>
-                    <strong>Trámite simplificado:</strong> omites el cargue de
-                    documentos y la validación de identidad en tu próxima solicitud.
-                  </li>
-                </ul>
-                <p className="mt-2 pt-1.5 border-t border-amber-500/20">
-                  💡 Por solo <strong>{formatearMoneda(RENOVACION_ANTICIPADA_COSTO)}</strong> pagaderos
-                  una sola vez al inicio del crédito, te aseguras continuidad
-                  financiera y ventajas exclusivas. El cobro se refleja en la
-                  primera cuota y se notifica en tu estado de cuenta.
+                <p>
+                  Es un beneficio que te permite <strong>reservar tu cupo de crédito</strong> para
+                  el siguiente ciclo. Al activarlo, se cobrarán{' '}
+                  <strong className="text-amber-200">{formatearMoneda(RENOVACION_ANTICIPADA_COSTO)}</strong>{' '}
+                  una sola vez al inicio del crédito (cargados en la primera cuota).
                 </p>
+
+                {/* === Explicación de por qué se cobra aunque no se use === */}
+                <div className="p-2 rounded bg-amber-900/20 border border-amber-700/30">
+                  <p className="font-semibold text-amber-200 mb-1">💰 ¿Por qué se cobra $9.900?</p>
+                  <p className="text-[10px] text-amber-100/80">
+                    Este valor corresponde a una <strong>reserva de cupo</strong>. Se cobra
+                    <strong> se utilice o no</strong> el beneficio, porque:
+                  </p>
+                  <ul className="list-disc list-inside space-y-0.5 mt-1 text-[10px] text-amber-100/80">
+                    <li>Se <strong>reserva el capital</strong> para tu próximo crédito desde ya, inmovilizando recursos.</li>
+                    <li>Se <strong>asigna prioridad</strong> en la fila de procesamiento de solicitudes.</li>
+                    <li>Se <strong>mantienen tus condiciones</strong> (tasa, monto) sin re-evaluación.</li>
+                    <li>Se <strong>agiliza el desembolso</strong> del nuevo crédito (&lt; 24 horas hábiles).</li>
+                  </ul>
+                  <p className="mt-1.5 text-[10px] text-amber-200/80 italic">
+                    ⚠️ Si activas este beneficio y decides no usarlo, el cobro de{' '}
+                    <strong>{formatearMoneda(RENOVACION_ANTICIPADA_COSTO)}</strong> ya se habrá
+                    aplicado y <strong>no es reembolsable</strong>, ya que la reserva del cupo
+                    estuvo vigente durante el ciclo del crédito.
+                  </p>
+                </div>
+
+                {/* === Beneficios === */}
+                <div>
+                  <p className="font-semibold text-amber-200 mb-1">✅ Beneficios al activar:</p>
+                  <ul className="list-disc list-inside space-y-0.5 text-[10px] text-amber-100/80">
+                    <li><strong>Reserva anticipada:</strong> tu monto queda asegurado para el siguiente crédito.</li>
+                    <li><strong>Prioridad:</strong> tu próxima solicitud pasa al frente de la fila.</li>
+                    <li><strong>Tasa preferencial:</strong> conservas la tasa actual sin re-evaluación.</li>
+                    <li><strong>Desembolso acelerado:</strong> el nuevo crédito se desembolsa en menos de 24h.</li>
+                    <li><strong>Trámite simplificado:</strong> omites cargue de documentos y validación de identidad.</li>
+                  </ul>
+                </div>
               </div>
 
-              {/* Banner de confirmación visual cuando está activo */}
+              {/* === Banner de confirmación cuando está activado === */}
               {renovacionAnticipada && (
-                <div className="mt-2 p-2 rounded-md bg-emerald-500/10 border border-emerald-500/30 text-[10px] text-emerald-100 flex items-center gap-1.5">
+                <div className="p-2 rounded-md bg-emerald-500/10 border border-emerald-500/30 text-[10px] text-emerald-100 flex items-center gap-1.5">
                   <BadgeCheck className="w-3.5 h-3.5 shrink-0" />
                   <span>
-                    ✅ Beneficio activado. Se cobrarán{' '}
+                    ✅ Renovación Anticipada activada. Se cobrarán{' '}
                     <strong>{formatearMoneda(RENOVACION_ANTICIPADA_COSTO)}</strong> una
-                    sola vez al inicio del crédito. Tu solicitud tendrá marcador
-                    de prioridad para el asesor.
+                    sola vez al inicio del crédito (en la primera cuota). Este cobro aplica
+                    <strong> se utilice o no</strong> el beneficio, ya que reserva tu cupo
+                    desde el inicio. Tu solicitud tendrá marcador de prioridad para el asesor.
+                  </span>
+                </div>
+              )}
+
+              {/* === Banner cuando NO está activado === */}
+              {!renovacionAnticipada && (
+                <div className="p-2 rounded-md bg-muted/20 border border-border/30 text-[10px] text-muted-foreground flex items-center gap-1.5">
+                  <Info className="w-3.5 h-3.5 shrink-0" />
+                  <span>
+                    No has activado la renovación anticipada. Podrás activarla en una
+                    próxima solicitud si lo deseas.
                   </span>
                 </div>
               )}
