@@ -2430,6 +2430,21 @@ function SimuladorCredito({
   const tieneTasaPers = !!tasaPersonalizadaInicial?.tiene
   const tasaPersValor = tasaPersonalizadaInicial?.valor ?? 0
 
+  // === Tarifa de Plataforma (2026-08-29) ===
+  // $4.900 COP — cobro único cuando la tasa mensual es ≥ 15%.
+  // Se cobra una sola vez durante la vigencia, cargado en la primera cuota.
+  const TARIFA_PLATAFORMA = 4900
+  const TASA_MIN_PARA_TARIFA = 15
+  const tasaSimulacion = tieneTasaPers && tasaPersValor > 0 ? tasaPersValor : TASA_GENERAL_DEFAULT_SIM
+  const tarifaPlataformaAplica = tasaSimulacion >= TASA_MIN_PARA_TARIFA
+  const tarifaPlataformaMonto = tarifaPlataformaAplica ? TARIFA_PLATAFORMA : 0
+
+  // === Estado para el flujo de envío de solicitud (2026-08-29) ===
+  // El cliente primero simula, ve los resultados con todos los cargos,
+  // luego hace clic en "Enviar Solicitud", se le pide confirmación,
+  // y solo DESPUÉS de confirmar se solicita la clave dinámica.
+  const [mostrarConfirmacionEnvio, setMostrarConfirmacionEnvio] = useState(false)
+
   const calcularSimulacion = () => {
     const valor = parseFloat(valorSolicitado)
     const cuotas = parseInt(numeroCuotas, 10)
@@ -2477,6 +2492,12 @@ function SimuladorCredito({
       })
     }
     setResultado(res)
+    
+    // === FIX (2026-08-29): Mostrar tarifa de plataforma automáticamente ===
+    // La tarifa de $4.900 se cobra cuando la tasa mensual es ≥ 15%.
+    // Se calcula localmente y se muestra en los resultados de la simulación.
+    // No es necesario llamar al API para esto — el cálculo es simple.
+    // El valor se suma al total a pagar y a la primera cuota.
   }
 
   // === Solicitar Clave Dinámica (envía OTP al correo del cliente) ===
@@ -2626,6 +2647,10 @@ function SimuladorCredito({
           // === Periodo de corte (2026-08-21) ===
           periodoCorte: periodoCorte !== 'NINGUNO' ? periodoCorte : undefined,
           fechaSolicitud: fechaSolicitudSim,
+          // === Tarifa de Plataforma (2026-08-29) ===
+          // $4.900 cobro único cuando tasa ≥ 15%. Se carga en la primera cuota.
+          cobroTarifaPlataforma: tarifaPlataformaAplica,
+          valorTarifaPlataforma: tarifaPlataformaMonto,
         }),
       })
       const json = await res.json()
@@ -2640,6 +2665,7 @@ function SimuladorCredito({
         setClaveDinamicaValor('')
         setCodigoConfirmacion(null)
         setOtpRegistroId(null)
+        setMostrarConfirmacionEnvio(false)
       } else {
         // Si falla por codigoConfirmacion inválido, reset del flujo
         if (json.code === 'INVALID_CODIGO_CONFIRMACION') {
@@ -3111,8 +3137,170 @@ function SimuladorCredito({
             </CardContent>
           </Card>
 
-          {/* === PASO 1: Solicitar Clave Dinámica === */}
-          {!claveDinamicaSolicitada && !claveDinamicaVerificada && (
+          {/* === RESUMEN DE CARGOS Y BOTÓN ENVIAR SOLICITUD (2026-08-29) === */}
+          {/* El cliente ve el resumen completo de cargos (tarifa plataforma, */}
+          {/* flexibilidad, renovación, días causados) y luego hace clic en */}
+          {/* "Enviar Solicitud". Solo después de confirmar, se solicita la */}
+          {/* clave dinámica. */}
+          {!claveDinamicaSolicitada && !claveDinamicaVerificada && !mostrarConfirmacionEnvio && (
+            <Card className="premium-card rounded-2xl border-cyan-500/30">
+              <CardContent className="p-3.5 space-y-3">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center shadow-md">
+                    <Send className="w-4 h-4 text-white" />
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-xs font-bold">Enviar Solicitud</p>
+                    <p className="text-[10px] text-muted-foreground">
+                      Revisa los cargos y envía tu solicitud al asesor
+                    </p>
+                  </div>
+                </div>
+
+                {/* === Resumen de cargos === */}
+                <div className="space-y-1.5 p-2.5 rounded-lg bg-background/50 border border-border/50">
+                  <div className="flex justify-between text-[11px]">
+                    <span className="text-muted-foreground">Capital solicitado:</span>
+                    <strong>{formatearMoneda(parseFloat(valorSolicitado) || 0)}</strong>
+                  </div>
+                  <div className="flex justify-between text-[11px]">
+                    <span className="text-muted-foreground">Total intereses:</span>
+                    <strong className="text-amber-300">{resultado ? formatearMoneda(resultado.totalInteres) : '—'}</strong>
+                  </div>
+                  <div className="flex justify-between text-[11px]">
+                    <span className="text-muted-foreground">Cuota base:</span>
+                    <strong className="text-cyan-300">{resultado ? formatearMoneda(resultado.montoCuota) : '—'}</strong>
+                  </div>
+                  <div className="flex justify-between text-[11px]">
+                    <span className="text-muted-foreground">N° cuotas:</span>
+                    <strong>{numeroCuotas} ({frecuencia.toLowerCase()})</strong>
+                  </div>
+
+                  {/* === Tarifa de Plataforma $4.900 (automática cuando tasa ≥ 15%) === */}
+                  {tarifaPlataformaAplica && (
+                    <div className="flex justify-between text-[11px] pt-1.5 mt-1 border-t border-border/30">
+                      <span className="text-blue-300">
+                        💻 Tarifa Uso de Plataforma
+                        <span className="block text-[9px] text-muted-foreground">Cobro único · 1ª cuota · tasa ≥ {TASA_MIN_PARA_TARIFA}%</span>
+                      </span>
+                      <strong className="text-blue-300">{formatearMoneda(TARIFA_PLATAFORMA)}</strong>
+                    </div>
+                  )}
+                  {!tarifaPlataformaAplica && (
+                    <div className="flex justify-between text-[11px] pt-1.5 mt-1 border-t border-border/30">
+                      <span className="text-emerald-300">
+                        💻 Tarifa Uso de Plataforma
+                        <span className="block text-[9px] text-muted-foreground">No aplica (tasa &lt; {TASA_MIN_PARA_TARIFA}%)</span>
+                      </span>
+                      <strong className="text-emerald-300">$0</strong>
+                    </div>
+                  )}
+
+                  {/* === Flexibilidad Financiera (si está activada) === */}
+                  {flexibilidadFinanciera && (
+                    <div className="flex justify-between text-[11px]">
+                      <span className="text-emerald-300">
+                        ✨ Flexibilidad {flexibilidadModalidad}
+                      </span>
+                      <strong className="text-emerald-300">{formatearMoneda(FLEXIBILIDAD_COSTO)}</strong>
+                    </div>
+                  )}
+
+                  {/* === Renovación Anticipada (si está activada) === */}
+                  {renovacionAnticipada && (
+                    <div className="flex justify-between text-[11px]">
+                      <span className="text-violet-300">
+                        🔄 Renovación Anticipada
+                      </span>
+                      <strong className="text-violet-300">{formatearMoneda(RENOVACION_ANTICIPADA_COSTO)}</strong>
+                    </div>
+                  )}
+
+                  {/* === Total con cargos === */}
+                  <div className="flex justify-between text-xs pt-1.5 mt-1 border-t border-border/30">
+                    <span className="font-bold">Total a pagar (con cargos):</span>
+                    <strong className="text-emerald-300 text-sm">
+                      {formatearMoneda(
+                        (resultado?.totalPagar || 0) +
+                        tarifaPlataformaMonto +
+                        (flexibilidadFinanciera ? FLEXIBILIDAD_COSTO : 0) +
+                        (renovacionAnticipada ? RENOVACION_ANTICIPADA_COSTO : 0)
+                      )}
+                    </strong>
+                  </div>
+                  {tarifaPlataformaAplica && (
+                    <p className="text-[9px] text-blue-300/70 italic">
+                      💡 La 1ª cuota incluirá {formatearMoneda(tarifaPlataformaMonto)} por tarifa de plataforma (cobro único).
+                      Primera cuota total: <strong>{formatearMoneda((resultado?.montoCuota || 0) + tarifaPlataformaMonto + (flexibilidadFinanciera ? FLEXIBILIDAD_COSTO : 0) + (renovacionAnticipada ? RENOVACION_ANTICIPADA_COSTO : 0))}</strong>
+                    </p>
+                  )}
+                </div>
+
+                <Button
+                  onClick={() => setMostrarConfirmacionEnvio(true)}
+                  className="w-full gradient-premium gradient-premium-hover btn-press"
+                >
+                  <Send className="w-4 h-4 mr-2" />
+                  Enviar Solicitud
+                </Button>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* === CONFIRMACIÓN: ¿Está seguro que desea enviar? === */}
+          {mostrarConfirmacionEnvio && !claveDinamicaSolicitada && !claveDinamicaVerificada && (
+            <Card className="premium-card rounded-2xl border-amber-500/40 fade-scale">
+              <CardContent className="p-3.5 space-y-3">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-amber-500 to-orange-600 flex items-center justify-center shadow-md">
+                    <AlertTriangle className="w-4 h-4 text-white" />
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-xs font-bold text-amber-200">¿Está seguro?</p>
+                    <p className="text-[10px] text-muted-foreground">
+                      Confirma que deseas enviar esta solicitud
+                    </p>
+                  </div>
+                </div>
+                <p className="text-[11px] text-muted-foreground leading-relaxed">
+                  Vas a enviar una solicitud de crédito por{' '}
+                  <strong className="text-foreground">{formatearMoneda(parseFloat(valorSolicitado) || 0)}</strong>{' '}
+                  a {numeroCuotas} cuotas {frecuencia.toLowerCase()}s.
+                  {tarifaPlataformaAplica && (
+                    <> Incluye tarifa de plataforma de <strong className="text-blue-300">{formatearMoneda(TARIFA_PLATAFORMA)}</strong> (cobro único en la primera cuota).</>
+                  )}
+                  {' '}Un asesor la revisará y se comunicará contigo.
+                </p>
+                <div className="grid grid-cols-2 gap-2">
+                  <Button
+                    onClick={() => setMostrarConfirmacionEnvio(false)}
+                    variant="outline"
+                    size="sm"
+                    className="border-white/20 hover:bg-white/5"
+                  >
+                    Cancelar
+                  </Button>
+                  <Button
+                    onClick={() => {
+                      setMostrarConfirmacionEnvio(false)
+                      solicitarClaveDinamica()
+                    }}
+                    className="gradient-premium gradient-premium-hover btn-press"
+                    size="sm"
+                  >
+                    <CheckCircle className="w-3.5 h-3.5 mr-1.5" />
+                    Sí, enviar
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* === PASO 1: Clave Dinámica enviada (la solicitud fue automática tras confirmar) === */}
+          {/* Ya no se muestra el botón "Solicitar Clave Dinámica" porque la clave */}
+          {/* se solicita automáticamente al confirmar el envío de la solicitud. */}
+          {/* Solo se muestra el estado: "Clave enviada a tu correo". */}
+          {claveDinamicaSolicitada && !claveDinamicaVerificada && (
             <Card className="premium-card rounded-2xl border-violet-500/30">
               <CardContent className="p-3.5 space-y-2.5">
                 <div className="flex items-center gap-2">
@@ -3120,28 +3308,16 @@ function SimuladorCredito({
                     <KeyRound className="w-4 h-4 text-white" />
                   </div>
                   <div className="flex-1">
-                    <p className="text-xs font-bold">Confirmar con Clave Dinámica</p>
+                    <p className="text-xs font-bold">Clave Dinámica enviada</p>
                     <p className="text-[10px] text-muted-foreground">
-                      Para enviar tu solicitud, verifica tu identidad
+                      Hemos enviado una clave a tu correo
                     </p>
                   </div>
                 </div>
                 <p className="text-[10px] text-muted-foreground leading-relaxed">
-                  Te enviaremos una clave de 6 dígitos a tu correo registrado.
-                  Deberás ingresarla para confirmar el envío de tu solicitud.
+                  Te enviamos una clave de 6 dígitos a tu correo registrado ({emailEnmascarado}).
+                  Ingrésala abajo para confirmar el envío de tu solicitud.
                 </p>
-                <Button
-                  onClick={solicitarClaveDinamica}
-                  disabled={claveDinamicaEnviando}
-                  className="w-full gradient-premium gradient-premium-hover btn-press"
-                >
-                  {claveDinamicaEnviando ? (
-                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  ) : (
-                    <KeyRound className="w-4 h-4 mr-2" />
-                  )}
-                  {claveDinamicaEnviando ? 'Enviando clave...' : 'Solicitar Clave Dinámica'}
-                </Button>
               </CardContent>
             </Card>
           )}
