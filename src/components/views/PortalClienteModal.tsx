@@ -2398,7 +2398,7 @@ function SimuladorCredito({
   // El cliente puede elegir si sus fechas de pago serán con corte del 5-20, 15-30,
   // o una fecha personalizada (ej: 16-1, 6-20). El sistema calcula cuántos días
   // faltan para el corte y cuánto se cobraría como días causados.
-  const [periodoCorte, setPeriodoCorte] = useState<string>('NINGUNO')
+  const [periodoCorte, setPeriodoCorte] = useState<string>('')
   const [fechaSolicitudSim, setFechaSolicitudSim] = useState<string>(
     new Date().toISOString().slice(0, 10)
   )
@@ -2461,6 +2461,16 @@ function SimuladorCredito({
       toast({
         title: 'Cuotas inválidas',
         description: 'Ingresa un número de cuotas mayor a 0',
+        variant: 'destructive',
+      })
+      return
+    }
+    // === FIX (2026-08-29): Periodo de corte OBLIGATORIO ===
+    // El cliente debe seleccionar una fecha de pago antes de simular.
+    if (!periodoCorte || periodoCorte === 'NINGUNO') {
+      toast({
+        title: '⚠️ Debes seleccionar una fecha de pago',
+        description: 'Elige una fecha de corte (5-20, 15-30, 1-16, etc.) para continuar. Es obligatorio.',
         variant: 'destructive',
       })
       return
@@ -2646,7 +2656,7 @@ function SimuladorCredito({
           renovacionAnticipada,
           renovacionAnticipadaCosto: RENOVACION_ANTICIPADA_COSTO,
           // === Periodo de corte (2026-08-21) ===
-          periodoCorte: periodoCorte !== 'NINGUNO' ? periodoCorte : undefined,
+          periodoCorte: periodoCorte && periodoCorte !== 'NINGUNO' ? periodoCorte : undefined,
           fechaSolicitud: fechaSolicitudSim,
           // === Tarifa de Plataforma (2026-08-29) ===
           // $4.900 cobro único cuando tasa ≥ 15%. Se carga en la primera cuota.
@@ -2766,25 +2776,27 @@ function SimuladorCredito({
               />
             </div>
 
-            {/* === Periodo de corte (2026-08-21) === */}
-            <div className="space-y-2 p-3 rounded-lg bg-indigo-500/10 border border-indigo-500/30">
-              <Label className="text-xs font-semibold text-indigo-200 flex items-center gap-1.5">
+            {/* === Periodo de corte OBLIGATORIO (2026-08-29) === */}
+            {/* El cliente DEBE escoger una fecha de corte obligatoriamente. */}
+            {/* Se le advierte que si el pago se pasa de la fecha de corte, */}
+            {/* se calculará mora del 1% diario. */}
+            <div className="space-y-2 p-3 rounded-lg bg-indigo-500/10 border-2 border-indigo-500/40">
+              <Label className="text-xs font-bold text-indigo-200 flex items-center gap-1.5">
                 <Calendar className="w-3.5 h-3.5" />
-                Fechas de corte (opcional)
+                Fechas de pago (obligatorio) *
               </Label>
               <p className="text-[10px] text-muted-foreground">
-                Elige si tus pagos serán con corte del 5-20, 15-30, o una fecha personalizada.
-                El sistema calculará los días causados hasta el corte.
+                Debes escoger la fecha de pagos para tu crédito. Las cuotas se
+                programarán según el periodo de corte que selecciones.
               </p>
               <div className="grid grid-cols-2 gap-2">
                 <div className="space-y-1">
-                  <Label className="text-[10px] text-muted-foreground">Periodo de corte</Label>
+                  <Label className="text-[10px] text-muted-foreground font-semibold">Periodo de corte *</Label>
                   <Select value={periodoCorte} onValueChange={setPeriodoCorte}>
-                    <SelectTrigger className="input-premium h-8 text-xs">
+                    <SelectTrigger className={`input-premium h-8 text-xs ${(!periodoCorte || periodoCorte === 'NINGUNO') ? 'border-red-500/50' : ''}`}>
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="NINGUNO">Sin corte</SelectItem>
                       <SelectItem value="5-20">📅 Cortes 5 y 20</SelectItem>
                       <SelectItem value="15-30">📅 Cortes 15 y 30</SelectItem>
                       <SelectItem value="1-16">📅 Cortes 1 y 16</SelectItem>
@@ -2794,7 +2806,7 @@ function SimuladorCredito({
                   </Select>
                 </div>
                 <div className="space-y-1">
-                  <Label className="text-[10px] text-muted-foreground">Fecha de solicitud</Label>
+                  <Label className="text-[10px] text-muted-foreground font-semibold">Fecha de solicitud</Label>
                   <Input
                     type="date"
                     value={fechaSolicitudSim}
@@ -2803,11 +2815,38 @@ function SimuladorCredito({
                   />
                 </div>
               </div>
-              {periodoCorte !== 'NINGUNO' && (
-                <p className="text-[10px] text-indigo-200 italic">
-                  💡 Las cuotas se programarán desde la fecha de corte más cercana.
-                  Si la solicitud no cae en un día de corte, se cobrarán días causados adicionales.
-                </p>
+
+              {/* === Mensaje informativo sobre el corte seleccionado === */}
+              {periodoCorte && periodoCorte !== 'NINGUNO' && (
+                <div className="p-2 rounded bg-indigo-500/10 border border-indigo-500/20 text-[10px] text-indigo-200">
+                  <p>
+                    💡 Las cuotas se programarán desde la fecha de corte más cercana.
+                    Si la solicitud no cae en un día de corte, se cobrarán días causados adicionales.
+                  </p>
+                </div>
+              )}
+
+              {/* === Advertencia de mora (siempre visible) === */}
+              <div className="p-2 rounded bg-red-500/10 border border-red-500/30 text-[10px] text-red-200 flex items-start gap-1.5">
+                <AlertTriangle className="w-3.5 h-3.5 text-red-400 mt-0.5 shrink-0" />
+                <div>
+                  <p className="font-semibold text-red-200">⚠️ Importante sobre mora</p>
+                  <p className="text-red-100/80 mt-0.5">
+                    Si tu pago se pasa de la fecha de corte seleccionada, se calculará
+                    <strong className="text-red-200"> mora del 1% diario</strong> sobre el saldo pendiente,
+                    calculada de forma compuesta. Asegúrate de cumplir con las fechas de pago.
+                  </p>
+                </div>
+              </div>
+
+              {/* === Aviso si no ha seleccionado corte === */}
+              {(!periodoCorte || periodoCorte === 'NINGUNO') && (
+                <div className="p-2 rounded bg-red-500/10 border border-red-500/30 text-[10px] text-red-200 flex items-center gap-1.5">
+                  <AlertTriangle className="w-3.5 h-3.5 text-red-400 shrink-0" />
+                  <span className="font-semibold">
+                    Debes seleccionar una fecha de corte para continuar.
+                  </span>
+                </div>
               )}
             </div>
           </div>
