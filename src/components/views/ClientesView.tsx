@@ -49,6 +49,8 @@ import {
   Percent,
   AlertCircle,
   FileText,
+  LayoutGrid,
+  Table2,
 } from 'lucide-react'
 import { SolicitudesPendientesPanel } from './SolicitudesPendientesPanel'
 import { HojaVidaClienteModal } from './HojaVidaClienteModal'
@@ -199,6 +201,7 @@ export function ClientesView({ onChanged }: { onChanged: () => void }) {
   const [categorias, setCategorias] = useState<any[]>([])
   const [cuentas, setCuentas] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
+  const [vistaClientes, setVistaClientes] = useState<'tabla' | 'cards'>('cards')
   const [busqueda, setBusqueda] = useState('')
   const [filtroActivo, setFiltroActivo] = useState<'todos' | 'activos' | 'inactivos'>('todos')
   // === Filtro adicional: clientes con mora activa o con solicitudes activos ===
@@ -598,7 +601,110 @@ export function ClientesView({ onChanged }: { onChanged: () => void }) {
         </Select>
       </div>
 
-      {/* Tabla */}
+      {/* Toggle vista tabla/cards */}
+      <div className="flex items-center gap-2">
+        <button
+          onClick={() => setVistaClientes('tabla')}
+          className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${vistaClientes === 'tabla' ? 'bg-primary/20 text-primary' : 'text-muted-foreground hover:bg-white/5'}`}
+          title="Vista de tabla"
+        >
+          <Table2 className="w-4 h-4 inline mr-1" /> Tabla
+        </button>
+        <button
+          onClick={() => setVistaClientes('cards')}
+          className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${vistaClientes === 'cards' ? 'bg-primary/20 text-primary' : 'text-muted-foreground hover:bg-white/5'}`}
+          title="Vista de tarjetas"
+        >
+          <LayoutGrid className="w-4 h-4 inline mr-1" /> Tarjetas
+        </button>
+      </div>
+
+      {/* === Vista de tarjetas === */}
+      {vistaClientes === 'cards' && (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+          {loading ? (
+            <div className="col-span-full text-center py-8 text-muted-foreground">Cargando...</div>
+          ) : clientesFiltrados.length === 0 ? (
+            <div className="col-span-full text-center py-8 text-muted-foreground">No hay clientes que coincidan con el filtro.</div>
+          ) : (
+            clientesFiltrados.map((c) => (
+              <Card key={c.id} className={`bg-card/50 backdrop-blur-sm border-white/10 hover:border-primary/30 transition-all ${!c.activo ? 'opacity-60' : ''}`}>
+                <CardContent className="p-4 space-y-3">
+                  {/* Header */}
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex-1 min-w-0">
+                      <div className="font-semibold text-sm flex items-center gap-2">
+                        {c.nombre}
+                        {clientesConMora.has(c.id) && (
+                          <Badge variant="destructive" className="text-[9px]">En mora</Badge>
+                        )}
+                      </div>
+                      <div className="text-xs text-muted-foreground font-mono">{c.cedula}</div>
+                      {c.email && (
+                        <div className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
+                          <Mail className="w-3 h-3" /> {c.email}
+                        </div>
+                      )}
+                    </div>
+                    <div className="flex flex-col items-end gap-1">
+                      {c.activo ? (
+                        <Badge className="bg-green-100 text-green-700 hover:bg-green-100">Activo</Badge>
+                      ) : (
+                        <Badge variant="destructive">Inactivo</Badge>
+                      )}
+                      {c.esPrueba && (
+                        <Badge className="bg-amber-100 text-amber-800 hover:bg-amber-100 border border-amber-300">PRUEBA</Badge>
+                      )}
+                    </div>
+                  </div>
+                  {/* Datos */}
+                  <div className="grid grid-cols-2 gap-2 text-xs">
+                    <div>
+                      <div className="text-muted-foreground">Teléfono</div>
+                      <div className="font-medium flex items-center gap-1"><Phone className="w-3 h-3" /> {c.telefono}</div>
+                    </div>
+                    <div>
+                      <div className="text-muted-foreground">Ubicación</div>
+                      <div className="font-medium flex items-center gap-1">
+                        <MapPin className="w-3 h-3" /> {c.municipio || '—'}{c.departamento ? ` / ${c.departamento}` : ''}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-muted-foreground">Tasa</div>
+                      <div>{c.tieneTasaPersonalizada && c.tasaPersonalizada != null ? `${c.tasaPersonalizada}%` : 'Sin tasa'}</div>
+                    </div>
+                    <div>
+                      <div className="text-muted-foreground">Solicitudes</div>
+                      <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-primary/10 text-primary text-xs font-bold">{c._count?.prestamos || 0}</span>
+                    </div>
+                  </div>
+                  {/* Referido */}
+                  {c.referidoPor && (
+                    <div className="text-xs text-muted-foreground flex items-center gap-1">
+                      <UserPlus className="w-3 h-3" /> Referido por: <strong>{c.referidoPor.nombre}</strong>
+                    </div>
+                  )}
+                  {/* Botones */}
+                  <div className="flex gap-1 flex-wrap pt-1 border-t border-white/5">
+                    <Button size="sm" variant="ghost" className="h-7 text-xs text-blue-600" onClick={() => { setClienteHojaVidaId(c.id); setModalHojaVida(true) }} title="Hoja de Vida">
+                      <FileText className="w-3.5 h-3.5" />
+                    </Button>
+                    <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => abrirModalEditar(c)} title="Editar">
+                      <Pencil className="w-3.5 h-3.5" />
+                    </Button>
+                    <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => toggleActivo(c)} title={c.activo ? 'Desactivar' : 'Activar'}>
+                      {c.activo ? <UserX className="w-3.5 h-3.5 text-red-600" /> : <UserCheck className="w-3.5 h-3.5 text-green-600" />}
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            ))
+          )}
+        </div>
+      )}
+
+      {/* === Vista de tabla === */}
+      {vistaClientes === 'tabla' && (
       <Card>
         <CardContent className="p-0">
           <Table>
@@ -772,6 +878,7 @@ export function ClientesView({ onChanged }: { onChanged: () => void }) {
           </Table>
         </CardContent>
       </Card>
+      )}
 
       {/* Modal nuevo/editar cliente */}
       <Dialog open={modalAbierto} onOpenChange={setModalAbierto}>

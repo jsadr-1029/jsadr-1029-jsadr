@@ -36,7 +36,7 @@ import { useToast } from '@/hooks/use-toast'
 import { formatearMoneda, formatearFecha, calcularPrestamo, calcularPrestamoTasaFijaMensual, Frecuencia } from '@/lib/finanzas'
 import { calcularBloqueCorte, calcularFechaPrimerCorte, calcularDiasCausadosAntes, calcularValorDiasCausados, PeriodoCorte } from '@/lib/corte-fechas'
 import { abrirHtmlImprimible } from '@/lib/auth-docs'
-import { FileText, Plus, Search, Eye, Check, X, ArrowRight, RefreshCw, PenTool, Shield, Trash2, Calendar, Scissors, Sparkles, MonitorSmartphone, Info } from 'lucide-react'
+import { FileText, Plus, Search, Eye, Check, X, ArrowRight, RefreshCw, PenTool, Shield, Trash2, Calendar, Scissors, Sparkles, MonitorSmartphone, Info, LayoutGrid, Table2 } from 'lucide-react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { ClientesView } from '@/components/views/ClientesView'
 import { CajasView } from '@/components/views/CajasView'
@@ -315,6 +315,7 @@ function PrestamosPanel({
 
   // Estado del formulario
   const [clienteId, setClienteId] = useState('')
+  const [vistaPrestamos, setVistaPrestamos] = useState<'tabla' | 'cards'>('cards')
   const [modalidad, setModalidad] = useState<'FRANCES' | 'TASA_FIJA' | 'CUOTA_PERSONALIZADA' | 'INTERES_FIJO_SIN_CAPITAL'>('FRANCES')
   // === Modalidad INTERES_FIJO_SIN_CAPITAL ===
   // El cliente paga SOLO intereses fijos mensuales mientras mantiene la deuda
@@ -1822,6 +1823,144 @@ ${linkFirmaCodeudor}
         </Select>
       </div>
 
+      {/* === Toggle vista tabla/cards === */}
+      <div className="flex items-center gap-2">
+        <button
+          onClick={() => setVistaPrestamos('tabla')}
+          className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${vistaPrestamos === 'tabla' ? 'bg-primary/20 text-primary' : 'text-muted-foreground hover:bg-white/5'}`}
+          title="Vista de tabla"
+        >
+          <Table2 className="w-4 h-4 inline mr-1" /> Tabla
+        </button>
+        <button
+          onClick={() => setVistaPrestamos('cards')}
+          className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${vistaPrestamos === 'cards' ? 'bg-primary/20 text-primary' : 'text-muted-foreground hover:bg-white/5'}`}
+          title="Vista de tarjetas"
+        >
+          <LayoutGrid className="w-4 h-4 inline mr-1" /> Tarjetas
+        </button>
+      </div>
+
+      {/* === Vista de tarjetas === */}
+      {vistaPrestamos === 'cards' && (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+          {loading ? (
+            <div className="col-span-full text-center py-8 text-muted-foreground">Cargando...</div>
+          ) : prestamosFiltrados.length === 0 ? (
+            <div className="col-span-full text-center py-8 text-muted-foreground">No hay solicitudes registradas.</div>
+          ) : (
+            prestamosFiltrados.map((p) => {
+              const conteo = calcularConteoVigencia(p, nowTick)
+              const cfgPlazo: Record<EstadoPlazo, { label: string; emoji: string; className: string }> = {
+                DENTRO: { label: 'DENTRO', emoji: '🟢', className: 'bg-emerald-500/15 text-emerald-300 border-emerald-400/30' },
+                CUMPLIDO: { label: 'CUMPLIDO', emoji: '🟡', className: 'bg-amber-500/15 text-amber-300 border-amber-400/30' },
+                EXCEDIDO: { label: `EXCEDIÓ ${conteo.diasExcedidos}d`, emoji: '🔴', className: 'bg-red-500/15 text-red-300 border-red-400/30' },
+                CANCELADO: { label: 'CANCELADO', emoji: '🔵', className: 'bg-blue-500/15 text-blue-300 border-blue-400/30' },
+                NO_APLICA: { label: '—', emoji: '', className: '' },
+              }
+              const c = cfgPlazo[conteo.estadoPlazo]
+              return (
+                <Card key={p.id} className="bg-card/50 backdrop-blur-sm border-white/10 hover:border-primary/30 transition-all">
+                  <CardContent className="p-4 space-y-3">
+                    {/* Header: código + estado */}
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <div className="font-mono text-xs font-semibold text-primary">{p.codigo}</div>
+                        <div className="font-semibold text-sm mt-0.5">{p.cliente.nombre}</div>
+                        <div className="text-xs text-muted-foreground">{p.cliente.cedula}</div>
+                      </div>
+                      <div className="flex flex-col items-end gap-1">
+                        <EstadoBadge estado={p.estado} />
+                        {p.tieneCodeudor && (
+                          <Badge variant="outline" className="text-[9px] bg-violet-500/15 text-violet-300 border-violet-400/40">🛡️ Codeudor</Badge>
+                        )}
+                        {conteo.aplica && (
+                          <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-semibold border ${c.className}`}>
+                            {c.emoji} {c.label}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    {/* Datos financieros */}
+                    <div className="grid grid-cols-2 gap-2 text-xs">
+                      <div>
+                        <div className="text-muted-foreground">Principal</div>
+                        <div className="font-mono font-semibold">{formatearMoneda(p.montoPrincipal)}</div>
+                      </div>
+                      <div>
+                        <div className="text-muted-foreground">Cuota</div>
+                        <div className="font-mono font-semibold">{formatearMoneda(p.montoCuota)}</div>
+                      </div>
+                      <div>
+                        <div className="text-muted-foreground">Tasa</div>
+                        <div className="font-mono">{p.tasaInteresAnual}% anual</div>
+                      </div>
+                      <div>
+                        <div className="text-muted-foreground">Plazo</div>
+                        <div>{p.numeroCuotas} cuotas ({p.frecuencia.toLowerCase()})</div>
+                      </div>
+                      <div>
+                        <div className="text-muted-foreground">Saldo</div>
+                        <div className="font-mono font-semibold text-amber-300">{formatearMoneda(p.saldoTotal)}</div>
+                      </div>
+                      <div>
+                        <div className="text-muted-foreground">Conteo</div>
+                        <div className="font-medium">{conteo.aplica ? `${conteo.diasTranscurridos}/${conteo.plazoTotalDias}d` : '—'}</div>
+                      </div>
+                    </div>
+                    {/* Progreso */}
+                    <div className="flex items-center gap-2">
+                      <div className="flex-1 bg-muted rounded-full h-1.5">
+                        <div className="bg-primary h-1.5 rounded-full" style={{ width: `${(p.cuotasPagadas / p.numeroCuotas) * 100}%` }} />
+                      </div>
+                      <span className="text-xs text-muted-foreground">{p.cuotasPagadas}/{p.numeroCuotas}</span>
+                    </div>
+                    {/* Botones de acción */}
+                    <div className="flex gap-1 flex-wrap pt-1 border-t border-white/5">
+                      <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => onAbrirPrestamo(p.id)} title="Ver detalle">
+                        <Eye className="w-3.5 h-3.5" />
+                      </Button>
+                      <Button size="sm" variant="ghost" className="h-7 text-xs text-purple-600" onClick={() => abrirHtmlImprimible(`/api/estado-cuenta?cedula=${encodeURIComponent(p.cliente.cedula)}&prestamoId=${p.id}`)} title="Estado de cuenta">
+                        <FileText className="w-3.5 h-3.5" />
+                      </Button>
+                      <OtroSiAccionesDropdown prestamoId={p.id} prestamoCodigo={p.codigo} />
+                      <Button size="sm" variant="ghost" className={`h-7 text-xs ${p.firmaId ? "text-blue-600" : "opacity-40"}`} onClick={() => p.firmaId && abrirHtmlImprimible(`/api/firma/certificado?firmaId=${p.firmaId}`)} title="Certificado de firma" disabled={!p.firmaId}>
+                        <Shield className="w-3.5 h-3.5" />
+                      </Button>
+                      {['ACTIVO', 'EN_MORA', 'JURIDICO', 'CANCELADO'].includes(p.estado) && (
+                        <Button size="sm" variant="ghost" className="h-7 text-xs text-purple-600" onClick={() => { setPrestamoQueCambioId(p.id); setPrestamoQueCambioCodigo(p.codigo); setModalQueCambio(true) }} title="¿Qué cambió?">
+                          <Sparkles className="w-3.5 h-3.5" />
+                        </Button>
+                      )}
+                      {p.estado === 'SOLICITUD' && (
+                        <Button size="sm" variant="ghost" className="h-7 text-xs text-blue-600" onClick={async () => {
+                          try {
+                            const res = await fetch(`/api/prestamos/${p.id}/enviar-codigo`, { method: 'POST', headers: { 'Content-Type': 'application/json' } })
+                            const json = await res.json()
+                            if (json.success) { toast({ title: '🔐 Código enviado', description: `Al correo ${json.data?.codigos?.[0]?.email || ''}.` }); cargar(); onChanged() }
+                            else { toast({ title: 'Error', description: json.error, variant: 'destructive' }) }
+                          } catch (e: any) { toast({ title: 'Error', description: e.message, variant: 'destructive' }) }
+                        }} title="Enviar código OTP">📧</Button>
+                      )}
+                      {p.estado === 'SOLICITUD' && (
+                        <Button size="sm" variant="ghost" className="h-7 text-xs text-red-600" onClick={() => cambiarEstado(p.id, 'rechazar')} title="Rechazar">
+                          <X className="w-3.5 h-3.5" />
+                        </Button>
+                      )}
+                      <Button size="sm" variant="ghost" className="h-7 text-xs text-red-700" onClick={() => eliminarPrestamo(p)} title="Eliminar">
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              )
+            })
+          )}
+        </div>
+      )}
+
+      {/* === Vista de tabla === */}
+      {vistaPrestamos === 'tabla' && (
       <Card>
         <CardContent className="p-0">
           <Table>
@@ -2113,6 +2252,7 @@ ${linkFirmaCodeudor}
           </Table>
         </CardContent>
       </Card>
+      )}
 
       {/* === MODAL ELIMINAR SOLICITUD === */}
       <Dialog open={!!prestamoAEliminar} onOpenChange={(open) => !open && setPrestamoAEliminar(null)}>
