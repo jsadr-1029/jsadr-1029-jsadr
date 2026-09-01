@@ -77,6 +77,73 @@ export function calcularFechaVencimiento(
 }
 
 /**
+ * Corrige las fechas de la tabla de amortización para que respeten los días
+ * de corte del calendario (ej: 16 y 01 de cada mes) en lugar de usar
+ * aritmética simple (+15 días).
+ *
+ * Cuando un préstamo tiene `periodoCorte` definido (ej: '16-01', '5-20'),
+ * las fechas de vencimiento deben caer EXACTAMENTE en esos días del mes,
+ * sin importar cuántos días tenga cada mes (28, 30, 31).
+ *
+ * @param tabla - La tabla de amortización calculada (con fechas aritméticas).
+ * @param periodoCorte - El periodo de corte (ej: '16-01', '5-20', '15-30').
+ * @returns La tabla con las fechas corregidas a días de calendario.
+ */
+export function corregirFechasPorCorte(
+  tabla: CuotaAmortizacion[],
+  periodoCorte?: string | null
+): CuotaAmortizacion[] {
+  if (!periodoCorte || periodoCorte === 'NINGUNO') return tabla
+
+  // Parsear los días de corte (ej: '16-01' → [16, 1])
+  const diasCorte = periodoCorte.split('-').map((d) => parseInt(d.trim(), 10))
+  if (diasCorte.length !== 2 || diasCorte.some(isNaN)) return tabla
+
+  // Ordenar los días de menor a mayor para saber cuál va primero en el mes
+  const [diaMenor, diaMayor] = diasCorte.sort((a, b) => a - b)
+
+  // Generar las fechas de calendario
+  // Empezar desde la fecha de la primera cuota y alternar entre los dos días de corte
+  if (tabla.length === 0) return tabla
+
+  const fechasCorregidas: Date[] = []
+  // Primera cuota: mantener la fecha original
+  fechasCorregidas.push(new Date(tabla[0].fechaVencimiento))
+
+  // A partir de la segunda cuota: alternar entre los dos días de corte del calendario
+  for (let i = 1; i < tabla.length; i++) {
+    const fechaAnterior = new Date(fechasCorregidas[i - 1])
+    const diaAnterior = fechaAnterior.getDate()
+    const nuevaFecha = new Date(fechaAnterior)
+
+    // Determinar si la fecha anterior estaba en el día mayor o menor de corte
+    // (con tolerancia de ±1 día para meses que no tienen el día exacto, ej: febrero)
+    const estabaEnDiaMayor = Math.abs(diaAnterior - diaMayor) <= 1 || diaAnterior >= diaMayor
+    const estabaEnDiaMenor = Math.abs(diaAnterior - diaMenor) <= 1
+
+    if (estabaEnDiaMayor && !estabaEnDiaMenor) {
+      // La fecha anterior era el día mayor → ir al día menor del mes SIGUIENTE
+      nuevaFecha.setMonth(nuevaFecha.getMonth() + 1)
+      // Ajustar al día menor (o último día del mes si es menor que el día de corte)
+      const diasEnMes = new Date(nuevaFecha.getFullYear(), nuevaFecha.getMonth() + 1, 0).getDate()
+      nuevaFecha.setDate(Math.min(diaMenor, diasEnMes))
+    } else {
+      // La fecha anterior era el día menor → ir al día mayor del MISMO mes
+      const diasEnMes = new Date(nuevaFecha.getFullYear(), nuevaFecha.getMonth() + 1, 0).getDate()
+      nuevaFecha.setDate(Math.min(diaMayor, diasEnMes))
+    }
+
+    fechasCorregidas.push(nuevaFecha)
+  }
+
+  // Aplicar las fechas corregidas a la tabla
+  return tabla.map((cuota, index) => ({
+    ...cuota,
+    fechaVencimiento: fechasCorregidas[index],
+  }))
+}
+
+/**
  * Cálculo de préstamo con cuota FIJA sobre capital inicial
  * Fórmula sistema francés: M = P * [r(1+r)^n] / [(1+r)^n - 1]
  * El interés se calcula SIEMPRE sobre el capital inicial (no sobre saldo)

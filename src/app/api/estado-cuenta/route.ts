@@ -3,6 +3,7 @@ import { db } from '@/lib/db'
 import {
   calcularPrestamo,
   calcularPrestamoTasaFijaMensual,
+  corregirFechasPorCorte,
   calcularMoraCompuesta,
   calcularDiasMora, getTasaMoraAnual,
   calcularCargosInicialesPendientes,
@@ -133,6 +134,9 @@ export async function GET(req: NextRequest) {
           fechaDesembolso: p.fechaInicioAmortizacion || p.fechaDesembolso || undefined,
         })
       }
+
+      // === Corregir fechas por calendario si hay periodoCorte (ej: '16-01') ===
+      calculo.tablaAmortizacion = corregirFechasPorCorte(calculo.tablaAmortizacion, p.periodoCorte)
 
       // === FIX Task 12: calcular cargos iniciales pendientes de cobrar ===
       // Estos cargos (pagaré + carta, tarifa plataforma, flexibilidad financiera,

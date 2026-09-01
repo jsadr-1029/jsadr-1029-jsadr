@@ -4,6 +4,7 @@ import { recalcularSaldosPrestamo } from '@/lib/recalcular-saldos'
 import {
   calcularPrestamo,
   calcularPrestamoTasaFijaMensual,
+  corregirFechasPorCorte,
   calcularMoraCompuesta,
   calcularDiasMora, getTasaMoraDiaria,
   calcularFechaVencimiento,
@@ -60,7 +61,7 @@ function calcularPrestamoSegunModalidad(prestamo: any) {
       fondoGarantia: 0,
     }
   }
-  return calcularPrestamo({
+  const resultado = calcularPrestamo({
     montoPrincipal: prestamo.montoPrincipal,
     tasaInteresAnual: prestamo.tasaInteresAnual,
     tasaMoraAnual: getTasaMoraDiaria(prestamo),
@@ -68,6 +69,12 @@ function calcularPrestamoSegunModalidad(prestamo: any) {
     frecuencia: prestamo.frecuencia as any,
     fechaDesembolso: fechaBase,
   })
+  // === Corregir fechas por calendario si hay periodoCorte (ej: '16-01') ===
+  resultado.tablaAmortizacion = corregirFechasPorCorte(resultado.tablaAmortizacion, prestamo.periodoCorte)
+  if (resultado.tablaAmortizacion.length > 0) {
+    resultado.fechaVencimiento = resultado.tablaAmortizacion[resultado.tablaAmortizacion.length - 1].fechaVencimiento
+  }
+  return resultado
 }
 
 // =====================================================
