@@ -178,7 +178,7 @@ export function BuzonSolicitudesView({ onConvertir }: BuzonSolicitudesViewProps)
 
   // Nuevos estados para mejoras
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
-  const [vista, setVista] = useState<'tabla' | 'cards'>('tabla')
+  const [vista, setVista] = useState<'tabla' | 'cards'>('cards')
   const [bulkAction, setBulkAction] = useState<string>('')
 
   // === Cargar solicitudes ===
@@ -975,12 +975,32 @@ export function BuzonSolicitudesView({ onConvertir }: BuzonSolicitudesViewProps)
                       <Button
                         size="sm"
                         variant="outline"
+                        onClick={() => verDetalle(s)}
+                        className="h-7 text-xs"
+                      >
+                        <Eye className="w-3 h-3 mr-1" />
+                        Ver
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
                         onClick={() => contactarWhatsApp(s)}
                         className="h-7 text-xs"
                       >
                         <MessageCircle className="w-3 h-3 mr-1 text-emerald-400" />
                         WhatsApp
                       </Button>
+                      {s.clienteEmail && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => contactarEmail(s)}
+                          className="h-7 text-xs"
+                        >
+                          <Mail className="w-3 h-3 mr-1 text-sky-400" />
+                          Email
+                        </Button>
+                      )}
                       <Button
                         size="sm"
                         variant="outline"
@@ -990,6 +1010,34 @@ export function BuzonSolicitudesView({ onConvertir }: BuzonSolicitudesViewProps)
                       >
                         <ThumbsUp className="w-3 h-3 mr-1 text-emerald-400" />
                         Aprobar
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => abrirModalEstado(s)}
+                        className="h-7 text-xs"
+                      >
+                        <RefreshCw className="w-3 h-3 mr-1" />
+                        Estado
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => abrirModalObs(s)}
+                        className="h-7 text-xs"
+                      >
+                        <FileText className="w-3 h-3 mr-1" />
+                        Obs.
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => abrirModalRechazar(s)}
+                        disabled={s.estado === 'RECHAZADA' || s.estado === 'CONVERTIDA'}
+                        className="h-7 text-xs text-red-400 border-red-500/30 hover:bg-red-500/10"
+                      >
+                        <XCircle className="w-3 h-3 mr-1" />
+                        Rechazar
                       </Button>
                       <Button
                         size="sm"
