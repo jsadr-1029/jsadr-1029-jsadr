@@ -140,6 +140,9 @@ interface PrestamoAplicar {
   cargosInicialesPendientes?: Array<{ concepto: string; etiqueta: string; monto: number; yaCobrado: boolean }>
   cargosInicialesPendientesMonto?: number
   totalCuotaConCargos?: number  // cuota base + mora + cargos iniciales
+  // === FIX (2026-09-04): sincronizar con estado de cuenta ===
+  totalPagar?: number  // total a pagar del préstamo (con cargos, igual que estado de cuenta)
+  saldoYaIncluyeCargos?: boolean  // si saldoTotal ya incluye cargos
 }
 
 interface ProximoPago {

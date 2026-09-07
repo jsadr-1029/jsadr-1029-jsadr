@@ -219,6 +219,18 @@ export async function GET(req: NextRequest) {
         ? 'CATEGORIA_PRESTAMO'
         : 'SIN_CUENTA'
 
+      // === FIX (2026-09-04): sincronizar saldoTotal con estado de cuenta ===
+      // El estado de cuenta usa una heurística para determinar si saldoTotal ya incluye
+      // los cargos iniciales o no. Si no los incluye (préstamos legacy), los suma.
+      // Aplicar Pago antes mostraba saldoTotal sin la misma corrección, causando
+      // discrepancia entre el estado de cuenta y el modal de pago.
+      const saldoSinCargos = p.montoPrincipal + p.totalInteres - p.montoPagado
+      const saldoConCargosEsperado = saldoSinCargos + cargosInicialesPendientesMonto
+      const saldoYaIncluyeCargos = p.saldoTotal >= saldoConCargosEsperado - 1
+      const saldoTotalSincronizado = saldoYaIncluyeCargos
+        ? p.saldoTotal
+        : p.saldoTotal + cargosInicialesPendientesMonto
+
       return {
         id: p.id,
         codigo: p.codigo,
@@ -259,7 +271,14 @@ export async function GET(req: NextRequest) {
         totalCuotaConMora,
         montoPendiente,
         montoTotalPendiente,
-        saldoTotal: p.saldoTotal,
+        // === FIX: saldoTotal sincronizado con estado de cuenta ===
+        saldoTotal: saldoTotalSincronizado,
+        // === FIX: totalPagar sincronizado con estado de cuenta ===
+        totalPagar: saldoYaIncluyeCargos ? p.totalPagar : p.totalPagar + cargosInicialesPendientesMonto,
+        // === flag para que el frontend sepa si el saldo ya incluye cargos ===
+        saldoYaIncluyeCargos,
+        // === cargos iniciales pendientes (para mostrar en frontend) ===
+        cargosInicialesPendientesMonto,
         estado: p.estado,
         cuentaRecaudo: cuentaRecaudo
           ? {
@@ -313,10 +332,7 @@ export async function GET(req: NextRequest) {
           ? 'No se puede usar flexibilidad desde la prima (primera cuota)'
           : null,
         // === FIX Task 12: información de cargos iniciales en cuota 1 ===
-        // Para que el frontend muestre el monto correcto a pagar (cuota + cargos)
-        // y el detalle de los conceptos incluidos.
         cargosInicialesPendientes: cargosInicialesInfoAjustada.cargos.filter(c => !c.yaCobrado),
-        cargosInicialesPendientesMonto,
         totalCuotaConCargos,  // con cargos (lo que el cliente debe pagar)
       }
     })
