@@ -1875,3 +1875,24 @@ Stage Summary:
 - ✅ Pagaré y carta de instrucciones conservan "préstamo" (documentos legales).
 - ✅ Sistema funcionando correctamente (build + TS limpios).
 - ✅ Producción desplegada.
+
+---
+Task ID: ef-fix-dates
+Agent: main
+Task: Corregir fechas de pago del préstamo EF-CC-30000301-20260904-01 (1er pago: 15/09/2026, 2do pago: 30/09/2026)
+
+Work Log:
+- Investigado préstamo en BD Neon (id: cmtnf9yph0001l404xpsdc1a9)
+- Encontrado: frecuencia=QUINCENAL, numeroCuotas=2, periodoCorte=null, modalidadAmortizacion=TASA_FIJA
+- Encontrado bug: fechaInicioAmortizacion estaba en 2026-09-15 (la fecha deseada de la 1ra cuota), pero la función calcularPrestamoTasaFijaMensual hace fechaInicio + i*15 días para la cuota i. Por lo tanto, cuota 1 caía en 30/09 y cuota 2 en 15/10 (incorrecto).
+- Convención del sistema: fechaInicioAmortizacion representa "1 periodo ANTES de la primera cuota" (no la primera cuota misma), según el código en /api/prestamos/route.ts que resta 1 periodo a fechaPrimerCuota al guardar.
+- Aplicado UPDATE en BD: fechaInicioAmortizacion = '2026-08-31T17:00:00.000Z' (Aug 31, 12pm Bogota = Aug 31 5pm UTC)
+- Verificado con script: cuota 1 = 15/09/2026, cuota 2 = 30/09/2026 ✓
+- Verificado producción: cambio ya aplicado en Neon (BD compartida con jsadr.com.co)
+
+Stage Summary:
+- Préstamo EF-CC-30000301-20260904-01 corregido.
+- 1ra cuota: 15/09/2026 ✓
+- 2da cuota: 30/09/2026 ✓
+- No se requirió deploy de código (fue fix solo de datos en BD Neon).
+- Sin afectar otros préstamos (no se modificó lógica de cálculo).
