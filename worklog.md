@@ -1931,3 +1931,45 @@ Stage Summary:
 - Excel incluye TODOS los datos del cliente y del crédito en cada fila de pago
 - Hoja de Resumen con métricas agregadas (totales, por mes, por método)
 - Sin afectar funcionalidad existente (botón Exportar CSV original se mantiene)
+
+---
+Task ID: portal-regularizacion-inteligente
+Agent: main
+Task: Crear módulo de Regularización Inteligente de Cuotas Vencidas en el portal del cliente
+
+Work Log:
+- Investigada estructura del PortalClienteModal y API del portal
+- Creado endpoint /api/portal/[cedula]/regularizar:
+  * GET: retorna cuotas vencidas + escenarios comparativos (hoy/15/30/45 días)
+  * POST con accion='calcular_escenario': cálculo dinámico para fecha específica
+  * POST con accion='guardar_compromiso': guarda acuerdo en tabla CompromisoPago
+  * Autenticación: tokenSesion (header x-portal-token) + validación cross-cliente
+  * Usa calcularPrestamoTasaFijaMensual / calcularPrestamo según modalidadAmortizacion
+  * Aplica corregirFechasPorCorte si periodoCorte está definido
+  * Mora compuesta diaria proyectada a fecha objetivo
+  * Incluye cargos iniciales pendientes (pagaré, tarifa plataforma, etc)
+- Creado componente RegularizacionInteligenteModal.tsx con flujo conversacional:
+  * Paso 0: Selección de préstamo (si hay varios)
+  * Paso 1: Resumen de cuotas vencidas (n°, fecha, capital, interés, días mora)
+  * Paso 1b: Pregunta fecha (calendario) o 'No estoy seguro' (días aprox)
+  * Paso 2: Escenario calculado con tabla comparativa de fechas
+  * Paso 3: Pregunta capacidad de pago (compara con monto necesario)
+  * Paso 4: 4 alternativas: pago completo, parcial, acuerdo regularización, promesa
+  * Paso 5: Resumen final antes de confirmar
+  * Paso 6: Confirmación de envío con código de seguimiento
+- Integrado en PortalClienteModal:
+  * Importado RegularizacionInteligenteModal
+  * Agregado estado regularizacionOpen
+  * Agregado prop onRegularizar a PrestamosView
+  * Modificado banner de mora para incluir botón 'Regularizar inteligentemente'
+  * Renderizado modal al final del Dialog principal
+- Sincronizado con GitHub (push exitoso)
+- Verificado en producción: endpoint responde 401 sin token (correcto)
+
+Stage Summary:
+- Módulo completo de Regularización Inteligente desplegado en jsadr.com.co
+- Botón visible en banner de mora dentro de la vista de Créditos del portal
+- Flujo conversacional de 7 pasos con cálculos dinámicos en tiempo real
+- 4 alternativas de regularización: pago completo, parcial, acuerdo, promesa
+- Acuerdos guardados en tabla CompromisoPago (estado REGISTRADO)
+- Asesor revisa en 24h desde el panel de administración
