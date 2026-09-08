@@ -91,10 +91,12 @@ import {
   Zap,
   BadgeCheck,
   Trophy,
+  Handshake,
 } from 'lucide-react'
 import { CentroComunicacionesPortal } from '@/components/views/CentroComunicacionesPortal'
 import { useInactivityAutoLogout } from '@/hooks/use-inactivity-auto-logout'
 import { PasaporteConfianzaView } from '@/components/views/pasaporte/PasaporteConfianzaView'
+import { RegularizacionInteligenteModal } from '@/components/views/portal/RegularizacionInteligenteModal'
 
 // =====================================================
 // Tipos (sin cambios — preserva contrato de API)
@@ -311,6 +313,9 @@ export function PortalClienteModal({
   const [tycValidandoOtp, setTycValidandoOtp] = useState(false)
   const [tycGuardando, setTycGuardando] = useState(false)
   const tycIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  // === Modal de Regularización Inteligente ===
+  const [regularizacionOpen, setRegularizacionOpen] = useState(false)
 
   // Headers estándar para llamadas autenticadas del portal
   const portalHeaders = () => {
@@ -868,6 +873,7 @@ export function PortalClienteModal({
               onAceptarTyC={aceptarTyC}
               onPazYSalvo={generarPazYSalvo}
               onEstadoCuenta={descargarEstadoCuenta}
+              onRegularizar={() => setRegularizacionOpen(true)}
             />
           )}
 
@@ -1339,6 +1345,14 @@ export function PortalClienteModal({
             </div>
           </div>
         )}
+
+        {/* === MODAL DE REGULARIZACIÓN INTELIGENTE === */}
+        <RegularizacionInteligenteModal
+          open={regularizacionOpen}
+          onClose={() => setRegularizacionOpen(false)}
+          cedula={cedula}
+          token={token || ''}
+        />
       </DialogContent>
     </Dialog>
   )
@@ -1674,12 +1688,14 @@ function PrestamosView({
   onAceptarTyC,
   onPazYSalvo,
   onEstadoCuenta,
+  onRegularizar,
 }: {
   prestamos: any[]
   onAbrirTyC: (prestamoId: string, codigo: string) => void
   onAceptarTyC: (prestamoId: string) => Promise<void>
   onPazYSalvo: (prestamoId: string, codigo: string, estado?: string, saldoTotal?: number, cuotasPagadas?: number, numeroCuotas?: number) => void
   onEstadoCuenta: (prestamoId?: string) => void
+  onRegularizar: () => void
 }) {
   if (prestamos.length === 0) {
     return (
@@ -1780,11 +1796,22 @@ function PrestamosView({
 
               {/* Banner mora */}
               {p.diasMora > 0 && p.estado === 'EN_MORA' && (
-                <div className="mb-2 p-2 rounded-lg bg-red-500/10 border border-red-400/30 flex items-center gap-2">
-                  <AlertTriangle className="w-3.5 h-3.5 text-red-400 shrink-0" />
-                  <p className="text-[11px] text-red-200">
-                    <strong>En mora:</strong> {p.diasMora} días · {formatearMoneda(p.montoMora)}
-                  </p>
+                <div className="mb-2 p-2 rounded-lg bg-red-500/10 border border-red-400/30">
+                  <div className="flex items-center gap-2 mb-2">
+                    <AlertTriangle className="w-3.5 h-3.5 text-red-400 shrink-0" />
+                    <p className="text-[11px] text-red-200">
+                      <strong>En mora:</strong> {p.diasMora} días · {formatearMoneda(p.montoMora)}
+                    </p>
+                  </div>
+                  <button
+                    onClick={onRegularizar}
+                    className="w-full flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-md bg-indigo-600/20 hover:bg-indigo-600/30 border border-indigo-400/40 transition-all"
+                  >
+                    <Handshake className="w-3.5 h-3.5 text-indigo-300" />
+                    <span className="text-[11px] font-semibold text-indigo-200">
+                      Regularizar inteligentemente
+                    </span>
+                  </button>
                 </div>
               )}
 
