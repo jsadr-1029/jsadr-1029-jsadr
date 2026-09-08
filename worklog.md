@@ -1896,3 +1896,38 @@ Stage Summary:
 - 2da cuota: 30/09/2026 ✓
 - No se requirió deploy de código (fue fix solo de datos en BD Neon).
 - Sin afectar otros préstamos (no se modificó lógica de cálculo).
+
+---
+Task ID: pagos-export-anio
+Agent: main
+Task: Agregar opción en módulo de Pagos para exportar todos los pagos del año vigente con datos completos de persona y crédito
+
+Work Log:
+- Investigada estructura actual del módulo Pagos (PagosView.tsx + /api/pagos/export CSV)
+- Creado nuevo endpoint /api/pagos/export-anio/route.ts:
+  * Genera archivo Excel (.xlsx) con ExcelJS
+  * Hoja "Pagos": cada fila = 1 pago con TODOS los datos:
+    - Datos del pago: código, fecha/hora, estado, n° cuota, capital, interés, mora, total, método, referencia, cuenta recaudo, solo intereses, notas
+    - Datos del crédito: código, estado, modalidad, frecuencia, monto principal, tasa mensual, n° cuotas, plazo, fechas (desembolso/vencimiento), cuotas pagadas, saldos (capital/total)
+    - Datos del cliente: nombre, cédula, teléfono, email, departamento, municipio, ciudad, barrio, dirección, salario, banco, tipo cuenta, n° cuenta, activo
+  * Hoja "Resumen": totales (capital/interes/mora/general), desglose por mes, desglose por método de pago, clientes y créditos únicos
+  * Filtro por año (default: actual) y estado (default: APLICADO, opción TODOS)
+  * Excel con encabezados congelados, autofiltro, zebra, formato moneda/tasa
+- Modificado PagosView.tsx:
+  * Importados iconos ChevronDown y DropdownMenu components
+  * Agregado estado exportandoAnio
+  * Agregada función exportarAnio(anio, estado) que llama al endpoint con auth
+  * Reemplazado botón simple por dropdown con 3 opciones:
+    1. Pagos Aplicados del año actual (verde)
+    2. Todos los Pagos del año actual (aplicados + pendientes)
+    3. Pagos del año anterior (comparativo)
+  * Mantiene botón "Exportar CSV" original (sin cambios)
+- Sincronizado con GitHub (push exitoso)
+- Verificado en producción: https://jsadr.com.co/api/pagos/export-anio devuelve 401 (auth requerida, correcto)
+
+Stage Summary:
+- Nuevo endpoint /api/pagos/export-anio disponible y desplegado en producción
+- Botón "Exportar Pagos del Año" agregado en módulo de Pagos (verde, con dropdown)
+- Excel incluye TODOS los datos del cliente y del crédito en cada fila de pago
+- Hoja de Resumen con métricas agregadas (totales, por mes, por método)
+- Sin afectar funcionalidad existente (botón Exportar CSV original se mantiene)
