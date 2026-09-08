@@ -16,6 +16,14 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
+import {
   Table,
   TableBody,
   TableCell,
@@ -44,7 +52,7 @@ import {
   TrendingUp, TrendingDown, Calendar, Users, AlertTriangle, Clock,
   Search, CheckCircle, Banknote, Wallet, FileText, Download,
   Handshake, Save, Sparkles, Brain, FileSpreadsheet, CalendarDays, Receipt,
-  Info,
+  Info, ChevronDown,
 } from 'lucide-react'
 import { BotIcons } from '@/components/views/BotIcons'
 import { PagosCharts } from '@/components/views/pagos/PagosCharts'
@@ -279,6 +287,7 @@ export function PagosView({ onChanged }: { onChanged: () => void }) {
   const [loadingProximos, setLoadingProximos] = useState(false)
   const [resumenProximos, setResumenProximos] = useState<any>(null)
   const [exportando, setExportando] = useState(false)
+  const [exportandoAnio, setExportandoAnio] = useState(false)
 
   // Informe
   const [informe, setInforme] = useState<InformeData | null>(null)
@@ -872,6 +881,41 @@ export function PagosView({ onChanged }: { onChanged: () => void }) {
     })
   }
 
+  // === Exportar todos los pagos del año vigente en Excel ===
+  // Llama al endpoint /api/pagos/export-anio y descarga el .xlsx
+  // Incluye TODOS los datos del cliente y del crédito en cada fila.
+  const exportarAnio = async (anio: number, estado: 'APLICADO' | 'TODOS') => {
+    try {
+      setExportandoAnio(true)
+      const params = new URLSearchParams()
+      params.set('anio', String(anio))
+      params.set('estado', estado)
+      const ok = await descargarArchivo(`/api/pagos/export-anio?${params.toString()}`)
+      if (ok) {
+        toast({
+          title: 'Excel generado correctamente',
+          description: `Se descargó el listado de pagos del año ${anio} (${estado === 'APLICADO' ? 'solo aplicados' : 'todos los estados'}), con todos los datos de clientes y créditos.`,
+          duration: 6000,
+        })
+      } else {
+        toast({
+          title: 'No se pudo exportar',
+          description: 'Verifica tu sesión e intenta nuevamente.',
+          variant: 'destructive',
+        })
+      }
+    } catch (e: any) {
+      console.error('[exportarAnio] Error:', e)
+      toast({
+        title: 'Error al exportar',
+        description: e?.message || 'Error inesperado',
+        variant: 'destructive',
+      })
+    } finally {
+      setExportandoAnio(false)
+    }
+  }
+
   // === Cálculos ===
   const totalDia = pagos
     .filter((p) => p.estado === 'APLICADO')
@@ -955,46 +999,113 @@ export function PagosView({ onChanged }: { onChanged: () => void }) {
               Gráficos
             </TabsTrigger>
           </TabsList>
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={exportando}
-            onClick={async () => {
-              const params = new URLSearchParams()
-              if (tab === 'pagos-dia') {
-                params.set('tipo', 'hoy')
-                if (fechaFiltro) params.set('fecha', fechaFiltro)
-              } else if (tab === 'proximos') {
-                params.set('tipo', 'rango')
-                params.set('desde', new Date().toISOString().slice(0, 10))
-                const fin = new Date()
-                fin.setDate(fin.getDate() + 30)
-                params.set('hasta', fin.toISOString().slice(0, 10))
-              } else if (tab === 'informe' || tab === 'graficos') {
-                params.set('tipo', 'informe')
-                params.set('periodo', periodoInforme)
-              } else {
-                params.set('tipo', 'hoy')
-              }
-              // IMPORTANTE: usar descargarArchivo (fetch + Blob) en lugar de
-              // window.open, porque window.open NO puede añadir el header
-              // Authorization: Bearer y en producción el endpoint devuelve
-              // 401 "No autorizado. Token requerido."
-              setExportando(true)
-              const ok = await descargarArchivo(`/api/pagos/export?${params.toString()}`)
-              setExportando(false)
-              if (!ok) {
-                toast({
-                  title: 'No se pudo exportar',
-                  description: 'Verifica tu sesión e intenta nuevamente.',
-                  variant: 'destructive',
-                })
-              }
-            }}
-          >
-            <Download className="w-3.5 h-3.5 mr-1.5" />
-            {exportando ? 'Exportando…' : 'Exportar CSV'}
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={exportando}
+              onClick={async () => {
+                const params = new URLSearchParams()
+                if (tab === 'pagos-dia') {
+                  params.set('tipo', 'hoy')
+                  if (fechaFiltro) params.set('fecha', fechaFiltro)
+                } else if (tab === 'proximos') {
+                  params.set('tipo', 'rango')
+                  params.set('desde', new Date().toISOString().slice(0, 10))
+                  const fin = new Date()
+                  fin.setDate(fin.getDate() + 30)
+                  params.set('hasta', fin.toISOString().slice(0, 10))
+                } else if (tab === 'informe' || tab === 'graficos') {
+                  params.set('tipo', 'informe')
+                  params.set('periodo', periodoInforme)
+                } else {
+                  params.set('tipo', 'hoy')
+                }
+                // IMPORTANTE: usar descargarArchivo (fetch + Blob) en lugar de
+                // window.open, porque window.open NO puede añadir el header
+                // Authorization: Bearer y en producción el endpoint devuelve
+                // 401 "No autorizado. Token requerido."
+                setExportando(true)
+                const ok = await descargarArchivo(`/api/pagos/export?${params.toString()}`)
+                setExportando(false)
+                if (!ok) {
+                  toast({
+                    title: 'No se pudo exportar',
+                    description: 'Verifica tu sesión e intenta nuevamente.',
+                    variant: 'destructive',
+                  })
+                }
+              }}
+            >
+              <Download className="w-3.5 h-3.5 mr-1.5" />
+              {exportando ? 'Exportando…' : 'Exportar CSV'}
+            </Button>
+
+            {/* === Exportar pagos del año vigente (Excel con TODOS los datos) === */}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="default"
+                  size="sm"
+                  disabled={exportandoAnio}
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white"
+                >
+                  <FileSpreadsheet className="w-3.5 h-3.5 mr-1.5" />
+                  {exportandoAnio ? 'Generando Excel…' : 'Exportar Pagos del Año'}
+                  <ChevronDown className="w-3.5 h-3.5 ml-1.5" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-64">
+                <DropdownMenuLabel className="text-xs text-muted-foreground">
+                  Exportar pagos en Excel con todos los datos
+                </DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  className="cursor-pointer"
+                  onSelect={async (e) => {
+                    e.preventDefault()
+                    await exportarAnio(new Date().getFullYear(), 'APLICADO')
+                  }}
+                >
+                  <div className="flex flex-col">
+                    <span className="font-medium">Pagos Aplicados del {new Date().getFullYear()}</span>
+                    <span className="text-xs text-muted-foreground">
+                      Solo pagos en estado APLICADO
+                    </span>
+                  </div>
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  className="cursor-pointer"
+                  onSelect={async (e) => {
+                    e.preventDefault()
+                    await exportarAnio(new Date().getFullYear(), 'TODOS')
+                  }}
+                >
+                  <div className="flex flex-col">
+                    <span className="font-medium">Todos los Pagos del {new Date().getFullYear()}</span>
+                    <span className="text-xs text-muted-foreground">
+                      Aplicados + Pendientes (excluye anulados)
+                    </span>
+                  </div>
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  className="cursor-pointer"
+                  onSelect={async (e) => {
+                    e.preventDefault()
+                    await exportarAnio(new Date().getFullYear() - 1, 'APLICADO')
+                  }}
+                >
+                  <div className="flex flex-col">
+                    <span className="font-medium">Pagos del año {new Date().getFullYear() - 1}</span>
+                    <span className="text-xs text-muted-foreground">
+                      Año anterior (comparativo)
+                    </span>
+                  </div>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
         </div>
 
         {/* ============== TAB: PAGOS DEL DÍA ============== */}
