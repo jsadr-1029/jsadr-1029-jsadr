@@ -2043,3 +2043,35 @@ Stage Summary:
 - PDF generado y disponible en /home/z/my-project/download/caso_ejemplo_regularizacion_inteligente.pdf
 - Documenta el caso completo que el usuario puede probar en producción
 - Muestra conversación cliente-asistente en formato visual claro
+
+---
+Task ID: portal-acceso-destacado-regularizacion
+Agent: main
+Task: Hacer visible y proactivo el acceso al módulo de Regularización Inteligente desde el portal del cliente
+
+Work Log:
+- Añadido banner destacado en HubView (pantalla principal del portal):
+  * Visible cuando el cliente tiene préstamos con diasMora > 0 y estado EN_MORA
+  * Gradiente rojo/ámbar/índigo con bordes destacados
+  * Icono Handshake grande con halo
+  * Muestra: número de créditos en mora, días acumulados, monto moratorio
+  * Botón grande 'Regularizar inteligentemente' con gradiente índigo→violeta
+  * Texto secundario: 'Asistente conversacional · Sin costo · 100% en línea'
+- Añadido banner en ProximosPagosView (vista de próximos pagos):
+  * Visible cuando hay cuotas vencidas (fechaVencimiento < hoy)
+  * Mensaje: '¿No puedes pagar todo hoy? Negocia tu deuda'
+  * Botón 'Regularizar inteligentemente' al inicio de la lista de pagos
+- Mantenido el banner inline en PrestamosView (ya existente)
+- Agregadas props prestamos y onRegularizar a HubView
+- Agregada prop onRegularizar a ProximosPagosView
+- Agregado icono ChevronRight a imports de lucide-react
+- Sincronizado con GitHub/Vercel
+- Verificado despliegue: https://jsadr.com.co/ responde 200
+
+Stage Summary:
+- Acceso visible desde 3 puntos del portal del cliente:
+  1. HubView (dashboard principal) - banner destacado cuando hay mora
+  2. ProximosPagosView - banner cuando hay cuotas vencidas
+  3. PrestamosView - banner inline en cada crédito con mora
+- El cliente ahora puede solicitar negociar la deuda por sí mismo
+- El botón abre el modal conversacional que guía paso a paso
