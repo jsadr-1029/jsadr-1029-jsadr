@@ -92,6 +92,7 @@ import {
   BadgeCheck,
   Trophy,
   Handshake,
+  ChevronRight,
 } from 'lucide-react'
 import { CentroComunicacionesPortal } from '@/components/views/CentroComunicacionesPortal'
 import { useInactivityAutoLogout } from '@/hooks/use-inactivity-auto-logout'
@@ -861,6 +862,8 @@ export function PortalClienteModal({
               onSelect={(id) => navegarA(id)}
               cuentaRecaudoPrincipal={data.cuentaRecaudoPrincipal}
               onEstadoCuenta={descargarEstadoCuenta}
+              prestamos={prestamos}
+              onRegularizar={() => setRegularizacionOpen(true)}
             />
           )}
 
@@ -881,6 +884,7 @@ export function PortalClienteModal({
             <ProximosPagosView
               prestamos={prestamos}
               onPagar={pagarBancolombia}
+              onRegularizar={() => setRegularizacionOpen(true)}
             />
           )}
 
@@ -1457,6 +1461,8 @@ function HubView({
   onSelect,
   cuentaRecaudoPrincipal,
   onEstadoCuenta,
+  prestamos,
+  onRegularizar,
 }: {
   cliente: PortalClienteInfo
   kpis: PortalKPIS
@@ -1465,9 +1471,63 @@ function HubView({
   onSelect: (id: HubItemId) => void
   cuentaRecaudoPrincipal?: CuentaRecaudoInfo | null
   onEstadoCuenta?: (prestamoId?: string) => void
+  prestamos?: any[]
+  onRegularizar?: () => void
 }) {
+  // === Detectar si hay préstamos con mora ===
+  const prestamosEnMora = (prestamos || []).filter(
+    (p) => p.diasMora > 0 && p.estado === 'EN_MORA'
+  )
+  const tieneMora = prestamosEnMora.length > 0
+  const totalMora = prestamosEnMora.reduce((s, p) => s + (p.montoMora || 0), 0)
+  const totalDiasMora = prestamosEnMora.reduce((s, p) => s + (p.diasMora || 0), 0)
+  const totalCuotasVencidas = prestamosEnMora.reduce(
+    (s, p) => s + (p.pagos?.filter((pg: any) => pg.estado === 'PENDIENTE' && new Date(pg.fechaVencimiento) < new Date()).length || 0),
+    0
+  )
+
   return (
     <div className="space-y-5 fade-scale">
+      {/* === BANNER DESTACADO: REGULARIZACIÓN INTELIGENTE === */}
+      {tieneMora && onRegularizar && (
+        <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-red-500/15 via-amber-500/10 to-indigo-500/15 border-2 border-red-400/40 p-4">
+          {/* Patrón decorativo */}
+          <div className="absolute -top-4 -right-4 w-24 h-24 bg-red-500/10 rounded-full blur-xl"></div>
+          <div className="absolute -bottom-4 -left-4 w-20 h-20 bg-amber-500/10 rounded-full blur-xl"></div>
+
+          <div className="relative flex items-start gap-3">
+            <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-red-500 to-amber-500 flex items-center justify-center shrink-0 shadow-lg">
+              <Handshake className="w-6 h-6 text-white" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-xs font-bold text-red-300 uppercase tracking-wider mb-1 flex items-center gap-1">
+                <AlertTriangle className="w-3 h-3" />
+                Tienes cuotas vencidas
+              </p>
+              <h3 className="text-white font-bold text-base leading-tight mb-1">
+                ¡Regulariza tu deuda ahora!
+              </h3>
+              <p className="text-[11px] text-slate-300 leading-snug mb-3">
+                Tienes <strong className="text-white">{prestamosEnMora.length} crédito(s)</strong> con mora
+                ({totalDiasMora} días acumulados · {formatearMoneda(totalMora)} en intereses moratorios).
+                Te ayudamos a encontrar una solución personalizada y sostenible.
+              </p>
+              <button
+                onClick={onRegularizar}
+                className="w-full flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 transition-all shadow-lg hover:shadow-indigo-500/30"
+              >
+                <Handshake className="w-4 h-4 text-white" />
+                <span className="text-white font-bold text-sm">Regularizar inteligentemente</span>
+                <ChevronRight className="w-4 h-4 text-white/80" />
+              </button>
+              <p className="text-[9px] text-slate-400 mt-2 text-center">
+                Asistente conversacional · Sin costo · 100% en línea
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* === LETRERO ELECTRÓNICO — AVISO DE CUENTA DE PAGO === */}
       <AvisoCuentaPago cuenta={cuentaRecaudoPrincipal} />
 
@@ -1900,9 +1960,11 @@ function PrestamosView({
 function ProximosPagosView({
   prestamos,
   onPagar,
+  onRegularizar,
 }: {
   prestamos: any[]
   onPagar: (prestamoId: string, monto: number, numeroCuota: number) => void
+  onRegularizar?: () => void
 }) {
   const proximos = prestamos
     .filter((p) => p.estado === 'ACTIVO' || p.estado === 'EN_MORA')
@@ -1933,8 +1995,46 @@ function ProximosPagosView({
     return diff >= 0 && diff <= 1
   })
 
+  // === Identificar pagos vencidos ===
+  const vencidos = proximos.filter((pg) => {
+    const venc = new Date(pg.fechaVencimiento)
+    venc.setHours(0, 0, 0, 0)
+    return venc.getTime() < hoy.getTime()
+  })
+
   return (
     <div className="space-y-3 fade-scale">
+      {/* Banner destacado: cuotas vencidas → regularizar */}
+      {vencidos.length > 0 && onRegularizar && (
+        <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-red-500/20 via-amber-500/15 to-indigo-500/20 border-2 border-red-400/50 p-4">
+          <div className="flex items-start gap-3">
+            <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-red-500 to-amber-500 flex items-center justify-center shrink-0 shadow-lg">
+              <Handshake className="w-6 h-6 text-white" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-xs font-bold text-red-300 uppercase tracking-wider mb-0.5 flex items-center gap-1">
+                <AlertTriangle className="w-3 h-3" />
+                {vencidos.length} cuota(s) vencida(s)
+              </p>
+              <h3 className="text-white font-bold text-sm leading-tight mb-2">
+                ¿No puedes pagar todo hoy? Negocia tu deuda
+              </h3>
+              <p className="text-[11px] text-slate-300 leading-snug mb-3">
+                Te ayudamos a encontrar una fecha y forma de pago viable. Calculamos escenarios en tiempo real para que veas el costo de esperar.
+              </p>
+              <button
+                onClick={onRegularizar}
+                className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 transition-all"
+              >
+                <Handshake className="w-4 h-4 text-white" />
+                <span className="text-white font-bold text-xs">Regularizar inteligentemente</span>
+                <ChevronRight className="w-3.5 h-3.5 text-white/80" />
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Banner de recordatorio destacado (solo si hay cuota que vence hoy o mañana) */}
       {proximoUrgente && (
         <div className="rounded-xl p-3 bg-gradient-to-r from-amber-500/20 to-orange-500/20 border-2 border-amber-400/60">
