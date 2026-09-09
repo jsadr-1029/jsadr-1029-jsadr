@@ -2075,3 +2075,47 @@ Stage Summary:
   3. PrestamosView - banner inline en cada crédito con mora
 - El cliente ahora puede solicitar negociar la deuda por sí mismo
 - El botón abre el modal conversacional que guía paso a paso
+
+---
+Task ID: admin-acuerdos-regularizacion
+Agent: main
+Task: Hacer visible el módulo de Acuerdos de Regularización desde el panel del admin y permitir gestionarlos con opciones completas
+
+Work Log:
+- Verificado que los acuerdos del portal se guardaban correctamente en CompromisoPago (2 acuerdos ya creados por Johan Álvarez)
+- Creado endpoint /api/regularizacion con:
+  * GET: lista acuerdos con cliente, préstamo, cuotas vencidas, montos
+  * POST accion=aprobar: genera Otro Sí automáticamente (tabla OtroSiCambioFecha) + aplica negociación de mora
+  * POST accion=contraoferta: ajusta monto/fecha del acuerdo, estado=CONTRAOFERTA
+  * POST accion=negociar_mora: anula o fija valor de mora en el préstamo
+  * POST accion=rechazar: rechaza acuerdo con motivo
+- Creado componente AcuerdosRegularizacionView con:
+  * 4 KPIs: pendientes, aprobados, contraofertas, rechazados
+  * Filtro por estado y buscador por nombre/cédula/código
+  * Tabla con todos los datos del acuerdo
+  * 4 acciones por acuerdo:
+    - Aprobar (verde): abre modal con ajuste de monto/fecha + negociación de mora (mantener/anular/negociar) + observaciones → genera Otro Sí automáticamente
+    - Contraoferta (ámbar): modal con monto/fecha/observaciones para contraofertar al cliente
+    - Negociar mora (naranja): modal con opción anular/negociar valor de la mora
+    - Rechazar (rojo): modal con motivo del rechazo
+- Integrado en el panel admin:
+  * Sidebar.tsx: nuevo item 'Acuerdos Regularización' (icono Handshake)
+  * UserMenu.tsx: acceso rápido
+  * page.tsx: renderiza AcuerdosRegularizacionView cuando view='acuerdos-regularizacion'
+  * permisos.ts: agregado a ADMIN y GESTOR
+- El Otro Sí generado usa la tabla existente OtroSiCambioFecha con tipoModificacion='ACUERDO_REGULARIZACION', por lo que se ve automáticamente en:
+  * Acciones del crédito (PrestamoDetalleModal)
+  * Bitácora del crédito
+  * Portal del cliente (pendiente de firma electrónica)
+- Descripción del Otro Sí incluye: cliente, crédito, tipo, monto, fecha, total, saldo, cuotas, fechas posteriores, estado de mora, observaciones
+- Sincronizado con GitHub/Vercel
+- Verificado producción: https://jsadr.com.co/api/regularizacion responde 401 sin token (correcto)
+
+Stage Summary:
+- Los acuerdos que el cliente envía desde el portal ahora son visibles en el panel admin
+- Sidebar: 'Acuerdos Regularización' entre Buzón Solicitudes y Portal Cliente
+- 4 acciones por acuerdo: aprobar, contraoferta, negociar mora, rechazar
+- Al aprobar, se genera automáticamente un Otro Sí (código OS-XXX) como acuerdo de partes
+- El Otro Sí aparece en Acciones del crédito, Bitácora y Portal del cliente (pendiente firma)
+- Negociación de mora con 3 opciones: mantener, anular, negociar valor
+- Todo el flujo queda trazable y auditable
