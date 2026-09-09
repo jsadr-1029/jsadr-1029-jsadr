@@ -1973,3 +1973,73 @@ Stage Summary:
 - 4 alternativas de regularización: pago completo, parcial, acuerdo, promesa
 - Acuerdos guardados en tabla CompromisoPago (estado REGISTRADO)
 - Asesor revisa en 24h desde el panel de administración
+
+---
+Task ID: caso-ejemplo-regularizacion
+Agent: main
+Task: Crear caso de ejemplo con cédula 1214731649 para demostrar el módulo de Regularización Inteligente
+
+Work Log:
+- Verificado cliente JOHAN SEBASTIAN ALVAREZ DEL RIO (cédula 1214731649): existe, sin préstamos
+- Creado préstamo de ejemplo con cuotas vencidas:
+  * Código: JA-CC-1214731649-20260626-01
+  * Monto: $1.000.000
+  * Tasa mensual: 15% (TASA_FIJA)
+  * 4 cuotas mensuales de $400.000 (capital $250.000 + interés $150.000)
+  * Tasa mora: 1% diario compuesto
+  * fechaDesembolso: 2026-06-26 (hace 75 días)
+  * fechaInicioAmortizacion: 2026-06-26
+  * Cuotas:
+    - Cuota 1: vence 2026-07-26 (45 días de mora)
+    - Cuota 2: vence 2026-08-26 (14 días de mora)
+    - Cuota 3: vence 2026-09-26 (vigente)
+    - Cuota 4: vence 2026-10-26 (vigente)
+  * 4 cuotas (Pago) insertadas en estado PENDIENTE
+- Actualizado tokenSesion del cliente para acceso al portal
+- Verificado endpoint GET /api/portal/[cedula]/regularizar:
+  * Detecta correctamente 2 cuotas vencidas
+  * Total pendiente hoy: $1.514.284,96
+  * Total mora: $714.284,96
+  * Genera escenarios comparativos (hoy/15/30/45 días)
+- Verificado POST calcular_escenario para fecha 30 días futuros:
+  * Total proyectado: $2.422.223,80
+  * Diferencia vs hoy: +$907.938,84
+  * Tabla comparativa: $1.514.284 → $1.920.000 → $2.422.223 → $3.005.289
+- Verificado POST guardar_compromiso:
+  * Acuerdo creado con ID cmtu7nxjr0003l504g8wz921s
+  * Estado: REGISTRADO
+  * Tipo: ACUERDO_REGULARIZACION
+  * Monto: $700.000 primer pago + saldo en cuotas posteriores
+
+Stage Summary:
+- Caso ejemplo creado y funcionando en producción (jsadr.com.co)
+- Cliente puede iniciar sesión en el portal con cédula 1214731649
+- El banner de mora mostrará "Regularizar inteligentemente"
+- El flujo conversacional guía al cliente paso a paso
+- Los acuerdos quedan guardados en tabla CompromisoPago
+
+---
+Task ID: caso-ejemplo-pdf
+Agent: main
+Task: Generar PDF con caso de ejemplo documentado paso a paso
+
+Work Log:
+- Creado script Python con ReportLab para generar PDF del caso ejemplo
+- PDF estructurado en 7 pasos:
+  1. Resumen de cuotas vencidas (con tabla detallada)
+  2. Selección de fecha (calendario / no estoy seguro)
+  3. Cálculo dinámico del escenario (con tabla comparativa)
+  4. Capacidad de pago (cliente propone monto)
+  5. Alternativas de regularización (4 opciones visuales)
+  6. Resumen y confirmación (con tabla final)
+  7. Acuerdo registrado (con código de seguimiento)
+- Incluye conclusiones del caso al final
+- Diseño premium con colores azul/violeta/esmeralda consistente con el portal
+- Tablas comparativas, cajas de advertencia, estilos de chat (sistema/cliente)
+- Generado en: /home/z/my-project/download/caso_ejemplo_regularizacion_inteligente.pdf
+- Tamaño: 16 KB (5 páginas aprox)
+
+Stage Summary:
+- PDF generado y disponible en /home/z/my-project/download/caso_ejemplo_regularizacion_inteligente.pdf
+- Documenta el caso completo que el usuario puede probar en producción
+- Muestra conversación cliente-asistente en formato visual claro
