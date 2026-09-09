@@ -48,6 +48,7 @@ const AuditoriaSeguridadView = dynamic(() => import('@/components/views/Auditori
 const CentroComunicacionesView = dynamic(() => import('@/components/views/CentroComunicacionesView').then(m => ({ default: m.CentroComunicacionesView })), { ssr: false })
 const CentroConfiguracionView = dynamic(() => import('@/components/views/CentroConfiguracionView').then(m => ({ default: m.CentroConfiguracionView })), { ssr: false })
 const BuzonSolicitudesView = dynamic(() => import('@/components/views/BuzonSolicitudesView').then(m => ({ default: m.BuzonSolicitudesView })), { ssr: false })
+const AcuerdosRegularizacionView = dynamic(() => import('@/components/views/AcuerdosRegularizacionView').then(m => ({ default: m.AcuerdosRegularizacionView })), { ssr: false })
 const PortalAdminView = dynamic(() => import('@/components/views/PortalAdminView').then(m => ({ default: m.PortalAdminView })), { ssr: false })
 
 export type ViewKey =
@@ -74,6 +75,7 @@ export type ViewKey =
   | 'manual'
   | 'automatizacion'
   | 'buzon-solicitudes'
+  | 'acuerdos-regularizacion'
 
 export default function Home() {
   const [view, setView] = useState<ViewKey>('prestamos')
@@ -517,6 +519,9 @@ export default function Home() {
                 {view === 'automatizacion' && <AutomatizacionView />}
                 {view === 'buzon-solicitudes' && (
                   <BuzonSolicitudesView onConvertir={convertirSolicitudWeb} />
+                )}
+                {view === 'acuerdos-regularizacion' && (
+                  <AcuerdosRegularizacionView />
                 )}
               </>
             )}

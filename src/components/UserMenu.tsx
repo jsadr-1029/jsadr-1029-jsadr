@@ -65,6 +65,7 @@ import {
   ArrowLeftRight,
   Loader2,
   AlertTriangle,
+  Handshake,
 } from 'lucide-react'
 
 interface UserMenuProps {
@@ -118,6 +119,7 @@ const FULL_NAV_ALL = [
   { key: 'campanas', label: 'Campañas', icon: Megaphone, group: 'Operación' },
   { key: 'simulador', label: 'Simulador', icon: Calculator, group: 'Operación' },
   { key: 'buzon-solicitudes', label: 'Buzón Solicitudes Web', icon: Inbox, group: 'Operación' },
+  { key: 'acuerdos-regularizacion', label: 'Acuerdos Regularización', icon: Handshake, group: 'Operación' },
   { key: 'portal', label: 'Portal Cliente', icon: Search, group: 'Consulta' },
   { key: 'comunicaciones', label: 'Comunicaciones', icon: MessageSquare, group: 'Consulta' },
   { key: 'notificaciones', label: 'Notificaciones', icon: Bell, group: 'Consulta' },

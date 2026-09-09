@@ -29,6 +29,7 @@ import {
   Repeat,
   ArrowLeftRight,
   Loader2,
+  Handshake,
   type LucideIcon,
 } from 'lucide-react'
 import { useMemo } from 'react'
@@ -82,6 +83,7 @@ const ALL_ITEMS: MenuNode[] = [
   { key: 'pagos', label: 'Pagos', icon: DollarSign, description: 'Recaudo y registro' },
   { key: 'juridico', label: 'Jurídico', icon: Scale, description: 'Casos legales' },
   { key: 'buzon-solicitudes', label: 'Buzón Solicitudes', icon: Inbox, description: 'Solicitudes web del portal' },
+  { key: 'acuerdos-regularizacion', label: 'Acuerdos Regularización', icon: Handshake, description: 'Negociaciones de cuotas vencidas' },
   { key: 'portal', label: 'Portal Cliente', icon: Search, description: 'Consulta por cédula' },
   { key: 'comunicaciones', label: 'Comunicaciones', icon: MessageSquare, description: 'Chat con clientes' },
   { key: 'notificaciones', label: 'Notificaciones', icon: Bell, description: 'Centro de avisos' },

@@ -49,6 +49,7 @@ export const VISTAS_POR_ROL: Record<Rol, ViewKey[]> = {
     'portal',
     'comunicaciones',
     'buzon-solicitudes',
+    'acuerdos-regularizacion',
     'usuarios',
     'conexiones',
     'seguridad',
@@ -75,6 +76,7 @@ export const VISTAS_POR_ROL: Record<Rol, ViewKey[]> = {
     'portal',
     'comunicaciones',
     'buzon-solicitudes',
+    'acuerdos-regularizacion',
     'notificaciones',
     'exportar',
     // 'manual' se incluye abajo — GESTOR ve solo la pestaña de uso
