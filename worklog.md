@@ -2119,3 +2119,36 @@ Stage Summary:
 - El Otro Sí aparece en Acciones del crédito, Bitácora y Portal del cliente (pendiente firma)
 - Negociación de mora con 3 opciones: mantener, anular, negociar valor
 - Todo el flujo queda trazable y auditable
+
+---
+Task ID: fix-reset-clave-1100012073
+Agent: main
+Task: Reparar el flujo de restablecimiento de clave para el cliente con cédula 1100012073
+
+Work Log:
+- Verificado cliente Dana Luz Manjarrez Muñoz (cédula 1100012073, email manjarrezdana4@gmail.com)
+- Encontrado el problema: rate limit era 1 solicitud cada 5 minutos por IP
+- Cuando varios clientes comparten IP (oficina, red móvil, NAT), se bloquean entre sí
+- El mensaje "Demasiadas solicitudes" confundía al usuario (pensaba que el correo no se enviaba)
+- En realidad, el endpoint SÍ envió el correo, pero el rate limit impedía reintentos
+- Generado nuevo token fresco para el cliente y verificado envío exitoso vía API en producción
+- Token: 6178c98401673215d1da547af860a7e30aa409442d5527284cdb7e6297278d91
+- Expira: 2026-09-10T16:10:18.155Z (60 minutos)
+- Cliente tiene debeCambiarClave=true, listo para restablecer
+- Fix systemic:
+  * Rate limit aumentado de 1 a 3 solicitudes cada 5 minutos por IP
+  * Rate limit ahora por IP + identificador (no solo IP)
+  * Permite que varios usuarios detrás de la misma IP hagan reset sin bloquearse
+  * Mantiene protección contra abuso real de fuerza bruta
+  * Limpia timestamps viejos (>5 min) para evitar memory leak
+  * Movida la verificación de rate limit después de parsear el body
+- Sincronizado con GitHub/Vercel
+- Verificado en producción: API responde 200 con destinatarioEnmascarado correcto
+
+Stage Summary:
+- Cliente Dana Luz Manjarrez recibió un nuevo magic link en manjarrezdana4@gmail.com
+- El token es válido por 60 minutos desde la última llamada (2026-09-10 15:10 UTC)
+- El cliente debe revisar su bandeja de entrada y carpeta de spam
+- Al hacer clic en el enlace del correo, podrá crear una nueva contraseña
+- Rate limit ahora permite hasta 3 intentos cada 5 minutos (en lugar de 1)
+- Varios usuarios detrás de una misma IP ya no se bloquean entre sí
