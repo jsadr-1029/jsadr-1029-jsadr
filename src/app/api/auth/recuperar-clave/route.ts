@@ -36,30 +36,79 @@ import { sanitizeError } from '@/lib/error-handler'
 import { getBaseUrl } from '@/lib/url'
 
 // === RATE LIMIT ===
-// 1 solicitud cada 5 minutos por IP para evitar abuso
+// Permitir hasta 3 solicitudes cada 5 minutos por IP, y hasta 3 por identificador.
+// Esto evita que varios usuarios detrás de una misma IP (oficina, red móvil)
+// se bloqueen entre sí, pero sigue protegiendo contra abuso real.
+//
+// Por qué no es 1 sola solicitud cada 5 min:
+//   - Varios clientes pueden compartir IP (mismo hogar, oficina, NAT de operador)
+//   - El usuario puede necesitar reintentar si el correo no llegó (spam, etc.)
+//   - El verdadero riesgo de fuerza bruta está en el endpoint /login, no aquí
+//     (aquí solo generamos un magic link, no verificamos credenciales)
 const RATE_LIMIT_MINUTOS = 5
-const RATE_LIMIT_MAP = new Map<string, number>()
+const RATE_LIMIT_MAX_INTENTOS = 3
+const RATE_LIMIT_MAP = new Map<string, number[]>()  // clave -> timestamps de intentos recientes
 
 // === Duración del magic link ===
 // 60 minutos — más corto que la contraseña temporal de 24h porque es
 // un link de un solo uso y no queremos que quede flotando mucho tiempo.
 const RESET_LINK_EXPIRY_MINUTES = 60
 
-// === Verificar rate limit por IP ===
-function verificarRateLimit(ip: string): { permitido: boolean; minutosRestantes?: number } {
+// === Verificar rate limit por IP + identificador ===
+// Combinamos IP e identificador para que:
+//   - Varios usuarios detrás de una misma IP no se bloqueen entre sí
+//   - Un mismo usuario (identificador) tenga su propio límite independiente
+function verificarRateLimit(ip: string, identificador: string): {
+  permitido: boolean
+  minutosRestantes?: number
+  intentosRestantes?: number
+} {
   const ahora = Date.now()
-  const ultimo = RATE_LIMIT_MAP.get(ip)
-  if (ultimo) {
-    const diffMin = (ahora - ultimo) / 60000
-    if (diffMin < RATE_LIMIT_MINUTOS) {
-      return {
-        permitido: false,
-        minutosRestantes: Math.ceil(RATE_LIMIT_MINUTOS - diffMin),
-      }
+  const ventanaMs = RATE_LIMIT_MINUTOS * 60 * 1000
+
+  // Limpiar entradas viejas (más de 5 min) para evitar memory leak
+  // y solo contar intentos dentro de la ventana actual
+  const limpiarYContar = (lista: number[] | undefined): number[] => {
+    if (!lista) return []
+    return lista.filter((ts) => ahora - ts < ventanaMs)
+  }
+
+  // Verificar rate limit por IP (3 por 5 min)
+  const intentosIP = limpiarYContar(RATE_LIMIT_MAP.get(`ip:${ip}`))
+  if (intentosIP.length >= RATE_LIMIT_MAX_INTENTOS) {
+    const masAntiguo = Math.min(...intentosIP)
+    const minutosRestantes = Math.ceil((ventanaMs - (ahora - masAntiguo)) / 60000)
+    return {
+      permitido: false,
+      minutosRestantes: Math.max(1, minutosRestantes),
+      intentosRestantes: 0,
     }
   }
-  RATE_LIMIT_MAP.set(ip, ahora)
-  return { permitido: true }
+
+  // Verificar rate limit por identificador (3 por 5 min)
+  // Esto permite que varios usuarios detrás de la misma IP hagan reset,
+  // pero bloquea a un usuario que insista demasiado con el mismo identificador
+  const intentosId = limpiarYContar(RATE_LIMIT_MAP.get(`id:${identificador.toLowerCase()}`))
+  if (intentosId.length >= RATE_LIMIT_MAX_INTENTOS) {
+    const masAntiguo = Math.min(...intentosId)
+    const minutosRestantes = Math.ceil((ventanaMs - (ahora - masAntiguo)) / 60000)
+    return {
+      permitido: false,
+      minutosRestantes: Math.max(1, minutosRestantes),
+      intentosRestantes: 0,
+    }
+  }
+
+  // Registrar el intento en ambas listas
+  intentosIP.push(ahora)
+  intentosId.push(ahora)
+  RATE_LIMIT_MAP.set(`ip:${ip}`, intentosIP)
+  RATE_LIMIT_MAP.set(`id:${identificador.toLowerCase()}`, intentosId)
+
+  return {
+    permitido: true,
+    intentosRestantes: RATE_LIMIT_MAX_INTENTOS - intentosIP.length,
+  }
 }
 
 interface DestinatarioRecuperacion {
@@ -234,8 +283,19 @@ export async function POST(req: NextRequest) {
   try {
     const clientInfo = getClientInfo(req)
 
-    // Rate limit
-    const rl = verificarRateLimit(clientInfo.ip || 'unknown')
+    const body = await req.json()
+    const { identificador } = body
+
+    if (!identificador || typeof identificador !== 'string' || identificador.trim().length < 3) {
+      return NextResponse.json(
+        { success: false, error: 'Debes ingresar tu usuario, cédula o correo.', code: 'MISSING_FIELDS' },
+        { status: 400 }
+      )
+    }
+
+    // Rate limit — combinamos IP + identificador para que varios usuarios
+    // detrás de la misma IP no se bloqueen entre sí
+    const rl = verificarRateLimit(clientInfo.ip || 'unknown', identificador.trim())
     if (!rl.permitido) {
       return NextResponse.json(
         {
@@ -245,16 +305,6 @@ export async function POST(req: NextRequest) {
           minutosRestantes: rl.minutosRestantes,
         },
         { status: 429 }
-      )
-    }
-
-    const body = await req.json()
-    const { identificador } = body
-
-    if (!identificador || typeof identificador !== 'string' || identificador.trim().length < 3) {
-      return NextResponse.json(
-        { success: false, error: 'Debes ingresar tu usuario, cédula o correo.', code: 'MISSING_FIELDS' },
-        { status: 400 }
       )
     }
 
