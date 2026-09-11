@@ -2152,3 +2152,70 @@ Stage Summary:
 - Al hacer clic en el enlace del correo, podrá crear una nueva contraseña
 - Rate limit ahora permite hasta 3 intentos cada 5 minutos (en lugar de 1)
 - Varios usuarios detrás de una misma IP ya no se bloquean entre sí
+
+---
+Task ID: ef-prestamo-4-cuotas-15-30
+Agent: main
+Task: Reconfigurar el préstamo EF-CC-30000301-20260904-01 con 4 cuotas en fechas 15 y 30, +$20.000 en primera cuota por días causados
+
+Work Log:
+- Revisado estado actual del préstamo:
+  * montoPrincipal: $200.000
+  * tasaInteresMensual: 25%
+  * numeroCuotas: 2 (quincenal)
+  * modalidadAmortizacion: TASA_FIJA
+  * fechaInicioAmortizacion: 2026-08-31
+  * periodoCorte: null
+  * diasCausadosAntes: 11, valorDiasCausados: null
+
+- Encontrado bug en función corregirFechasPorCorte():
+  * Usaba rangos hardcodeados (15-27 'día mayor', 1-14 'día menor')
+  * Para corte '15-30' fallaba porque día 15 caía en rango 'día mayor'
+    cuando en realidad es el día MENOR del corte 15-30
+  * Esto causaba fechas incorrectas: 15/09 → 15/10 (en vez de 30/09)
+
+- Fix aplicado a corregirFechasPorCorte() en src/lib/finanzas.ts:
+  * Nueva lógica basada en los días EXACTOS del corte
+  * Si diaAnterior == diaMayor → siguiente es diaMenor del mes siguiente
+  * Si diaAnterior == diaMenor → siguiente es diaMayor del mismo mes
+  * Si diaAnterior entre diaMenor y diaMayor → diaMayor del mismo mes
+  * Si diaAnterior > diaMayor → diaMenor del mes siguiente
+  * Si diaAnterior < diaMenor → diaMenor del mismo mes
+  * Funciona universalmente para cualquier combinación (15-30, 16-01, 10-25, etc.)
+
+- Verificado el cálculo con script de prueba:
+  * 4 cuotas quincenales con fechaInicio Aug 31
+  * Cuota 1: 15/09/2026 ✓
+  * Cuota 2: 30/09/2026 ✓
+  * Cuota 3: 15/10/2026 ✓
+  * Cuota 4: 30/10/2026 ✓
+
+- Actualizado préstamo EF-CC-30000301-20260904-01 en BD:
+  * numeroCuotas: 2 → 4
+  * plazoMeses: 1 → 2 (4 quincenales = 2 meses)
+  * montoCuota: $125.000 → $75.000
+  * totalInteres: $50.000 → $100.000 (2 meses × 25% × $200.000)
+  * totalPagar: $250.000 → $320.000 ($300.000 + $20.000 días causados)
+  * saldoTotal: $250.000 → $320.000
+  * periodoCorte: null → '15-30'
+  * fechaPrimerCorte: null → 2026-09-15
+  * diasCausadosAntes: 11 → 5
+  * valorDiasCausados: null → $20.000
+  * fechaVencimiento: actualizada a 2026-10-30
+
+- Creados 4 pagos programados nuevos:
+  * Cuota 1: 15/09/2026 | $95.000 (capital $50.000 + interés $25.000 + $20.000 días causados)
+  * Cuota 2: 30/09/2026 | $75.000 (capital $50.000 + interés $25.000)
+  * Cuota 3: 15/10/2026 | $75.000 (capital $50.000 + interés $25.000)
+  * Cuota 4: 30/10/2026 | $75.000 (capital $50.000 + interés $25.000)
+
+- Sincronizado con GitHub/Vercel
+- Fix de la función corregirFechasPorCorte se aplica automáticamente
+  en estado de cuenta, módulo de pagos y portal del cliente
+
+Stage Summary:
+- Préstamo EF-CC-30000301-20260904-01 reconfigurado exitosamente
+- 4 cuotas quincenales con fechas exactamente en días 15 y 30 de cada mes
+- $20.000 adicionales en primera cuota por concepto de 5 días causados
+- Bug crítico corregido en función de corrección de fechas por corte
+- Función ahora funciona universalmente para cualquier combinación de corte
