@@ -41,13 +41,35 @@ function calcularPrestamoSegunModalidad(prestamo: any) {
   // fechaPrimerCuota (el sistema contaría desde fechaDesembolso).
   const fechaBase = prestamo.fechaInicioAmortizacion || prestamo.fechaDesembolso || undefined
   if (prestamo.modalidadAmortizacion === 'TASA_FIJA') {
-    return calcularPrestamoTasaFijaMensual({
+    const calculo = calcularPrestamoTasaFijaMensual({
       montoPrincipal: prestamo.montoPrincipal,
       tasaMensualFija: prestamo.tasaInteresMensual || prestamo.tasaInteresAnual / 12,
       numeroCuotas: prestamo.numeroCuotas,
       frecuencia: prestamo.frecuencia as any,
       fechaDesembolso: fechaBase,
     })
+    // === FIX: Respetar montoCuota guardado en BD si incluye ajustes manuales ===
+    // El admin puede ajustar montoCuota en BD (ej: +$5.000 por cargo adicional).
+    // El cálculo automático no conoce estos ajustes, así que reemplazamos el
+    // montoCuota calculado por el guardado en BD y ajustamos la tabla.
+    if (prestamo.montoCuota && prestamo.montoCuota !== calculo.montoCuota) {
+      calculo.tablaAmortizacion = calculo.tablaAmortizacion.map((c: any) => ({
+        ...c,
+        montoCuota: c.numero === 1
+          ? prestamo.montoCuota + (prestamo.valorDiasCausados || 0)
+          : prestamo.montoCuota,
+      }))
+      calculo.montoCuota = prestamo.montoCuota
+    } else if (prestamo.valorDiasCausados && prestamo.valorDiasCausados > 0) {
+      calculo.tablaAmortizacion = calculo.tablaAmortizacion.map((c: any) =>
+        c.numero === 1
+          ? { ...c, montoCuota: c.montoCuota + (prestamo.valorDiasCausados || 0) }
+          : c
+      )
+    }
+    // Aplicar corrección de fechas por calendario si hay periodoCorte
+    calculo.tablaAmortizacion = corregirFechasPorCorte(calculo.tablaAmortizacion, prestamo.periodoCorte)
+    return calculo
   }
   if (prestamo.modalidadAmortizacion === 'INTERES_FIJO_SIN_CAPITAL') {
     return {
@@ -69,6 +91,22 @@ function calcularPrestamoSegunModalidad(prestamo: any) {
     frecuencia: prestamo.frecuencia as any,
     fechaDesembolso: fechaBase,
   })
+  // === FIX: Para FRANCES también respetar montoCuota guardado si difiere ===
+  if (prestamo.montoCuota && prestamo.montoCuota !== resultado.montoCuota) {
+    resultado.tablaAmortizacion = resultado.tablaAmortizacion.map((c: any) => ({
+      ...c,
+      montoCuota: c.numero === 1
+        ? prestamo.montoCuota + (prestamo.valorDiasCausados || 0)
+        : prestamo.montoCuota,
+    }))
+    resultado.montoCuota = prestamo.montoCuota
+  } else if (prestamo.valorDiasCausados && prestamo.valorDiasCausados > 0) {
+    resultado.tablaAmortizacion = resultado.tablaAmortizacion.map((c: any) =>
+      c.numero === 1
+        ? { ...c, montoCuota: c.montoCuota + (prestamo.valorDiasCausados || 0) }
+        : c
+    )
+  }
   // === Corregir fechas por calendario si hay periodoCorte (ej: '16-01') ===
   resultado.tablaAmortizacion = corregirFechasPorCorte(resultado.tablaAmortizacion, prestamo.periodoCorte)
   if (resultado.tablaAmortizacion.length > 0) {

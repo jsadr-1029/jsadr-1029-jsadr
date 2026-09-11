@@ -75,6 +75,23 @@ function calcularTabla(p: any) {
       frecuencia: p.frecuencia as any,
       fechaDesembolso: fechaBase,
     })
+    // === FIX: Respetar montoCuota guardado en BD si difiere del calculado ===
+    // El admin puede ajustar montoCuota en BD (ej: +$5.000 por cargo adicional).
+    if (p.montoCuota && p.montoCuota !== calculo.montoCuota) {
+      calculo.tablaAmortizacion = calculo.tablaAmortizacion.map((c: any) => ({
+        ...c,
+        montoCuota: c.numero === 1
+          ? p.montoCuota + (p.valorDiasCausados || 0)
+          : p.montoCuota,
+      }))
+      calculo.montoCuota = p.montoCuota
+    } else if (p.valorDiasCausados && p.valorDiasCausados > 0) {
+      calculo.tablaAmortizacion = calculo.tablaAmortizacion.map((c: any) =>
+        c.numero === 1
+          ? { ...c, montoCuota: c.montoCuota + (p.valorDiasCausados || 0) }
+          : c
+      )
+    }
   } else if (p.modalidadAmortizacion === 'INTERES_FIJO_SIN_CAPITAL') {
     const fechaVenc = new Date(fechaBase)
     fechaVenc.setMonth(fechaVenc.getMonth() + 1)

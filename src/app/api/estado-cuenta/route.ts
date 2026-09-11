@@ -109,6 +109,25 @@ export async function GET(req: NextRequest) {
           // === FIX (2026-08-21): usar fechaInicioAmortizacion si está disponible ===
           fechaDesembolso: p.fechaInicioAmortizacion || p.fechaDesembolso || undefined,
         })
+        // === FIX: Respetar el montoCuota guardado en BD si difiere del calculado ===
+        // El montoCuota en BD puede incluir ajustes manuales del admin (ej: +$5.000
+        // por cargo adicional). Si usamos el montoCuota recalculado, el cliente
+        // vería valores distintos a los que realmente debe pagar.
+        if (p.montoCuota && p.montoCuota !== calculo.montoCuota) {
+          calculo.tablaAmortizacion = calculo.tablaAmortizacion.map((c: any) => ({
+            ...c,
+            montoCuota: c.numero === 1
+              ? p.montoCuota + (p.valorDiasCausados || 0)
+              : p.montoCuota,
+          }))
+          calculo.montoCuota = p.montoCuota
+        } else if (p.valorDiasCausados && p.valorDiasCausados > 0) {
+          calculo.tablaAmortizacion = calculo.tablaAmortizacion.map((c: any) =>
+            c.numero === 1
+              ? { ...c, montoCuota: c.montoCuota + (p.valorDiasCausados || 0) }
+              : c
+          )
+        }
       } else if (p.modalidadAmortizacion === 'INTERES_FIJO_SIN_CAPITAL') {
         // Modalidad especial: no hay tabla de amortización tradicional.
         // El cliente paga intereses fijos mensuales mientras mantenga deuda de capital.
