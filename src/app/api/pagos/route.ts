@@ -52,20 +52,16 @@ function calcularPrestamoSegunModalidad(prestamo: any) {
     // El admin puede ajustar montoCuota en BD (ej: +$5.000 por cargo adicional).
     // El cálculo automático no conoce estos ajustes, así que reemplazamos el
     // montoCuota calculado por el guardado en BD y ajustamos la tabla.
+    //
+    // IMPORTANTE: valorDiasCausados NO se suma a ninguna cuota individual.
+    // Es un cargo único que se documenta en notas pero las cuotas quedan
+    // todas iguales al montoCuota guardado en BD.
     if (prestamo.montoCuota && prestamo.montoCuota !== calculo.montoCuota) {
       calculo.tablaAmortizacion = calculo.tablaAmortizacion.map((c: any) => ({
         ...c,
-        montoCuota: c.numero === 1
-          ? prestamo.montoCuota + (prestamo.valorDiasCausados || 0)
-          : prestamo.montoCuota,
+        montoCuota: prestamo.montoCuota,  // Todas las cuotas al valor guardado
       }))
       calculo.montoCuota = prestamo.montoCuota
-    } else if (prestamo.valorDiasCausados && prestamo.valorDiasCausados > 0) {
-      calculo.tablaAmortizacion = calculo.tablaAmortizacion.map((c: any) =>
-        c.numero === 1
-          ? { ...c, montoCuota: c.montoCuota + (prestamo.valorDiasCausados || 0) }
-          : c
-      )
     }
     // Aplicar corrección de fechas por calendario si hay periodoCorte
     calculo.tablaAmortizacion = corregirFechasPorCorte(calculo.tablaAmortizacion, prestamo.periodoCorte)
@@ -95,17 +91,9 @@ function calcularPrestamoSegunModalidad(prestamo: any) {
   if (prestamo.montoCuota && prestamo.montoCuota !== resultado.montoCuota) {
     resultado.tablaAmortizacion = resultado.tablaAmortizacion.map((c: any) => ({
       ...c,
-      montoCuota: c.numero === 1
-        ? prestamo.montoCuota + (prestamo.valorDiasCausados || 0)
-        : prestamo.montoCuota,
+      montoCuota: prestamo.montoCuota,  // Todas las cuotas al valor guardado
     }))
     resultado.montoCuota = prestamo.montoCuota
-  } else if (prestamo.valorDiasCausados && prestamo.valorDiasCausados > 0) {
-    resultado.tablaAmortizacion = resultado.tablaAmortizacion.map((c: any) =>
-      c.numero === 1
-        ? { ...c, montoCuota: c.montoCuota + (prestamo.valorDiasCausados || 0) }
-        : c
-    )
   }
   // === Corregir fechas por calendario si hay periodoCorte (ej: '16-01') ===
   resultado.tablaAmortizacion = corregirFechasPorCorte(resultado.tablaAmortizacion, prestamo.periodoCorte)

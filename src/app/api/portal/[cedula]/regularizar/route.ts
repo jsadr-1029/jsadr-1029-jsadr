@@ -77,20 +77,16 @@ function calcularTabla(p: any) {
     })
     // === FIX: Respetar montoCuota guardado en BD si difiere del calculado ===
     // El admin puede ajustar montoCuota en BD (ej: +$5.000 por cargo adicional).
+    //
+    // IMPORTANTE: valorDiasCausados NO se suma a ninguna cuota individual.
+    // Es un cargo único que se documenta en notas pero las cuotas quedan
+    // todas iguales al montoCuota guardado en BD.
     if (p.montoCuota && p.montoCuota !== calculo.montoCuota) {
       calculo.tablaAmortizacion = calculo.tablaAmortizacion.map((c: any) => ({
         ...c,
-        montoCuota: c.numero === 1
-          ? p.montoCuota + (p.valorDiasCausados || 0)
-          : p.montoCuota,
+        montoCuota: p.montoCuota,  // Todas las cuotas al valor guardado
       }))
       calculo.montoCuota = p.montoCuota
-    } else if (p.valorDiasCausados && p.valorDiasCausados > 0) {
-      calculo.tablaAmortizacion = calculo.tablaAmortizacion.map((c: any) =>
-        c.numero === 1
-          ? { ...c, montoCuota: c.montoCuota + (p.valorDiasCausados || 0) }
-          : c
-      )
     }
   } else if (p.modalidadAmortizacion === 'INTERES_FIJO_SIN_CAPITAL') {
     const fechaVenc = new Date(fechaBase)

@@ -99,26 +99,19 @@ export async function GET(req: NextRequest) {
         })
         // === FIX: Respetar el montoCuota guardado en BD si difiere del calculado ===
         // El montoCuota en BD puede incluir ajustes manuales del admin (ej: +$5.000
-        // por cargo adicional, +$20.000 por días causados, etc.). Si usamos el
-        // montoCuota recalculado ($75.000) en lugar del guardado ($80.000), el
-        // cliente vería valores distintos a los que realmente debe pagar.
-        // Respetamos el montoCuota guardado y ajustamos la tabla de amortización.
+        // por cargo adicional). Si usamos el montoCuota recalculado ($75.000) en
+        // lugar del guardado ($80.000), el cliente vería valores distintos a los
+        // que realmente debe pagar.
+        //
+        // IMPORTANTE: valorDiasCausados NO se suma a ninguna cuota individual.
+        // Es un cargo único que se documenta en notas pero las cuotas quedan
+        // todas iguales al montoCuota guardado en BD.
         if (p.montoCuota && p.montoCuota !== calculo.montoCuota) {
-          const diff = p.montoCuota - calculo.montoCuota
           calculo.tablaAmortizacion = calculo.tablaAmortizacion.map((c: any) => ({
             ...c,
-            montoCuota: c.numero === 1
-              ? p.montoCuota + (p.valorDiasCausados || 0)  // Cuota 1 incluye días causados
-              : p.montoCuota,
+            montoCuota: p.montoCuota,  // Todas las cuotas al valor guardado
           }))
           calculo.montoCuota = p.montoCuota
-        } else if (p.valorDiasCausados && p.valorDiasCausados > 0) {
-          // Si no hay diff pero sí días causados, sumarlos a la cuota 1
-          calculo.tablaAmortizacion = calculo.tablaAmortizacion.map((c: any) =>
-            c.numero === 1
-              ? { ...c, montoCuota: c.montoCuota + (p.valorDiasCausados || 0) }
-              : c
-          )
         }
       } else if (p.modalidadAmortizacion === 'INTERES_FIJO_SIN_CAPITAL') {
         const fechaBase = fechaBaseAmortizacion
