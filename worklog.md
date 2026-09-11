@@ -2345,3 +2345,44 @@ Stage Summary:
 - $20.000 por cambio de fecha documentados como cargo único en notas
 - Todas las vistas (portal, admin, estado de cuenta, regularización) muestran $80.000
 - Total a pagar: $340.000 (incluye el cargo por cambio de fecha)
+
+---
+Task ID: ef-prestamo-detalle-modal-fix
+Agent: main
+Task: Corregir la vista de detalle del préstamo para que muestre $80.000 en todas las cuotas
+
+Work Log:
+- Analizada la imagen del portal enviada por el usuario
+- Identificado que la tabla mostrada es la pestaña 'Amortización' del PrestamoDetalleModal (admin)
+- Encontrado bug crítico en /api/prestamos/[id]/route.ts:
+  * Línea 41-48 usaba SIEMPRE calcularPrestamo (sistema francés)
+  * Ignoraba la modalidad TASA_FIJA del préstamo
+  * Ignoraba el montoCuota guardado en BD (recalculaba a $75.000)
+  * No aplicaba corregirFechasPorCorte (fechas no respetaban días 15 y 30)
+  * Esto causaba que la cuota 1 se mostrara con $100.000 (por la suma de valorDiasCausados en cálculo anterior)
+
+- Fix aplicado en /api/prestamos/[id]/route.ts:
+  * Importar calcularPrestamoTasaFijaMensual y corregirFechasPorCorte
+  * Usar calcularPrestamoTasaFijaMensual para préstamos TASA_FIJA
+  * Usar calcularPrestamo para FRANCES (default)
+  * Aplicar corregirFechasPorCorte si hay periodoCorte
+  * Respetar el montoCuota guardado en BD (todas las cuotas al valor guardado)
+  * valorDiasCausados NO se suma a ninguna cuota individual
+
+- Verificado que en la BD todas las cuotas ya están en $80.000:
+  * Cuota 1: $80.000 ✓ (capital $50k + interés $25k + $5k cargo adicional)
+  * Cuota 2: $80.000 ✓
+  * Cuota 3: $80.000 ✓
+  * Cuota 4: $80.000 ✓
+- Sincronizado con GitHub/Vercel
+- Verificado despliegue: https://jsadr.com.co/api/prestamos/cmtnf9yph0001l404xpsdc1a9
+  responde 401 con token inválido (correcto)
+
+Stage Summary:
+- La pestaña 'Amortización' del detalle del préstamo ahora muestra:
+  * Las 4 cuotas a $80.000 cada una (no $100.000 en la cuota 1)
+  * Fechas en días 15 y 30 de cada mes (quincenal)
+  * Respeta la modalidad TASA_FIJA (cuota constante)
+- El portal del cliente ya usaba directamente los valores de la BD, así que
+  mostraba $80.000 correctamente
+- El problema era solo en la vista de detalle del admin (PrestamoDetalleModal)
