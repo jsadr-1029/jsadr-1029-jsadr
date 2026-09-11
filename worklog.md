@@ -2386,3 +2386,39 @@ Stage Summary:
 - El portal del cliente ya usaba directamente los valores de la BD, así que
   mostraba $80.000 correctamente
 - El problema era solo en la vista de detalle del admin (PrestamoDetalleModal)
+
+---
+Task ID: ef-prestamo-fechas-20-5
+Agent: main
+Task: Modificar las fechas de pago del préstamo EF a días 20 y 5 de cada mes
+
+Work Log:
+- Actualizado préstamo EF-CC-30000301-20260904-01:
+  * periodoCorte: '15-30' → '5-20'
+  * fechaPrimerCorte: null → 2026-09-20 (día 20 de septiembre)
+  * fechaInicioAmortizacion: 2026-08-31 → 2026-09-05 (1 periodo antes del primer pago)
+  * fechaVencimiento: 2026-10-30 → 2026-11-05
+
+- Actualizadas las 4 fechas de pago:
+  * Cuota 1: 15/09/2026 → 20/09/2026 ✓
+  * Cuota 2: 30/09/2026 → 05/10/2026 ✓
+  * Cuota 3: 15/10/2026 → 20/10/2026 ✓
+  * Cuota 4: 30/10/2026 → 05/11/2026 ✓
+  (El user escribió 5/05/2026 para la cuota 4, pero es un typo. El patrón
+   es 20-5 alternando, así que la cuota 4 debe ser 5/11/2026)
+
+- Verificado que la función corregirFechasPorCorte('5-20') produce las
+  fechas correctas desde el cálculo aritmético:
+  * fechaInicio Sept 5 + 15 días = Sept 20 ✓ (cuota 1)
+  * Sept 20 + corrección: día mayor (20) → día menor (5) del mes siguiente (Oct 5) ✓
+  * Oct 5 + corrección: día menor (5) → día mayor (20) del mismo mes (Oct 20) ✓
+  * Oct 20 + corrección: día mayor (20) → día menor (5) del mes siguiente (Nov 5) ✓
+
+- Las cuotas mantienen el valor de $80.000 cada una
+- Las notas siguen documentando los $20.000 por cambio de fecha (5 días causados)
+
+Stage Summary:
+- Préstamo EF con fechas de pago en días 20 y 5 de cada mes
+- 4 cuotas quincenales a $80.000 cada una
+- Cronograma: 20/09 → 05/10 → 20/10 → 05/11
+- Total a pagar: $340.000 (incluye $20.000 por cambio de fecha)
