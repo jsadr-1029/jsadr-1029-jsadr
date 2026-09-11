@@ -2306,3 +2306,42 @@ Stage Summary:
 - Cuota 1: $100.000 (75k + 5k extra + 20k días causados)
 - Cuota 2, 3, 4: $80.000 (75k + 5k extra)
 - Consistencia garantizada en todos los puntos del sistema
+
+---
+Task ID: ef-4-cuotas-iguales-80k
+Agent: main
+Task: Configurar las 4 cuotas del préstamo EF a $80.000 cada una con nota aclaratoria sobre $20.000 por cambio de fecha
+
+Work Log:
+- Actualizado préstamo EF-CC-30000301-20260904-01:
+  * montoCuota: $80.000 (todas las cuotas iguales)
+  * totalInteres: $120.000 (incluye $100k interés + $20k extras)
+  * totalPagar: $340.000 (200k capital + 100k interés + 20k cambio fecha + 20k extras)
+  * diasCausadosAntes: 5
+  * valorDiasCausados: $20.000 (cargo único por cambio de fecha)
+- Actualizadas las 4 cuotas en tabla Pago:
+  * Cuota 1: $80.000 (capital $50k + interés $25k + $5k cargo adicional)
+  * Cuota 2: $80.000 (igual composición)
+  * Cuota 3: $80.000 (igual composición)
+  * Cuota 4: $80.000 (igual composición)
+- Cada cuota tiene la nota: "Cuota $80.000 (capital $50.000 + interés $25.000 + $5.000 cargo adicional). Se cobran $20.000 adicionales por concepto de cambio de fecha de cuotas dejando 5 días causados (cargo único, no incluido en esta cuota)."
+
+- Fix sistémico en 4 endpoints para que valorDiasCausados NO se sume a cuota individual:
+  1. /api/pagos/aplicar/route.ts
+  2. /api/estado-cuenta/route.ts
+  3. /api/pagos/route.ts (helper calcularPrestamoSegunModalidad, TASA_FIJA + FRANCES)
+  4. /api/portal/[cedula]/regularizar/route.ts
+
+- Cambio lógico:
+  * Antes: si montoCuota guardado != calculado, la cuota 1 recibía
+    p.montoCuota + valorDiasCausados, las demás p.montoCuota
+  * Ahora: TODAS las cuotas reciben p.montoCuota (sin sumar valorDiasCausados)
+  * valorDiasCausados queda como cargo único documentado en notas
+
+- Sincronizado con GitHub/Vercel
+
+Stage Summary:
+- 4 cuotas iguales a $80.000 cada una (sin excepción en la cuota 1)
+- $20.000 por cambio de fecha documentados como cargo único en notas
+- Todas las vistas (portal, admin, estado de cuenta, regularización) muestran $80.000
+- Total a pagar: $340.000 (incluye el cargo por cambio de fecha)
