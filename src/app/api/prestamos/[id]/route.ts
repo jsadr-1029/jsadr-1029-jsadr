@@ -1,6 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { calcularPrestamo, calcularMoraCompuesta, calcularDiasMora, getTasaMoraDiaria, debeIrAJuridico } from '@/lib/finanzas'
+import {
+  calcularPrestamo,
+  calcularPrestamoTasaFijaMensual,
+  corregirFechasPorCorte,
+  calcularMoraCompuesta,
+  calcularDiasMora,
+  getTasaMoraDiaria,
+  debeIrAJuridico,
+} from '@/lib/finanzas'
 import { sanitizeError } from '@/lib/error-handler'
 import { requireRole as requireRoleAuth } from '@/lib/auth-guard'
 import { buildAbsoluteUrl } from '@/lib/url'
@@ -38,14 +46,45 @@ export async function GET(
       return NextResponse.json({ success: false, error: 'Solicitud no encontrado' }, { status: 404 })
     }
 
-    const calculo = calcularPrestamo({
-      montoPrincipal: prestamo.montoPrincipal,
-      tasaInteresAnual: prestamo.tasaInteresAnual,
-      tasaMoraAnual: getTasaMoraDiaria(prestamo),
-      plazoMeses: prestamo.plazoMeses,
-      frecuencia: prestamo.frecuencia as any,
-      fechaDesembolso: prestamo.fechaDesembolso || undefined,
-    })
+    // === FIX: Respetar la modalidad de amortización y el montoCuota guardado ===
+    // Antes siempre se usaba calcularPrestamo (sistema francés), lo que ignoraba
+    // los préstamos TASA_FIJA y los ajustes manuales del montoCuota en BD.
+    const fechaBase = prestamo.fechaInicioAmortizacion || prestamo.fechaDesembolso || undefined
+    let calculo: any
+    if (prestamo.modalidadAmortizacion === 'TASA_FIJA') {
+      calculo = calcularPrestamoTasaFijaMensual({
+        montoPrincipal: prestamo.montoPrincipal,
+        tasaMensualFija: prestamo.tasaInteresMensual || prestamo.tasaInteresAnual / 12,
+        numeroCuotas: prestamo.numeroCuotas,
+        frecuencia: prestamo.frecuencia as any,
+        fechaDesembolso: fechaBase,
+      })
+    } else {
+      calculo = calcularPrestamo({
+        montoPrincipal: prestamo.montoPrincipal,
+        tasaInteresAnual: prestamo.tasaInteresAnual,
+        tasaMoraAnual: getTasaMoraDiaria(prestamo),
+        plazoMeses: prestamo.plazoMeses,
+        frecuencia: prestamo.frecuencia as any,
+        fechaDesembolso: fechaBase,
+      })
+    }
+
+    // === Aplicar corrección de fechas por calendario si hay periodoCorte ===
+    calculo.tablaAmortizacion = corregirFechasPorCorte(calculo.tablaAmortizacion, prestamo.periodoCorte)
+
+    // === FIX: Respetar el montoCuota guardado en BD si incluye ajustes manuales ===
+    // El admin puede ajustar montoCuota en BD (ej: +$5.000 por cargo adicional).
+    // IMPORTANTE: valorDiasCausados NO se suma a ninguna cuota individual.
+    // Es un cargo único que se documenta en notas pero las cuotas quedan
+    // todas iguales al montoCuota guardado en BD.
+    if (prestamo.montoCuota && prestamo.montoCuota !== calculo.montoCuota) {
+      calculo.tablaAmortizacion = calculo.tablaAmortizacion.map((c: any) => ({
+        ...c,
+        montoCuota: prestamo.montoCuota,  // Todas las cuotas al valor guardado
+      }))
+      calculo.montoCuota = prestamo.montoCuota
+    }
 
     const tasaMoraEfectiva = getTasaMoraDiaria(prestamo)
 
