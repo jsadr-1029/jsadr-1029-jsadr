@@ -2219,3 +2219,48 @@ Stage Summary:
 - $20.000 adicionales en primera cuota por concepto de 5 días causados
 - Bug crítico corregido en función de corrección de fechas por corte
 - Función ahora funciona universalmente para cualquier combinación de corte
+
+---
+Task ID: ef-prestamo-quincenal-5000-extra
+Agent: main
+Task: Verificar que las cuotas del préstamo EF sean quincenales (no mensuales) y sumar $5.000 a cada cuota
+
+Work Log:
+- Verificado estado actual del préstamo EF-CC-30000301-20260904-01:
+  * frecuencia: QUINCENAL (correcta, no MENSUAL)
+  * numeroCuotas: 4 (quincenales = 2 meses de duración)
+  * periodoCorte: '15-30' (fechas en días 15 y 30)
+  * Fechas calculadas: 15/09, 30/09, 15/10, 30/10 (cada 15 días = QUINCENAL ✓)
+- El cálculo automático con calcularPrestamoTasaFijaMensual genera:
+  * Interés mensual: $50.000 (200.000 × 25%)
+  * Interés quincenal: $25.000 (mitad del mensual, dividido entre 2 quincenas)
+  * Cuota base: $75.000 (capital $50.000 + interés $25.000)
+  * Total interés: $100.000 (2 meses × $50.000)
+  * Total a pagar: $300.000 (200k capital + 100k interés)
+- Las fechas SÍ son quincenales (cada 15 días), no mensuales
+- El usuario solicitó $5.000 adicionales por cuota:
+  * Cuota base: $75.000 → $80.000
+  * Cuota 1 (con días causados): $75.000 + $5.000 + $20.000 = $100.000
+  * Cuota 2: $80.000
+  * Cuota 3: $80.000
+  * Cuota 4: $80.000
+
+- Actualizado préstamo en BD:
+  * montoCuota: $75.000 → $80.000 (incluye +$5.000)
+  * totalInteres: $100.000 → $120.000 (interes + 4×$5.000)
+  * totalPagar: $320.000 → $340.000 (incluye $20.000 días causados + $20.000 extras)
+  * saldoTotal: $320.000 → $340.000
+  * Frecuencia sigue siendo QUINCENAL (no se cambió a MENSUAL)
+
+- Actualizados los 4 pagos:
+  * Cuota 1: $100.000 (cap $50k + int $25k + $5k extra + $20k días causados)
+  * Cuota 2: $80.000 (cap $50k + int $25k + $5k extra)
+  * Cuota 3: $80.000 (cap $50k + int $25k + $5k extra)
+  * Cuota 4: $80.000 (cap $50k + int $25k + $5k extra)
+
+Stage Summary:
+- Préstamo EF confirmado como QUINCENAL (4 cuotas cada 15 días)
+- Fechas: 15/09, 30/09, 15/10, 30/10 — son quincenales correctas
+- $5.000 adicionales sumados a cada cuota
+- $20.000 de días causados se mantienen solo en cuota 1
+- Total a pagar: $340.000
