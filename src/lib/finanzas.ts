@@ -116,32 +116,45 @@ export function corregirFechasPorCorte(
     const diaAnterior = fechaAnterior.getDate()
     const nuevaFecha = new Date(fechaAnterior)
 
-    // Determinar si la fecha anterior estaba en el "día mayor" o "día menor" del corte.
-    // Si el día anterior es >= 15, se considera "día mayor" → siguiente cuota es "día menor".
-    // Si el día anterior es < 15, se considera "día menor" → siguiente cuota es "día mayor".
-    // EXCEPCIÓN: si el día anterior es >= 28 (fin de mes como 30, 31), ir al día MAYOR
-    // del mes siguiente (ej: 31/08 → 16/09), NO al día menor (01/10). Esto evita que
-    // se salte un mes entero cuando la fecha anterior cae al final del mes.
-    const esFinDeMes = diaAnterior >= 28
-    const estabaEnDiaMayor = diaAnterior >= 15 && diaAnterior < 28
+    // === Lógica robusta basada en los días EXACTOS del corte ===
+    // Antes se usaban rangos hardcodeados (15-27 / 1-14) que solo funcionaban
+    // para cortes como '16-01', '10-25', etc. Para cortes como '15-30' fallaba
+    // porque día 15 caía en el rango "día mayor" cuando en realidad es el
+    // día menor del corte 15-30.
+    //
+    // Nueva lógica:
+    //   - Si diaAnterior == diaMayor (ej: 30) → siguiente cuota es diaMenor (15) del MES SIGUIENTE
+    //   - Si diaAnterior == diaMenor (ej: 15) → siguiente cuota es diaMayor (30) del MISMO MES
+    //   - Si diaAnterior está entre diaMenor y diaMayor → siguiente cuota es diaMayor del MISMO MES
+    //   - Si diaAnterior > diaMayor (fin de mes) → siguiente cuota es diaMenor del MES SIGUIENTE
+    //   - Si diaAnterior < diaMenor → siguiente cuota es diaMenor del MISMO MES
 
-    if (esFinDeMes) {
-      // Fin de mes → ir al día MAYOR del mes siguiente (ej: 31/08 → 16/09)
-      // Importante: primero cambiar al día 1 para evitar overflow (31/09 no existe → 01/10)
-      nuevaFecha.setDate(1)
-      nuevaFecha.setMonth(nuevaFecha.getMonth() + 1)
-      const diasEnMes = new Date(nuevaFecha.getFullYear(), nuevaFecha.getMonth() + 1, 0).getDate()
-      nuevaFecha.setDate(Math.min(diaMayor, diasEnMes))
-    } else if (estabaEnDiaMayor) {
-      // Día mayor (15-27) → ir al día menor del mes siguiente (ej: 16/09 → 01/10)
+    const diasEnMesActual = new Date(nuevaFecha.getFullYear(), nuevaFecha.getMonth() + 1, 0).getDate()
+
+    if (diaAnterior === diaMayor) {
+      // Día mayor del corte (ej: 30) → ir a día menor del MES SIGUIENTE (ej: 30/09 → 15/10)
       nuevaFecha.setDate(1)
       nuevaFecha.setMonth(nuevaFecha.getMonth() + 1)
       const diasEnMes = new Date(nuevaFecha.getFullYear(), nuevaFecha.getMonth() + 1, 0).getDate()
       nuevaFecha.setDate(Math.min(diaMenor, diasEnMes))
-    } else {
-      // Día menor (1-14) → ir al día mayor del mismo mes (ej: 01/10 → 16/10)
+    } else if (diaAnterior === diaMenor) {
+      // Día menor del corte (ej: 15) → ir a día mayor del MISMO MES (ej: 15/09 → 30/09)
       const diasEnMes = new Date(nuevaFecha.getFullYear(), nuevaFecha.getMonth() + 1, 0).getDate()
       nuevaFecha.setDate(Math.min(diaMayor, diasEnMes))
+    } else if (diaAnterior > diaMayor) {
+      // Después del día mayor (fin de mes, ej: 31) → ir a día menor del MES SIGUIENTE
+      nuevaFecha.setDate(1)
+      nuevaFecha.setMonth(nuevaFecha.getMonth() + 1)
+      const diasEnMes = new Date(nuevaFecha.getFullYear(), nuevaFecha.getMonth() + 1, 0).getDate()
+      nuevaFecha.setDate(Math.min(diaMenor, diasEnMes))
+    } else if (diaAnterior > diaMenor && diaAnterior < diaMayor) {
+      // Entre diaMenor y diaMayor → ir a día mayor del MISMO MES
+      const diasEnMes = new Date(nuevaFecha.getFullYear(), nuevaFecha.getMonth() + 1, 0).getDate()
+      nuevaFecha.setDate(Math.min(diaMayor, diasEnMes))
+    } else {
+      // Antes del día menor → ir a día menor del MISMO MES
+      const diasEnMes = new Date(nuevaFecha.getFullYear(), nuevaFecha.getMonth() + 1, 0).getDate()
+      nuevaFecha.setDate(Math.min(diaMenor, diasEnMes))
     }
 
     fechasCorregidas.push(nuevaFecha)
