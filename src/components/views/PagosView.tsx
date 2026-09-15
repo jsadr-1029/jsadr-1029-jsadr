@@ -53,6 +53,7 @@ import {
   Search, CheckCircle, Banknote, Wallet, FileText, Download,
   Handshake, Save, Sparkles, Brain, FileSpreadsheet, CalendarDays, Receipt,
   Info, ChevronDown,
+  Menu,
 } from 'lucide-react'
 import { BotIcons } from '@/components/views/BotIcons'
 import { PagosCharts } from '@/components/views/pagos/PagosCharts'
@@ -924,50 +925,130 @@ export function PagosView({ onChanged }: { onChanged: () => void }) {
   // === RENDER ===
   return (
     <div className="space-y-6">
+      {/* === HEADER RESPONSIVE === */}
+      {/* Desktop: muestra todos los botones inline */}
+      {/* Mobile/Tablet: colapsa en un menú desplegable */}
       <PageHeader
         title="Pagos"
         subtitle="Recaudo, aplicación y gestión de pagos"
         icon={<DollarSign className="w-5 h-5" />}
         actions={
           <>
+            {/* Botón principal siempre visible */}
             <Button onClick={abrirModalAplicar} className="bg-emerald-600 hover:bg-emerald-700">
               <Plus className="w-4 h-4 mr-2" />
-              Aplicar Pago
+              <span className="hidden sm:inline">Aplicar Pago</span>
+              <span className="sm:hidden">Pago</span>
             </Button>
-            <Button
-              variant="outline"
-              onClick={() => setModalConciliacion(true)}
-              title="Importar CSV del banco y conciliar pagos pendientes"
-            >
-              <FileSpreadsheet className="w-4 h-4 mr-2" />
-              Conciliación
-            </Button>
-            <Button
-              variant="outline"
-              className="text-purple-700 border-purple-300 hover:bg-purple-50"
-              onClick={() => setModalPrediccion(true)}
-              title="Análisis predictivo de mora con IA"
-            >
-              <Brain className="w-4 h-4 mr-2" />
-              IA Mora
-            </Button>
-            <Button
-              variant="outline"
-              onClick={dispararRecordatorios}
-              disabled={enviandoNotif}
-            >
-              <Bell className="w-4 h-4 mr-2" />
-              Recordatorios
-            </Button>
-            <Button
-              variant="outline"
-              className="text-amber-700 border-amber-300 hover:bg-amber-50"
-              onClick={avisosMora}
-              disabled={enviandoNotif}
-            >
-              <Bell className="w-4 h-4 mr-2" />
-              Avisos Mora
-            </Button>
+
+            {/* === Acciones secundarias colapsables en móvil === */}
+            <div className="hidden md:flex items-center gap-2">
+              <Button
+                variant="outline"
+                onClick={() => setModalConciliacion(true)}
+                title="Importar CSV del banco y conciliar pagos pendientes"
+              >
+                <FileSpreadsheet className="w-4 h-4 mr-2" />
+                Conciliación
+              </Button>
+              <Button
+                variant="outline"
+                className="text-purple-700 border-purple-300 hover:bg-purple-50"
+                onClick={() => setModalPrediccion(true)}
+                title="Análisis predictivo de mora con IA"
+              >
+                <Brain className="w-4 h-4 mr-2" />
+                IA Mora
+              </Button>
+              <Button
+                variant="outline"
+                onClick={dispararRecordatorios}
+                disabled={enviandoNotif}
+              >
+                <Bell className="w-4 h-4 mr-2" />
+                Recordatorios
+              </Button>
+              <Button
+                variant="outline"
+                className="text-amber-700 border-amber-300 hover:bg-amber-50"
+                onClick={avisosMora}
+                disabled={enviandoNotif}
+              >
+                <Bell className="w-4 h-4 mr-2" />
+                Avisos Mora
+              </Button>
+            </div>
+
+            {/* === Menú hamburguesa en móvil/tablet === */}
+            <div className="md:hidden">
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" size="sm" className="px-2">
+                    <Menu className="w-4 h-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-56">
+                  <DropdownMenuLabel className="text-xs text-muted-foreground">
+                    Acciones rápidas
+                  </DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    className="cursor-pointer"
+                    onSelect={(e) => {
+                      e.preventDefault()
+                      setModalConciliacion(true)
+                    }}
+                  >
+                    <FileSpreadsheet className="w-4 h-4 mr-2 text-blue-600" />
+                    <span className="flex flex-col">
+                      <span className="font-medium">Conciliación</span>
+                      <span className="text-xs text-muted-foreground">Importar CSV del banco</span>
+                    </span>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    className="cursor-pointer"
+                    onSelect={(e) => {
+                      e.preventDefault()
+                      setModalPrediccion(true)
+                    }}
+                  >
+                    <Brain className="w-4 h-4 mr-2 text-purple-600" />
+                    <span className="flex flex-col">
+                      <span className="font-medium">IA Mora</span>
+                      <span className="text-xs text-muted-foreground">Análisis predictivo</span>
+                    </span>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    className="cursor-pointer"
+                    disabled={enviandoNotif}
+                    onSelect={(e) => {
+                      e.preventDefault()
+                      dispararRecordatorios()
+                    }}
+                  >
+                    <Bell className="w-4 h-4 mr-2 text-cyan-600" />
+                    <span className="flex flex-col">
+                      <span className="font-medium">Recordatorios</span>
+                      <span className="text-xs text-muted-foreground">Enviar a clientes</span>
+                    </span>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    className="cursor-pointer"
+                    disabled={enviandoNotif}
+                    onSelect={(e) => {
+                      e.preventDefault()
+                      avisosMora()
+                    }}
+                  >
+                    <Bell className="w-4 h-4 mr-2 text-amber-600" />
+                    <span className="flex flex-col">
+                      <span className="font-medium">Avisos Mora</span>
+                      <span className="text-xs text-muted-foreground">Notificar clientes en mora</span>
+                    </span>
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
           </>
         }
       />
@@ -976,34 +1057,40 @@ export function PagosView({ onChanged }: { onChanged: () => void }) {
       <BotIcons modulo="pagos" />
 
       <Tabs value={tab} onValueChange={setTab}>
-        <div className="flex items-center justify-between flex-wrap gap-2">
-          <TabsList className="grid grid-cols-5 w-full max-w-2xl">
-            <TabsTrigger value="pagos-dia">
-              <DollarSign className="w-3.5 h-3.5 mr-1.5" />
-              Pagos del día
+        {/* === Layout responsive: tabs arriba, exportar abajo en móvil === */}
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          {/* === Tabs: en móvil solo iconos + etiqueta corta === */}
+          <TabsList className="grid grid-cols-5 w-full sm:max-w-2xl h-auto">
+            <TabsTrigger value="pagos-dia" className="flex flex-col gap-0.5 py-1.5 px-1 sm:flex-row sm:py-1.5 sm:px-3">
+              <DollarSign className="w-4 h-4 sm:w-3.5 sm:h-3.5 sm:mr-1.5" />
+              <span className="text-[10px] leading-tight sm:text-sm sm:leading-normal">Pagos día</span>
             </TabsTrigger>
-            <TabsTrigger value="proximos">
-              <Clock className="w-3.5 h-3.5 mr-1.5" />
-              Próximos
+            <TabsTrigger value="proximos" className="flex flex-col gap-0.5 py-1.5 px-1 sm:flex-row sm:py-1.5 sm:px-3">
+              <Clock className="w-4 h-4 sm:w-3.5 sm:h-3.5 sm:mr-1.5" />
+              <span className="text-[10px] leading-tight sm:text-sm sm:leading-normal">Próximos</span>
             </TabsTrigger>
-            <TabsTrigger value="calendario">
-              <CalendarDays className="w-3.5 h-3.5 mr-1.5" />
-              Calendario
+            <TabsTrigger value="calendario" className="flex flex-col gap-0.5 py-1.5 px-1 sm:flex-row sm:py-1.5 sm:px-3">
+              <CalendarDays className="w-4 h-4 sm:w-3.5 sm:h-3.5 sm:mr-1.5" />
+              <span className="text-[10px] leading-tight sm:text-sm sm:leading-normal">Calendario</span>
             </TabsTrigger>
-            <TabsTrigger value="informe">
-              <TrendingUp className="w-3.5 h-3.5 mr-1.5" />
-              Informe
+            <TabsTrigger value="informe" className="flex flex-col gap-0.5 py-1.5 px-1 sm:flex-row sm:py-1.5 sm:px-3">
+              <TrendingUp className="w-4 h-4 sm:w-3.5 sm:h-3.5 sm:mr-1.5" />
+              <span className="text-[10px] leading-tight sm:text-sm sm:leading-normal">Informe</span>
             </TabsTrigger>
-            <TabsTrigger value="graficos">
-              <TrendingUp className="w-3.5 h-3.5 mr-1.5" />
-              Gráficos
+            <TabsTrigger value="graficos" className="flex flex-col gap-0.5 py-1.5 px-1 sm:flex-row sm:py-1.5 sm:px-3">
+              <TrendingUp className="w-4 h-4 sm:w-3.5 sm:h-3.5 sm:mr-1.5" />
+              <span className="text-[10px] leading-tight sm:text-sm sm:leading-normal">Gráficos</span>
             </TabsTrigger>
           </TabsList>
+
+          {/* === Exportar: en móvil dropdown único, en desktop 2 botones === */}
           <div className="flex items-center gap-2">
+            {/* Desktop: botones separados */}
             <Button
               variant="outline"
               size="sm"
               disabled={exportando}
+              className="hidden md:inline-flex"
               onClick={async () => {
                 const params = new URLSearchParams()
                 if (tab === 'pagos-dia') {
@@ -1048,10 +1135,11 @@ export function PagosView({ onChanged }: { onChanged: () => void }) {
                   variant="default"
                   size="sm"
                   disabled={exportandoAnio}
-                  className="bg-emerald-600 hover:bg-emerald-700 text-white"
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white w-full md:w-auto"
                 >
                   <FileSpreadsheet className="w-3.5 h-3.5 mr-1.5" />
-                  {exportandoAnio ? 'Generando Excel…' : 'Exportar Pagos del Año'}
+                  <span className="hidden md:inline">{exportandoAnio ? 'Generando Excel…' : 'Exportar Pagos del Año'}</span>
+                  <span className="md:hidden">{exportandoAnio ? 'Generando…' : 'Exportar'}</span>
                   <ChevronDown className="w-3.5 h-3.5 ml-1.5" />
                 </Button>
               </DropdownMenuTrigger>
@@ -1060,6 +1148,46 @@ export function PagosView({ onChanged }: { onChanged: () => void }) {
                   Exportar pagos en Excel con todos los datos
                 </DropdownMenuLabel>
                 <DropdownMenuSeparator />
+                {/* En móvil mostramos también CSV como opción del dropdown */}
+                <DropdownMenuItem
+                  className="cursor-pointer md:hidden"
+                  onSelect={async (e) => {
+                    e.preventDefault()
+                    const params = new URLSearchParams()
+                    if (tab === 'pagos-dia') {
+                      params.set('tipo', 'hoy')
+                      if (fechaFiltro) params.set('fecha', fechaFiltro)
+                    } else if (tab === 'proximos') {
+                      params.set('tipo', 'rango')
+                      params.set('desde', new Date().toISOString().slice(0, 10))
+                      const fin = new Date()
+                      fin.setDate(fin.getDate() + 30)
+                      params.set('hasta', fin.toISOString().slice(0, 10))
+                    } else if (tab === 'informe' || tab === 'graficos') {
+                      params.set('tipo', 'informe')
+                      params.set('periodo', periodoInforme)
+                    } else {
+                      params.set('tipo', 'hoy')
+                    }
+                    setExportando(true)
+                    const ok = await descargarArchivo(`/api/pagos/export?${params.toString()}`)
+                    setExportando(false)
+                    if (!ok) {
+                      toast({
+                        title: 'No se pudo exportar',
+                        description: 'Verifica tu sesión e intenta nuevamente.',
+                        variant: 'destructive',
+                      })
+                    }
+                  }}
+                >
+                  <Download className="w-4 h-4 mr-2 text-blue-600" />
+                  <div className="flex flex-col">
+                    <span className="font-medium">Exportar CSV</span>
+                    <span className="text-xs text-muted-foreground">Exportar vista actual en CSV</span>
+                  </div>
+                </DropdownMenuItem>
+                <DropdownMenuSeparator className="md:hidden" />
                 <DropdownMenuItem
                   className="cursor-pointer"
                   onSelect={async (e) => {
@@ -1110,36 +1238,40 @@ export function PagosView({ onChanged }: { onChanged: () => void }) {
 
         {/* ============== TAB: PAGOS DEL DÍA ============== */}
         <TabsContent value="pagos-dia" className="space-y-4 mt-4">
-          {/* Resumen del día */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          {/* Resumen del día - responsive: 3 cols siempre, compacto en móvil */}
+          <div className="grid grid-cols-3 gap-2 sm:gap-4">
             <Card>
-              <CardContent className="p-5">
-                <p className="text-xs text-muted-foreground uppercase tracking-wider">
-                  Total Recaudado
+              <CardContent className="p-3 sm:p-5">
+                <p className="text-[10px] sm:text-xs text-muted-foreground uppercase tracking-wider">
+                  Recaudado
                 </p>
-                <p className="text-2xl font-bold text-emerald-700 mt-1">{formatearMoneda(totalDia)}</p>
+                <p className="text-base sm:text-2xl font-bold text-emerald-700 mt-1">
+                  {formatearMoneda(totalDia)}
+                </p>
               </CardContent>
             </Card>
             <Card>
-              <CardContent className="p-5">
-                <p className="text-xs text-muted-foreground uppercase tracking-wider">
+              <CardContent className="p-3 sm:p-5">
+                <p className="text-[10px] sm:text-xs text-muted-foreground uppercase tracking-wider">
                   N° Pagos
                 </p>
-                <p className="text-2xl font-bold mt-1">{pagos.filter(p => p.estado === 'APLICADO').length}</p>
+                <p className="text-base sm:text-2xl font-bold mt-1">
+                  {pagos.filter(p => p.estado === 'APLICADO').length}
+                </p>
               </CardContent>
             </Card>
             <Card>
-              <CardContent className="p-5 flex items-center gap-3">
-                <div className="flex-1">
-                  <p className="text-xs text-muted-foreground uppercase tracking-wider">Fecha</p>
+              <CardContent className="p-3 sm:p-5 flex items-center gap-2 sm:gap-3">
+                <div className="flex-1 min-w-0">
+                  <p className="text-[10px] sm:text-xs text-muted-foreground uppercase tracking-wider">Fecha</p>
                   <Input
                     type="date"
                     value={fechaFiltro}
                     onChange={(e) => setFechaFiltro(e.target.value)}
-                    className="mt-1"
+                    className="mt-1 h-8 sm:h-10 text-xs sm:text-sm p-2 sm:p-3"
                   />
                 </div>
-                <Button variant="ghost" size="sm" onClick={cargarPagos} title="Recargar">
+                <Button variant="ghost" size="sm" onClick={cargarPagos} title="Recargar" className="shrink-0 px-2">
                   <RefreshCw className="w-4 h-4" />
                 </Button>
               </CardContent>
@@ -1148,102 +1280,270 @@ export function PagosView({ onChanged }: { onChanged: () => void }) {
 
           <Card>
             <CardContent className="p-0">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Fecha</TableHead>
-                    <TableHead>Solicitud</TableHead>
-                    <TableHead>Cliente</TableHead>
-                    <TableHead>Cuota</TableHead>
-                    <TableHead>Capital</TableHead>
-                    <TableHead>Interés</TableHead>
-                    <TableHead>Mora</TableHead>
-                    <TableHead>Total</TableHead>
-                    <TableHead>Método</TableHead>
-                    <TableHead>Estado</TableHead>
-                    <TableHead className="text-right">Acciones</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {loading ? (
-                    <TableRow>
-                      <TableCell colSpan={11} className="text-center py-8 text-muted-foreground">
-                        Cargando...
-                      </TableCell>
-                    </TableRow>
-                  ) : pagos.length === 0 ? (
-                    <TableRow>
-                      <TableCell colSpan={11} className="text-center py-8 text-muted-foreground">
-                        No hay pagos registrados en esta fecha.
-                      </TableCell>
-                    </TableRow>
-                  ) : (
-                    pagos.map((p) => (
-                      <TableRow
+              {/* === Loading / Empty state (compartido desktop y móvil) === */}
+              {loading ? (
+                <div className="text-center py-8 text-muted-foreground text-sm">
+                  <RefreshCw className="w-5 h-5 animate-spin mx-auto mb-2" />
+                  Cargando pagos...
+                </div>
+              ) : pagos.length === 0 ? (
+                <div className="text-center py-8 text-muted-foreground text-sm">
+                  No hay pagos registrados en esta fecha.
+                </div>
+              ) : (
+                <>
+                  {/* === Desktop: tabla completa con scroll horizontal === */}
+                  <div className="hidden lg:block overflow-x-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Fecha</TableHead>
+                          <TableHead>Solicitud</TableHead>
+                          <TableHead>Cliente</TableHead>
+                          <TableHead>Cuota</TableHead>
+                          <TableHead>Capital</TableHead>
+                          <TableHead>Interés</TableHead>
+                          <TableHead>Mora</TableHead>
+                          <TableHead>Total</TableHead>
+                          <TableHead>Método</TableHead>
+                          <TableHead>Estado</TableHead>
+                          <TableHead className="text-right">Acciones</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {pagos.map((p) => (
+                          <TableRow
+                            key={p.id}
+                            className={`hover:bg-muted/40 ${p.estado === 'REVERSADO' ? 'opacity-60 bg-red-50/30' : ''}`}
+                          >
+                            <TableCell className="text-sm">{formatearFecha(p.fechaPago)}</TableCell>
+                            <TableCell className="font-mono text-xs">{p.prestamo.codigo}</TableCell>
+                            <TableCell>
+                              <div className="font-semibold text-sm">{p.prestamo.cliente.nombre}</div>
+                              <div className="text-xs text-muted-foreground">
+                                {p.prestamo.cliente.cedula}
+                              </div>
+                            </TableCell>
+                            <TableCell className="text-sm">{p.numeroCuota}</TableCell>
+                            <TableCell className="text-sm">{formatearMoneda(p.montoCapital)}</TableCell>
+                            <TableCell className="text-sm">{formatearMoneda(p.montoInteres)}</TableCell>
+                            <TableCell className="text-sm">
+                              {p.montoMora > 0 ? (
+                                <span className="text-red-700">{formatearMoneda(p.montoMora)}</span>
+                              ) : (
+                                '—'
+                              )}
+                            </TableCell>
+                            <TableCell className="font-bold text-emerald-700">
+                              {formatearMoneda(p.montoTotal)}
+                            </TableCell>
+                            <TableCell className="text-xs">
+                              <span className="inline-flex items-center px-2 py-0.5 rounded bg-muted text-xs font-medium">
+                                {p.metodoPago}
+                              </span>
+                            </TableCell>
+                            <TableCell>
+                              {p.estado === 'APLICADO' && (
+                                <Badge variant="outline" className="text-emerald-700 border-emerald-300 bg-emerald-50">
+                                  Aplicado
+                                </Badge>
+                              )}
+                              {p.estado === 'PAGO_PARCIAL' && (
+                                <Badge variant="outline" className="text-amber-700 border-amber-300 bg-amber-50">
+                                  ⚡ Pago Parcial
+                                </Badge>
+                              )}
+                              {p.estado === 'REVERSADO' && (
+                                <Badge variant="outline" className="text-red-700 border-red-300 bg-red-50">
+                                  ⚠ Reversado
+                                </Badge>
+                              )}
+                              {p.estado === 'PENDIENTE' && (
+                                <Badge variant="outline" className="text-amber-700 border-amber-300 bg-amber-50">
+                                  Pendiente
+                                </Badge>
+                              )}
+                              {p.estado === 'ANULADO' && (
+                                <Badge variant="outline" className="text-gray-700">
+                                  Anulado
+                                </Badge>
+                              )}
+                            </TableCell>
+                            <TableCell>
+                              <div className="flex gap-1 justify-end">
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  className="text-blue-700 hover:text-blue-800 hover:bg-blue-50 h-8"
+                                  onClick={() => descargarEstadoCuenta(p.prestamo.cliente.cedula, p.prestamo.cliente.nombre)}
+                                  title="Descargar estado de cuenta del cliente"
+                                >
+                                  <FileText className="w-3.5 h-3.5" />
+                                </Button>
+                                {(p.estado === 'APLICADO' || p.estado === 'PAGO_PARCIAL') && (
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    className="text-emerald-700 hover:text-emerald-800 hover:bg-emerald-50 h-8"
+                                    onClick={() => setReciboPagoId(p.id)}
+                                    title="Generar recibo con QR de verificación"
+                                  >
+                                    <Receipt className="w-3.5 h-3.5" />
+                                  </Button>
+                                )}
+                                {p.estado === 'APLICADO' && (
+                                  <>
+                                    <Button
+                                      size="sm"
+                                      variant="ghost"
+                                      className="text-amber-700 hover:text-amber-800 hover:bg-amber-50 h-8"
+                                      onClick={() => abrirModalReversar(p)}
+                                      title="Reversar pago (mantiene registro)"
+                                    >
+                                      <RotateCcw className="w-3.5 h-3.5" />
+                                    </Button>
+                                    <Button
+                                      size="sm"
+                                      variant="ghost"
+                                      className="text-red-700 hover:text-red-800 hover:bg-red-50 h-8"
+                                      onClick={() => abrirModalEliminar(p)}
+                                      title="Eliminar pago (borra el registro)"
+                                    >
+                                      <Trash2 className="w-3.5 h-3.5" />
+                                    </Button>
+                                  </>
+                                )}
+                                {p.estado === 'PAGO_PARCIAL' && (
+                                  <>
+                                    <Button
+                                      size="sm"
+                                      variant="ghost"
+                                      className="text-amber-700 hover:text-amber-800 hover:bg-amber-50 h-8"
+                                      onClick={() => abrirModalReversar(p)}
+                                      title="Reversar pago parcial"
+                                    >
+                                      <RotateCcw className="w-3.5 h-3.5" />
+                                    </Button>
+                                    <Button
+                                      size="sm"
+                                      variant="ghost"
+                                      className="text-red-700 hover:text-red-800 hover:bg-red-50 h-8"
+                                      onClick={() => abrirModalEliminar(p)}
+                                      title="Eliminar pago parcial"
+                                    >
+                                      <Trash2 className="w-3.5 h-3.5" />
+                                    </Button>
+                                  </>
+                                )}
+                                {p.estado === 'REVERSADO' && (
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    className="text-red-700 hover:text-red-800 hover:bg-red-50 h-8"
+                                    onClick={() => abrirModalEliminar(p)}
+                                    title="Eliminar pago (borra el registro)"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </Button>
+                                )}
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+
+                  {/* === Mobile/Tablet: cards apilados (1 pago = 1 card) === */}
+                  <div className="lg:hidden divide-y">
+                    {pagos.map((p) => (
+                      <div
                         key={p.id}
-                        className={`hover:bg-muted/40 ${p.estado === 'REVERSADO' ? 'opacity-60 bg-red-50/30' : ''}`}
+                        className={`p-3 ${p.estado === 'REVERSADO' ? 'opacity-60 bg-red-50/30' : ''}`}
                       >
-                        <TableCell className="text-sm">{formatearFecha(p.fechaPago)}</TableCell>
-                        <TableCell className="font-mono text-xs">{p.prestamo.codigo}</TableCell>
-                        <TableCell>
-                          <div className="font-semibold text-sm">{p.prestamo.cliente.nombre}</div>
-                          <div className="text-xs text-muted-foreground">
-                            {p.prestamo.cliente.cedula}
+                        {/* Fila 1: Cliente + Estado */}
+                        <div className="flex items-start justify-between gap-2 mb-2">
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-1.5 mb-0.5">
+                              <span className="font-mono text-[10px] text-muted-foreground shrink-0">
+                                {p.prestamo.codigo}
+                              </span>
+                              <span className="text-[10px] text-muted-foreground">·</span>
+                              <span className="text-[10px] text-muted-foreground shrink-0">
+                                {formatearFecha(p.fechaPago)}
+                              </span>
+                            </div>
+                            <div className="font-semibold text-sm truncate">
+                              {p.prestamo.cliente.nombre}
+                            </div>
+                            <div className="text-[10px] text-muted-foreground">
+                              CC {p.prestamo.cliente.cedula} · Cuota {p.numeroCuota}
+                            </div>
                           </div>
-                        </TableCell>
-                        <TableCell className="text-sm">{p.numeroCuota}</TableCell>
-                        <TableCell className="text-sm">{formatearMoneda(p.montoCapital)}</TableCell>
-                        <TableCell className="text-sm">{formatearMoneda(p.montoInteres)}</TableCell>
-                        <TableCell className="text-sm">
-                          {p.montoMora > 0 ? (
-                            <span className="text-red-700">{formatearMoneda(p.montoMora)}</span>
-                          ) : (
-                            '—'
-                          )}
-                        </TableCell>
-                        <TableCell className="font-bold text-emerald-700">
-                          {formatearMoneda(p.montoTotal)}
-                        </TableCell>
-                        <TableCell className="text-xs">
-                          <span className="inline-flex items-center px-2 py-0.5 rounded bg-muted text-xs font-medium">
+                          {/* Estado badge */}
+                          <div className="shrink-0">
+                            {p.estado === 'APLICADO' && (
+                              <Badge variant="outline" className="text-emerald-700 border-emerald-300 bg-emerald-50 text-[10px]">
+                                ✓ Aplicado
+                              </Badge>
+                            )}
+                            {p.estado === 'PAGO_PARCIAL' && (
+                              <Badge variant="outline" className="text-amber-700 border-amber-300 bg-amber-50 text-[10px]">
+                                ⚡ Parcial
+                              </Badge>
+                            )}
+                            {p.estado === 'REVERSADO' && (
+                              <Badge variant="outline" className="text-red-700 border-red-300 bg-red-50 text-[10px]">
+                                ⚠ Reversado
+                              </Badge>
+                            )}
+                            {p.estado === 'PENDIENTE' && (
+                              <Badge variant="outline" className="text-amber-700 border-amber-300 bg-amber-50 text-[10px]">
+                                Pendiente
+                              </Badge>
+                            )}
+                            {p.estado === 'ANULADO' && (
+                              <Badge variant="outline" className="text-gray-700 text-[10px]">
+                                Anulado
+                              </Badge>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Fila 2: Detalle financiero (Capital/Interés/Mora/Total) */}
+                        <div className="grid grid-cols-4 gap-1 mb-2 bg-muted/30 rounded p-2">
+                          <div>
+                            <p className="text-[9px] text-muted-foreground uppercase">Capital</p>
+                            <p className="text-xs font-medium">{formatearMoneda(p.montoCapital)}</p>
+                          </div>
+                          <div>
+                            <p className="text-[9px] text-muted-foreground uppercase">Interés</p>
+                            <p className="text-xs font-medium">{formatearMoneda(p.montoInteres)}</p>
+                          </div>
+                          <div>
+                            <p className="text-[9px] text-muted-foreground uppercase">Mora</p>
+                            <p className={`text-xs font-medium ${p.montoMora > 0 ? 'text-red-700' : ''}`}>
+                              {p.montoMora > 0 ? formatearMoneda(p.montoMora) : '—'}
+                            </p>
+                          </div>
+                          <div className="text-right border-l pl-1">
+                            <p className="text-[9px] text-muted-foreground uppercase">Total</p>
+                            <p className="text-sm font-bold text-emerald-700">{formatearMoneda(p.montoTotal)}</p>
+                          </div>
+                        </div>
+
+                        {/* Fila 3: Método + Acciones */}
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="inline-flex items-center px-2 py-0.5 rounded bg-muted text-[10px] font-medium">
                             {p.metodoPago}
                           </span>
-                        </TableCell>
-                        <TableCell>
-                          {p.estado === 'APLICADO' && (
-                            <Badge variant="outline" className="text-emerald-700 border-emerald-300 bg-emerald-50">
-                              Aplicado
-                            </Badge>
-                          )}
-                          {p.estado === 'PAGO_PARCIAL' && (
-                            <Badge variant="outline" className="text-amber-700 border-amber-300 bg-amber-50">
-                              ⚡ Pago Parcial
-                            </Badge>
-                          )}
-                          {p.estado === 'REVERSADO' && (
-                            <Badge variant="outline" className="text-red-700 border-red-300 bg-red-50">
-                              ⚠ Reversado
-                            </Badge>
-                          )}
-                          {p.estado === 'PENDIENTE' && (
-                            <Badge variant="outline" className="text-amber-700 border-amber-300 bg-amber-50">
-                              Pendiente
-                            </Badge>
-                          )}
-                          {p.estado === 'ANULADO' && (
-                            <Badge variant="outline" className="text-gray-700">
-                              Anulado
-                            </Badge>
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex gap-1 justify-end">
+                          <div className="flex gap-1">
                             <Button
                               size="sm"
                               variant="ghost"
-                              className="text-blue-700 hover:text-blue-800 hover:bg-blue-50 h-8"
+                              className="text-blue-700 hover:text-blue-800 hover:bg-blue-50 h-7 w-7 p-0"
                               onClick={() => descargarEstadoCuenta(p.prestamo.cliente.cedula, p.prestamo.cliente.nombre)}
-                              title="Descargar estado de cuenta del cliente"
+                              title="Estado de cuenta"
                             >
                               <FileText className="w-3.5 h-3.5" />
                             </Button>
@@ -1251,9 +1551,9 @@ export function PagosView({ onChanged }: { onChanged: () => void }) {
                               <Button
                                 size="sm"
                                 variant="ghost"
-                                className="text-emerald-700 hover:text-emerald-800 hover:bg-emerald-50 h-8"
+                                className="text-emerald-700 hover:text-emerald-800 hover:bg-emerald-50 h-7 w-7 p-0"
                                 onClick={() => setReciboPagoId(p.id)}
-                                title="Generar recibo con QR de verificación"
+                                title="Recibo"
                               >
                                 <Receipt className="w-3.5 h-3.5" />
                               </Button>
@@ -1263,18 +1563,18 @@ export function PagosView({ onChanged }: { onChanged: () => void }) {
                                 <Button
                                   size="sm"
                                   variant="ghost"
-                                  className="text-amber-700 hover:text-amber-800 hover:bg-amber-50 h-8"
+                                  className="text-amber-700 hover:text-amber-800 hover:bg-amber-50 h-7 w-7 p-0"
                                   onClick={() => abrirModalReversar(p)}
-                                  title="Reversar pago (mantiene registro)"
+                                  title="Reversar"
                                 >
                                   <RotateCcw className="w-3.5 h-3.5" />
                                 </Button>
                                 <Button
                                   size="sm"
                                   variant="ghost"
-                                  className="text-red-700 hover:text-red-800 hover:bg-red-50 h-8"
+                                  className="text-red-700 hover:text-red-800 hover:bg-red-50 h-7 w-7 p-0"
                                   onClick={() => abrirModalEliminar(p)}
-                                  title="Eliminar pago (borra el registro)"
+                                  title="Eliminar"
                                 >
                                   <Trash2 className="w-3.5 h-3.5" />
                                 </Button>
@@ -1285,18 +1585,18 @@ export function PagosView({ onChanged }: { onChanged: () => void }) {
                                 <Button
                                   size="sm"
                                   variant="ghost"
-                                  className="text-amber-700 hover:text-amber-800 hover:bg-amber-50 h-8"
+                                  className="text-amber-700 hover:text-amber-800 hover:bg-amber-50 h-7 w-7 p-0"
                                   onClick={() => abrirModalReversar(p)}
-                                  title="Reversar pago parcial"
+                                  title="Reversar parcial"
                                 >
                                   <RotateCcw className="w-3.5 h-3.5" />
                                 </Button>
                                 <Button
                                   size="sm"
                                   variant="ghost"
-                                  className="text-red-700 hover:text-red-800 hover:bg-red-50 h-8"
+                                  className="text-red-700 hover:text-red-800 hover:bg-red-50 h-7 w-7 p-0"
                                   onClick={() => abrirModalEliminar(p)}
-                                  title="Eliminar pago parcial"
+                                  title="Eliminar parcial"
                                 >
                                   <Trash2 className="w-3.5 h-3.5" />
                                 </Button>
@@ -1306,20 +1606,20 @@ export function PagosView({ onChanged }: { onChanged: () => void }) {
                               <Button
                                 size="sm"
                                 variant="ghost"
-                                className="text-red-700 hover:text-red-800 hover:bg-red-50 h-8"
+                                className="text-red-700 hover:text-red-800 hover:bg-red-50 h-7 w-7 p-0"
                                 onClick={() => abrirModalEliminar(p)}
-                                title="Eliminar pago (borra el registro)"
+                                title="Eliminar"
                               >
                                 <Trash2 className="w-3.5 h-3.5" />
                               </Button>
                             )}
                           </div>
-                        </TableCell>
-                      </TableRow>
-                    ))
-                  )}
-                </TableBody>
-              </Table>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
             </CardContent>
           </Card>
         </TabsContent>

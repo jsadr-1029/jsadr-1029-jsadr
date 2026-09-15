@@ -1040,6 +1040,16 @@ html {
     font-size: 13px !important;
   }
 
+  /* === Override: tabs del módulo Pagos tienen layout flex-col en móvil === */
+  /* El TabsList usa grid-cols-5 con cada tab en flex-col (icono arriba, texto abajo) */
+  /* en móvil, por lo que NO debe aplicarse flex-shrink: 0 ni white-space: nowrap */
+  [data-responsive-mode]:not([data-responsive-mode="desktop"]) [role="tablist"].grid-cols-5 [role="tab"] {
+    flex-shrink: 1 !important;
+    white-space: normal !important;
+    padding-left: 4px !important;
+    padding-right: 4px !important;
+  }
+
   /* === Tablas: scroll horizontal === */
   [data-responsive-mode]:not([data-responsive-mode="desktop"]) .table-container,
   [data-responsive-mode]:not([data-responsive-mode="desktop"]) [class*="overflow-x-auto"] {
