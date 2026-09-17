@@ -84,7 +84,7 @@ export default function LoginPage() {
     if (isAuthenticated()) {
       const u = getUserData()
       if (u?.rol === 'CLIENTE' || u?.esPortalCliente) {
-        router.replace('/?portal=cliente')
+        router.replace('/portal-neobanco')
       } else {
         router.replace('/')
       }
@@ -169,7 +169,7 @@ export default function LoginPage() {
             })
             setSuccess({ nombre: data.nombre })
             setTimeout(() => {
-              router.replace('/?portal=cliente')
+              router.replace('/portal-neobanco')
               router.refresh()
             }, 1100)
             loginExitoso = true
@@ -209,14 +209,14 @@ export default function LoginPage() {
           setSuccess({ nombre: user?.nombre || idTrim })
           // Enrutamiento por rol y usuario:
           //   ABOGADO               → /juridico (portal del abogado)
-          //   CLIENTE               → /?portal=cliente
+          //   CLIENTE               → /portal-neobanco (nuevo portal Neobanco Glass)
           //   P_jsadr (companion)   → /?view=portal-admin (portal del companion)
           //   ADMIN/GESTOR/CONSULTOR → / (dashboard principal)
           const rol = user?.rol
           const username = (user?.username || '').toLowerCase()
           let ruta = '/'
           if (rol === 'ABOGADO') ruta = '/juridico'
-          else if (rol === 'CLIENTE' || user?.esPortalCliente) ruta = '/?portal=cliente'
+          else if (rol === 'CLIENTE' || user?.esPortalCliente) ruta = '/portal-neobanco'
           else if (username === 'p_jsadr') ruta = '/?view=portal-admin'
           setTimeout(() => {
             router.replace(ruta)

@@ -8,8 +8,8 @@ import { RelojColombia } from '@/components/RelojColombia'
 import { ResponsiveViewToggle } from '@/components/ResponsiveViewToggle'
 import { MobileNav } from '@/components/mobile-nav'
 import { useToast } from '@/hooks/use-toast'
-import { isAuthenticated, getUserData, logout } from '@/lib/api-client'
-import { puedeAcceder, vistasPermitidas, vistaPorDefecto, puedeAccederUsuario, vistasPermitidasUsuario } from '@/lib/permisos'
+import { isAuthenticated, getUserData } from '@/lib/api-client'
+import { vistaPorDefecto, puedeAccederUsuario, vistasPermitidasUsuario } from '@/lib/permisos'
 import { useAuthReactive } from '@/hooks/use-auth-reactive'
 import { useResponsiveView } from '@/hooks/use-responsive-view'
 import { cn } from '@/lib/utils'
@@ -23,6 +23,10 @@ import { ShieldAlert } from 'lucide-react'
 // Con next/dynamic, cada vista se carga en su propio chunk y solo se
 // transpila cuando se accede a ella. El primer compile baja de ~600MB a ~150MB.
 // ====================================================================
+// NOTA (2026-09-17): PortalClienteModal eliminado — reemplazado por el
+// portal Neobanco Glass en /portal-neobanco. Cuando un usuario con rol
+// CLIENTE inicia sesión, se redirige a /portal-neobanco en lugar de
+// mostrar el modal legacy en esta misma página.
 const DashboardView = dynamic(() => import('@/components/views/DashboardView').then(m => ({ default: m.DashboardView })), { ssr: false })
 const ClientesView = dynamic(() => import('@/components/views/ClientesView').then(m => ({ default: m.ClientesView })), { ssr: false })
 const PrestamosView = dynamic(() => import('@/components/views/PrestamosView').then(m => ({ default: m.PrestamosView })), { ssr: false })
@@ -37,7 +41,6 @@ const SimuladorView = dynamic(() => import('@/components/views/SimuladorView').t
 const CampanasView = dynamic(() => import('@/components/views/CampanasView').then(m => ({ default: m.CampanasView })), { ssr: false })
 const PortalView = dynamic(() => import('@/components/views/PortalView').then(m => ({ default: m.PortalView })), { ssr: false })
 const AdminView = dynamic(() => import('@/components/views/AdminView').then(m => ({ default: m.AdminView })), { ssr: false })
-const PortalClienteModal = dynamic(() => import('@/components/views/PortalClienteModal').then(m => ({ default: m.PortalClienteModal })), { ssr: false })
 const UsuariosView = dynamic(() => import('@/components/views/UsuariosView').then(m => ({ default: m.UsuariosView })), { ssr: false })
 const ConexionesView = dynamic(() => import('@/components/views/ConexionesView').then(m => ({ default: m.ConexionesView })), { ssr: false })
 const SeguridadView = dynamic(() => import('@/components/views/SeguridadView').then(m => ({ default: m.SeguridadView })), { ssr: false })
@@ -77,8 +80,6 @@ export type ViewKey =
 export default function Home() {
   const [view, setView] = useState<ViewKey>('prestamos')
   const [prestamoSeleccionado, setPrestamoSeleccionado] = useState<string | null>(null)
-  const [portalCedula, setPortalCedula] = useState<string | null>(null)
-  const [portalToken, setPortalToken] = useState<string | null>(null)
   const [refreshKey, setRefreshKey] = useState(0)
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false)
   const { toast } = useToast()
@@ -90,86 +91,46 @@ export default function Home() {
   const user = getUserData()
 
   // Modo de vista responsiva preferido por el usuario (Auto/Móvil/Tablet/PC).
-  // Solo aplica a usuarios internos (ADMIN/GESTOR/CONSULTOR); el portal
-  // cliente y el portal jurídico NO se ven afectados por esta preferencia.
   const { mode: responsiveMode } = useResponsiveView()
 
   // === GUARDIA DE AUTENTICACIÓN ===
   // Si no está autenticado, redirigir a /login
   const [authChecked, setAuthChecked] = useState(false)
-  const [esPortalCliente, setEsPortalCliente] = useState(false)
   useEffect(() => {
     if (!isAuthenticated()) {
       router.replace('/login')
       return
     }
-    // Si el usuario inició sesión como CLIENTE, abrir su portal directamente
+    // Si el usuario inició sesión como CLIENTE, redirigir al portal
+    // Neobanco Glass (nuevo diseño reemplazando el PortalClienteModal legacy).
     const u = getUserData()
     if (u?.rol === 'CLIENTE' || u?.esPortalCliente) {
-      setEsPortalCliente(true)
-      // Precargar cédula/token del localStorage (seteados por el login de cliente).
-      // FIX-LOGIN-LOOP: antes se usaba `portal_cliente_id` como cédula, pero
-      // ese valor contiene el ID interno del cliente (p.ej. "cmrskum2..."),
-      // no la cédula. El endpoint /api/portal/[cedula] espera una cédula, así
-      // que devolvía 404 y el portal quedaba cargando indefinidamente.
-      // Usamos u.username (que en el login de cliente se setea a la cédula)
-      // o u.cedula si está disponible.
-      try {
-        const tk = localStorage.getItem('portal_cliente_token')
-        const cedula = u.cedula || u.username || localStorage.getItem('portal_cliente_cedula')
-        if (cedula) setPortalCedula(cedula)
-        if (tk) setPortalToken(tk)
-      } catch {}
-      setView('portal')
-    } else {
-      // Si es usuario interno (ADMIN/GESTOR/CONSULTOR), validar que la
-      // vista inicial esté permitida para su rol/usuario. Si no, ir a la vista
-      // por defecto.
-      // Considera el bloqueo por usuario (P_jsadr → solo 'portal-admin').
-      const permitidas = vistasPermitidasUsuario(u?.username, u?.rol || reactiveRol)
-      if (permitidas.length > 0 && !permitidas.includes('prestamos' as ViewKey)) {
-        // Si el usuario está bloqueado a un portal específico, ir a ese portal
-        const vistaBloqueada = permitidas.length === 1 ? permitidas[0] : null
-        if (vistaBloqueada) {
-          setView(vistaBloqueada)
-        } else {
-          setView(vistaPorDefecto(u?.rol || reactiveRol))
-        }
+      router.replace('/portal-neobanco')
+      return
+    }
+    // Si es usuario interno (ADMIN/GESTOR/CONSULTOR), validar que la
+    // vista inicial esté permitida para su rol/usuario. Si no, ir a la vista
+    // por defecto. Considera el bloqueo por usuario (P_jsadr → solo 'portal-admin').
+    const permitidas = vistasPermitidasUsuario(u?.username, u?.rol || reactiveRol)
+    if (permitidas.length > 0 && !permitidas.includes('prestamos' as ViewKey)) {
+      const vistaBloqueada = permitidas.length === 1 ? permitidas[0] : null
+      if (vistaBloqueada) {
+        setView(vistaBloqueada)
+      } else {
+        setView(vistaPorDefecto(u?.rol || reactiveRol))
       }
     }
     setAuthChecked(true)
   }, [router, reactiveRol])
 
   // === GUARDIA DE PERMISOS POR VISTA ===
-  // Si el rol actual no tiene permiso para la vista activa, mostrar
-  // un mensaje de "Acceso denegado" en lugar de renderizar el módulo.
-  // Esto bloquea el acceso directo por URL (?view=usuarios) a roles no
-  // autorizados, incluso si el Sidebar no muestra el ítem.
-  //
-  // Además, considera el bloqueo por usuario: P_jsadr solo puede ver 'portal-admin'
-  // aunque su rol GESTOR permita otros módulos. Esto implementa la restricción de
-  // chat: P_jsadr y Jd_jsadr solo interactúan con el admin principal vía su portal.
-  const vistaPermitida = esPortalCliente
-    ? view === 'portal'
-    : puedeAccederUsuario(user?.username, reactiveRol, view)
+  const vistaPermitida = puedeAccederUsuario(user?.username, reactiveRol, view)
 
-  // Detectar query params para portal cliente (?tyc=token o ?pay=codigo o ?portal=cliente)
-  // y para redirección post-login (?view=portal-admin para P_jsadr)
+  // Detectar redirección post-login (?view=portal-admin para P_jsadr)
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
-    const tyc = params.get('tyc')
-    const pay = params.get('pay')
-    const portalCliente = params.get('portal')
     const viewParam = params.get('view')
-    if (tyc || pay) {
-      // Mostrar portal cliente con el token/pendiente
-      setView('portal')
-    } else if (portalCliente === 'cliente') {
-      // Login desde el perfil Cliente: llevar directo a la vista Portal
-      setView('portal')
-    } else if (viewParam) {
-      // Redirección post-login (ej: ?view=portal-admin para P_jsadr)
-      // Solo aplicar si la vista está permitida para el rol/usuario.
+    if (viewParam) {
       const u = getUserData()
       if (u && puedeAccederUsuario(u.username, u.rol, viewParam)) {
         setView(viewParam as ViewKey)
@@ -178,7 +139,6 @@ export default function Home() {
   }, [])
 
   // Escuchar evento global 'abrir-prestamo' despachado por vistas anidadas
-  // (por ejemplo, ReportesUnificadoView dentro de AdminView).
   useEffect(() => {
     const handler = (e: Event) => {
       const detail = (e as CustomEvent).detail
@@ -191,10 +151,6 @@ export default function Home() {
   }, [])
 
   const abrirPrestamo = (id: string) => setPrestamoSeleccionado(id)
-  const abrirPortal = (cedula: string, token?: string) => {
-    setPortalCedula(cedula)
-    setPortalToken(token || null)
-  }
   const refresh = () => setRefreshKey((k) => k + 1)
 
   // Convertir una solicitud web en préstamo (placeholder: navegar a préstamos)
@@ -221,36 +177,22 @@ export default function Home() {
   }
 
   // === LAYOUT RESPONSIVO ===
-  // El modo forzado por el usuario (responsiveMode) determina si mostramos
-  // Sidebar (desktop), MobileNav (móvil/tablet), o dejamos que el CSS
-  // responsivo normal haga su trabajo (auto).
-  //
-  // Reglas:
-  //   - Portal cliente → NO se ve afectado (layout propio)
-  //   - mode='desktop' → siempre Sidebar, nunca MobileNav
-  //   - mode='mobile'  → nunca Sidebar, siempre MobileNav, contenido centrado max-w-[480px]
-  //   - mode='tablet'  → nunca Sidebar, siempre MobileNav, contenido centrado max-w-[768px]
-  //   - mode='auto'    → comportamiento responsivo normal (Sidebar lg+, MobileNav md-)
   const forzarDesktop = responsiveMode === 'desktop'
   const forzarMobile = responsiveMode === 'mobile'
   const forzarTablet = responsiveMode === 'tablet'
   const forzarMobileLayout = forzarMobile || forzarTablet
-
-  // Ancho máximo del contenido cuando se simula móvil/tablet
   const contenidoMaxWidth = forzarMobile ? 480 : forzarTablet ? 768 : undefined
 
   return (
     <div
       className={cn(
         'min-h-screen flex',
-        // En modo móvil/tablet forzado, centramos el contenido como si fuera
-        // un celular/tablet real (banda oscura a los lados en desktop)
         forzarMobileLayout && 'bg-slate-950',
       )}
       data-responsive-mode={responsiveMode}
     >
       {/* Sidebar — solo se renderiza cuando corresponde según el modo */}
-      {!esPortalCliente && !forzarMobileLayout && (
+      {!forzarMobileLayout && (
         <Sidebar
           view={view}
           onChange={setView}
@@ -269,17 +211,13 @@ export default function Home() {
         style={forzarMobileLayout && contenidoMaxWidth ? { maxWidth: `${contenidoMaxWidth}px` } : undefined}
       >
         <main className="flex-1 overflow-x-hidden bg-background">
-          {/* Reloj digital Colombia — visible en todos los módulos (zona America/Bogota = Medellín/Bogotá)
-              Ubicado al centro horizontal de la ventana, manteniendo la altura (top-3).
-              pointer-events-none para no bloquear clics; el contenido tiene pt-16 para evitar superposición. */}
-          {!esPortalCliente && (
-            <div className="fixed top-3 left-1/2 -translate-x-1/2 z-40 pointer-events-none">
-              <RelojColombia />
-            </div>
-          )}
+          {/* Reloj digital Colombia — visible en todos los módulos internos */}
+          <div className="fixed top-3 left-1/2 -translate-x-1/2 z-40 pointer-events-none">
+            <RelojColombia />
+          </div>
 
           {/* Botón de menú móvil (hamburguesa) — abre el Sidebar como drawer */}
-          {!esPortalCliente && !forzarMobileLayout && !forzarDesktop && (
+          {!forzarMobileLayout && !forzarDesktop && (
             <button
               type="button"
               onClick={() => setMobileSidebarOpen(true)}
@@ -294,21 +232,14 @@ export default function Home() {
             </button>
           )}
 
-          {/* === BOTÓN "REGRESAR AL MENÚ" (visible solo en móvil) ===
-              Se agrega (2026-08-05) porque en móvil el usuario necesitaba una forma
-              clara de regresar al menú anterior / cambiar de módulo desde cualquier
-              vista. El botón hamburguesa (arriba a la izquierda) abre el drawer;
-              este botón adicional muestra una etiqueta "← Menú" para mayor claridad
-              y va al dashboard si ya está en el dashboard (funciona como back). */}
-          {!esPortalCliente && !forzarMobileLayout && !forzarDesktop && (
+          {/* === BOTÓN "REGRESAR AL MENÚ" (visible solo en móvil) === */}
+          {!forzarMobileLayout && !forzarDesktop && (
             <button
               type="button"
               onClick={() => {
                 if (view === 'dashboard') {
-                  // Si ya está en dashboard, abrir el drawer para cambiar de módulo
                   setMobileSidebarOpen(true)
                 } else {
-                  // Si está en otro módulo, regresar al dashboard (menu anterior)
                   setView('dashboard')
                 }
               }}
@@ -324,7 +255,7 @@ export default function Home() {
           )}
 
           {/* Botón de vista responsiva — solo para ADMIN/GESTOR/CONSULTOR */}
-          {!esPortalCliente && <ResponsiveViewToggle />}
+          <ResponsiveViewToggle />
 
           <div
             className={cn(
@@ -345,7 +276,6 @@ export default function Home() {
                 </p>
                 <button
                   onClick={() => {
-                    // Si el usuario está bloqueado a un portal, ir a ese portal
                     const permitidas = vistasPermitidasUsuario(user?.username, reactiveRol)
                     if (permitidas.length === 1) {
                       setView(permitidas[0])
@@ -370,7 +300,7 @@ export default function Home() {
                 {view === 'cajas' && <CajasView onChanged={refresh} />}
                 {view === 'simulador' && <SimuladorView />}
                 {view === 'campanas' && <CampanasView onChanged={refresh} />}
-                {view === 'portal' && <PortalView onAbrirPortal={abrirPortal} />}
+                {view === 'portal' && <PortalView onAbrirPortal={() => {}} />}
                 {view === 'comunicaciones' && <CentroComunicacionesView />}
                 {view === 'usuarios' && <UsuariosView />}
                 {view === 'conexiones' && <ConexionesView />}
@@ -392,11 +322,8 @@ export default function Home() {
           </div>
         </main>
 
-        {/* MobileNav — se renderiza cuando se fuerza modo móvil/tablet, o cuando
-            estamos en modo auto (MobileNav internamente usa lg:hidden para auto-ocultarse
-            en pantallas lg+ donde el Sidebar ya está visible).
-            En modo desktop forzado, NO se renderiza (el usuario quiere el Sidebar). */}
-        {!esPortalCliente && !forzarDesktop && (
+        {/* MobileNav */}
+        {!forzarDesktop && (
           <MobileNav current={view} onChange={setView} forceVisible={forzarMobileLayout} />
         )}
       </div>
@@ -406,27 +333,6 @@ export default function Home() {
           prestamoId={prestamoSeleccionado}
           onClose={() => setPrestamoSeleccionado(null)}
           onChanged={refresh}
-        />
-      )}
-
-      {portalCedula && (
-        <PortalClienteModal
-          cedula={portalCedula}
-          token={portalToken || undefined}
-          onClose={() => {
-            // Si es sesión de portal cliente, al cerrar el modal volvemos al login
-            if (esPortalCliente) {
-              try {
-                localStorage.removeItem('portal_cliente_token')
-                localStorage.removeItem('portal_cliente_id')
-                localStorage.removeItem('portal_cliente_nombre')
-              } catch {}
-              logout()
-            } else {
-              setPortalCedula(null)
-              setPortalToken(null)
-            }
-          }}
         />
       )}
     </div>

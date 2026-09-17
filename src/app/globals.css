@@ -935,9 +935,7 @@
 }
 
 /* Pausar animaciones costosas cuando el documento no está visible
-   (pestaña en background) — reduce consumo de batería y CPU.
-   Esto se hace vía JS con IntersectionObserver y Page Visibility API
-   en el componente PortalClienteModal, no via CSS. */
+   (pestaña en background) — reduce consumo de batería y CPU. */
 
 /* Optimización táctil: mejorar respuesta de click en móvil
    eliminando el delay de 300ms en touch */
