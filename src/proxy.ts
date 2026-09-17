@@ -71,55 +71,15 @@ function isPublicEndpoint(pathname: string): boolean {
     pathname.startsWith('/api/auth/login') ||
     pathname.startsWith('/api/auth/mfa') ||
     pathname.startsWith('/api/auth/refresh') ||
-    // FIX-LOGOUT-INESPERADO: /api/auth/logout debe ser público porque puede
-    // llamarse cuando el access_token ya expiró (el endpoint usa el
-    // refresh_token del body como fallback para identificar al usuario).
-    pathname.startsWith('/api/auth/logout') ||
     pathname.startsWith('/api/auth/recuperar-clave') ||
-    pathname.startsWith('/api/auth/restablecer-clave') || // magic link password reset (v4.14)
     pathname.startsWith('/api/portal/auth') ||
     pathname.startsWith('/api/portal/') || // portal usa x-portal-token
     pathname.startsWith('/api/admin/portal/auth') || // login del portal admin companion (P_jsadr / 731649)
-    pathname.startsWith('/api/admin/portal/chat') || // chat del portal admin companion (valida token companion internamente)
     pathname.startsWith('/api/juridico/portal/auth') || // login del portal jurídico (abogados con cédula + clave)
     pathname.startsWith('/api/chat/iniciar') || // inicio de chat con cédula+teléfono (sin token previo)
     pathname.startsWith('/api/chat/otp') || // solicitud/verificación OTP del chat
     pathname === '/api/simulador' || // simulador público
-    pathname === '/api/solicitudes-nuevos-clientes' || // POST público: registro de nuevos clientes desde /register
-    pathname.startsWith('/api/solicitudes-nuevos-clientes/consulta-publica') || // GET público: consulta de solicitud DEVUELTA por cédula (para que el cliente pueda corregir y reenviar desde /register?cedula=X&corregir=1)
-    // === Buzón de solicitudes web desde el portal del cliente ===
-    // El cliente envía su token de sesión en el body; el handler valida
-    // internamente contra cliente.tokenSesion con safeCompare.
-    // FIX: antes estas rutas NO estaban en la lista pública, así que el proxy
-    // bloqueaba el POST /api/solicitudes-web con 401 "No autorizado. Token
-    // requerido." justo después de que el cliente validara su Clave Dinámica
-    // OTP — el cliente veía "Token requerido" y no podía enviar la solicitud.
-    pathname === '/api/solicitudes-web' ||
-    pathname.startsWith('/api/solicitudes-web/') ||
-    // === Verificación pública de documentos (QR escaneable) ===
-    // Cualquier persona (juez, notario, tercero) debe poder escanear el QR
-    // de un pagaré/carta/certificado de firma y verificar su autenticidad
-    // SIN tener cuenta en el sistema. El código de verificación actúa como
-    // token único e intransferible (hash SHA-256 del documento).
-    pathname === '/api/verificar' ||
-    pathname === '/api/documentos/verificar' ||
-    // === Estado de mantenimiento (público) ===
-    // La página de login consulta este endpoint para mostrar el mensaje
-    // de mantenimiento a los clientes. NO requiere autenticación porque
-    // el cliente aún no ha iniciado sesión.
-    pathname === '/api/estado-mantenimiento' ||
-    // === Health check del bloqueo de correo (público) ===
-    // Monitoreo uptime (Better Stack / Uptime Robot / Vercel Cron).
-    // NO expone credenciales — solo estado aggregated: ok | degraded.
-    pathname === '/api/email-lock/health' ||
-    // === Firma electrónica con token público ===
-    // El cliente accede vía /firma/[token] sin login (token único en URL).
-    // El handler valida el token internamente contra TokenFirma en BD.
-    // Si el token no existe o ya fue usado, retorna 404.
-    pathname === '/api/firma' ||
-    // === Cron endpoints (v4.4) — autenticados por X-Cron-Secret ===
-    pathname.startsWith('/api/recordatorios/cron') ||
-    pathname.startsWith('/api/pagos/cron')
+    pathname === '/api/solicitudes-nuevos-clientes' // POST público: registro de nuevos clientes desde /register
   )
 }
 
@@ -128,15 +88,6 @@ function isCSRFSafe(req: NextRequest): boolean {
   // Para peticiones GET/HEAD/OPTIONS no se valida Origin (no causan state changes)
   const method = req.method.toUpperCase()
   if (method === 'GET' || method === 'HEAD' || method === 'OPTIONS') return true
-
-  // === Excepción: endpoints de cron (server-to-server, sin Origin/Referer) ===
-  // Vercel Cron llama internamente desde el deployment, no envía Origin.
-  // Estos endpoints se autentican con X-Cron-Secret o X-Vercel-Cron=1 internamente.
-  const pathname = req.nextUrl.pathname
-  if (pathname.startsWith('/api/recordatorios/cron') ||
-      pathname.startsWith('/api/pagos/cron')) {
-    return true
-  }
 
   const origin = req.headers.get('origin')
   const referer = req.headers.get('referer')
@@ -210,7 +161,6 @@ function getRateLimitForPath(pathname: string): { max: number; key: string } | n
     pathname.startsWith('/api/chat/totp') ||
     pathname.includes('/aceptar-tyc-otp') ||
     pathname.startsWith('/api/auth/recuperar-clave') ||
-    pathname.startsWith('/api/auth/restablecer-clave') || // magic link password reset (v4.14)
     pathname.startsWith('/api/seguridad/recuperacion-claves')
   ) {
     return { max: RATE_LIMIT_OTP, key: `otp:${pathname}` }
@@ -242,40 +192,22 @@ function getRateLimitForPath(pathname: string): { max: number; key: string } | n
 export async function proxy(req: NextRequest) {
   // === 1. CORS preflight ===
   if (req.method === 'OPTIONS') {
+    const response = new NextResponse(null, { status: 204 })
     const origin = req.headers.get('origin')
-    const isOriginAllowed = origin && ALLOWED_ORIGINS.some(allowed => {
+    if (origin && ALLOWED_ORIGINS.some(allowed => {
       if (allowed.includes('*')) {
         const regex = new RegExp('^' + allowed.replace(/\./g, '\\.').replace(/\*/g, '.*') + '$')
         return regex.test(origin)
       }
       return origin === allowed
-    })
-
-    if (isOriginAllowed) {
-      // Origen permitido: retornar 204 con headers CORS completos
-      const response = new NextResponse(null, { status: 204 })
+    })) {
       response.headers.set('Access-Control-Allow-Origin', origin)
       response.headers.set('Access-Control-Allow-Methods', 'GET, POST, PATCH, PUT, DELETE, OPTIONS')
       response.headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization, x-portal-token')
       response.headers.set('Access-Control-Allow-Credentials', 'true')
       response.headers.set('Access-Control-Max-Age', '86400')
-      return response
     }
-
-    // v4.9 (QA M06 TC-SEC-015): CORS preflight rechazado debe retornar 403 explícito.
-    // Antes: si el origen no estaba en la whitelist, el proxy retornaba 204 (éxito)
-    // sin headers CORS, lo cual era confuso (el navegador lo interpretaba como
-    // éxito pero bloqueaba la petición real). Ahora: retorna 403 Forbidden explícito
-    // con codigo CORS_ORIGEN_NO_PERMITIDO y mensaje claro.
-    return NextResponse.json(
-      {
-        success: false,
-        error: `Origin '${origin || '(missing)'}' no permitido por política CORS.`,
-        code: 'CORS_ORIGEN_NO_PERMITIDO',
-        allowedOrigins: ALLOWED_ORIGINS,
-      },
-      { status: 403 }
-    )
+    return response
   }
 
   const pathname = req.nextUrl.pathname
@@ -368,7 +300,7 @@ export async function proxy(req: NextRequest) {
   response.headers.set('X-Permitted-Cross-Domain-Policies', 'none')
   response.headers.set('Cross-Origin-Resource-Policy', 'same-site')
   response.headers.set('Cross-Origin-Opener-Policy', 'same-origin-allow-popups')
-  response.headers.set('Permissions-Policy', 'camera=(self), microphone=(), geolocation=(), payment=()')
+  response.headers.set('Permissions-Policy', 'camera=(), microphone=(), geolocation=(), payment=()')
   response.headers.set('X-XSS-Protection', '1; mode=block')
   response.headers.set('X-RateLimit-Limit', limitConfig ? String(limitConfig.max) : '0')
   // X-Frame-Options y CSP restrictivos solo en producción (en preview z.ai necesita iframe)

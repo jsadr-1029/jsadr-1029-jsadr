@@ -82,7 +82,7 @@ export async function PATCH(
       include: { prestamo: { include: { cliente: true } } },
     })
 
-    // Si se cierra el caso, actualizar solicitud
+    // Si se cierra el caso, actualizar préstamo
     if (estado === 'CERRADO') {
       await db.prestamo.update({
         where: { id: caso.prestamoId },

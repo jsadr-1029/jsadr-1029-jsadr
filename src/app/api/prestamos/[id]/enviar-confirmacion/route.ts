@@ -5,7 +5,6 @@ import { enviarWhatsApp, guardarNotificacion, mensajeAprobacionTyC } from '@/lib
 import { registrarAuditLog, getClientInfo } from '@/lib/security'
 import { sanitizeError } from '@/lib/error-handler'
 import { requireRole } from '@/lib/auth-guard'
-import { buildAbsoluteUrl } from '@/lib/url'
 import { enviarEmail } from '@/lib/email'
 import { generarYEnviarCodigosConfirmacion } from '@/lib/prestamo-codigo'
 import crypto from 'crypto'
@@ -37,12 +36,12 @@ export async function POST(
     })
 
     if (!prestamo) {
-      return NextResponse.json({ success: false, error: 'Solicitud no encontrado' }, { status: 404 })
+      return NextResponse.json({ success: false, error: 'Préstamo no encontrado' }, { status: 404 })
     }
 
     if (prestamo.estado !== 'SOLICITUD' && prestamo.estado !== 'PENDIENTE_ACEPTACION') {
       return NextResponse.json(
-        { success: false, error: `El solicitud está en estado ${prestamo.estado}. Solo se puede enviar confirmación a solicitudes en SOLICITUD o PENDIENTE_ACEPTACION.` },
+        { success: false, error: `El préstamo está en estado ${prestamo.estado}. Solo se puede enviar confirmación a préstamos en SOLICITUD o PENDIENTE_ACEPTACION.` },
         { status: 400 }
       )
     }
@@ -72,7 +71,8 @@ export async function POST(
     // ============================================================
     if (metodo === 'LINK') {
       const tycToken = generarTokenTyC()
-      const linkAceptacion = buildAbsoluteUrl(`/?tyc=${tycToken}`)
+      const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'
+      const linkAceptacion = `${baseUrl}/?tyc=${tycToken}`
 
       await db.prestamo.update({
         where: { id },
@@ -88,7 +88,6 @@ export async function POST(
         tasaAnual: prestamo.tasaInteresAnual,
         totalPagar: calculo.totalPagar,
         linkAceptacion,
-        modalidad: (prestamo.modalidadAmortizacion as string) || 'FRANCES',
       })
 
       const envioWhatsApp = await enviarWhatsApp(prestamo.cliente.telefono, mensaje)
@@ -121,8 +120,8 @@ export async function POST(
     //
     // Delega en el helper compartido `generarYEnviarCodigosConfirmacion`
     // para garantizar que se aplique la REGLA DE NEGOCIO de doble OTP
-    // cuando el solicitud tenga codeudor. Antes este método generaba
-    // un solo código para el deudor, lo que permitía activar solicitudes
+    // cuando el préstamo tenga codeudor. Antes este método generaba
+    // un solo código para el deudor, lo que permitía activar préstamos
     // con codeudor sin que este confirmara.
     // ============================================================
     if (metodo === 'CORREO') {
@@ -147,7 +146,8 @@ export async function POST(
       }
 
       const tycToken = generarTokenTyC()
-      const linkAceptacion = buildAbsoluteUrl(`/?tyc=${tycToken}`)
+      const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'
+      const linkAceptacion = `${baseUrl}/?tyc=${tycToken}`
 
       await db.prestamo.update({
         where: { id },
@@ -173,7 +173,7 @@ export async function POST(
               interactive: {
                 type: 'button',
                 body: {
-                  text: `✅ *SOLICITUD APROBADO*\n\nHola *${prestamo.cliente.nombre}*, tu solicitud ${prestamo.codigo} fue aprobado.\n\n📋 *Detalles:*\n• Monto: $${prestamo.montoPrincipal.toLocaleString('es-CO')}\n• Cuota: $${calculo.montoCuota.toLocaleString('es-CO')}\n• N° cuotas: ${calculo.numeroCuotas}\n• Total: $${calculo.totalPagar.toLocaleString('es-CO')}\n\nPara activar tu solicitud, acepta los términos y condiciones:`,
+                  text: `✅ *PRÉSTAMO APROBADO*\n\nHola *${prestamo.cliente.nombre}*, tu préstamo ${prestamo.codigo} fue aprobado.\n\n📋 *Detalles:*\n• Monto: $${prestamo.montoPrincipal.toLocaleString('es-CO')}\n• Cuota: $${calculo.montoCuota.toLocaleString('es-CO')}\n• N° cuotas: ${calculo.numeroCuotas}\n• Total: $${calculo.totalPagar.toLocaleString('es-CO')}\n\nPara activar tu préstamo, acepta los términos y condiciones:`,
                 },
                 action: {
                   buttons: [
@@ -220,7 +220,6 @@ export async function POST(
         tasaAnual: prestamo.tasaInteresAnual,
         totalPagar: calculo.totalPagar,
         linkAceptacion,
-        modalidad: (prestamo.modalidadAmortizacion as string) || 'FRANCES',
       })
 
       const envioWhatsApp = await enviarWhatsApp(prestamo.cliente.telefono, mensajeFallback)

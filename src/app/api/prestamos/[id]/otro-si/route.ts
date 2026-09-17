@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { sanitizeError } from '@/lib/error-handler'
 import { requireRole } from '@/lib/auth-guard'
-import { buildAbsoluteUrl } from '@/lib/url'
 import {
   generarHtmlOtroSi,
   generarCodigoOtroSi,
@@ -13,7 +12,7 @@ import {
 
 // =====================================================
 // GET /api/prestamos/[id]/otro-si
-// Lista todos los Otros Síes de un solicitud.
+// Lista todos los Otros Síes de un préstamo.
 // =====================================================
 export async function GET(
   req: NextRequest,
@@ -30,7 +29,7 @@ export async function GET(
     })
     if (!prestamo) {
       return NextResponse.json(
-        { success: false, error: 'Solicitud no encontrado' },
+        { success: false, error: 'Préstamo no encontrado' },
         { status: 404 }
       )
     }
@@ -124,19 +123,19 @@ export async function POST(
       )
     }
 
-    // === Cargar solicitud + cliente ===
+    // === Cargar préstamo + cliente ===
     const prestamo = await db.prestamo.findUnique({
       where: { id: prestamoId },
       include: { cliente: true },
     })
     if (!prestamo) {
       return NextResponse.json(
-        { success: false, error: 'Solicitud no encontrado' },
+        { success: false, error: 'Préstamo no encontrado' },
         { status: 404 }
       )
     }
 
-    // === Validar que el solicitud tenga Flexibilidad Financiera activada ===
+    // === Validar que el préstamo tenga Flexibilidad Financiera activada ===
     if (!prestamo.flexibilidadFinanciera) {
       return NextResponse.json(
         {
@@ -256,7 +255,9 @@ export async function POST(
         },
       })
 
-      const linkFirma = buildAbsoluteUrl(`/firma/${tokenCreado}`)
+      const baseUrl =
+        process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'
+      const linkFirma = `${baseUrl}/firma/${tokenCreado}`
 
       // === Enviar OTP por correo ===
       let otpEnviado = false
@@ -267,10 +268,10 @@ export async function POST(
           const { enviarEmail } = await import('@/lib/email')
           const otp = generarCodigoOtp('numeric', 6)
 
-          const subject = `Código de Verificación - Otro Sí ${codigo} - Solicitud ${prestamo.codigo}`
+          const subject = `Código de Verificación - Otro Sí ${codigo} - Préstamo ${prestamo.codigo}`
           const textContent = `Estimado/a ${prestamo.cliente.nombre},
 
-Tu código de verificación para firmar el Otro Sí "${codigo}" del solicitud ${prestamo.codigo} es:
+Tu código de verificación para firmar el Otro Sí "${codigo}" del préstamo ${prestamo.codigo} es:
 
   >>  ${otp}  <<
 
@@ -278,13 +279,13 @@ Este código expira en 5 minutos.
 No compartas este código con nadie.
 
 Saludos,
-Sistema de Gestión de Solicitudes`
+Sistema de Gestión de Préstamos`
 
           const htmlContent = `
 <div style="font-family: Arial, sans-serif; max-width: 500px; margin: 0 auto; padding: 20px;">
   <h2 style="color: #1e40af;">🔐 Código de Verificación — Otro Sí</h2>
   <p>Hola <strong>${prestamo.cliente.nombre}</strong>,</p>
-  <p>Tu código para firmar electrónicamente el Otro Sí <strong>${codigo}</strong> del solicitud <strong>${prestamo.codigo}</strong> es:</p>
+  <p>Tu código para firmar electrónicamente el Otro Sí <strong>${codigo}</strong> del préstamo <strong>${prestamo.codigo}</strong> es:</p>
   <div style="background: #fef3c7; border: 2px dashed #f59e0b; padding: 20px; text-align: center; margin: 20px 0; border-radius: 8px;">
     <div style="font-size: 36px; font-weight: bold; letter-spacing: 8px; color: #1e40af; font-family: 'Courier New', monospace;">${otp}</div>
   </div>
@@ -309,7 +310,7 @@ Sistema de Gestión de Solicitudes`
             destinatario: prestamo.cliente.email,
             tipo: 'FIRMA_ELECTRONICA',
             entidadRefId: firmaCreada.id,
-            descripcion: `OTP Otro Sí ${codigo} solicitud ${prestamo.codigo}`,
+            descripcion: `OTP Otro Sí ${codigo} préstamo ${prestamo.codigo}`,
             maxIntentos: 5,
             expiraEnMinutos: 5,
             ipSolicitud: null,
@@ -348,7 +349,7 @@ Sistema de Gestión de Solicitudes`
       }
     }
 
-    // === Registrar en bitácora del solicitud ===
+    // === Registrar en bitácora del préstamo ===
     await db.bitacoraPrestamo.create({
       data: {
         prestamoId,
@@ -357,7 +358,7 @@ Sistema de Gestión de Solicitudes`
         tipo: 'OTRO',
         titulo: `OTRO SÍ CREADO: ${codigo}`,
         descripcion:
-          `Se generó el Otro Sí ${codigo} (${tipoModificacion}) para el solicitud ${prestamo.codigo}.\n\n` +
+          `Se generó el Otro Sí ${codigo} (${tipoModificacion}) para el préstamo ${prestamo.codigo}.\n\n` +
           `Tipo de modificación: ${tipoModificacion === 'CAMBIO_FECHA' ? 'Cambio de fecha de pago' : 'Traslado de cuota al final'}\n` +
           `Cantidad de cuotas modificadas: ${modificaciones.length}\n\n` +
           `Descripción: ${descripcionFinal}\n\n` +
@@ -411,7 +412,7 @@ export async function PATCH(
       })
       if (!prestamo) {
         return NextResponse.json(
-          { success: false, error: 'Solicitud no encontrado' },
+          { success: false, error: 'Préstamo no encontrado' },
           { status: 404 }
         )
       }
@@ -453,7 +454,7 @@ export async function PATCH(
           tipo: 'OTRO',
           titulo: 'FLEXIBILIDAD FINANCIERA ACTIVADA',
           descripcion:
-            `Se activó el beneficio de Flexibilidad Financiera para el solicitud ${prestamo.codigo}.\n\n` +
+            `Se activó el beneficio de Flexibilidad Financiera para el préstamo ${prestamo.codigo}.\n\n` +
             `Costo cobrado: $${prestamo.flexibilidadCosto.toLocaleString('es-CO')}\n` +
             `Cliente: ${prestamo.cliente.nombre} (CC ${prestamo.cliente.cedula})\n` +
             `Fecha de activación: ${new Date().toLocaleString('es-CO')}\n\n` +

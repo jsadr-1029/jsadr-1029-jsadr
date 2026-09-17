@@ -9,7 +9,6 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Switch } from '@/components/ui/switch'
-import { Alert, AlertDescription } from '@/components/ui/alert'
 import {
   Select,
   SelectContent,
@@ -35,8 +34,7 @@ import {
 import { useToast } from '@/hooks/use-toast'
 import { formatearMoneda, formatearFecha, calcularPrestamo, calcularPrestamoTasaFijaMensual, Frecuencia } from '@/lib/finanzas'
 import { calcularBloqueCorte, calcularFechaPrimerCorte, calcularDiasCausadosAntes, calcularValorDiasCausados, PeriodoCorte } from '@/lib/corte-fechas'
-import { abrirHtmlImprimible } from '@/lib/auth-docs'
-import { FileText, Plus, Search, Eye, Check, X, ArrowRight, RefreshCw, PenTool, Shield, Trash2, Calendar, Scissors, Sparkles, MonitorSmartphone, Info, LayoutGrid, Table2 } from 'lucide-react'
+import { FileText, Plus, Search, Eye, Check, X, ArrowRight, RefreshCw, PenTool, Shield, Trash2, Calendar, Scissors, Sparkles } from 'lucide-react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { ClientesView } from '@/components/views/ClientesView'
 import { CajasView } from '@/components/views/CajasView'
@@ -46,12 +44,8 @@ import { BuzonSolicitudesView } from '@/components/views/BuzonSolicitudesView'
 import { PlanClienteView } from '@/components/views/PlanClienteView'
 import { SimuladorView } from '@/components/views/SimuladorView'
 import { DocumentosPrestamosView } from '@/components/views/DocumentosPrestamosView'
-import { LineaTiempoView } from '@/components/views/LineaTiempoView'
 import { DashboardPrestamos } from '@/components/views/DashboardPrestamos'
 import { BotIcons } from '@/components/views/BotIcons'
-import { OtroSiAccionesDropdown } from '@/components/views/OtroSiAccionesDropdown'
-import { QueCambioModal } from '@/components/views/QueCambioModal'
-import { PlanAmortizacionPreview } from '@/components/views/PlanAmortizacionPreview'
 
 interface Prestamo {
   id: string
@@ -71,157 +65,21 @@ interface Prestamo {
   montoPagado: number
   estado: string
   fechaSolicitud: string
-  // === Fechas para el conteo de vigencia ===
-  // fechaDesembolso: fecha real de inicio del crédito (se setea al activar).
-  // fechaVencimiento: fecha final pactada (se setea al activar).
-  // updatedAt: fecha de la última modificación — se usa como aproximación
-  //   de la fecha de cancelación cuando el crédito pasa a CANCELADO.
-  fechaDesembolso?: string | null
-  fechaVencimiento?: string | null
-  updatedAt?: string
   requiereDocumentos: boolean
   tycAceptado: boolean
   firmaId?: string | null
-  firmaFechaCompleta?: string | null
-  firmaTipo?: string | null
-  firmaRol?: string | null
   tieneCodeudor?: boolean
   codeudorNombre?: string | null
   codeudorCedula?: string | null
 }
 
 // =====================================================
-// CONTEO DE VIGENCIA DE CRÉDITOS
-// =====================================================
-// Calcula automáticamente los días transcurridos del crédito en relación
-// con el plazo total pactado. La lógica es:
-//
-//   - Si el crédito está CANCELADO → el conteo se CONGELA en la fecha de
-//     cancelación (updatedAt). No sigue incrementándose.
-//   - Si el crédito está ACTIVO/EN_MORA/JURIDICO → el conteo es dinámico
-//     y usa la fecha actual del sistema.
-//   - Para otros estados (SOLICITUD, PENDIENTE_ACEPTACION, RECHAZADO) el
-//     conteo no aplica (aún no hay crédito vigente).
-//
-// Estados del plazo:
-//   🟢 DENTRO DEL PLAZO   → días transcurridos < plazo total
-//   🟡 PLAZO CUMPLIDO     → días transcurridos = plazo total
-//   🔴 EXCEDIÓ EL PLAZO   → días transcurridos > plazo total (muestra días excedidos)
-//   —                      → crédito CANCELADO (conteo congelado, sin estado de plazo)
-
-export type EstadoPlazo = 'DENTRO' | 'CUMPLIDO' | 'EXCEDIDO' | 'CANCELADO' | 'NO_APLICA'
-
-export interface ConteoVigencia {
-  aplica: boolean                 // false si el conteo no aplica (solicitud, rechazado, etc.)
-  diasTranscurridos: number       // días desde inicio hasta corte
-  plazoTotalDias: number          // plazo total pactado en días
-  diasExcedidos: number           // días que exceden el plazo (0 si no excede)
-  estadoPlazo: EstadoPlazo        // estado del plazo
-  congelado: boolean              // true si el conteo está congelado (crédito cancelado)
-  fechaCorte: Date                // fecha usada para el cálculo
-  fechaInicio: Date               // fecha de inicio del crédito
-}
-
-function calcularPlazoTotalDias(p: Prestamo): number {
-  // Preferir la diferencia real entre fechaVencimiento y fechaDesembolso,
-  // que refleja el plazo exacto pactado (incluye ajustes de frecuencia).
-  if (p.fechaVencimiento && p.fechaDesembolso) {
-    const diffMs = new Date(p.fechaVencimiento).getTime() - new Date(p.fechaDesembolso).getTime()
-    const dias = Math.round(diffMs / (1000 * 60 * 60 * 24))
-    if (dias > 0) return dias
-  }
-  // Fallback: calcular según frecuencia y número de cuotas
-  const cuotas = p.numeroCuotas || 0
-  switch (p.frecuencia) {
-    case 'MENSUAL': return cuotas * 30
-    case 'QUINCENAL': return cuotas * 15
-    case 'SEMANAL': return cuotas * 7
-    case 'DIARIO': return cuotas
-    default: return cuotas * 30
-  }
-}
-
-export function calcularConteoVigencia(p: Prestamo, ahora: Date = new Date()): ConteoVigencia {
-  // Solo aplica a créditos activos, en mora, jurídicos o cancelados.
-  // No aplica a solicitudes pendientes ni a solicitudes rechazados.
-  const estadosValidos = ['ACTIVO', 'EN_MORA', 'JURIDICO', 'CANCELADO']
-  if (!estadosValidos.includes(p.estado)) {
-    return {
-      aplica: false,
-      diasTranscurridos: 0,
-      plazoTotalDias: 0,
-      diasExcedidos: 0,
-      estadoPlazo: 'NO_APLICA',
-      congelado: false,
-      fechaCorte: ahora,
-      fechaInicio: ahora,
-    }
-  }
-
-  // Fecha de inicio: fechaDesembolso (cuando el crédito realmente se activó).
-  // Si por algún motivo no existe, no podemos calcular el conteo.
-  const fechaInicio = p.fechaDesembolso ? new Date(p.fechaDesembolso) : null
-  if (!fechaInicio) {
-    return {
-      aplica: false,
-      diasTranscurridos: 0,
-      plazoTotalDias: 0,
-      diasExcedidos: 0,
-      estadoPlazo: 'NO_APLICA',
-      congelado: false,
-      fechaCorte: ahora,
-      fechaInicio: ahora,
-    }
-  }
-
-  const plazoTotalDias = calcularPlazoTotalDias(p)
-  const estaCancelado = p.estado === 'CANCELADO'
-
-  // Fecha de corte para el cálculo:
-  //   - Si está CANCELADO: usar updatedAt (fecha de cancelación) → CONGELA el conteo.
-  //   - Si está ACTIVO/EN_MORA/JURIDICO: usar la fecha actual → conteo dinámico.
-  const fechaCorte = estaCancelado && p.updatedAt
-    ? new Date(p.updatedAt)
-    : ahora
-
-  // Días transcurridos = diferencia en días (sin decimales, sin hora).
-  // Usamos floor para no contar el día actual hasta que termine.
-  const diffMs = fechaCorte.getTime() - fechaInicio.getTime()
-  const diasTranscurridos = Math.max(0, Math.floor(diffMs / (1000 * 60 * 60 * 24)))
-
-  // Determinar estado del plazo
-  let estadoPlazo: EstadoPlazo
-  if (estaCancelado) {
-    estadoPlazo = 'CANCELADO'
-  } else if (diasTranscurridos < plazoTotalDias) {
-    estadoPlazo = 'DENTRO'
-  } else if (diasTranscurridos === plazoTotalDias) {
-    estadoPlazo = 'CUMPLIDO'
-  } else {
-    estadoPlazo = 'EXCEDIDO'
-  }
-
-  const diasExcedidos = Math.max(0, diasTranscurridos - plazoTotalDias)
-
-  return {
-    aplica: true,
-    diasTranscurridos,
-    plazoTotalDias,
-    diasExcedidos,
-    estadoPlazo,
-    congelado: estaCancelado,
-    fechaCorte,
-    fechaInicio,
-  }
-}
-
-// =====================================================
-// Tipos auxiliares para la vista de Solicitudes
+// Tipos auxiliares para la vista de Préstamos
 // =====================================================
 
 // Parámetros de simulación que se pueden inyectar en el formulario
 // de PrestamosPanel (por ejemplo, al convertir una solicitud web del
-// buzón en un solicitud). Se aplican automáticamente al abrir el modal.
+// buzón en un préstamo). Se aplican automáticamente al abrir el modal.
 export interface SimulacionParams {
   clienteId?: string
   montoPrincipal: string
@@ -229,27 +87,12 @@ export interface SimulacionParams {
   plazoMeses: string
   frecuencia: Frecuencia
   origen?: string
-  // === ID de la solicitud web origen (para auto-marcarla como CONVERTIDA) ===
-  solicitudWebId?: string
-  // === Fecha de la primera cuota (opcional) ===
-  // Cuando el cliente simula en el portal, puede elegir una fecha
-  // preferida para su primer pago. Esa fecha llega en
-  // `solicitud.primerPagoFecha` y se inyecta acá para que el asesor la
-  // vea precargada en el formulario (y pueda modificarla si lo desea).
-  fechaPrimerCuota?: string | null
-  // === Flexibilidad financiera elegida por el cliente en la simulación ===
-  flexibilidadFinanciera?: boolean
-  flexibilidadModalidad?: 'BASICA' | 'PREMIUM'
-  flexibilidadCosto?: number
-  // === Renovación Anticipada elegida por el cliente en la simulación ===
-  renovacionAnticipada?: boolean
-  renovacionAnticipadaCosto?: number
 }
 
 // Tipo mínimo estructuralmente compatible con la interfaz SolicitudWeb
 // interna de BuzonSolicitudesView (no exportada). Solo declaramos los
 // campos que necesitamos leer para construir la SimulacionParams.
-export interface SolicitudWebMin {
+interface SolicitudWebMin {
   id: string
   codigo: string
   clienteId: string
@@ -258,24 +101,12 @@ export interface SolicitudWebMin {
   numeroCuotas: number
   frecuencia: string
   tasaUtilizada: number
-  // === Fecha de primer pago elegida por el cliente en la simulación ===
-  // Se guarda como ISO string en la BD; se reenvía al formulario para
-  // que el asesor vea la fecha que pidió el cliente y pueda confirmarla
-  // o cambiarla antes de crear el solicitud.
-  primerPagoFecha?: string | null
-  // === Campos opcionales para preservar la flexibilidad elegida por el cliente ===
-  flexibilidadFinanciera?: boolean
-  flexibilidadModalidad?: string | null
-  flexibilidadCosto?: number
-  // === Renovación Anticipada elegida por el cliente ===
-  renovacionAnticipada?: boolean
-  renovacionAnticipadaCosto?: number
 }
 
 // =====================================================
 // PrestamosPanel — panel interno de la pestaña "Solicitudes"
 // =====================================================
-// Lista de solicitudes + modal para crear una nueva solicitud.
+// Lista de préstamos + modal para crear una nueva solicitud.
 // Recibe opcionalmente `simulacionInicial` para precargar el formulario
 // (por ejemplo, al convertir una solicitud web del buzón).
 function PrestamosPanel({
@@ -296,32 +127,11 @@ function PrestamosPanel({
   const [busqueda, setBusqueda] = useState('')
   const [filtroEstado, setFiltroEstado] = useState<string>('all')
   const [modalAbierto, setModalAbierto] = useState(false)
-  // === Modal "¿Qué Cambió?" — análisis de comportamiento de pagos ===
-  const [modalQueCambio, setModalQueCambio] = useState(false)
-  const [prestamoQueCambioId, setPrestamoQueCambioId] = useState<string | null>(null)
-  const [prestamoQueCambioCodigo, setPrestamoQueCambioCodigo] = useState<string>('')
   const { toast } = useToast()
-
-  // === Tick para refresco dinámico del CONTEO DE VIGENCIA ===
-  // Cada 60 segundos se actualiza `nowTick` para forzar un re-render del
-  // componente y que el conteo de días transcurridos se recalcule con la
-  // fecha/hora actual del sistema. Esto cumple el requisito de que el
-  // conteo sea dinámico y no dependa de que el usuario recargue la página.
-  const [nowTick, setNowTick] = useState(() => new Date())
-  useEffect(() => {
-    const interval = setInterval(() => setNowTick(new Date()), 60_000)
-    return () => clearInterval(interval)
-  }, [])
 
   // Estado del formulario
   const [clienteId, setClienteId] = useState('')
-  const [vistaPrestamos, setVistaPrestamos] = useState<'tabla' | 'cards'>('cards')
-  const [modalidad, setModalidad] = useState<'FRANCES' | 'TASA_FIJA' | 'CUOTA_PERSONALIZADA' | 'INTERES_FIJO_SIN_CAPITAL'>('FRANCES')
-  // === Modalidad INTERES_FIJO_SIN_CAPITAL ===
-  // El cliente paga SOLO intereses fijos mensuales mientras mantiene la deuda
-  // de capital. El capital se paga aparte en abonos extraordinarios.
-  // Ej: deuda $6.000.000, paga $370.000 mensuales de interés fijo.
-  const [interesFijoMensual, setInteresFijoMensual] = useState('370000')
+  const [modalidad, setModalidad] = useState<'FRANCES' | 'TASA_FIJA' | 'CUOTA_PERSONALIZADA'>('FRANCES')
   const [montoPrincipal, setMontoPrincipal] = useState('')
   const [tasaInteresAnual, setTasaInteresAnual] = useState('24')
   const [tasaMoraAnual, setTasaMoraAnual] = useState('1')
@@ -349,8 +159,8 @@ function PrestamosPanel({
   const [tieneCodeudor, setTieneCodeudor] = useState(false)
   const [codeudorId, setCodeudorId] = useState('')
 
-  // === Fecha del solicitud (fecha asignada) ===
-  // Permite registrar una solicitud con la fecha real en que se realizó el solicitud,
+  // === Fecha del préstamo (fecha asignada) ===
+  // Permite registrar una solicitud con la fecha real en que se realizó el préstamo,
   // no la fecha actual del sistema. Todos los documentos generados (pagaré, carta,
   // tabla de amortización) usarán esta fecha como fecha base.
   // Por defecto es hoy (formato YYYY-MM-DD para el input type="date").
@@ -361,26 +171,6 @@ function PrestamosPanel({
     const dd = String(hoy.getDate()).padStart(2, '0')
     return `${yyyy}-${mm}-${dd}`
   })
-
-  // === Fecha de la PRIMERA CUOTA (opcional, modificable por el asesor) ===
-  // El cliente puede pedir en el simulador del portal una fecha específica
-  // para su primer pago (campo `primerPagoFecha` de la SolicitudWeb).
-  // Esa fecha se precarga acá cuando se convierte una solicitud del buzón,
-  // y el asesor puede confirmarla, cambiarla o dejarla vacía.
-  //
-  // - Si está vacía: las cuotas se programan desde `fechaPrestamo` (o desde
-  //   `fechaPrimerCorte` si hay periodo de corte activo) — comportamiento
-  //   por defecto del sistema.
-  // - Si está seteada: se usa como fecha de vencimiento de la cuota #1.
-  //   El sistema calcula `fechaInicio = fechaPrimerCuota - 1 periodo`
-  //   (MENSUAL=1 mes, QUINCENAL=15 días, SEMANAL=7 días, DIARIO=1 día) y lo
-  //   pasa como `fechaDesembolso` a la función de amortización, de modo que
-  //   la primera cuota cae EXACTAMENTE en `fechaPrimerCuota` y las demás
-  //   cuotas siguen la periodicidad normal a partir de ahí.
-  //
-  // Se ignora cuando hay `periodoCorte` activo, porque en ese caso las
-  // cuotas se programan desde `fechaPrimerCorte`.
-  const [fechaPrimerCuota, setFechaPrimerCuota] = useState<string>('')
 
   // === Periodo de corte + días causados antes del corte ===
   // Caso de uso: cliente solicita crédito ANTES de la fecha de corte.
@@ -399,12 +189,6 @@ function PrestamosPanel({
   const [valorDiasCausados, setValorDiasCausados] = useState<number>(0)
   const [editarDiasCausadosManual, setEditarDiasCausadosManual] = useState(false)
 
-  // === Fondo de garantía (opcional, tasa configurable) ===
-  // El gestor decide si aplica y a qué tasa (default 5%).
-  // NO se activa automáticamente — el usuario debe marcarlo explícitamente.
-  const [incluirFondoGarantia, setIncluirFondoGarantia] = useState(false)
-  const [tasaFondoGarantia, setTasaFondoGarantia] = useState<number>(5) // porcentaje (5 = 5%)
-
   // === Renovación de crédito ===
   const [esRenovacion, setEsRenovacion] = useState(false)
   const [prestamoARenovar, setPrestamoARenovar] = useState('')
@@ -412,121 +196,17 @@ function PrestamosPanel({
   const [infoPrestamoRenovacion, setInfoPrestamoRenovacion] = useState<any>(null)
 
   // === Flexibilidad Financiera (beneficio opcional) ===
-  // Se ofrece cuando el número de cuotas >= 4. DOS tarifas:
-  //   - BASICA:  $15.000 COP — permite usar el beneficio 1 sola vez durante la vigencia
-  //   - PREMIUM: $34.900 COP — permite usar el beneficio 2 veces durante la vigencia
+  // Se ofrece cuando el número de cuotas >= 4. Costo adicional fijo de $10.000 COP.
   // Permite al cliente:
   //   1) Trasladar UNA cuota al final del crédito
   //   2) Solicitar cambio de fecha de pago (genera documento "Otro Sí")
   //
   // - flexibilidadFinanciera: si el cliente adquirió el beneficio en esta solicitud
-  // - flexibilidadModalidad: "BASICA" | "PREMIUM"
-  // - flexibilidadCosto: monto COP (15000 o 34900)
-  // - El cobro se hace UNA sola vez al inicio, cargado en la primera cuota
+  // - flexibilidadCosto: monto COP (por defecto 10000)
   const [flexibilidadFinanciera, setFlexibilidadFinanciera] = useState(false)
-  const [flexibilidadModalidad, setFlexibilidadModalidad] = useState<'BASICA' | 'PREMIUM'>('BASICA')
-  const FLEXIBILIDAD_COSTO_BASICA = 15000
-  const FLEXIBILIDAD_COSTO_PREMIUM = 34900
-  const flexibilidadCosto = flexibilidadModalidad === 'PREMIUM' ? FLEXIBILIDAD_COSTO_PREMIUM : FLEXIBILIDAD_COSTO_BASICA
+  const [flexibilidadCosto] = useState(10000)
 
-  // === Renovación Anticipada (beneficio opcional del simulador del portal) ===
-  // Cobro único de $9.900 COP cuando el cliente activa este beneficio en el
-  // simulador del portal del cliente. Se persiste en el solicitud y se cobra
-  // automáticamente al activarse tras la aceptación de T&C, registrándose
-  // en la caja CAJA-RENOVACIONES.
-  const [renovacionAnticipada, setRenovacionAnticipada] = useState(false)
-  const RENOVACION_ANTICIPADA_COSTO = 9900
-
-  // === Cobro de Pagaré + Carta de Instrucciones ===
-  // Cargo editable (por defecto $19.900 COP) que se cobra UNA sola vez al cliente
-  // cuando el solicitud incluye generar pagare + carta de instrucciones.
-  // Se explica en el estado de cuenta como concepto "Pagaré + Carta de Instrucciones".
-  const [cobroPagareCarta, setCobroPagareCarta] = useState(true)
-  const [valorPagareCarta, setValorPagareCarta] = useState<number>(19900)
-
-  // === Tarifa de Uso de Plataforma (Tarea U) ===
-  // Cargo editable (por defecto $4.900 COP) que se cobra UNA sola vez al cliente
-  // por el uso de la plataforma tecnológica asociada al crédito.
-  // Se refleja en el estado de cuenta como concepto "Tarifa de Uso de Plataforma".
-  // El ingreso se registra automáticamente en la caja CAJA-USO-PLATAFORMA.
-  const [cobroTarifaPlataforma, setCobroTarifaPlataforma] = useState(true)
-  const [valorTarifaPlataforma, setValorTarifaPlataforma] = useState<number>(4900)
-
-  // === ID de la solicitud web origen (para auto-marcarla como CONVERTIDA) ===
-  // Cuando el admin convierte una solicitud web en solicitud, este ID se pasa
-  // al backend para que marque automáticamente la solicitud como CONVERTIDA
-  // y active el flujo de firma del lado del cliente.
-  const [solicitudWebOrigenId, setSolicitudWebOrigenId] = useState<string | null>(null)
-
-  // === Función: aplicar condiciones de un solicitud al formulario ===
-  // Extraída para reutilizar tanto al seleccionar un crédito a renovar como
-  // al pulsar "Restablecer condiciones originales".
-  const aplicarCondicionesAlFormulario = (p: any) => {
-    if (!p) return
-    // Determinar la modalidad del crédito original
-    const modOriginal = (p.modalidadAmortizacion || 'FRANCES').toUpperCase()
-    const esTasaFijaOrig = modOriginal === 'TASA_FIJA'
-    const esCuotaPersOrig = modOriginal === 'CUOTA_PERSONALIZADA'
-
-    // Capital
-    setMontoPrincipal(String(p.montoPrincipal ?? ''))
-
-    // Campos según modalidad
-    if (esCuotaPersOrig) {
-      setModalidad('CUOTA_PERSONALIZADA')
-      setTasaMensualPersonalizada(String(p.tasaInteresMensual ?? ''))
-      setMontoCuotaPersonalizada(String(p.montoCuota ?? ''))
-      setNumeroCuotasPersonalizada(String(p.numeroCuotas ?? ''))
-    } else if (esTasaFijaOrig) {
-      setModalidad('TASA_FIJA')
-      setTasaMensualFija(String(p.tasaInteresMensual ?? ''))
-      setNumeroCuotasFija(String(p.numeroCuotas ?? ''))
-    } else {
-      setModalidad('FRANCES')
-      setTasaInteresAnual(String(p.tasaInteresAnual ?? ''))
-      setPlazoMeses(String(p.plazoMeses ?? ''))
-    }
-
-    // Tasa moratoria diaria (común a todas las modalidades)
-    setTasaMoraAnual(String(p.tasaMoraDiaria ?? ''))
-
-    // Frecuencia
-    if (p.frecuencia) {
-      setFrecuencia(p.frecuencia as Frecuencia)
-    }
-
-    // Categoría
-    if (p.categoriaId) {
-      setCategoriaId(p.categoriaId)
-    }
-
-    // Documentos
-    setRequiereDocumentos(p.requiereDocumentos ?? true)
-    setGenerarPagare(p.generarPagare ?? true)
-    setGenerarCarta(p.generarCarta ?? true)
-
-    // Cobro Pagaré + Carta
-    setCobroPagareCarta(p.cobroPagareCarta ?? false)
-    if (p.valorPagareCarta != null) {
-      setValorPagareCarta(Number(p.valorPagareCarta))
-    }
-
-    // Fondo de Garantía
-    setIncluirFondoGarantia(p.fondoGarantiaCargado ?? false)
-    if (p.fondoGarantiaTasa != null && Number(p.fondoGarantiaTasa) > 0) {
-      setTasaFondoGarantia(Number(p.fondoGarantiaTasa))
-    }
-
-    // Periodo de corte
-    if (p.periodoCorte) {
-      setPeriodoCorte(p.periodoCorte)
-    }
-  }
-
-  // === Función: cargar saldo pendiente del solicitud a renovar + auto-rellenar formulario ===
-  // Cuando el admin selecciona un crédito a renovar, el sistema "arrastra"
-  // automáticamente todas las condiciones (tasa, monto, cuotas, frecuencia,
-  // modalidad, etc.) para que el admin pueda modificarlas.
+  // === Función: cargar saldo pendiente del préstamo a renovar ===
   const seleccionarPrestamoARenovar = async (prestamoId: string) => {
     setPrestamoARenovar(prestamoId)
     if (!prestamoId) {
@@ -542,9 +222,7 @@ function PrestamosPanel({
         // Calcular saldo pendiente total (capital + interés - pagado)
         const saldoPendiente = prestamo.saldoTotal || 0
         setSaldoPendienteRenovacion(saldoPendiente)
-
-        // Guardar TODAS las condiciones originales para referencia y comparación
-        const condicionesOriginales = {
+        setInfoPrestamoRenovacion({
           codigo: prestamo.codigo,
           montoPrincipal: prestamo.montoPrincipal,
           montoCuota: prestamo.montoCuota,
@@ -553,118 +231,11 @@ function PrestamosPanel({
           saldoTotal: prestamo.saldoTotal,
           estado: prestamo.estado,
           fechaDesembolso: prestamo.fechaDesembolso,
-          modalidadAmortizacion: prestamo.modalidadAmortizacion || 'FRANCES',
-          tasaInteresAnual: prestamo.tasaInteresAnual,
-          tasaInteresMensual: prestamo.tasaInteresMensual,
-          tasaMoraDiaria: prestamo.tasaMoraDiaria,
-          plazoMeses: prestamo.plazoMeses,
-          frecuencia: prestamo.frecuencia,
-          categoriaId: prestamo.categoriaId,
-          requiereDocumentos: prestamo.requiereDocumentos,
-          generarPagare: prestamo.generarPagare,
-          generarCarta: prestamo.generarCarta,
-          cobroPagareCarta: prestamo.cobroPagareCarta,
-          valorPagareCarta: prestamo.valorPagareCarta,
-          fondoGarantiaCargado: prestamo.fondoGarantiaCargado,
-          fondoGarantiaTasa: prestamo.fondoGarantiaTasa,
-          periodoCorte: prestamo.periodoCorte,
-          totalInteres: prestamo.totalInteres,
-          totalPagar: prestamo.totalPagar,
-        }
-        setInfoPrestamoRenovacion(condicionesOriginales)
-
-        // === AUTO-RELLENAR el formulario con las condiciones del crédito a renovar ===
-        // El admin puede modificar cualquier campo después.
-        aplicarCondicionesAlFormulario(prestamo)
-
-        toast({
-          title: '✅ Condiciones cargadas',
-          description: `Se cargaron las condiciones del crédito ${prestamo.codigo}. Modifica los campos que necesites cambiar.`,
         })
       }
     } catch (e: any) {
-      console.error('Error cargando solicitud a renovar:', e)
-      toast({
-        title: 'Error',
-        description: 'No se pudieron cargar las condiciones del crédito',
-        variant: 'destructive',
-      })
+      console.error('Error cargando préstamo a renovar:', e)
     }
-  }
-
-  // === Función: restablecer las condiciones originales en el formulario ===
-  // Permite al admin volver a las condiciones del crédito original si modificó
-  // algún campo por error.
-  const restablecerCondicionesOriginales = () => {
-    if (!infoPrestamoRenovacion) return
-    aplicarCondicionesAlFormulario(infoPrestamoRenovacion)
-    toast({
-      title: '🔄 Condiciones restablecidas',
-      description: `Se restauraron las condiciones originales del crédito ${infoPrestamoRenovacion.codigo}.`,
-    })
-  }
-
-  // === Función: detectar qué campos cambiaron vs el crédito original ===
-  // Devuelve un array de { campo, original, actual } para mostrar un resumen
-  // visual de las modificaciones.
-  const detectarCambios = () => {
-    if (!infoPrestamoRenovacion) return []
-    const p = infoPrestamoRenovacion
-    const cambios: { campo: string; original: string; actual: string }[] = []
-
-    const montoActual = parseFloat(montoPrincipal) || 0
-    if (montoActual !== (p.montoPrincipal || 0)) {
-      cambios.push({ campo: 'Capital', original: formatearMoneda(p.montoPrincipal), actual: formatearMoneda(montoActual) })
-    }
-
-    const tasaMorActual = parseFloat(tasaMoraAnual) || 0
-    if (tasaMorActual !== (p.tasaMoraDiaria || 0)) {
-      cambios.push({ campo: 'Tasa moratoria diaria', original: `${p.tasaMoraDiaria}%`, actual: `${tasaMorActual}%` })
-    }
-
-    if (frecuencia !== p.frecuencia) {
-      cambios.push({ campo: 'Frecuencia', original: p.frecuencia || '—', actual: frecuencia })
-    }
-
-    const modOriginal = (p.modalidadAmortizacion || 'FRANCES').toUpperCase()
-    if (modalidad !== modOriginal) {
-      cambios.push({ campo: 'Modalidad', original: modOriginal, actual: modalidad })
-    } else if (modalidad === 'FRANCES') {
-      const tasaActual = parseFloat(tasaInteresAnual) || 0
-      if (tasaActual !== (p.tasaInteresAnual || 0)) {
-        cambios.push({ campo: 'Tasa anual', original: `${p.tasaInteresAnual}%`, actual: `${tasaActual}%` })
-      }
-      const plazoActual = parseInt(plazoMeses) || 0
-      if (plazoActual !== (p.plazoMeses || 0)) {
-        cambios.push({ campo: 'Plazo (meses)', original: String(p.plazoMeses), actual: String(plazoActual) })
-      }
-    } else if (modalidad === 'TASA_FIJA') {
-      const tasaMensActual = parseFloat(tasaMensualFija) || 0
-      const tasaMensOrig = p.tasaInteresMensual || 0
-      if (tasaMensActual !== tasaMensOrig) {
-        cambios.push({ campo: 'Tasa mensual', original: `${tasaMensOrig}%`, actual: `${tasaMensActual}%` })
-      }
-      const cuotasActual = parseInt(numeroCuotasFija) || 0
-      if (cuotasActual !== (p.numeroCuotas || 0)) {
-        cambios.push({ campo: 'N° cuotas', original: String(p.numeroCuotas), actual: String(cuotasActual) })
-      }
-    } else if (modalidad === 'CUOTA_PERSONALIZADA') {
-      const tasaMensActual = parseFloat(tasaMensualPersonalizada) || 0
-      const tasaMensOrig = p.tasaInteresMensual || 0
-      if (tasaMensActual !== tasaMensOrig) {
-        cambios.push({ campo: 'Tasa mensual', original: `${tasaMensOrig}%`, actual: `${tasaMensActual}%` })
-      }
-      const cuotaActual = parseFloat(montoCuotaPersonalizada) || 0
-      if (cuotaActual !== (p.montoCuota || 0)) {
-        cambios.push({ campo: 'Cuota', original: formatearMoneda(p.montoCuota), actual: formatearMoneda(cuotaActual) })
-      }
-      const cuotasActual = parseInt(numeroCuotasPersonalizada) || 0
-      if (cuotasActual !== (p.numeroCuotas || 0)) {
-        cambios.push({ campo: 'N° cuotas', original: String(p.numeroCuotas), actual: String(cuotasActual) })
-      }
-    }
-
-    return cambios
   }
 
   // === Función: al activar el switch de codeudor, precargar automáticamente ===
@@ -783,30 +354,14 @@ function PrestamosPanel({
   // Cálculo según modalidad
   const calculo = useMemo(() => {
     // === Resolución de fecha base para la tabla de amortización ===
-    // Prioridad (de mayor a menor):
-    //   1. periodoCorte + fechaPrimerCorte → cuotas desde la fecha de corte
-    //   2. fechaPrimerCuota (editable por asesor / pedida por cliente) →
-    //      cuota #1 cae en fechaPrimerCuota, las demás siguen periodicidad.
-    //      Para lograrlo, calculamos `fechaInicio = fechaPrimerCuota - 1 periodo`
-    //      y lo pasamos como `fechaDesembolso` a la función de amortización.
-    //   3. fechaPrestamo → comportamiento por defecto (cuotas desde hoy/fecha solicitud)
+    // Si hay periodoCorte activo y fechaPrimerCorte calculada, las cuotas
+    // se programan desde fechaPrimerCorte (no desde fechaPrestamo).
+    // Esto implementa la regla: "las fechas de pago se iniciaran desde
+    // esa fecha corte" (ej: préstamo 2/08 con corte 5-20 → primera cuota
+    // se programa desde el 5/08).
     let fechaBaseParaAmortizacion: Date | undefined = undefined
     if (periodoCorte && fechaPrimerCorte) {
       fechaBaseParaAmortizacion = fechaPrimerCorte
-    } else if (fechaPrimerCuota) {
-      // Parsear YYYY-MM-DD como fecha local (sin zona horaria)
-      const [yyyy, mm, dd] = fechaPrimerCuota.split('-').map(Number)
-      if (yyyy && mm && dd) {
-        const fechaPrimera = new Date(yyyy, mm - 1, dd, 12, 0, 0)
-        // Calcular fechaInicio = fechaPrimera - 1 periodo según frecuencia
-        // (asumiendo que la primera cuota vence 1 periodo después de fechaInicio)
-        const fechaInicio = new Date(fechaPrimera)
-        if (frecuencia === 'MENSUAL') fechaInicio.setMonth(fechaInicio.getMonth() - 1)
-        else if (frecuencia === 'QUINCENAL') fechaInicio.setDate(fechaInicio.getDate() - 15)
-        else if (frecuencia === 'SEMANAL') fechaInicio.setDate(fechaInicio.getDate() - 7)
-        else if (frecuencia === 'DIARIO') fechaInicio.setDate(fechaInicio.getDate() - 1)
-        fechaBaseParaAmortizacion = fechaInicio
-      }
     } else if (fechaPrestamo) {
       const [yyyy, mm, dd] = fechaPrestamo.split('-').map(Number)
       if (yyyy && mm && dd) {
@@ -901,48 +456,13 @@ function PrestamosPanel({
         tasaAplicada: tasaMen / 100 / cuotasPorMes,
         tablaAmortizacion: tabla,
         fechaVencimiento: tabla[tabla.length - 1]?.fechaVencimiento,
-        fondoGarantia: incluirFondoGarantia ? Math.round(monto * (tasaFondoGarantia / 100) * 100) / 100 : 0,
+        fondoGarantia: Math.round(monto * 0.05 * 100) / 100,
         tipoCalculo: 'CUOTA_PERSONALIZADA',
         tasaMensual: tasaMen,
         tasaAnual,
         valorDiasCausados: valorDiasExtra > 0 ? valorDiasExtra : undefined,
         diasCausadosAntes: valorDiasExtra > 0 ? diasCausadosAntes : undefined,
         fechaPrimerCorte: valorDiasExtra > 0 ? (fechaPrimerCorte || undefined) : undefined,
-      }
-    }
-
-    // === Modalidad INTERES_FIJO_SIN_CAPITAL ===
-    // El cliente paga SOLO intereses fijos mensuales mientras mantiene la deuda
-    // de capital. No hay tabla de amortización tradicional — el "saldo real"
-    // es montoPrincipal - capitalPagadoExtra (que empieza en 0).
-    if (modalidad === 'INTERES_FIJO_SIN_CAPITAL') {
-      const monto = parseFloat(montoPrincipal)
-      const interesFijo = parseFloat(interesFijoMensual)
-      if (!monto || !interesFijo) return null
-
-      // Calcular tasa anual equivalente (informativa)
-      const tasaAnualEquiv = monto > 0 ? (interesFijo / monto) * 12 * 100 : 0
-      const tasaMensualEquiv = monto > 0 ? (interesFijo / monto) * 100 : 0
-
-      // Próxima fecha de cuota de interés (un mes después de la fecha base)
-      const fechaBase = fechaBaseParaAmortizacion || new Date()
-      const proximaCuota = new Date(fechaBase.getTime())
-      proximaCuota.setMonth(proximaCuota.getMonth() + 1)
-
-      return {
-        numeroCuotas: 0,  // Sin cuotas programadas
-        montoCuota: interesFijo,  // La cuota mensual fija de interés
-        totalInteres: 0,  // No se conoce — se paga mes a mes
-        totalPagar: monto,  // Solo capital; intereses se cobran aparte
-        tasaAplicada: tasaAnualEquiv / 100 / 12,
-        tablaAmortizacion: [],  // Sin tabla (no aplica amortización tradicional)
-        fechaVencimiento: null,  // Sin vencimiento definido
-        fondoGarantia: 0,
-        esInteresFijoSinCapital: true,
-        interesFijoMensual: interesFijo,
-        proximaCuotaInteresFecha: proximaCuota,
-        tasaAnualCalculada: Math.round(tasaAnualEquiv * 100) / 100,
-        tasaMensualCalculada: Math.round(tasaMensualEquiv * 100) / 100,
       }
     }
 
@@ -977,9 +497,6 @@ function PrestamosPanel({
     tasaMensualPersonalizada, montoCuotaPersonalizada, numeroCuotasPersonalizada,
     tasaMensualFija, numeroCuotasFija, fechaPrestamo,
     periodoCorte, fechaPrimerCorte, valorDiasCausados, diasCausadosAntes,
-    incluirFondoGarantia, tasaFondoGarantia,
-    fechaPrimerCuota,
-    interesFijoMensual,
   ])
 
   const prestamosFiltrados = prestamos.filter((p) => {
@@ -1063,7 +580,7 @@ function PrestamosPanel({
   }, [requiereDocumentos, clienteId, clientes])
 
   // Aplicar parámetros de simulación inyectados (por ejemplo, al convertir
-  // una solicitud web del buzón en solicitud). Se ejecuta cuando cambia
+  // una solicitud web del buzón en préstamo). Se ejecuta cuando cambia
   // `simulacionInicial` y precarga el formulario abriendo el modal.
   useEffect(() => {
     if (!simulacionInicial) return
@@ -1076,36 +593,6 @@ function PrestamosPanel({
     if (simulacionInicial.tasaInteresAnual) setTasaInteresAnual(simulacionInicial.tasaInteresAnual)
     if (simulacionInicial.plazoMeses) setPlazoMeses(simulacionInicial.plazoMeses)
     if (simulacionInicial.frecuencia) setFrecuencia(simulacionInicial.frecuencia)
-    // === Preservar ID de la solicitud web origen ===
-    setSolicitudWebOrigenId(simulacionInicial.solicitudWebId || null)
-    // === Precargar fecha de primera cuota (la que pidió el cliente en el simulador) ===
-    // El asesor puede confirmarla, cambiarla o borrarla antes de crear el solicitud.
-    if (simulacionInicial.fechaPrimerCuota) {
-      try {
-        const d = new Date(simulacionInicial.fechaPrimerCuota)
-        if (!isNaN(d.getTime())) {
-          const yyyy = d.getFullYear()
-          const mm = String(d.getMonth() + 1).padStart(2, '0')
-          const dd = String(d.getDate()).padStart(2, '0')
-          setFechaPrimerCuota(`${yyyy}-${mm}-${dd}`)
-        }
-      } catch {
-        // Si la fecha no es parseable, dejamos el campo vacío para que el
-        // asesor lo complete manualmente.
-      }
-    } else {
-      setFechaPrimerCuota('')
-    }
-    // === Preservar flexibilidad financiera elegida por el cliente ===
-    if (simulacionInicial.flexibilidadFinanciera) {
-      setFlexibilidadFinanciera(true)
-      const modalidad = (simulacionInicial.flexibilidadModalidad || 'BASICA').toUpperCase() === 'PREMIUM' ? 'PREMIUM' : 'BASICA'
-      setFlexibilidadModalidad(modalidad)
-    }
-    // === Preservar Renovación Anticipada elegida por el cliente ===
-    if (simulacionInicial.renovacionAnticipada) {
-      setRenovacionAnticipada(true)
-    }
     setModalAbierto(true)
   }, [simulacionInicial])
 
@@ -1138,64 +625,6 @@ function PrestamosPanel({
       setFlexibilidadFinanciera(false)
     }
   }, [cuotasActuales, flexibilidadFinanciera])
-
-  // === Cargos iniciales que se cargan a la PRIMERA cuota ===
-  // (Pagaré + Carta, Tarifa Plataforma, Flexibilidad Financiera, Fondo de Garantía,
-  //  Días causados antes del corte) — se muestran en la fila de la cuota #1 del preview.
-  const cargosInicialesCuota1 = useMemo(() => {
-    const items: Array<{ etiqueta: string; monto: number; color: string }> = []
-    const monto = parseFloat(montoPrincipal) || 0
-
-    // 1. Pagaré + Carta
-    if (cobroPagareCarta && requiereDocumentos && (generarPagare || generarCarta)) {
-      items.push({
-        etiqueta: 'Pagaré + Carta',
-        monto: Number(valorPagareCarta) || 19900,
-        color: 'text-amber-700 dark:text-amber-300',
-      })
-    }
-    // 2. Tarifa Plataforma
-    if (cobroTarifaPlataforma) {
-      items.push({
-        etiqueta: 'Tarifa Plataforma',
-        monto: Number(valorTarifaPlataforma) || 4900,
-        color: 'text-blue-700 dark:text-blue-300',
-      })
-    }
-    // 3. Flexibilidad Financiera
-    if (flexibilidadFinanciera && cuotasActuales >= 4) {
-      items.push({
-        etiqueta: `Flexibilidad ${flexibilidadModalidad}`,
-        monto: flexibilidadCosto,
-        color: 'text-emerald-700 dark:text-emerald-300',
-      })
-    }
-    // 4. Fondo de Garantía
-    if (incluirFondoGarantia && monto > 0) {
-      items.push({
-        etiqueta: `Fondo Garantía (${tasaFondoGarantia}%)`,
-        monto: Math.round(monto * (tasaFondoGarantia / 100) * 100) / 100,
-        color: 'text-indigo-700 dark:text-indigo-300',
-      })
-    }
-    // 5. Días causados (periodo de corte)
-    if (periodoCorte && valorDiasCausados > 0) {
-      items.push({
-        etiqueta: `${diasCausadosAntes} día${diasCausadosAntes === 1 ? '' : 's'} causados`,
-        monto: valorDiasCausados,
-        color: 'text-rose-700 dark:text-rose-300',
-      })
-    }
-    const total = items.reduce((s, c) => s + c.monto, 0)
-    return { items, total: Math.round(total * 100) / 100 }
-  }, [
-    cobroPagareCarta, requiereDocumentos, generarPagare, generarCarta, valorPagareCarta,
-    cobroTarifaPlataforma, valorTarifaPlataforma,
-    flexibilidadFinanciera, flexibilidadModalidad, flexibilidadCosto, cuotasActuales,
-    incluirFondoGarantia, tasaFondoGarantia, montoPrincipal,
-    periodoCorte, valorDiasCausados, diasCausadosAntes,
-  ])
-
   useEffect(() => {
     if (!fechaPrestamo || !periodoCorte) {
       setFechaPrimerCorte(null)
@@ -1330,8 +759,8 @@ function PrestamosPanel({
         docsDatosAdicionales,
         aprobarYEnviarTyC,
         notas,
-        // === Fecha del solicitud (fecha asignada) ===
-        // Se envía al backend para que el código del solicitud, fechaSolicitud,
+        // === Fecha del préstamo (fecha asignada) ===
+        // Se envía al backend para que el código del préstamo, fechaSolicitud,
         // fechaDesembolso y todos los documentos usen esta fecha como base.
         fechaPrestamo,
       }
@@ -1348,65 +777,14 @@ function PrestamosPanel({
         body.valorDiasCausados = valorDiasCausados
       }
 
-      // === Fecha de la PRIMERA CUOTA (opcional, modificable por el asesor) ===
-      // Si el asesor define una fecha de primera cuota (o la confirmó desde
-      // una solicitud web del buzón), se envía al backend para que las cuotas
-      // se programen de manera que la cuota #1 venza EXACTAMENTE en esta fecha.
-      // El backend calcula `fechaInicio = fechaPrimerCuota - 1 periodo` y lo
-      // usa como fecha base para la tabla de amortización.
-      // Se ignora cuando hay `periodoCorte` activo (las cuotas se programan
-      // desde `fechaPrimerCorte` en ese caso).
-      if (fechaPrimerCuota && !(periodoCorte && fechaPrimerCorte)) {
-        body.fechaPrimerCuota = fechaPrimerCuota
-      }
-
       // === Flexibilidad Financiera (beneficio opcional, cuotas >= 4) ===
-      // DOS tarifas:
-      //   - BASICA  ($15.000): 1 uso durante la vigencia
-      //   - PREMIUM ($34.900): 2 usos durante la vigencia
-      // El cobro se hace UNA sola vez al inicio del crédito, cargado en la primera cuota.
+      // Solo se envía si el usuario activó el beneficio. El backend lo guarda
+      // en el préstamo y queda disponible para que el cliente lo active (pagando)
+      // y solicite Otros Síes después.
       if (flexibilidadFinanciera) {
         body.flexibilidadFinanciera = true
-        body.flexibilidadModalidad = flexibilidadModalidad
         body.flexibilidadCosto = flexibilidadCosto
       }
-
-      // === Renovación Anticipada (beneficio opcional del simulador del portal) ===
-      // Cobro único de $9.900 COP. Se cobra UNA sola vez al inicio del crédito
-      // (al activarse tras T&C) y se registra automáticamente en CAJA-RENOVACIONES.
-      if (renovacionAnticipada) {
-        body.renovacionAnticipada = true
-        body.renovacionAnticipadaCosto = RENOVACION_ANTICIPADA_COSTO
-      }
-
-      // === Fondo de Garantía (opcional, tasa configurable) ===
-      // Solo se envía si el gestor activó el fondo. La tasa se envía como decimal (0.05 = 5%).
-      body.incluirFondoGarantia = incluirFondoGarantia
-      body.tasaFondoGarantia = tasaFondoGarantia / 100 // Convertir % a decimal
-
-      // === Cobro de Pagaré + Carta de Instrucciones ===
-      // Cargo editable (por defecto $19.900 COP) cobrado UNA sola vez al inicio.
-      // Se explica en el estado de cuenta como concepto "Pagaré + Carta de Instrucciones".
-      if (cobroPagareCarta && requiereDocumentos && (generarPagare || generarCarta)) {
-        body.cobroPagareCarta = true
-        body.valorPagareCarta = Number(valorPagareCarta) || 19900
-      }
-
-      // === Tarifa de Uso de Plataforma (Tarea U) ===
-      // Cargo editable (por defecto $4.900 COP) cobrado UNA sola vez al inicio.
-      // Se refleja en el estado de cuenta como concepto "Tarifa de Uso de Plataforma".
-      if (cobroTarifaPlataforma) {
-        body.cobroTarifaPlataforma = true
-        body.valorTarifaPlataforma = Number(valorTarifaPlataforma) || 4900
-      }
-
-      // === ID de la solicitud web origen (para auto-marcarla como CONVERTIDA) ===
-      // Cuando se crea el solicitud, el backend marca la solicitud web como CONVERTIDA
-      // y activa el flujo de firma del lado del cliente.
-      if (solicitudWebOrigenId) {
-        body.solicitudWebOrigenId = solicitudWebOrigenId
-      }
-
 
       // === Renovación ===
       if (esRenovacion && prestamoARenovar) {
@@ -1444,11 +822,6 @@ function PrestamosPanel({
         body.numeroCuotasFija = numeroCuotasFija
         body.frecuencia = frecuencia
         body.tasaMoraAnual = tasaMoraAnual
-      } else if (modalidad === 'INTERES_FIJO_SIN_CAPITAL') {
-        body.modalidad = 'INTERES_FIJO_SIN_CAPITAL'
-        body.interesFijoMensual = interesFijoMensual
-        body.frecuencia = 'MENSUAL'  // Forzada: solo soporta mensual
-        body.tasaMoraAnual = tasaMoraAnual
       } else {
         body.tasaInteresAnual = tasaInteresAnual
         body.tasaMoraAnual = tasaMoraAnual
@@ -1482,11 +855,11 @@ function PrestamosPanel({
               const clienteNombre = jsonFirma.data.cliente.nombre
               const linkFirma = jsonFirma.data.linkFirma
               const telefono = jsonFirma.data.cliente.telefono
-              const mensajeFirma = `🔐 *FIRMA ELECTRÓNICA - SOLICITUD ${json.data.codigo}*
+              const mensajeFirma = `🔐 *FIRMA ELECTRÓNICA - PRÉSTAMO ${json.data.codigo}*
 
 Hola *${clienteNombre}*,
 
-Como *DEUDOR* del solicitud, necesitas firmar electrónicamente:
+Como *DEUDOR* del préstamo, necesitas firmar electrónicamente:
 
 📋 *Pasos a seguir:*
 1. Ingresa al siguiente enlace:
@@ -1508,11 +881,11 @@ ${linkFirma}
                 const codeudorNombre = jsonFirma.data.codeudor.nombre
                 const codeudorTelefono = jsonFirma.data.codeudor.telefono
                 const linkFirmaCodeudor = jsonFirma.data.linkFirmaCodeudor
-                const mensajeFirmaCodeudor = `🔐 *FIRMA ELECTRÓNICA - SOLICITUD ${json.data.codigo}*
+                const mensajeFirmaCodeudor = `🔐 *FIRMA ELECTRÓNICA - PRÉSTAMO ${json.data.codigo}*
 
 Hola *${codeudorNombre}*,
 
-Como *CODEUDOR* del solicitud, necesitas firmar electrónicamente:
+Como *CODEUDOR* del préstamo, necesitas firmar electrónicamente:
 
 📋 *Pasos a seguir:*
 1. Ingresa al siguiente enlace:
@@ -1533,7 +906,7 @@ ${linkFirmaCodeudor}
                 }, 1500)
 
                 toast({
-                  title: '✅ Solicitud creado + Firmas enviadas a DEUDOR y CODEUDOR',
+                  title: '✅ Préstamo creado + Firmas enviadas a DEUDOR y CODEUDOR',
                   description: `Código ${json.data.codigo}. Se abrieron 2 ventanas de WhatsApp: una para ${clienteNombre} (deudor) y otra para ${codeudorNombre} (codeudor). Ambos deben firmar con OTP por ${canalFirma === 'EMAIL' ? 'correo' : canalFirma === 'WHATSAPP' ? 'WhatsApp' : 'WhatsApp o correo'}.`,
                   duration: 12000,
                 })
@@ -1549,7 +922,7 @@ ${linkFirmaCodeudor}
               } else {
                 // Sin codeudor: solo deudor
                 toast({
-                  title: '✅ Solicitud creado + Solicitud de firma electrónica enviada',
+                  title: '✅ Préstamo creado + Solicitud de firma electrónica enviada',
                   description: `Código ${json.data.codigo}. Se abrió WhatsApp con el link de firma. El cliente debe: subir foto del documento, selfie con cédula, dibujar firma y validar código ${canalFirma === 'EMAIL' ? 'por correo' : canalFirma === 'WHATSAPP' ? 'por WhatsApp' : 'por WhatsApp o correo'}.`,
                   duration: 10000,
                 })
@@ -1565,7 +938,7 @@ ${linkFirmaCodeudor}
               }
             } else {
               toast({
-                title: '⚠️ Solicitud creado pero no se pudo iniciar firma',
+                title: '⚠️ Préstamo creado pero no se pudo iniciar firma',
                 description: jsonFirma.error || 'Error desconocido',
                 variant: 'destructive',
                 duration: 8000,
@@ -1582,20 +955,20 @@ ${linkFirmaCodeudor}
           // Abrir WhatsApp automáticamente con el mensaje de T&C
           window.open(json.linkTycWaMe, '_blank', 'noopener,noreferrer')
           toast({
-            title: '✅ Solicitud creado - Abre WhatsApp para enviar T&C',
+            title: '✅ Préstamo creado - Abre WhatsApp para enviar T&C',
             description: `Código ${json.data.codigo}. Se abrió WhatsApp con el mensaje de T&C. Haz clic en enviar desde WhatsApp para que el cliente reciba el link de aceptación.`,
             duration: 8000,
           })
         } else if (json.linkSolicitudWaMe) {
           window.open(json.linkSolicitudWaMe, '_blank', 'noopener,noreferrer')
           toast({
-            title: 'Solicitud creado - Abre WhatsApp',
+            title: 'Préstamo creado - Abre WhatsApp',
             description: `Código ${json.data.codigo}. Se abrió WhatsApp con el mensaje de solicitud.`,
             duration: 6000,
           })
         } else {
           toast({
-            title: 'Solicitud creado',
+            title: 'Préstamo creado',
             description: `Código ${json.data.codigo}.`,
           })
         }
@@ -1604,7 +977,7 @@ ${linkFirmaCodeudor}
         cargar()
         onChanged()
         // === ORDEN OBLIGATORIA 3: Abrir vista previa siempre que se termine un proceso ===
-        // Después de crear el solicitud, abrir automáticamente el modal de detalle
+        // Después de crear el préstamo, abrir automáticamente el modal de detalle
         // para que el usuario vea el resultado (código, cuotas, documentos generados, etc.)
         if (json.data?.id) {
           setTimeout(() => {
@@ -1612,23 +985,7 @@ ${linkFirmaCodeudor}
           }, 400)
         }
       } else {
-        // === Manejo específico del bloqueo por mora ===
-        // Si el cliente tiene créditos en mora, la API devuelve codigo=CLIENTE_EN_MORA_BLOQUEADO
-        // y el detalle de los solicitudes en mora. Mostramos un toast detallado y permitimos
-        // al admin decidir si forzar la creación con confirmación explícita.
-        if (json.codigo === 'CLIENTE_EN_MORA_BLOQUEADO' && json.prestamosEnMora?.length > 0) {
-          const detalleMora = json.prestamosEnMora.map((p: any) =>
-            `• ${p.codigo} (${p.estado}, ${p.diasMora} días mora, saldo ${formatearMoneda(p.saldoTotal)})`
-          ).join('\n')
-          toast({
-            title: '🚫 Cliente bloqueado por mora',
-            description: `El cliente tiene ${json.prestamosEnMora.length} crédito(s) en mora.\n${detalleMora}\n\nResuelva la mora antes de crear un nuevo solicitud.`,
-            variant: 'destructive',
-            duration: 12000,
-          })
-        } else {
-          toast({ title: 'Error', description: json.error, variant: 'destructive' })
-        }
+        toast({ title: 'Error', description: json.error, variant: 'destructive' })
       }
     } catch (e: any) {
       toast({ title: 'Error', description: e.message, variant: 'destructive' })
@@ -1656,7 +1013,7 @@ ${linkFirmaCodeudor}
     setDireccion('')
     setAprobarYEnviarTyC(true)
     setNotas('')
-    // Reset fecha del solicitud a hoy
+    // Reset fecha del préstamo a hoy
     const hoy = new Date()
     const yyyy = hoy.getFullYear()
     const mm = String(hoy.getMonth() + 1).padStart(2, '0')
@@ -1678,8 +1035,6 @@ ${linkFirmaCodeudor}
     setCodeudorId('')
     // Reset flexibilidad financiera
     setFlexibilidadFinanciera(false)
-    // Reset renovación anticipada
-    setRenovacionAnticipada(false)
   }
 
   const cambiarEstado = async (id: string, accion: string) => {
@@ -1702,7 +1057,7 @@ ${linkFirmaCodeudor}
     }
   }
 
-  // === ELIMINAR SOLICITUD (borra todo el registro) ===
+  // === ELIMINAR PRÉSTAMO (borra todo el registro) ===
   const [prestamoAEliminar, setPrestamoAEliminar] = useState<Prestamo | null>(null)
   const [motivoEliminacion, setMotivoEliminacion] = useState('')
   const [eliminandoPrestamo, setEliminandoPrestamo] = useState(false)
@@ -1717,7 +1072,7 @@ ${linkFirmaCodeudor}
     if (motivoEliminacion.trim().length < 5) {
       toast({
         title: 'Motivo requerido',
-        description: 'Explica por qué eliminas el solicitud (mínimo 5 caracteres)',
+        description: 'Explica por qué eliminas el préstamo (mínimo 5 caracteres)',
         variant: 'destructive',
       })
       return
@@ -1731,7 +1086,7 @@ ${linkFirmaCodeudor}
       const json = await res.json()
       if (json.success) {
         toast({
-          title: '🗑️ Solicitud eliminado',
+          title: '🗑️ Préstamo eliminado',
           description: json.mensaje,
           duration: 8000,
         })
@@ -1752,7 +1107,7 @@ ${linkFirmaCodeudor}
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Solicitudes"
+        title="Préstamos"
         subtitle="Solicitudes y créditos vigentes"
         icon={<FileText className="w-5 h-5" />}
         actions={
@@ -1791,7 +1146,7 @@ ${linkFirmaCodeudor}
       {clientes.length === 0 && (
         <Card className="border-amber-200 bg-amber-50">
           <CardContent className="p-4 text-sm text-amber-800">
-            ⚠️ Para crear un solicitud primero debes registrar al menos un cliente en la sección Clientes.
+            ⚠️ Para crear un préstamo primero debes registrar al menos un cliente en la sección Clientes.
           </CardContent>
         </Card>
       )}
@@ -1823,144 +1178,6 @@ ${linkFirmaCodeudor}
         </Select>
       </div>
 
-      {/* === Toggle vista tabla/cards === */}
-      <div className="flex items-center gap-2">
-        <button
-          onClick={() => setVistaPrestamos('tabla')}
-          className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${vistaPrestamos === 'tabla' ? 'bg-primary/20 text-primary' : 'text-muted-foreground hover:bg-white/5'}`}
-          title="Vista de tabla"
-        >
-          <Table2 className="w-4 h-4 inline mr-1" /> Tabla
-        </button>
-        <button
-          onClick={() => setVistaPrestamos('cards')}
-          className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${vistaPrestamos === 'cards' ? 'bg-primary/20 text-primary' : 'text-muted-foreground hover:bg-white/5'}`}
-          title="Vista de tarjetas"
-        >
-          <LayoutGrid className="w-4 h-4 inline mr-1" /> Tarjetas
-        </button>
-      </div>
-
-      {/* === Vista de tarjetas === */}
-      {vistaPrestamos === 'cards' && (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-          {loading ? (
-            <div className="col-span-full text-center py-8 text-muted-foreground">Cargando...</div>
-          ) : prestamosFiltrados.length === 0 ? (
-            <div className="col-span-full text-center py-8 text-muted-foreground">No hay solicitudes registradas.</div>
-          ) : (
-            prestamosFiltrados.map((p) => {
-              const conteo = calcularConteoVigencia(p, nowTick)
-              const cfgPlazo: Record<EstadoPlazo, { label: string; emoji: string; className: string }> = {
-                DENTRO: { label: 'DENTRO', emoji: '🟢', className: 'bg-emerald-500/15 text-emerald-300 border-emerald-400/30' },
-                CUMPLIDO: { label: 'CUMPLIDO', emoji: '🟡', className: 'bg-amber-500/15 text-amber-300 border-amber-400/30' },
-                EXCEDIDO: { label: `EXCEDIÓ ${conteo.diasExcedidos}d`, emoji: '🔴', className: 'bg-red-500/15 text-red-300 border-red-400/30' },
-                CANCELADO: { label: 'CANCELADO', emoji: '🔵', className: 'bg-blue-500/15 text-blue-300 border-blue-400/30' },
-                NO_APLICA: { label: '—', emoji: '', className: '' },
-              }
-              const c = cfgPlazo[conteo.estadoPlazo]
-              return (
-                <Card key={p.id} className="bg-card/50 backdrop-blur-sm border-white/10 hover:border-primary/30 transition-all">
-                  <CardContent className="p-4 space-y-3">
-                    {/* Header: código + estado */}
-                    <div className="flex items-start justify-between gap-2">
-                      <div>
-                        <div className="font-mono text-xs font-semibold text-primary">{p.codigo}</div>
-                        <div className="font-semibold text-sm mt-0.5">{p.cliente.nombre}</div>
-                        <div className="text-xs text-muted-foreground">{p.cliente.cedula}</div>
-                      </div>
-                      <div className="flex flex-col items-end gap-1">
-                        <EstadoBadge estado={p.estado} />
-                        {p.tieneCodeudor && (
-                          <Badge variant="outline" className="text-[9px] bg-violet-500/15 text-violet-300 border-violet-400/40">🛡️ Codeudor</Badge>
-                        )}
-                        {conteo.aplica && (
-                          <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-semibold border ${c.className}`}>
-                            {c.emoji} {c.label}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                    {/* Datos financieros */}
-                    <div className="grid grid-cols-2 gap-2 text-xs">
-                      <div>
-                        <div className="text-muted-foreground">Principal</div>
-                        <div className="font-mono font-semibold">{formatearMoneda(p.montoPrincipal)}</div>
-                      </div>
-                      <div>
-                        <div className="text-muted-foreground">Cuota</div>
-                        <div className="font-mono font-semibold">{formatearMoneda(p.montoCuota)}</div>
-                      </div>
-                      <div>
-                        <div className="text-muted-foreground">Tasa</div>
-                        <div className="font-mono">{p.tasaInteresAnual}% anual</div>
-                      </div>
-                      <div>
-                        <div className="text-muted-foreground">Plazo</div>
-                        <div>{p.numeroCuotas} cuotas ({p.frecuencia.toLowerCase()})</div>
-                      </div>
-                      <div>
-                        <div className="text-muted-foreground">Saldo</div>
-                        <div className="font-mono font-semibold text-amber-300">{formatearMoneda(p.saldoTotal)}</div>
-                      </div>
-                      <div>
-                        <div className="text-muted-foreground">Conteo</div>
-                        <div className="font-medium">{conteo.aplica ? `${conteo.diasTranscurridos}/${conteo.plazoTotalDias}d` : '—'}</div>
-                      </div>
-                    </div>
-                    {/* Progreso */}
-                    <div className="flex items-center gap-2">
-                      <div className="flex-1 bg-muted rounded-full h-1.5">
-                        <div className="bg-primary h-1.5 rounded-full" style={{ width: `${(p.cuotasPagadas / p.numeroCuotas) * 100}%` }} />
-                      </div>
-                      <span className="text-xs text-muted-foreground">{p.cuotasPagadas}/{p.numeroCuotas}</span>
-                    </div>
-                    {/* Botones de acción */}
-                    <div className="flex gap-1 flex-wrap pt-1 border-t border-white/5">
-                      <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => onAbrirPrestamo(p.id)} title="Ver detalle">
-                        <Eye className="w-3.5 h-3.5" />
-                      </Button>
-                      <Button size="sm" variant="ghost" className="h-7 text-xs text-purple-600" onClick={() => abrirHtmlImprimible(`/api/estado-cuenta?cedula=${encodeURIComponent(p.cliente.cedula)}&prestamoId=${p.id}`)} title="Estado de cuenta">
-                        <FileText className="w-3.5 h-3.5" />
-                      </Button>
-                      <OtroSiAccionesDropdown prestamoId={p.id} prestamoCodigo={p.codigo} />
-                      <Button size="sm" variant="ghost" className={`h-7 text-xs ${p.firmaId ? "text-blue-600" : "opacity-40"}`} onClick={() => p.firmaId && abrirHtmlImprimible(`/api/firma/certificado?firmaId=${p.firmaId}`)} title="Certificado de firma" disabled={!p.firmaId}>
-                        <Shield className="w-3.5 h-3.5" />
-                      </Button>
-                      {['ACTIVO', 'EN_MORA', 'JURIDICO', 'CANCELADO'].includes(p.estado) && (
-                        <Button size="sm" variant="ghost" className="h-7 text-xs text-purple-600" onClick={() => { setPrestamoQueCambioId(p.id); setPrestamoQueCambioCodigo(p.codigo); setModalQueCambio(true) }} title="¿Qué cambió?">
-                          <Sparkles className="w-3.5 h-3.5" />
-                        </Button>
-                      )}
-                      {p.estado === 'SOLICITUD' && (
-                        <Button size="sm" variant="ghost" className="h-7 text-xs text-blue-600" onClick={async () => {
-                          try {
-                            const res = await fetch(`/api/prestamos/${p.id}/enviar-codigo`, { method: 'POST', headers: { 'Content-Type': 'application/json' } })
-                            const json = await res.json()
-                            if (json.success) { toast({ title: '🔐 Código enviado', description: `Al correo ${json.data?.codigos?.[0]?.email || ''}.` }); cargar(); onChanged() }
-                            else { toast({ title: 'Error', description: json.error, variant: 'destructive' }) }
-                          } catch (e: any) { toast({ title: 'Error', description: e.message, variant: 'destructive' }) }
-                        }} title="Enviar código OTP">📧</Button>
-                      )}
-                      {p.estado === 'SOLICITUD' && (
-                        <Button size="sm" variant="ghost" className="h-7 text-xs text-red-600" onClick={() => cambiarEstado(p.id, 'rechazar')} title="Rechazar">
-                          <X className="w-3.5 h-3.5" />
-                        </Button>
-                      )}
-                      <Button size="sm" variant="ghost" className="h-7 text-xs text-red-700" onClick={() => eliminarPrestamo(p)} title="Eliminar">
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </Button>
-                    </div>
-                  </CardContent>
-                </Card>
-              )
-            })
-          )}
-        </div>
-      )}
-
-      {/* === Vista de tabla === */}
-      {vistaPrestamos === 'tabla' && (
       <Card>
         <CardContent className="p-0">
           <Table>
@@ -1972,10 +1189,6 @@ ${linkFirmaCodeudor}
                 <TableHead>Tasa</TableHead>
                 <TableHead>Cuota</TableHead>
                 <TableHead>Plazo</TableHead>
-                {/* === CONTEO DE VIGENCIA — Días transcurridos / Plazo total === */}
-                <TableHead className="text-center">Conteo</TableHead>
-                {/* === ESTADO DEL PLAZO — Dentro / Cumplido / Excedido / Cancelado === */}
-                <TableHead className="text-center">Estado del Plazo</TableHead>
                 <TableHead>Saldo</TableHead>
                 <TableHead>Progreso</TableHead>
                 <TableHead>Estado</TableHead>
@@ -1985,30 +1198,20 @@ ${linkFirmaCodeudor}
             <TableBody>
               {loading ? (
                 <TableRow>
-                  <TableCell colSpan={12} className="text-center py-8 text-muted-foreground">
+                  <TableCell colSpan={10} className="text-center py-8 text-muted-foreground">
                     Cargando...
                   </TableCell>
                 </TableRow>
               ) : prestamosFiltrados.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={12} className="text-center py-8 text-muted-foreground">
-                    No hay solicitudes registrados.
+                  <TableCell colSpan={10} className="text-center py-8 text-muted-foreground">
+                    No hay préstamos registrados.
                   </TableCell>
                 </TableRow>
               ) : (
                 prestamosFiltrados.map((p) => (
                   <TableRow key={p.id} className="hover:bg-muted/40">
-                    <TableCell className="font-mono text-xs">
-                      {p.codigo}
-                      {p.cliente?.esPrueba && (
-                        <span
-                          className="ml-1 inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-100 text-amber-800 border border-amber-300 align-middle"
-                          title="Solicitud de cliente de prueba: no se contabiliza en saldos reales"
-                        >
-                          PRUEBA
-                        </span>
-                      )}
-                    </TableCell>
+                    <TableCell className="font-mono text-xs">{p.codigo}</TableCell>
                     <TableCell>
                       <div className="font-semibold text-sm">{p.cliente.nombre}</div>
                       <div className="text-xs text-muted-foreground">{p.cliente.cedula}</div>
@@ -2025,73 +1228,6 @@ ${linkFirmaCodeudor}
                       {p.numeroCuotas} cuotas
                       <div className="text-muted-foreground">{p.frecuencia.toLowerCase()}</div>
                     </TableCell>
-                    {/* === CONTEO DE VIGENCIA + ESTADO DEL PLAZO === */}
-                    {/* Calculamos `conteo` una sola vez y renderizamos ambas celdas. */}
-                    {/* Para créditos CANCELADOS el conteo queda congelado en el valor */}
-                    {/* alcanzado al momento de la cancelación (no sigue incrementándose). */}
-                    {(() => {
-                      const conteo = calcularConteoVigencia(p, nowTick)
-                      if (!conteo.aplica) {
-                        return (
-                          <>
-                            <TableCell className="text-center text-xs text-muted-foreground">—</TableCell>
-                            <TableCell className="text-center text-xs text-muted-foreground">—</TableCell>
-                          </>
-                        )
-                      }
-                      // Mapear estado del plazo a etiqueta + emoji + clases de color
-                      const cfgPlazo: Record<EstadoPlazo, { label: string; emoji: string; className: string }> = {
-                        DENTRO: {
-                          label: 'DENTRO DEL PLAZO',
-                          emoji: '🟢',
-                          className: 'bg-emerald-500/15 text-emerald-300 border-emerald-400/30',
-                        },
-                        CUMPLIDO: {
-                          label: 'PLAZO CUMPLIDO',
-                          emoji: '🟡',
-                          className: 'bg-amber-500/15 text-amber-300 border-amber-400/30',
-                        },
-                        EXCEDIDO: {
-                          label: `EXCEDIÓ EL PLAZO — ${conteo.diasExcedidos} DÍAS`,
-                          emoji: '🔴',
-                          className: 'bg-red-500/15 text-red-300 border-red-400/30',
-                        },
-                        CANCELADO: {
-                          label: 'CANCELADO',
-                          emoji: '🔵',
-                          className: 'bg-blue-500/15 text-blue-300 border-blue-400/30',
-                        },
-                        NO_APLICA: { label: '—', emoji: '', className: '' },
-                      }
-                      const c = cfgPlazo[conteo.estadoPlazo]
-                      return (
-                        <>
-                          {/* Celda CONTEO: "DÍA TRANSCURRIDO / PLAZO TOTAL días" */}
-                          <TableCell className="text-center">
-                            <div className={`text-sm font-semibold ${conteo.congelado ? 'text-blue-400' : 'text-foreground'}`}>
-                              {conteo.diasTranscurridos} / {conteo.plazoTotalDias}
-                            </div>
-                            <div className="text-[10px] text-muted-foreground">
-                              {conteo.congelado ? 'días (congelado)' : 'días'}
-                            </div>
-                          </TableCell>
-                          {/* Celda ESTADO DEL PLAZO: badge de estado con tooltip */}
-                          <TableCell className="text-center">
-                            <span
-                              className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold border ${c.className}`}
-                              title={
-                                conteo.congelado
-                                  ? `Conteo congelado al cancelar el crédito. Último valor: ${conteo.diasTranscurridos}/${conteo.plazoTotalDias} días.`
-                                  : `Inicio: ${conteo.fechaInicio.toLocaleDateString('es-CO')} · Corte: ${conteo.fechaCorte.toLocaleDateString('es-CO')}`
-                              }
-                            >
-                              {c.emoji && <span>{c.emoji}</span>}
-                              <span>{c.label}</span>
-                            </span>
-                          </TableCell>
-                        </>
-                      )
-                    })()}
                     <TableCell className="text-sm font-semibold">{formatearMoneda(p.saldoTotal)}</TableCell>
                     <TableCell>
                       <div className="flex items-center gap-2">
@@ -2128,60 +1264,22 @@ ${linkFirmaCodeudor}
                           size="sm"
                           variant="ghost"
                           className="text-purple-600 hover:text-purple-700"
-                          onClick={() => abrirHtmlImprimible(`/api/estado-cuenta?cedula=${encodeURIComponent(p.cliente.cedula)}&prestamoId=${p.id}`)}
+                          onClick={() => window.open(`/api/estado-cuenta?cedula=${encodeURIComponent(p.cliente.cedula)}&prestamoId=${p.id}`, '_blank', 'noopener,noreferrer')}
                           title="Estado de cuenta"
                         >
                           <FileText className="w-4 h-4" />
                         </Button>
-                        {/* === Otros Síes — ver / descargar Otros Síes firmados === */}
-                        {/* Dropdown con lazy-load: al abrir, hace fetch de los Otros Síes */}
-                        {/* del solicitud y habilita Ver / Descargar para los FIRMADO. */}
-                        <OtroSiAccionesDropdown
-                          prestamoId={p.id}
-                          prestamoCodigo={p.codigo}
-                        />
-                        {/* Reforzado: botón para ver certificado de firma electrónica.
-                            Habilitado para descarga repetida — cuantas veces el gestor lo necesite.
-                            Solo se deshabilita si NO existe ninguna firma completada. */}
+                        {/* Reforzado: botón para ver certificado de firma electrónica */}
                         <Button
                           size="sm"
                           variant="ghost"
                           className={p.firmaId ? "text-blue-600 hover:text-blue-700" : "text-muted-foreground opacity-40"}
-                          onClick={() => {
-                            if (!p.firmaId) return
-                            // FIX 2026-08-12: El endpoint /api/firma/certificado está
-                            // protegido por JWT. window.open() no envía el header
-                            // Authorization, por lo que el endpoint devolvía 401 y el
-                            // botón "Descargar Certificado de Firma Electrónica" no
-                            // funcionaba. Usamos abrirHtmlImprimible que hace fetch
-                            // autenticado (con Authorization: Bearer) y abre un blob
-                            // URL en una nueva pestaña.
-                            abrirHtmlImprimible(`/api/firma/certificado?firmaId=${p.firmaId}`)
-                          }}
-                          title={p.firmaId ? `Descargar Certificado de Firma Electrónica (descargable las veces que necesite)${p.firmaFechaCompleta ? ` · Firmado: ${new Date(p.firmaFechaCompleta).toLocaleDateString('es-CO')}` : ''}` : "Sin firma electrónica completada"}
+                          onClick={() => p.firmaId && window.open(`/api/firma/certificado?firmaId=${p.firmaId}`, '_blank', 'noopener,noreferrer')}
+                          title={p.firmaId ? "Ver Certificado de Firma Electrónica" : "Sin firma electrónica"}
                           disabled={!p.firmaId}
                         >
                           <Shield className="w-4 h-4" />
                         </Button>
-                        {/* === ¿QUÉ CAMBIÓ? — Análisis de comportamiento de pagos === */}
-                        {/* Solo se muestra para solicitudes con pagos (ACTIVO/EN_MORA/JURIDICO/CANCELADO). */}
-                        {/* Compara el comportamiento actual vs anterior y muestra los */}
-                        {/* cambios detectados: pagos menores, atrasos, ritmo de pago, etc. */}
-                        {['ACTIVO', 'EN_MORA', 'JURIDICO', 'CANCELADO'].includes(p.estado) && (
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            className="text-purple-600 hover:text-purple-700"
-                            onClick={() => {
-                              setPrestamoQueCambioId(p.id)
-                              setPrestamoQueCambioCodigo(p.codigo)
-                              setModalQueCambio(true)
-                            }}
-                            title="¿Qué cambió? — Analiza el comportamiento actual vs. anterior del crédito"
-                          >
-                            <Sparkles className="w-4 h-4" />
-                          </Button>
-                        )}
                         {p.estado === 'SOLICITUD' && (
                           <>
                             <Button
@@ -2199,7 +1297,7 @@ ${linkFirmaCodeudor}
                                     const codigos = json.data?.codigos || []
                                     const esDual = json.data?.requiereCodeudor
                                     const desc = esDual
-                                      ? `Doble OTP: 1 al TITULAR (${codigos[0]?.email}) y 1 al CODEUDOR (${codigos[1]?.email}). El solicitud se activa solo cuando el gestor verifique AMBOS códigos.`
+                                      ? `Doble OTP: 1 al TITULAR (${codigos[0]?.email}) y 1 al CODEUDOR (${codigos[1]?.email}). El préstamo se activa solo cuando el gestor verifique AMBOS códigos.`
                                       : `Al correo ${codigos[0]?.email || json.data.email}. Revisa y pide el código al cliente.`
                                     toast({
                                       title: esDual ? '🔐 Doble código enviado' : '🔐 Código enviado',
@@ -2233,13 +1331,13 @@ ${linkFirmaCodeudor}
                             </Button>
                           </>
                         )}
-                        {/* === Botón ELIMINAR solicitud (siempre disponible) === */}
+                        {/* === Botón ELIMINAR préstamo (siempre disponible) === */}
                         <Button
                           size="sm"
                           variant="ghost"
                           className="text-red-700 hover:text-red-800 hover:bg-red-50"
                           onClick={() => eliminarPrestamo(p)}
-                          title="Eliminar solicitud (borra TODO el registro)"
+                          title="Eliminar préstamo (borra TODO el registro)"
                         >
                           <Trash2 className="w-4 h-4" />
                         </Button>
@@ -2252,15 +1350,14 @@ ${linkFirmaCodeudor}
           </Table>
         </CardContent>
       </Card>
-      )}
 
-      {/* === MODAL ELIMINAR SOLICITUD === */}
+      {/* === MODAL ELIMINAR PRÉSTAMO === */}
       <Dialog open={!!prestamoAEliminar} onOpenChange={(open) => !open && setPrestamoAEliminar(null)}>
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-red-700">
               <Trash2 className="w-5 h-5" />
-              Eliminar Solicitud
+              Eliminar Préstamo
             </DialogTitle>
           </DialogHeader>
           {prestamoAEliminar && (
@@ -2268,10 +1365,10 @@ ${linkFirmaCodeudor}
               <div className="p-3 rounded bg-red-50 border border-red-200 text-sm space-y-1">
                 <p className="text-red-900 font-semibold">⚠️ Esta acción NO se puede deshacer</p>
                 <p className="text-red-800">
-                  Se borrará permanentemente el solicitud y TODOS sus registros asociados:
+                  Se borrará permanentemente el préstamo y TODOS sus registros asociados:
                 </p>
                 <ul className="list-disc list-inside text-xs text-red-700 ml-2">
-                  <li>Solicitud: <strong>{prestamoAEliminar.codigo}</strong></li>
+                  <li>Préstamo: <strong>{prestamoAEliminar.codigo}</strong></li>
                   <li>Cliente: <strong>{prestamoAEliminar.cliente.nombre}</strong></li>
                   <li>Estado: <strong>{prestamoAEliminar.estado}</strong></li>
                   <li>Monto: <strong>{formatearMoneda(prestamoAEliminar.montoPrincipal)}</strong></li>
@@ -2284,7 +1381,7 @@ ${linkFirmaCodeudor}
                   <li>Firmas electrónicas (con fotos y OTP)</li>
                   <li>Notificaciones enviadas</li>
                   <li>Documentos del gestor vinculados</li>
-                  <li>Bitácora del solicitud</li>
+                  <li>Bitácora del préstamo</li>
                   <li>Caso jurídico (si existe)</li>
                 </ul>
               </div>
@@ -2336,7 +1433,7 @@ ${linkFirmaCodeudor}
       <Dialog open={modalAbierto} onOpenChange={setModalAbierto}>
         <DialogContent className="max-w-3xl max-h-[95vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Nueva Solicitud de Solicitud</DialogTitle>
+            <DialogTitle>Nueva Solicitud de Préstamo</DialogTitle>
           </DialogHeader>
           <form onSubmit={handleSubmit} className="space-y-4">
             {/* === Tipo de solicitud: Nuevo o Renovación === */}
@@ -2362,7 +1459,7 @@ ${linkFirmaCodeudor}
                     Crédito Nuevo
                   </div>
                   <div className="text-xs text-muted-foreground mt-1">
-                    Solicitud de solicitud sin relación a créditos anteriores
+                    Solicitud de préstamo sin relación a créditos anteriores
                   </div>
                 </button>
                 <button
@@ -2385,16 +1482,16 @@ ${linkFirmaCodeudor}
               </div>
             </div>
 
-            {/* === FECHA DEL SOLICITUD (fecha asignada) ===
-                Permite registrar la fecha real en que se realizó el solicitud.
+            {/* === FECHA DEL PRÉSTAMO (fecha asignada) ===
+                Permite registrar la fecha real en que se realizó el préstamo.
                 Todos los documentos generados (pagaré, carta, tabla de amortización)
                 usarán esta fecha como fecha base.
-                Ej: si el solicitud se hizo el 2/08/2026 y se carga el 5/08/2026,
+                Ej: si el préstamo se hizo el 2/08/2026 y se carga el 5/08/2026,
                 todos los documentos empezarán desde el 2/08/2026. */}
-            <div className="space-y-2 p-3 rounded-md bg-emerald-50 dark:bg-emerald-900/60 border-2 border-emerald-300 dark:border-emerald-500 shadow-sm">
-              <Label htmlFor="fechaPrestamo" className="text-sm font-semibold flex items-center gap-1.5 text-emerald-900 dark:text-emerald-100">
+            <div className="space-y-2 p-3 rounded-md bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800">
+              <Label htmlFor="fechaPrestamo" className="text-sm font-medium flex items-center gap-1.5">
                 <Calendar className="w-3.5 h-3.5 text-emerald-700 dark:text-emerald-300" />
-                Fecha del solicitud *
+                Fecha del préstamo *
               </Label>
               <Input
                 id="fechaPrestamo"
@@ -2410,8 +1507,8 @@ ${linkFirmaCodeudor}
                   return `${yyyy}-${mm}-${dd}`
                 })()}
               />
-              <p className="text-xs text-emerald-900 dark:text-emerald-100 font-medium">
-                📅 Esta será la fecha base del solicitud. Todos los documentos generados (pagaré, carta, tabla de amortización) y el código del solicitud usarán esta fecha, no la fecha actual del sistema.
+              <p className="text-xs text-emerald-800 dark:text-emerald-200">
+                📅 Esta será la fecha base del préstamo. Todos los documentos generados (pagaré, carta, tabla de amortización) y el código del préstamo usarán esta fecha, no la fecha actual del sistema.
               </p>
               {fechaPrestamo !== (() => {
                 const hoy = new Date()
@@ -2420,98 +1517,24 @@ ${linkFirmaCodeudor}
                 const dd = String(hoy.getDate()).padStart(2, '0')
                 return `${yyyy}-${mm}-${dd}`
               })() && (
-                <p className="text-xs text-amber-900 dark:text-amber-200 font-semibold bg-amber-100 dark:bg-amber-900/60 p-2 rounded border border-amber-300 dark:border-amber-700">
-                  ⚠️ Estás registrando un solicitud con fecha retroactiva ({fechaPrestamo}). Verifica que sea correcto.
+                <p className="text-xs text-amber-700 dark:text-amber-300 font-medium">
+                  ⚠️ Estás registrando un préstamo con fecha retroactiva ({fechaPrestamo}). Verifica que sea correcto.
                 </p>
               )}
             </div>
 
-            {/* === FECHA DE LA PRIMERA CUOTA (opcional, modificable por el asesor) ===
-                Permite definir cuándo vence la PRIMERA cuota del solicitud.
-                Casos de uso:
-                - El cliente pidió una fecha específica en el simulador del portal
-                  (campo `primerPagoFecha` de la SolicitudWeb). Esa fecha se
-                  precarga acá cuando el asesor convierte una solicitud del buzón.
-                - El asesor quiere manualmente definir el primer vencimiento
-                  (ej: solicitud el 17/08 pero primer pago el 25/08 en lugar
-                  del 17/09 que sería el cálculo estándar de "hoy + 1 mes").
-
-                Comportamiento:
-                - Si está vacía: las cuotas se programan desde `fechaPrestamo`
-                  (o desde `fechaPrimerCorte` si hay periodo de corte).
-                - Si está seteada: la cuota #1 vence en esta fecha. El sistema
-                  calcula `fechaInicio = fechaPrimerCuota - 1 periodo` y las
-                  cuotas siguen la periodicidad normal desde ahí.
-                - Se ignora cuando hay `periodoCorte` activo (en ese caso las
-                  cuotas se programan desde `fechaPrimerCorte`).
-            */}
-            <div className="space-y-2 p-3 rounded-md bg-sky-50 dark:bg-sky-900/60 border-2 border-sky-300 dark:border-sky-500 shadow-sm">
-              <div className="flex items-center justify-between gap-2">
-                <Label htmlFor="fechaPrimerCuota" className="text-sm font-semibold flex items-center gap-1.5 text-sky-900 dark:text-sky-100">
-                  <Calendar className="w-3.5 h-3.5 text-sky-700 dark:text-sky-300" />
-                  Fecha de la primera cuota (opcional)
-                </Label>
-                {fechaPrimerCuota && (
-                  <button
-                    type="button"
-                    onClick={() => setFechaPrimerCuota('')}
-                    className="text-xs text-sky-800 dark:text-sky-200 hover:underline font-medium"
-                  >
-                    Usar fecha del solicitud
-                  </button>
-                )}
-              </div>
-              <Input
-                id="fechaPrimerCuota"
-                type="date"
-                value={fechaPrimerCuota}
-                onChange={(e) => setFechaPrimerCuota(e.target.value)}
-                min={fechaPrestamo || undefined}
-                disabled={!!(periodoCorte && fechaPrimerCorte)}
-              />
-              <p className="text-xs text-sky-900 dark:text-sky-100 font-medium">
-                {periodoCorte && fechaPrimerCorte ? (
-                  <>🔒 Deshabilitado porque hay <strong>periodo de corte</strong> activo. Las cuotas se programan desde la fecha de corte.</>
-                ) : fechaPrimerCuota ? (
-                  <>📅 La <strong>primera cuota</strong> vencerá el <strong>{formatearFecha(new Date(fechaPrimerCuota + 'T12:00:00'))}</strong>. Las demás cuotas seguirán la periodicidad ({frecuencia.toLowerCase()}) desde esa fecha.</>
-                ) : (
-                  <>💡 Por defecto, la primera cuota vence <strong>1 periodo</strong> después de la fecha del solicitud. Si el cliente pidió una fecha específica en el simulador del portal, aparecerá acá automáticamente — puedes confirmarla, cambiarla o dejarla vacía.</>
-                )}
-              </p>
-            </div>
-
-            {/* === PLAN DE AMORTIZACIÓN (vista previa dinámica) ===
-                Se actualiza automáticamente al cambiar:
-                - Monto, tasa, plazo, frecuencia, modalidad
-                - Fecha del solicitud, fecha primera cuota, periodo de corte
-                - Cargos iniciales (pagaré, tarifa plataforma, flexibilidad, fondo garantía)
-
-                Muestra tabla completa de cuotas con fechas, capital, interés y saldo,
-                más los cargos iniciales cargados a la cuota #1.
-            */}
-            {calculo && calculo.tablaAmortizacion && calculo.tablaAmortizacion.length > 0 && (
-              <PlanAmortizacionPreview
-                calculo={calculo}
-                frecuencia={frecuencia}
-                cargosIniciales={cargosInicialesCuota1}
-                fechaPrimerCuota={fechaPrimerCuota || null}
-                fechaPrimerCorte={fechaPrimerCorte}
-                periodoCorte={periodoCorte || null}
-              />
-            )}
-
             {/* === PERIODO DE CORTE + DÍAS CAUSADOS ANTES DEL CORTE ===
                 Caso de uso: cliente solicita crédito ANTES de la fecha de corte.
-                Ej: solicitud 2/08/2026, periodo "5-20" → corte más cercano = 5/08/2026.
+                Ej: préstamo 2/08/2026, periodo "5-20" → corte más cercano = 5/08/2026.
                 El sistema cobra 3 días de interés anticipado (valorDiasCausados) y
                 las cuotas se programan desde el 5/08/2026 (fechaPrimerCorte).
 
-                Si no se selecciona periodo, el solicitud se comporta normalmente
+                Si no se selecciona periodo, el préstamo se comporta normalmente
                 (las cuotas se programan desde fechaPrestamo).
             */}
-            <div className="space-y-3 p-3 rounded-md bg-indigo-50 dark:bg-indigo-900/60 border-2 border-indigo-300 dark:border-indigo-500 shadow-sm">
+            <div className="space-y-3 p-3 rounded-md bg-indigo-50 dark:bg-indigo-950/20 border border-indigo-200 dark:border-indigo-800">
               <div className="flex items-center justify-between gap-2">
-                <Label className="text-sm font-semibold flex items-center gap-1.5 text-indigo-900 dark:text-indigo-100">
+                <Label className="text-sm font-medium flex items-center gap-1.5">
                   <Scissors className="w-3.5 h-3.5 text-indigo-700 dark:text-indigo-300" />
                   Periodo de corte (opcional)
                 </Label>
@@ -2525,7 +1548,7 @@ ${linkFirmaCodeudor}
                       setValorDiasCausados(0)
                       setEditarDiasCausadosManual(false)
                     }}
-                    className="text-xs text-indigo-800 dark:text-indigo-200 hover:underline font-medium"
+                    className="text-xs text-indigo-700 dark:text-indigo-300 hover:underline"
                   >
                     Quitar corte
                   </button>
@@ -2550,58 +1573,58 @@ ${linkFirmaCodeudor}
                   <SelectItem value="15-30">📅 Periodo 15-30 (cortes los días 15 y 30 de cada mes)</SelectItem>
                 </SelectContent>
               </Select>
-              <p className="text-xs text-indigo-900 dark:text-indigo-100 font-medium">
-                💡 Para clientes que solicitan crédito <strong className="text-indigo-950 dark:text-white">antes</strong> de la fecha de corte.
+              <p className="text-xs text-indigo-800 dark:text-indigo-200">
+                💡 Para clientes que solicitan crédito <strong>antes</strong> de la fecha de corte.
                 El sistema calcula automáticamente los días causados hasta el corte más cercano y
                 programa los pagos desde esa fecha de corte.
               </p>
 
               {/* === Bloque de cálculo automático === */}
               {periodoCorte && fechaPrestamo && (
-                <div className="space-y-3 p-4 rounded-md bg-white dark:bg-slate-900/90 border-2 border-indigo-400 dark:border-indigo-400 shadow-md">
+                <div className="space-y-3 p-3 rounded-md bg-white dark:bg-indigo-900/30 border border-indigo-300 dark:border-indigo-700">
                   {/* Resumen automático */}
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
-                    <div className="space-y-1 p-2 rounded bg-indigo-50 dark:bg-indigo-950/80 border border-indigo-200 dark:border-indigo-800">
-                      <div className="text-indigo-900 dark:text-indigo-200 font-semibold flex items-center gap-1">
-                        📅 Fecha del solicitud
+                    <div className="space-y-1">
+                      <div className="text-indigo-700 dark:text-indigo-300 font-medium">
+                        📅 Fecha del préstamo
                       </div>
-                      <div className="font-bold text-slate-900 dark:text-white text-sm">
+                      <div className="font-bold text-foreground">
                         {formatearFecha(new Date(fechaPrestamo + 'T12:00:00'))}
                       </div>
                     </div>
-                    <div className="space-y-1 p-2 rounded bg-indigo-50 dark:bg-indigo-950/80 border border-indigo-200 dark:border-indigo-800">
-                      <div className="text-indigo-900 dark:text-indigo-200 font-semibold flex items-center gap-1">
+                    <div className="space-y-1">
+                      <div className="text-indigo-700 dark:text-indigo-300 font-medium">
                         🎯 Fecha del primer corte
                       </div>
-                      <div className="font-bold text-slate-900 dark:text-white text-sm">
+                      <div className="font-bold text-foreground">
                         {fechaPrimerCorte ? formatearFecha(fechaPrimerCorte) : '—'}
                       </div>
                     </div>
-                    <div className="space-y-1 p-2 rounded bg-amber-50 dark:bg-amber-950/80 border border-amber-200 dark:border-amber-800">
-                      <div className="text-amber-900 dark:text-amber-200 font-semibold flex items-center gap-1">
+                    <div className="space-y-1">
+                      <div className="text-indigo-700 dark:text-indigo-300 font-medium">
                         ⏳ Días causados antes del corte
                       </div>
-                      <div className="font-bold text-slate-900 dark:text-white text-sm">
+                      <div className="font-bold text-foreground">
                         {diasCausadosAntes} día{diasCausadosAntes === 1 ? '' : 's'}
                       </div>
                     </div>
                   </div>
 
                   {fechaPrimerCorte && (
-                    <div className="text-xs text-indigo-950 dark:text-indigo-50 bg-indigo-100 dark:bg-indigo-800 rounded p-2.5 border border-indigo-300 dark:border-indigo-600 font-medium">
+                    <div className="text-xs text-indigo-800 dark:text-indigo-200 bg-indigo-100 dark:bg-indigo-900/40 rounded p-2">
                       {diasCausadosAntes > 0 ? (
                         <>
-                          📊 El solicitud se entrega el{' '}
-                          <strong className="text-indigo-950 dark:text-white">{formatearFecha(new Date(fechaPrestamo + 'T12:00:00'))}</strong>{' '}
+                          📊 El préstamo se entrega el{' '}
+                          <strong>{formatearFecha(new Date(fechaPrestamo + 'T12:00:00'))}</strong>{' '}
                           pero el corte más cercano es el{' '}
-                          <strong className="text-indigo-950 dark:text-white">{formatearFecha(fechaPrimerCorte)}</strong>. El sistema cobrará{' '}
-                          <strong className="text-indigo-950 dark:text-white">{diasCausadosAntes} día{diasCausadosAntes === 1 ? '' : 's'}</strong>{' '}
+                          <strong>{formatearFecha(fechaPrimerCorte)}</strong>. El sistema cobrará{' '}
+                          <strong>{diasCausadosAntes} día{diasCausadosAntes === 1 ? '' : 's'}</strong>{' '}
                           de interés anticipado y las cuotas se programarán desde el{' '}
-                          <strong className="text-indigo-950 dark:text-white">{formatearFecha(fechaPrimerCorte)}</strong>.
+                          <strong>{formatearFecha(fechaPrimerCorte)}</strong>.
                         </>
                       ) : (
                         <>
-                          ✅ La fecha del solicitud cae <strong className="text-indigo-950 dark:text-white">justo en un día de corte</strong>{' '}
+                          ✅ La fecha del préstamo cae <strong>justo en un día de corte</strong>{' '}
                           ({formatearFecha(fechaPrimerCorte)}). No hay días causados adicionales y
                           las cuotas se programarán desde esta fecha.
                         </>
@@ -2611,12 +1634,12 @@ ${linkFirmaCodeudor}
 
                   {/* === Campos editables: días causados y valor a cobrar === */}
                   {diasCausadosAntes > 0 && (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-3 border-t-2 border-indigo-200 dark:border-indigo-700">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-indigo-200 dark:border-indigo-700">
                       <div className="space-y-1.5">
-                        <Label htmlFor="diasCausadosAntes" className="text-xs font-semibold flex items-center gap-1.5 text-slate-800 dark:text-slate-100">
+                        <Label htmlFor="diasCausadosAntes" className="text-xs font-medium flex items-center gap-1.5">
                           Días causados antes del corte
                           {editarDiasCausadosManual && (
-                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-200 text-amber-900 dark:bg-amber-500 dark:text-amber-950 font-bold">
+                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200">
                               ✏️ Manual
                             </span>
                           )}
@@ -2630,14 +1653,14 @@ ${linkFirmaCodeudor}
                             handleEditarDiasCausados()
                             setDiasCausadosAntes(parseInt(e.target.value) || 0)
                           }}
-                          className="bg-white dark:bg-slate-800 dark:text-white border-indigo-300 dark:border-indigo-600"
+                          className="bg-white dark:bg-indigo-900/40"
                         />
                       </div>
                       <div className="space-y-1.5">
-                        <Label htmlFor="valorDiasCausados" className="text-xs font-semibold flex items-center gap-1.5 text-slate-800 dark:text-slate-100">
+                        <Label htmlFor="valorDiasCausados" className="text-xs font-medium flex items-center gap-1.5">
                           Valor a cobrar por días causados (COP)
                           {editarDiasCausadosManual && (
-                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-200 text-amber-900 dark:bg-amber-500 dark:text-amber-950 font-bold">
+                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200">
                               ✏️ Manual
                             </span>
                           )}
@@ -2652,7 +1675,7 @@ ${linkFirmaCodeudor}
                             handleEditarDiasCausados()
                             setValorDiasCausados(parseFloat(e.target.value) || 0)
                           }}
-                          className="bg-white dark:bg-slate-800 dark:text-white border-indigo-300 dark:border-indigo-600"
+                          className="bg-white dark:bg-indigo-900/40"
                         />
                       </div>
                       {editarDiasCausadosManual && (
@@ -2660,12 +1683,12 @@ ${linkFirmaCodeudor}
                           <button
                             type="button"
                             onClick={handleRecalcularDiasCausados}
-                            className="text-xs px-3 py-1.5 rounded-md bg-indigo-200 text-indigo-900 hover:bg-indigo-300 dark:bg-indigo-600 dark:text-white dark:hover:bg-indigo-500 transition flex items-center gap-1.5 font-medium"
+                            className="text-xs px-3 py-1.5 rounded-md bg-indigo-100 text-indigo-700 hover:bg-indigo-200 dark:bg-indigo-800 dark:text-indigo-100 dark:hover:bg-indigo-700 transition flex items-center gap-1.5"
                           >
                             <RefreshCw className="w-3 h-3" />
                             Recalcular automáticamente
                           </button>
-                          <p className="text-[11px] text-amber-800 dark:text-amber-300 mt-1 font-medium">
+                          <p className="text-[11px] text-amber-700 dark:text-amber-300 mt-1">
                             ⚠️ Estás usando valores editados manualmente. Si cambian el monto o la tasa,
                             no se recalcularán hasta que presiones este botón.
                           </p>
@@ -2676,112 +1699,45 @@ ${linkFirmaCodeudor}
 
                   {/* === Aviso de cobro adicional === */}
                   {valorDiasCausados > 0 && (
-                    <div className="p-2.5 rounded-md bg-emerald-100 dark:bg-emerald-700/80 border-2 border-emerald-400 dark:border-emerald-400 text-xs text-emerald-950 dark:text-emerald-50 font-medium">
+                    <div className="p-2 rounded-md bg-emerald-100 dark:bg-emerald-900/40 border border-emerald-300 dark:border-emerald-700 text-xs text-emerald-900 dark:text-emerald-100">
                       💰 Se cobrarán <strong>{formatearMoneda(valorDiasCausados)}</strong> adicionales
                       por {diasCausadosAntes} día{diasCausadosAntes === 1 ? '' : 's'} de interés anticipado.
-                      Este valor se suma al total a pagar del solicitud.
+                      Este valor se suma al total a pagar del préstamo.
                     </div>
                   )}
                 </div>
               )}
             </div>
 
-            {/* === FONDO DE GARANTÍA (opcional, tasa configurable) ===
-                El gestor decide si el crédito lleva o no fondo de garantía.
-                Ya NO se activa automáticamente. Si se activa, se pregunta la tasa.
-                El monto se calcula como: montoPrincipal * (tasa / 100). */}
-            <div className="space-y-3 p-3 rounded-md bg-blue-50 dark:bg-blue-900/60 border-2 border-blue-300 dark:border-blue-500 shadow-sm">
-              <Label className="text-sm font-semibold flex items-center gap-1.5 text-blue-900 dark:text-blue-100">
-                <Shield className="w-3.5 h-3.5 text-blue-700 dark:text-blue-300" />
-                Fondo de Garantía (opcional)
-              </Label>
-              <div className="flex items-center gap-3">
-                <input
-                  id="incluirFondoGarantia"
-                  type="checkbox"
-                  checked={incluirFondoGarantia}
-                  onChange={(e) => setIncluirFondoGarantia(e.target.checked)}
-                  className="w-4 h-4 rounded border-blue-400 text-blue-600 focus:ring-blue-500"
-                />
-                <Label htmlFor="incluirFondoGarantia" className="text-xs font-medium text-slate-800 dark:text-slate-100 cursor-pointer">
-                  Este crédito lleva fondo de garantía
-                </Label>
-              </div>
-              {incluirFondoGarantia && (
-                <div className="space-y-1.5 pl-7">
-                  <Label htmlFor="tasaFondoGarantia" className="text-xs font-semibold text-slate-800 dark:text-slate-100">
-                    Tasa del fondo de garantía (%)
-                  </Label>
-                  <Input
-                    id="tasaFondoGarantia"
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    max="100"
-                    value={tasaFondoGarantia}
-                    onChange={(e) => setTasaFondoGarantia(parseFloat(e.target.value) || 0)}
-                    className="bg-white dark:bg-slate-800 dark:text-white border-blue-300 dark:border-blue-600"
-                  />
-                  <p className="text-[11px] text-blue-900 dark:text-blue-200 font-medium bg-blue-100 dark:bg-blue-800/80 p-2 rounded border border-blue-300 dark:border-blue-600">
-                    💡 Se cobrarán <strong className="text-blue-950 dark:text-white">{formatearMoneda((parseFloat(montoPrincipal) || 0) * (tasaFondoGarantia / 100))}</strong> adicionales
-                    por concepto de fondo de garantía ({tasaFondoGarantia}% del monto principal).
-                    Este valor se suma al total a pagar del solicitud.
-                  </p>
-                </div>
-              )}
-              {!incluirFondoGarantia && (
-                <p className="text-[11px] text-slate-700 dark:text-slate-300 font-medium">
-                  No se cobrará fondo de garantía en este crédito.
-                </p>
-              )}
-            </div>
-
-            {/* === Si es renovación, mostrar créditos ACTIVOS del cliente === */}
+            {/* === Si es renovación, mostrar préstamos del cliente === */}
             {esRenovacion && clienteId && (
               <div className="space-y-3 p-3 rounded-md bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800">
                 <div className="space-y-2">
                   <Label className="text-xs font-medium text-amber-900 dark:text-amber-100">
-                    Selecciona el crédito activo a renovar
+                    Selecciona el crédito a renovar
                   </Label>
                   <Select value={prestamoARenovar} onValueChange={seleccionarPrestamoARenovar}>
                     <SelectTrigger className="border-amber-400 dark:border-amber-600">
-                      <SelectValue placeholder="Selecciona el crédito activo del cliente" />
+                      <SelectValue placeholder="Selecciona el crédito previo del cliente" />
                     </SelectTrigger>
                     <SelectContent>
                       {prestamos
-                        .filter((p) =>
-                          p.cliente?.id === clienteId &&
-                          ['ACTIVO', 'EN_MORA', 'JURIDICO'].includes(p.estado)
-                        )
+                        .filter((p) => p.cliente?.id === clienteId && p.estado !== 'RECHAZADO' && p.estado !== 'CANCELADO')
                         .map((p) => (
                           <SelectItem key={p.id} value={p.id}>
-                            {p.codigo} · {formatearMoneda(p.montoPrincipal)} · {p.cuotasPagadas}/{p.numeroCuotas} cuotas · Saldo: {formatearMoneda(p.saldoTotal)} · {p.estado === 'ACTIVO' ? '✅ Activo' : p.estado === 'EN_MORA' ? '⚠️ En mora' : '⚖️ Jurídico'}
+                            {p.codigo} - {formatearMoneda(p.montoPrincipal)} - {p.cuotasPagadas}/{p.numeroCuotas} cuotas - Saldo: {formatearMoneda(p.saldoTotal)}
                           </SelectItem>
                         ))}
                     </SelectContent>
                   </Select>
-                  <p className="text-[10px] text-amber-700 dark:text-amber-300">
-                    💡 Solo se muestran créditos en estado ACTIVO, EN_MORA o JURIDICO (renovables). Al seleccionar uno, el formulario se auto-rellenará con sus condiciones para que las modifiques.
-                  </p>
                 </div>
 
-                {/* === Info del solicitud a renovar + condiciones originales === */}
+                {/* === Info del préstamo a renovar === */}
                 {infoPrestamoRenovacion && (
-                  <div className="p-3 rounded-md bg-amber-100 dark:bg-amber-900/30 border border-amber-400 dark:border-amber-600 text-xs space-y-3">
-                    <div className="flex items-center justify-between gap-2">
-                      <p className="font-semibold text-amber-900 dark:text-amber-100">
-                        📋 Crédito a renovar: {infoPrestamoRenovacion.codigo}
-                      </p>
-                      <button
-                        type="button"
-                        onClick={restablecerCondicionesOriginales}
-                        className="px-2 py-1 rounded text-[10px] font-medium bg-amber-200 hover:bg-amber-300 dark:bg-amber-800 dark:hover:bg-amber-700 text-amber-900 dark:text-amber-100 border border-amber-400 dark:border-amber-600 transition-colors"
-                        title="Volver a cargar las condiciones originales del crédito en el formulario"
-                      >
-                        🔄 Restablecer condiciones originales
-                      </button>
-                    </div>
-
+                  <div className="p-3 rounded-md bg-amber-100 dark:bg-amber-900/30 border border-amber-400 dark:border-amber-600 text-xs space-y-2">
+                    <p className="font-semibold text-amber-900 dark:text-amber-100">
+                      📋 Crédito a renovar: {infoPrestamoRenovacion.codigo}
+                    </p>
                     <div className="grid grid-cols-2 gap-2 text-amber-900 dark:text-amber-100">
                       <div>
                         <span className="text-amber-700 dark:text-amber-300">Capital original:</span>{' '}
@@ -2799,79 +1755,14 @@ ${linkFirmaCodeudor}
                         <span className="text-amber-700 dark:text-amber-300">Saldo pendiente:</span>{' '}
                         <strong className="text-base">{formatearMoneda(infoPrestamoRenovacion.saldoTotal)}</strong>
                       </div>
-                      <div>
-                        <span className="text-amber-700 dark:text-amber-300">Modalidad:</span>{' '}
-                        <strong>{infoPrestamoRenovacion.modalidadAmortizacion}</strong>
-                      </div>
-                      <div>
-                        <span className="text-amber-700 dark:text-amber-300">Frecuencia:</span>{' '}
-                        <strong>{infoPrestamoRenovacion.frecuencia}</strong>
-                      </div>
-                      <div>
-                        <span className="text-amber-700 dark:text-amber-300">Tasa anual:</span>{' '}
-                        <strong>{infoPrestamoRenovacion.tasaInteresAnual?.toFixed(2)}%</strong>
-                      </div>
-                      <div>
-                        <span className="text-amber-700 dark:text-amber-300">Tasa mensual:</span>{' '}
-                        <strong>{infoPrestamoRenovacion.tasaInteresMensual?.toFixed(4)}%</strong>
-                      </div>
-                      <div>
-                        <span className="text-amber-700 dark:text-amber-300">Tasa moratoria diaria:</span>{' '}
-                        <strong>{infoPrestamoRenovacion.tasaMoraDiaria}%</strong>
-                      </div>
-                      <div>
-                        <span className="text-amber-700 dark:text-amber-300">Plazo:</span>{' '}
-                        <strong>{infoPrestamoRenovacion.plazoMeses} meses</strong>
-                      </div>
                     </div>
-
-                    {/* === Banner: condiciones cargadas automáticamente === */}
-                    <div className="p-2 rounded bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-300 dark:border-emerald-700 text-emerald-800 dark:text-emerald-200">
-                      <p className="font-medium">
-                        ✅ Condiciones cargadas automáticamente en el formulario
-                      </p>
-                      <p className="mt-0.5 text-[10px]">
-                        Modifica los campos que necesites cambiar (tasa, monto, cuotas, frecuencia, etc.). Los campos sin modificar conservarán los valores originales del crédito.
-                      </p>
-                    </div>
-
-                    {/* === Resumen de cambios detectados === */}
-                    {(() => {
-                      const cambios = detectarCambios()
-                      if (cambios.length === 0) {
-                        return (
-                          <div className="p-2 rounded bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300">
-                            <p className="font-medium">📋 Sin cambios detectados</p>
-                            <p className="mt-0.5 text-[10px]">Las condiciones del formulario coinciden con el crédito original.</p>
-                          </div>
-                        )
-                      }
-                      return (
-                        <div className="p-2 rounded bg-blue-50 dark:bg-blue-950/30 border border-blue-300 dark:border-blue-700 text-blue-900 dark:text-blue-100">
-                          <p className="font-medium">
-                            ✏️ {cambios.length} cambio(s) detectado(s) vs el crédito original:
-                          </p>
-                          <div className="mt-1 space-y-0.5">
-                            {cambios.map((c, i) => (
-                              <div key={i} className="flex justify-between gap-2 text-[10px]">
-                                <span className="text-blue-700 dark:text-blue-300">{c.campo}:</span>
-                                <span className="line-through text-red-600 dark:text-red-400">{c.original}</span>
-                                <span className="text-blue-500">→</span>
-                                <span className="font-semibold text-emerald-700 dark:text-emerald-300">{c.actual}</span>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      )
-                    })()}
-
                     <div className="pt-2 border-t border-amber-300 dark:border-amber-700">
                       <p className="text-amber-800 dark:text-amber-200">
                         💡 Al crear la nueva solicitud:
                       </p>
                       <ul className="list-disc list-inside mt-1 space-y-0.5 text-amber-800 dark:text-amber-200">
                         <li>El crédito anterior se <strong>cierra</strong> (estado: CANCELADO, saldos en 0)</li>
-                        <li>El nuevo solicitud se crea por el <strong>capital que ingreses</strong></li>
+                        <li>El nuevo préstamo se crea por el <strong>capital que ingreses</strong></li>
                         <li>El saldo anterior se descuenta del nuevo capital</li>
                         <li>Si el capital nuevo &gt; saldo anterior → entregas el <strong>excedente</strong> en efectivo</li>
                         <li>Si el capital nuevo &lt; saldo anterior → cliente abona la <strong>diferencia</strong></li>
@@ -2885,12 +1776,9 @@ ${linkFirmaCodeudor}
                     ⚠️ Selecciona primero un cliente para ver sus créditos activos
                   </p>
                 )}
-                {clienteId && prestamos.filter((p) =>
-                  p.cliente?.id === clienteId &&
-                  ['ACTIVO', 'EN_MORA', 'JURIDICO'].includes(p.estado)
-                ).length === 0 && (
+                {clienteId && prestamos.filter((p) => p.cliente?.id === clienteId && p.estado !== 'RECHAZADO' && p.estado !== 'CANCELADO').length === 0 && (
                   <p className="text-xs text-amber-700 dark:text-amber-300">
-                    ℹ️ Este cliente no tiene créditos activos (ACTIVO / EN_MORA / JURIDICO) para renovar
+                    ℹ️ Este cliente no tiene créditos activos para renovar
                   </p>
                 )}
               </div>
@@ -2919,7 +1807,7 @@ ${linkFirmaCodeudor}
                   </div>
                 </div>
                 <div className="pt-2 border-t border-blue-300 dark:border-blue-700 text-blue-700 dark:text-blue-300">
-                  <p>📋 El nuevo solicitud se creará por <strong>{formatearMoneda(parseFloat(montoPrincipal) || 0)}</strong> de capital.</p>
+                  <p>📋 El nuevo préstamo se creará por <strong>{formatearMoneda(parseFloat(montoPrincipal) || 0)}</strong> de capital.</p>
                   <p>💸 El crédito anterior se cierra y el cliente recibe <strong>{formatearMoneda(Math.max(0, (parseFloat(montoPrincipal) || 0) - saldoPendienteRenovacion))}</strong> en efectivo.</p>
                   {(parseFloat(montoPrincipal) || 0) < saldoPendienteRenovacion && (
                     <p className="text-amber-700 dark:text-amber-300 font-medium mt-1">
@@ -3066,7 +1954,7 @@ ${linkFirmaCodeudor}
                 <span>
                   Este cliente <strong>no tiene tasa personalizada</strong> en su ficha.
                   Se usará la tasa que definas abajo (categoría o manual).
-                  Para asignarle una tasa fija permanente, edítalo en el módulo <strong>Solicitudes → Clientes</strong>.
+                  Para asignarle una tasa fija permanente, edítalo en el módulo <strong>Préstamos → Clientes</strong>.
                 </span>
               </div>
             )}
@@ -3074,7 +1962,7 @@ ${linkFirmaCodeudor}
             {/* Selección de modalidad */}
             <div className="space-y-2">
               <Label>Modalidad del Crédito *</Label>
-              <Select value={modalidad} onValueChange={(v) => setModalidad(v as 'FRANCES' | 'TASA_FIJA' | 'CUOTA_PERSONALIZADA' | 'INTERES_FIJO_SIN_CAPITAL')}>
+              <Select value={modalidad} onValueChange={(v) => setModalidad(v as 'FRANCES' | 'TASA_FIJA' | 'CUOTA_PERSONALIZADA')}>
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
@@ -3082,20 +1970,8 @@ ${linkFirmaCodeudor}
                   <SelectItem value="FRANCES">📊 Sistema Francés (tasa anual, cuota calculada automáticamente)</SelectItem>
                   <SelectItem value="TASA_FIJA">💰 Tasa Fija Mensual (tasa mensual sobre capital inicial)</SelectItem>
                   <SelectItem value="CUOTA_PERSONALIZADA">✏️ Cuota Personalizada / Checa (tú defines la cuota y la tasa mensual)</SelectItem>
-                  <SelectItem value="INTERES_FIJO_SIN_CAPITAL">🎯 Interés Fijo sin Capital (solo intereses mensuales, capital se paga aparte)</SelectItem>
                 </SelectContent>
               </Select>
-              {modalidad === 'INTERES_FIJO_SIN_CAPITAL' && (
-                <Alert className="bg-purple-500/10 border-purple-500/30 text-purple-200">
-                  <Info className="h-4 w-4" />
-                  <AlertDescription className="text-xs">
-                    <strong>Modalidad especial:</strong> El cliente paga SOLO intereses fijos mensuales
-                    mientras mantenga deuda de capital. El capital se abona aparte mediante pagos
-                    extraordinarios acordados. El saldo real del solicitud = capital − abonos extraordinarios.
-                    Los intereses se generan mes a mes hasta que el capital quede en $0.
-                  </AlertDescription>
-                </Alert>
-              )}
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -3257,7 +2133,7 @@ ${linkFirmaCodeudor}
                     </div>
                   </div>
                 </>
-              ) : modalidad === 'CUOTA_PERSONALIZADA' ? (
+              ) : (
                 <>
                   {/* Modalidad Cuota Personalizada / Checa */}
                   <div className="space-y-2">
@@ -3399,93 +2275,7 @@ ${linkFirmaCodeudor}
                     )}
                   </div>
                 </>
-              ) : modalidad === 'INTERES_FIJO_SIN_CAPITAL' ? (
-                <>
-                  {/* Modalidad Interés Fijo sin Capital */}
-                  <div className="space-y-2">
-                    <Label htmlFor="interesFijoMensual">Interés Fijo Mensual (COP) *</Label>
-                    <Input
-                      id="interesFijoMensual"
-                      type="number"
-                      step="0.01"
-                      value={interesFijoMensual}
-                      onChange={(e) => setInteresFijoMensual(e.target.value)}
-                      required
-                      placeholder="370000"
-                    />
-                    <p className="text-xs text-muted-foreground">
-                      El cliente paga este valor fijo cada mes mientras tenga saldo de capital.
-                      No incluye abono a capital — solo intereses.
-                    </p>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="tasaMoraInteresFijo">Tasa Moratoria Diaria (%) *</Label>
-                    <Input
-                      id="tasaMoraInteresFijo"
-                      type="number"
-                      step="0.0001"
-                      value={tasaMoraAnual}
-                      onChange={(e) => setTasaMoraAnual(e.target.value)}
-                      required
-                    />
-                    <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs">
-                      <p className="text-muted-foreground">
-                        Mora compuesta diaria. Ej: 1 = 1% diario sobre capital pendiente.
-                      </p>
-                      <p className="text-amber-700 font-medium">
-                        ≡ Mensual: <strong>{((parseFloat(tasaMoraAnual) || 0) * 30).toFixed(4)}%</strong>
-                      </p>
-                    </div>
-                  </div>
-                  {/* Cálculo informativo de tasa equivalente */}
-                  {montoPrincipal && interesFijoMensual && (
-                    <div className="mt-2 p-3 rounded-md bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-700 text-xs space-y-1">
-                      <p className="font-semibold text-purple-900 dark:text-purple-100">
-                        💡 Resumen de la modalidad
-                      </p>
-                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs">
-                        <div>
-                          <span className="text-muted-foreground">Capital prestado:</span>{' '}
-                          <strong className="text-purple-900 dark:text-purple-100">{formatearMoneda(parseFloat(montoPrincipal) || 0)}</strong>
-                        </div>
-                        <div>
-                          <span className="text-muted-foreground">Cuota mensual fija:</span>{' '}
-                          <strong className="text-purple-900 dark:text-purple-100">{formatearMoneda(parseFloat(interesFijoMensual) || 0)}</strong>
-                        </div>
-                        <div>
-                          <span className="text-muted-foreground">Tasa mensual equiv.:</span>{' '}
-                          <strong className="text-purple-900 dark:text-purple-100">
-                            {parseFloat(montoPrincipal) > 0
-                              ? ((parseFloat(interesFijoMensual) / parseFloat(montoPrincipal)) * 100).toFixed(4)
-                              : '0'}%
-                          </strong>
-                        </div>
-                        <div>
-                          <span className="text-muted-foreground">Tasa anual equiv.:</span>{' '}
-                          <strong className="text-purple-900 dark:text-purple-100">
-                            {parseFloat(montoPrincipal) > 0
-                              ? ((parseFloat(interesFijoMensual) / parseFloat(montoPrincipal)) * 12 * 100).toFixed(2)
-                              : '0'}%
-                          </strong>
-                        </div>
-                        <div>
-                          <span className="text-muted-foreground">Duración estimada:</span>{' '}
-                          <strong className="text-purple-900 dark:text-purple-100">Indefinida</strong>
-                        </div>
-                        <div>
-                          <span className="text-muted-foreground">Capital se abona:</span>{' '}
-                          <strong className="text-purple-900 dark:text-purple-100">Aparte</strong>
-                        </div>
-                      </div>
-                      <p className="text-[11px] text-purple-700 dark:text-purple-300 mt-2">
-                        El cliente paga la cuota mensual fija de intereses hasta que el capital quede en $0.
-                        El capital se abona aparte mediante pagos extraordinarios acordados con el gestor.
-                        El saldo real del solicitud = capital − abonos extraordinarios.
-                      </p>
-                    </div>
-                  )}
-                </>
-              ) : null}
+              )}
               <div className="space-y-2">
                 <Label htmlFor="frecuencia">Frecuencia de Pagos *</Label>
                 <Select value={frecuencia} onValueChange={(v) => setFrecuencia(v as Frecuencia)}>
@@ -3511,88 +2301,40 @@ ${linkFirmaCodeudor}
                       Cuota Personalizada / Checa
                     </span>
                   )}
-                  {modalidad === 'INTERES_FIJO_SIN_CAPITAL' && (
-                    <span className="text-xs px-2 py-0.5 rounded bg-purple-100 text-purple-800">
-                      🎯 Interés Fijo sin Capital
-                    </span>
-                  )}
                 </h4>
-                {modalidad === 'INTERES_FIJO_SIN_CAPITAL' ? (
-                  <>
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
-                      <div>
-                        <div className="text-xs text-muted-foreground">Capital (deuda)</div>
-                        <div className="font-bold text-primary">{formatearMoneda(parseFloat(montoPrincipal) || 0)}</div>
-                      </div>
-                      <div>
-                        <div className="text-xs text-muted-foreground">Cuota mensual fija</div>
-                        <div className="font-bold text-purple-700">{formatearMoneda(calculo.montoCuota)}</div>
-                      </div>
-                      <div>
-                        <div className="text-xs text-muted-foreground">Tasa mensual equiv.</div>
-                        <div className="font-bold text-blue-700">
-                          {(calculo as any).tasaMensualCalculada?.toFixed(4)}%
-                        </div>
-                      </div>
-                      <div>
-                        <div className="text-xs text-muted-foreground">Tasa anual equiv.</div>
-                        <div className="font-bold text-blue-700">
-                          {(calculo as any).tasaAnualCalculada?.toFixed(2)}%
-                        </div>
-                      </div>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
+                  <div>
+                    <div className="text-xs text-muted-foreground">N° Cuotas</div>
+                    <div className="font-bold">{calculo.numeroCuotas}</div>
+                  </div>
+                  <div>
+                    <div className="text-xs text-muted-foreground">Cuota Fija</div>
+                    <div className="font-bold">{formatearMoneda(calculo.montoCuota)}</div>
+                  </div>
+                  <div>
+                    <div className="text-xs text-muted-foreground">Total Interés</div>
+                    <div className="font-bold text-amber-700">{formatearMoneda(calculo.totalInteres)}</div>
+                  </div>
+                  <div>
+                    <div className="text-xs text-muted-foreground">Total a Pagar</div>
+                    <div className="font-bold text-primary">{formatearMoneda(calculo.totalPagar)}</div>
+                  </div>
+                </div>
+                {modalidad === 'CUOTA_PERSONALIZADA' && (
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs mt-2 pt-2 border-t border-primary/20">
+                    <div>
+                      <span className="text-muted-foreground">Tasa mensual:</span>{' '}
+                      <strong className="text-purple-700">{(calculo as any).tasaMensual}%</strong>
                     </div>
-                    <div className="mt-2 p-3 rounded-md bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-700">
-                      <p className="text-xs text-purple-900 dark:text-purple-100">
-                        <strong>💡 Funcionamiento:</strong> El cliente paga <strong>{formatearMoneda(calculo.montoCuota)}</strong> cada mes
-                        (solo intereses). El capital de <strong>{formatearMoneda(parseFloat(montoPrincipal) || 0)}</strong> se abona aparte mediante
-                        pagos extraordinarios. El saldo real del solicitud = capital − abonos extraordinarios.
-                        Los intereses se siguen pagando mes a mes hasta que el capital quede en $0.
-                      </p>
-                      {(calculo as any).proximaCuotaInteresFecha && (
-                        <p className="text-xs text-purple-700 dark:text-purple-300 mt-2">
-                          📅 Próxima cuota de interés:{' '}
-                          <strong>{formatearFecha((calculo as any).proximaCuotaInteresFecha)}</strong>
-                        </p>
-                      )}
+                    <div>
+                      <span className="text-muted-foreground">Tasa anual:</span>{' '}
+                      <strong>{(calculo as any).tasaAnual}%</strong>
                     </div>
-                  </>
-                ) : (
-                  <>
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
-                      <div>
-                        <div className="text-xs text-muted-foreground">N° Cuotas</div>
-                        <div className="font-bold">{calculo.numeroCuotas}</div>
-                      </div>
-                      <div>
-                        <div className="text-xs text-muted-foreground">Cuota Fija</div>
-                        <div className="font-bold">{formatearMoneda(calculo.montoCuota)}</div>
-                      </div>
-                      <div>
-                        <div className="text-xs text-muted-foreground">Total Interés</div>
-                        <div className="font-bold text-amber-700">{formatearMoneda(calculo.totalInteres)}</div>
-                      </div>
-                      <div>
-                        <div className="text-xs text-muted-foreground">Total a Pagar</div>
-                        <div className="font-bold text-primary">{formatearMoneda(calculo.totalPagar)}</div>
-                      </div>
+                    <div>
+                      <span className="text-muted-foreground">Interés por cuota:</span>{' '}
+                      <strong>{formatearMoneda(calculo.totalInteres / calculo.numeroCuotas)}</strong>
                     </div>
-                    {modalidad === 'CUOTA_PERSONALIZADA' && (
-                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs mt-2 pt-2 border-t border-primary/20">
-                        <div>
-                          <span className="text-muted-foreground">Tasa mensual:</span>{' '}
-                          <strong className="text-purple-700">{(calculo as any).tasaMensual}%</strong>
-                        </div>
-                        <div>
-                          <span className="text-muted-foreground">Tasa anual:</span>{' '}
-                          <strong>{(calculo as any).tasaAnual}%</strong>
-                        </div>
-                        <div>
-                          <span className="text-muted-foreground">Interés por cuota:</span>{' '}
-                          <strong>{formatearMoneda(calculo.totalInteres / calculo.numeroCuotas)}</strong>
-                        </div>
-                      </div>
-                    )}
-                  </>
+                  </div>
                 )}
 
                 {/* Tasas aplicables (todas las modalidades) */}
@@ -3655,8 +2397,8 @@ ${linkFirmaCodeudor}
                   </div>
                 </div>
                 {calculo.fondoGarantia > 0 && (
-                  <p className="text-xs text-blue-800 dark:text-blue-200 font-semibold bg-blue-50 dark:bg-blue-900/60 p-2 rounded border border-blue-200 dark:border-blue-700">
-                    🛡️ Fondo de Garantía ({tasaFondoGarantia}%): {formatearMoneda(calculo.fondoGarantia)}
+                  <p className="text-xs text-blue-700 font-medium">
+                    🛡️ Fondo de Garantía (5% primer préstamo): {formatearMoneda(calculo.fondoGarantia)}
                   </p>
                 )}
 
@@ -3701,7 +2443,7 @@ ${linkFirmaCodeudor}
                   <div className="mt-2 pt-2 border-t border-primary/20 space-y-1.5">
                     <div className="text-xs font-semibold text-emerald-700 dark:text-emerald-300 flex items-center gap-1.5">
                       <Sparkles className="w-3.5 h-3.5" />
-                      Flexibilidad Financiera: ADQUIRIDA ({flexibilidadModalidad})
+                      Flexibilidad Financiera: ADQUIRIDA
                     </div>
                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs">
                       <div>
@@ -3711,21 +2453,21 @@ ${linkFirmaCodeudor}
                         </strong>
                       </div>
                       <div>
-                        <span className="text-muted-foreground">Usos disponibles:</span>{' '}
-                        <strong className="text-emerald-700 dark:text-emerald-300">
-                          {flexibilidadModalidad === 'PREMIUM' ? '2 veces' : '1 vez'} durante la vigencia
+                        <span className="text-muted-foreground">Estado:</span>{' '}
+                        <strong className="text-amber-700 dark:text-amber-300">
+                          Pendiente de activación
                         </strong>
                       </div>
                       <div>
-                        <span className="text-muted-foreground">Modalidad:</span>{' '}
+                        <span className="text-muted-foreground">Beneficios:</span>{' '}
                         <strong className="text-emerald-700 dark:text-emerald-300">
-                          {flexibilidadModalidad === 'PREMIUM' ? 'Premium ($34.900)' : 'Básica ($15.000)'}
+                          Cambio de fecha + Traslado de cuota
                         </strong>
                       </div>
                     </div>
                     <p className="text-[11px] text-emerald-700 dark:text-emerald-300">
-                      ✨ El cobro de {formatearMoneda(flexibilidadCosto)} se cargará UNA sola vez en la primera cuota.
-                      {' '}El cliente podrá usar el beneficio {flexibilidadModalidad === 'PREMIUM' ? '2 veces' : '1 vez'} durante la vigencia.
+                      ✨ El cliente podrá activar el beneficio pagando {formatearMoneda(flexibilidadCosto)}.
+                      Al activarse, podrá generar Otros Síes con firma electrónica OTP.
                     </p>
                   </div>
                 )}
@@ -3733,7 +2475,6 @@ ${linkFirmaCodeudor}
             )}
 
             {/* === FLEXIBILIDAD FINANCIERA (beneficio opcional, cuotas >= 4) === */}
-            {/* DOS tarifas: Básica $15.000 (1 uso) | Premium $34.900 (2 usos) */}
             {cuotasActuales >= 4 ? (
               <div className={`space-y-3 p-4 rounded-lg border-2 transition-colors ${
                 flexibilidadFinanciera
@@ -3764,93 +2505,26 @@ ${linkFirmaCodeudor}
                     }
                   >
                     {flexibilidadFinanciera
-                      ? `✨ ADQUIRIDO (${flexibilidadModalidad})`
-                      : 'Opcional — 2 tarifas disponibles'}
+                      ? `✨ ADQUIRIDO (+$${flexibilidadCosto.toLocaleString('es-CO')})`
+                      : `Opcional · $${flexibilidadCosto.toLocaleString('es-CO')}`}
                   </Badge>
                 </div>
                 <p className="text-xs text-emerald-700 dark:text-emerald-300">
                   {flexibilidadFinanciera
-                    ? '✅ Activo. El cliente podrá trasladar una cuota al final del crédito o solicitar cambio de fecha de pago. Se generará un "Otro Sí" firmado electrónicamente con OTP. El cobro se realiza UNA sola vez al inicio del crédito (cargado en la primera cuota).'
-                    : `Disponible porque el crédito tiene ${cuotasActuales} cuotas (≥ 4). El cliente podrá trasladar UNA cuota al final del crédito o solicitar cambio de fecha (genera "Otro Sí" sin modificar pagaré/carta originales).`}
+                    ? '✅ Activo: el cliente podrá (previo pago del costo) trasladar una cuota al final del crédito o solicitar cambio de fecha de pago. Se generará un documento "Otro Sí" firmado electrónicamente con OTP.'
+                    : `Disponible porque el crédito tiene ${cuotasActuales} cuotas (≥ 4). Por un costo adicional de $${flexibilidadCosto.toLocaleString('es-CO')}, el cliente tendrá la posibilidad de:`}
                 </p>
-
-                {/* === Selector de modalidad (2 tarifas) — solo si está activo === */}
-                {flexibilidadFinanciera && (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-2">
-                    {/* Básica */}
-                    <button
-                      type="button"
-                      onClick={() => setFlexibilidadModalidad('BASICA')}
-                      className={`text-left p-3 rounded-lg border-2 transition-all ${
-                        flexibilidadModalidad === 'BASICA'
-                          ? 'border-emerald-500 bg-emerald-200/60 dark:bg-emerald-900/60'
-                          : 'border-emerald-300/40 dark:border-emerald-800/60 bg-emerald-50/40 dark:bg-emerald-950/40 hover:border-emerald-400'
-                      }`}
-                    >
-                      <div className="flex items-center justify-between mb-1">
-                        <span className="text-sm font-bold text-emerald-900 dark:text-emerald-100">Básica</span>
-                        <span className="text-lg font-bold text-emerald-700 dark:text-emerald-300">$15.000</span>
-                      </div>
-                      <p className="text-[11px] text-emerald-800 dark:text-emerald-200">
-                        ✅ <strong>1 uso</strong> durante la vigencia del crédito.
-                      </p>
-                      <p className="text-[10px] text-emerald-700/80 dark:text-emerald-300/80 mt-1">
-                        Nota: esta opción solo podrá usarse una vez durante la vigencia del crédito.
-                      </p>
-                    </button>
-
-                    {/* Premium */}
-                    <button
-                      type="button"
-                      onClick={() => setFlexibilidadModalidad('PREMIUM')}
-                      className={`text-left p-3 rounded-lg border-2 transition-all ${
-                        flexibilidadModalidad === 'PREMIUM'
-                          ? 'border-emerald-500 bg-emerald-200/60 dark:bg-emerald-900/60'
-                          : 'border-emerald-300/40 dark:border-emerald-800/60 bg-emerald-50/40 dark:bg-emerald-950/40 hover:border-emerald-400'
-                      }`}
-                    >
-                      <div className="flex items-center justify-between mb-1">
-                        <span className="text-sm font-bold text-emerald-900 dark:text-emerald-100 flex items-center gap-1">
-                          Premium
-                          <span className="text-[9px] px-1 py-0.5 rounded bg-amber-400/30 text-amber-800 dark:text-amber-200 border border-amber-400/40">RECOMENDADA</span>
-                        </span>
-                        <span className="text-lg font-bold text-emerald-700 dark:text-emerald-300">$34.900</span>
-                      </div>
-                      <p className="text-[11px] text-emerald-800 dark:text-emerald-200">
-                        ✅ <strong>2 usos</strong> durante la vigencia del crédito (para las dos cuotas del mes).
-                      </p>
-                      <p className="text-[10px] text-emerald-700/80 dark:text-emerald-300/80 mt-1">
-                        Nota: esta opción podrá usarse dos veces durante la vigencia del crédito.
-                      </p>
-                    </button>
-                  </div>
-                )}
-
-                {/* === Ejemplo de beneficio === */}
-                {flexibilidadFinanciera && (
-                  <div className="mt-3 p-3 rounded-md bg-amber-50 dark:bg-amber-950/30 border border-amber-300 dark:border-amber-800 text-[11px] text-amber-900 dark:text-amber-100">
-                    <div className="font-semibold mb-1 flex items-center gap-1.5">
-                      <span>💡</span> Ejemplo: cómo beneficia al cliente
-                    </div>
-                    <p className="leading-relaxed">
-                      Imagina que el cliente tiene una cuota de <strong>$200.000</strong> con vencimiento el <strong>5 de agosto</strong>,
-                      y por un imprevisto no podrá pagar a tiempo. Sin Flexibilidad Financiera, se generarían
-                      intereses moratorios diarios (ej: <strong>$6.000/día</strong>) — en 5 días serían <strong>$30.000</strong> solo en mora.
-                    </p>
-                    <p className="mt-1.5 leading-relaxed">
-                      Con Flexibilidad Financiera ({flexibilidadModalidad === 'PREMIUM' ? 'Premium $34.900' : 'Básica $15.000'}),
-                      el cliente puede <strong>trasladar esa cuota al final del crédito</strong> o <strong>cambiar la fecha de pago</strong>,
-                      <strong> evitando el cobro de mora</strong>. El ahorro supera ampliamente el costo del beneficio.
-                      {' '}El cobro de {formatearMoneda(flexibilidadCosto)} se cargará una sola vez en la <strong>primera cuota</strong>.
-                    </p>
-                  </div>
-                )}
-
                 {!flexibilidadFinanciera && (
                   <ul className="list-disc list-inside text-xs text-emerald-800 dark:text-emerald-200 ml-2 space-y-0.5">
                     <li>Trasladar UNA cuota al final del crédito</li>
                     <li>Solicitar cambio de fecha de pago (se genera "Otro Sí" sin modificar pagare/carta originales)</li>
                   </ul>
+                )}
+                {flexibilidadFinanciera && (
+                  <div className="mt-2 pt-2 border-t border-emerald-300 dark:border-emerald-700 text-[11px] text-emerald-700 dark:text-emerald-300">
+                    💡 El cliente deberá pagar el costo de <strong>${flexibilidadCosto.toLocaleString('es-CO')}</strong> para activar el beneficio.
+                    Una vez activado, podrá generar Otros Síes desde el detalle del préstamo.
+                  </div>
                 )}
               </div>
             ) : (
@@ -3859,181 +2533,6 @@ ${linkFirmaCodeudor}
                 <strong> 4 o más cuotas</strong>. Actualmente: {cuotasActuales} cuota(s).
               </div>
             )}
-
-            {/* === RENOVACIÓN ANTICIPADA (beneficio opcional del simulador del portal) === */}
-            {/* Cobro único de $9.900 COP. Se cobra al activarse tras T&C y se */}
-            {/* registra automáticamente en la caja CAJA-RENOVACIONES. */}
-            <div className={`space-y-3 p-4 rounded-lg border-2 transition-colors ${
-              renovacionAnticipada
-                ? 'bg-amber-50 dark:bg-amber-900/40 border-amber-500 dark:border-amber-500'
-                : 'bg-muted/30 border-muted-foreground/20'
-            }`}>
-              <div className="flex items-start justify-between gap-3">
-                <div className="flex-1 min-w-0">
-                  <Label className="text-sm font-semibold flex items-center gap-2">
-                    <RefreshCw className="w-4 h-4 text-amber-600 dark:text-amber-400" />
-                    Renovación Anticipada
-                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-200 dark:bg-amber-800 text-amber-900 dark:text-amber-100 font-bold">
-                      $9.900
-                    </span>
-                  </Label>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Beneficio opcional que el cliente puede activar desde el simulador del portal.
-                    Le da derecho a reserva anticipada de cupo, prioridad en procesamiento,
-                    tasa preferencial mantenida y desembolso acelerado.
-                  </p>
-                </div>
-                <input
-                  type="checkbox"
-                  id="renovacionAnticipadaAdmin"
-                  checked={renovacionAnticipada}
-                  onChange={(e) => setRenovacionAnticipada(e.target.checked)}
-                  className="w-4 h-4 accent-amber-500 shrink-0 cursor-pointer mt-1"
-                  aria-label="Activar Renovación Anticipada"
-                />
-              </div>
-              {renovacionAnticipada && (
-                <div className="mt-2 p-3 rounded-md bg-amber-50 dark:bg-amber-950/30 border border-amber-300 dark:border-amber-800 text-[11px] text-amber-900 dark:text-amber-100">
-                  <div className="font-semibold mb-1">✨ Beneficios que recibe el cliente:</div>
-                  <ul className="list-disc list-inside space-y-0.5 ml-1">
-                    <li>Reserva anticipada de su cupo para el siguiente ciclo</li>
-                    <li>Prioridad en el procesamiento de la próxima solicitud</li>
-                    <li>Tasa preferencial mantenida (sin re-evaluación)</li>
-                    <li>Desembolso acelerado (menos de 24 horas hábiles)</li>
-                    <li>Trámite simplificado (sin cargue de documentos)</li>
-                  </ul>
-                  <p className="mt-2 pt-1.5 border-t border-amber-300 dark:border-amber-800">
-                    El cobro de <strong>{formatearMoneda(RENOVACION_ANTICIPADA_COSTO)}</strong> se hará
-                    una sola vez al activarse el solicitud tras la aceptación de T&C,
-                    y se registrará automáticamente en la caja <strong>CAJA-RENOVACIONES</strong>.
-                  </p>
-                </div>
-              )}
-            </div>
-
-            {/* === COBRO DE PAGARÉ + CARTA DE INSTRUCCIONES === */}
-            {/* Cargo editable $19.900 — se cobra UNA sola vez al inicio del crédito */}
-            {requiereDocumentos && (generarPagare || generarCarta) && (
-              <div className={`space-y-3 p-4 rounded-lg border-2 transition-colors ${
-                cobroPagareCarta
-                  ? 'bg-violet-100 dark:bg-violet-900/40 border-violet-500 dark:border-violet-500'
-                  : 'bg-violet-50 dark:bg-violet-950/30 border-violet-300 dark:border-violet-800'
-              }`}>
-                <div className="flex items-center justify-between gap-2 flex-wrap">
-                  <div className="flex items-center gap-2">
-                    <Switch
-                      checked={cobroPagareCarta}
-                      onCheckedChange={setCobroPagareCarta}
-                      id="cobroPagareCarta"
-                    />
-                    <Label
-                      htmlFor="cobroPagareCarta"
-                      className="text-sm cursor-pointer font-semibold text-violet-900 dark:text-violet-100 flex items-center gap-1.5"
-                    >
-                      <FileText className="w-4 h-4 text-violet-600 dark:text-violet-300" />
-                      Cobro de Pagaré + Carta de Instrucciones
-                    </Label>
-                  </div>
-                  <Badge
-                    variant="outline"
-                    className={
-                      cobroPagareCarta
-                        ? 'text-violet-700 dark:text-violet-200 border-violet-400 dark:border-violet-500 bg-violet-200 dark:bg-violet-800'
-                        : 'text-muted-foreground border-muted-foreground/30'
-                    }
-                  >
-                    {cobroPagareCarta ? `Facturado: $${valorPagareCarta.toLocaleString('es-CO')}` : 'Sin cobro'}
-                  </Badge>
-                </div>
-                {cobroPagareCarta && (
-                  <>
-                    <p className="text-xs text-violet-700 dark:text-violet-300">
-                      ✅ Cargo único aplicado al cliente por la generación del pagaré y carta de instrucciones.
-                      {' '}Se explica en el estado de cuenta como concepto "Pagaré + Carta de Instrucciones".
-                      {' '}El valor es <strong>editable</strong> (puede variar según el cliente).
-                    </p>
-                    <div className="flex items-center gap-2 mt-1">
-                      <Label htmlFor="valorPagareCarta" className="text-xs text-violet-800 dark:text-violet-200 whitespace-nowrap">
-                        Valor a cobrar (COP):
-                      </Label>
-                      <Input
-                        id="valorPagareCarta"
-                        type="number"
-                        min={0}
-                        step={100}
-                        value={valorPagareCarta}
-                        onChange={(e) => setValorPagareCarta(Number(e.target.value) || 0)}
-                        className="w-40 h-9"
-                      />
-                      <span className="text-[11px] text-muted-foreground">
-                        ≈ ${valorPagareCarta.toLocaleString('es-CO')}
-                      </span>
-                    </div>
-                  </>
-                )}
-              </div>
-            )}
-
-            {/* === TARIFA DE USO DE PLATAFORMA (Tarea U) === */}
-            {/* Cargo editable $4.900 — se cobra UNA sola vez al inicio del crédito */}
-            <div className={`space-y-3 p-4 rounded-lg border-2 transition-colors ${
-              cobroTarifaPlataforma
-                ? 'bg-amber-100 dark:bg-amber-900/40 border-amber-500 dark:border-amber-500'
-                : 'bg-amber-50 dark:bg-amber-950/30 border-amber-300 dark:border-amber-800'
-            }`}>
-              <div className="flex items-center justify-between gap-2 flex-wrap">
-                <div className="flex items-center gap-2">
-                  <Switch
-                    checked={cobroTarifaPlataforma}
-                    onCheckedChange={setCobroTarifaPlataforma}
-                    id="cobroTarifaPlataforma"
-                  />
-                  <Label
-                    htmlFor="cobroTarifaPlataforma"
-                    className="text-sm cursor-pointer font-semibold text-amber-900 dark:text-amber-100 flex items-center gap-1.5"
-                  >
-                    <MonitorSmartphone className="w-4 h-4 text-amber-600 dark:text-amber-300" />
-                    Tarifa de Uso de Plataforma
-                  </Label>
-                </div>
-                <Badge
-                  variant="outline"
-                  className={
-                    cobroTarifaPlataforma
-                      ? 'text-amber-700 dark:text-amber-200 border-amber-400 dark:border-amber-500 bg-amber-200 dark:bg-amber-800'
-                      : 'text-muted-foreground border-muted-foreground/30'
-                  }
-                >
-                  {cobroTarifaPlataforma ? `Facturado: $${valorTarifaPlataforma.toLocaleString('es-CO')}` : 'Sin cobro'}
-                </Badge>
-              </div>
-              {cobroTarifaPlataforma && (
-                <>
-                  <p className="text-xs text-amber-700 dark:text-amber-300">
-                    ✅ Cargo único aplicado al cliente por el uso de la plataforma tecnológica asociada al crédito.
-                    {' '}Se refleja en el estado de cuenta como concepto "Tarifa de Uso de Plataforma".
-                    {' '}El valor es <strong>editable</strong> (puede variar según el cliente).
-                  </p>
-                  <div className="flex items-center gap-2 mt-1">
-                    <Label htmlFor="valorTarifaPlataforma" className="text-xs text-amber-800 dark:text-amber-200 whitespace-nowrap">
-                      Valor a cobrar (COP):
-                    </Label>
-                    <Input
-                      id="valorTarifaPlataforma"
-                      type="number"
-                      min={0}
-                      step={100}
-                      value={valorTarifaPlataforma}
-                      onChange={(e) => setValorTarifaPlataforma(Number(e.target.value) || 0)}
-                      className="w-40 h-9"
-                    />
-                    <span className="text-[11px] text-muted-foreground">
-                      ≈ ${valorTarifaPlataforma.toLocaleString('es-CO')}
-                    </span>
-                  </div>
-                </>
-              )}
-            </div>
 
             {/* Documentos */}
             <div className="space-y-3 border-t pt-4">
@@ -4268,7 +2767,7 @@ ${linkFirmaCodeudor}
                 </div>
                 <p className="text-xs text-violet-700 dark:text-violet-300">
                   {tieneCodeudor
-                    ? '✅ Activo: el codeudor firmará electrónicamente el pagaré y respaldará el solicitud.'
+                    ? '✅ Activo: el codeudor firmará electrónicamente el pagaré y respaldará el préstamo.'
                     : 'Si activas esta opción, podrás seleccionar un cliente como codeudor.'}
                 </p>
                 {tieneCodeudor && (
@@ -4400,7 +2899,7 @@ ${linkFirmaCodeudor}
                         💡 Recomendado: <strong>Ambos</strong>. El cliente recibirá el código por WhatsApp y correo para mayor seguridad.
                       </p>
                       <div className="bg-purple-100/50 p-2 rounded text-[11px] text-purple-900">
-                        📋 Flujo: 1) Cliente recibe link → 2) Sube foto del documento → 3) Sube selfie con cédula → 4) Dibuja firma → 5) Recibe código OTP → 6) Confirma código → 7) Solicitud se activa automáticamente
+                        📋 Flujo: 1) Cliente recibe link → 2) Sube foto del documento → 3) Sube selfie con cédula → 4) Dibuja firma → 5) Recibe código OTP → 6) Confirma código → 7) Préstamo se activa automáticamente
                       </div>
                     </div>
                   )}
@@ -4428,18 +2927,6 @@ ${linkFirmaCodeudor}
           </form>
         </DialogContent>
       </Dialog>
-
-      {/* === Modal "¿QUÉ CAMBIÓ?" — Análisis de comportamiento de pagos === */}
-      {/* Muestra los cambios detectados comparando los últimos 30 días vs. los 30 días anteriores. */}
-      <QueCambioModal
-        prestamoId={prestamoQueCambioId}
-        prestamoCodigo={prestamoQueCambioCodigo}
-        open={modalQueCambio}
-        onClose={() => {
-          setModalQueCambio(false)
-          setPrestamoQueCambioId(null)
-        }}
-      />
     </div>
   )
 }
@@ -4447,7 +2934,7 @@ ${linkFirmaCodeudor}
 // =====================================================
 // SimuladorPanel — wrapper interno de SimuladorView
 // =====================================================
-// Reutiliza el SimuladorView standalone dentro de la pestaña de solicitudes.
+// Reutiliza el SimuladorView standalone dentro de la pestaña de préstamos.
 // Mantener un wrapper propio permite inyectar props adicionales (por
 // ejemplo, parámetros precargados) en el futuro sin romper la API pública.
 function SimuladorPanel() {
@@ -4457,7 +2944,7 @@ function SimuladorPanel() {
 // =====================================================
 // PrestamosView — wrapper con pestañas internas
 // =====================================================
-// Vista principal de Solicitudes que agrupa 8 pestañas:
+// Vista principal de Préstamos que agrupa 8 pestañas:
 //   1. Solicitudes     -> PrestamosPanel (lista + crear solicitud)
 //   2. Clientes        -> ClientesView
 //   3. Simulador       -> SimuladorPanel
@@ -4474,60 +2961,65 @@ export function PrestamosView({
   onAbrirPrestamo,
   onChanged,
   onCambiarVista,
-  solicitudPendiente,
-  onSolicitudConsumida,
 }: {
   onAbrirPrestamo: (id: string) => void
   onChanged: () => void
   onCambiarVista?: (vista: string) => void
-  // Solicitud web inyectada desde fuera (ej: BuzonSolicitudesView montado
-  // en page.tsx) que debe convertirse en solicitud. Cuando cambia, se
-  // precarga el formulario y se abre el modal.
-  solicitudPendiente?: SolicitudWebMin | null
-  // Callback opcional para que el padre sepa que la solicitud ya fue
-  // procesada (y pueda limpiarla de su estado).
-  onSolicitudConsumida?: () => void
 }) {
   const [tab, setTab] = useState('solicitudes')
   const [simulacionInicial, setSimulacionInicial] = useState<SimulacionParams | null>(null)
   const { toast } = useToast()
 
-  // === Procesar solicitudPendiente inyectada desde page.tsx ===
-  // Esto permite que el Buzón de Solicitudes montado como vista directa
-  // en page.tsx (no como tab interno) pueda disparar la creación de
-  // solicitud al hacer clic en el botón "Solicitud".
-  useEffect(() => {
-    if (!solicitudPendiente) return
-    const solicitud = solicitudPendiente
-    const params: SimulacionParams = {
-      clienteId: solicitud.clienteId,
-      montoPrincipal: solicitud.valorSolicitado?.toString() ?? '',
-      tasaInteresAnual: solicitud.tasaUtilizada?.toString() ?? '24',
-      plazoMeses: solicitud.numeroCuotas?.toString() ?? '12',
-      frecuencia: (solicitud.frecuencia as Frecuencia) || 'MENSUAL',
-      origen: `Solicitud web ${solicitud.codigo}`,
-      solicitudWebId: solicitud.id,
-      // === Preservar fecha de primera cuota pedida por el cliente ===
-      fechaPrimerCuota: solicitud.primerPagoFecha ?? null,
-      flexibilidadFinanciera: solicitud.flexibilidadFinanciera,
-      flexibilidadModalidad: (solicitud.flexibilidadModalidad === 'PREMIUM' ? 'PREMIUM' : 'BASICA'),
-      flexibilidadCosto: solicitud.flexibilidadCosto,
-      renovacionAnticipada: solicitud.renovacionAnticipada,
-      renovacionAnticipadaCosto: solicitud.renovacionAnticipadaCosto,
+  // === Limpiar todos los registros ===
+  const [modalLimpiarAbierto, setModalLimpiarAbierto] = useState(false)
+  const [passwordLimpiar, setPasswordLimpiar] = useState('')
+  const [motivoLimpiar, setMotivoLimpiar] = useState('')
+  const [limpiando, setLimpiando] = useState(false)
+  const [resultadoLimpieza, setResultadoLimpieza] = useState<any>(null)
+  const [refreshKey, setRefreshKey] = useState(0)
+
+  const limpiarTodosPrestamos = async () => {
+    // La contraseña NO se compara en el frontend — el backend la valida
+    // contra LIMPIAR_PRESTAMOS_PASSWORD en .env. Aquí solo verificamos
+    // que el campo no esté vacío antes de llamar al endpoint.
+    if (!passwordLimpiar || passwordLimpiar.length < 4) {
+      toast({ title: 'Contraseña requerida', description: 'Ingresa la contraseña de autorización (definida en LIMPIAR_PRESTAMOS_PASSWORD del .env).', variant: 'destructive' })
+      return
     }
-    setSimulacionInicial(params)
-    setTab('solicitudes')
-    toast({
-      title: 'Solicitud cargada',
-      description: `Se precargó el formulario con los datos de la solicitud ${solicitud.codigo}. Completa la información restante para crear el solicitud. Al crear, la solicitud se marcará como CONVERTIDA y el cliente verá el flujo de firma en su portal.`,
-      duration: 7000,
-    })
-    // Avisar al padre que ya consumió la solicitud para que limpie su estado
-    if (onSolicitudConsumida) onSolicitudConsumida()
-  }, [solicitudPendiente, onSolicitudConsumida])
+    setLimpiando(true)
+    setResultadoLimpieza(null)
+    try {
+      const res = await fetch('/api/prestamos/limpiar-todos', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password: passwordLimpiar, motivo: motivoLimpiar }),
+      })
+      const json = await res.json()
+      if (json.success) {
+        setResultadoLimpieza(json)
+        setPasswordLimpiar('')
+        setMotivoLimpiar('')
+        setRefreshKey(k => k + 1)
+        onChanged()
+      } else {
+        toast({ title: 'Error', description: json.error || 'No se pudo completar', variant: 'destructive' })
+      }
+    } catch (e: any) {
+      toast({ title: 'Error', description: e.message, variant: 'destructive' })
+    } finally {
+      setLimpiando(false)
+    }
+  }
+
+  const cerrarModalLimpiar = () => {
+    setModalLimpiarAbierto(false)
+    setPasswordLimpiar('')
+    setMotivoLimpiar('')
+    setResultadoLimpieza(null)
+  }
 
   // Convertir una solicitud web en una simulación precargada en la pestaña
-  // "Solicitudes" para que el operador complete la creación del solicitud.
+  // "Solicitudes" para que el operador complete la creación del préstamo.
   const convertirSolicitudWeb = (solicitud: SolicitudWebMin) => {
     const params: SimulacionParams = {
       clienteId: solicitud.clienteId,
@@ -4536,31 +3028,20 @@ export function PrestamosView({
       plazoMeses: solicitud.numeroCuotas?.toString() ?? '12',
       frecuencia: (solicitud.frecuencia as Frecuencia) || 'MENSUAL',
       origen: `Solicitud web ${solicitud.codigo}`,
-      // === Preservar ID de la solicitud web para auto-marcarla como CONVERTIDA ===
-      solicitudWebId: solicitud.id,
-      // === Preservar fecha de primera cuota pedida por el cliente ===
-      fechaPrimerCuota: solicitud.primerPagoFecha ?? null,
-      // === Preservar flexibilidad financiera elegida por el cliente ===
-      flexibilidadFinanciera: solicitud.flexibilidadFinanciera,
-      flexibilidadModalidad: (solicitud.flexibilidadModalidad === 'PREMIUM' ? 'PREMIUM' : 'BASICA'),
-      flexibilidadCosto: solicitud.flexibilidadCosto,
-      // === Preservar Renovación Anticipada elegida por el cliente ===
-      renovacionAnticipada: solicitud.renovacionAnticipada,
-      renovacionAnticipadaCosto: solicitud.renovacionAnticipadaCosto,
     }
     setSimulacionInicial(params)
     setTab('solicitudes')
     toast({
       title: 'Solicitud cargada',
-      description: `Se precargó el formulario con los datos de la solicitud ${solicitud.codigo}. Completa la información restante para crear el solicitud. Al crear, la solicitud se marcará como CONVERTIDA y el cliente verá el flujo de firma en su portal.`,
-      duration: 7000,
+      description: `Se precargó el formulario con los datos de la solicitud ${solicitud.codigo}. Completa la información restante para crear el préstamo.`,
+      duration: 6000,
     })
   }
 
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Solicitudes"
+        title="Préstamos"
         subtitle="Solicitudes, clientes, simulador, cajas y más"
         icon={<FileText className="w-5 h-5" />}
       />
@@ -4569,7 +3050,7 @@ export function PrestamosView({
         {/* === FIX MOBILE (2026-08-05): Antes era grid-cols-2 que mostraba 9 pestañas
             en 5 filas en la mitad de la pantalla del móvil, bloqueando la navegación.
             Ahora es un TabsList horizontal con scroll suave en móvil, y grid en desktop. === */}
-        <TabsList className="flex overflow-x-auto whitespace-nowrap md:grid md:grid-cols-4 lg:grid-cols-10 w-full gap-1 md:gap-0 no-scrollbar">
+        <TabsList className="flex overflow-x-auto whitespace-nowrap md:grid md:grid-cols-4 lg:grid-cols-9 w-full gap-1 md:gap-0 no-scrollbar">
           <TabsTrigger value="solicitudes" className="flex-1 md:flex-initial">Solicitudes</TabsTrigger>
           <TabsTrigger value="clientes" className="flex-1 md:flex-initial">Clientes</TabsTrigger>
           <TabsTrigger value="simulador" className="flex-1 md:flex-initial">Simulador</TabsTrigger>
@@ -4579,7 +3060,6 @@ export function PrestamosView({
           <TabsTrigger value="documentos" className="flex-1 md:flex-initial">Documentos</TabsTrigger>
           <TabsTrigger value="buzon" className="flex-1 md:flex-initial">Buzón Web</TabsTrigger>
           <TabsTrigger value="plan-cliente" className="flex-1 md:flex-initial">Plan Cliente</TabsTrigger>
-          <TabsTrigger value="linea-tiempo" className="flex-1 md:flex-initial" title="Línea de Tiempo 360°">🕰️ Línea de Tiempo</TabsTrigger>
         </TabsList>
 
         <TabsContent value="solicitudes" className="mt-6">
@@ -4622,11 +3102,117 @@ export function PrestamosView({
         <TabsContent value="plan-cliente" className="mt-6">
           <PlanClienteView />
         </TabsContent>
-
-        <TabsContent value="linea-tiempo" className="mt-6">
-          <LineaTiempoView />
-        </TabsContent>
       </Tabs>
+
+      {/* === BOTÓN FLOTANTE: Limpiar registros === */}
+      <button
+        onClick={() => setModalLimpiarAbierto(true)}
+        className="fixed bottom-6 right-6 z-40 flex items-center gap-2 px-4 py-3 rounded-full bg-red-600 hover:bg-red-700 text-white shadow-lg shadow-red-600/30 transition-all hover:scale-105 group"
+        title="Limpiar todos los registros de préstamos"
+      >
+        <Trash2 className="w-5 h-5" />
+        <span className="text-sm font-semibold hidden sm:inline">Limpiar registros</span>
+      </button>
+
+      {/* === MODAL: Limpiar todos los registros === */}
+      <Dialog open={modalLimpiarAbierto} onOpenChange={(o) => !o && cerrarModalLimpiar()}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-red-600">
+              <Trash2 className="w-5 h-5" />
+              Limpiar todos los registros de préstamos
+            </DialogTitle>
+          </DialogHeader>
+
+          {resultadoLimpieza ? (
+            <div className="space-y-4">
+              <div className="bg-green-500/10 border border-green-500/30 rounded-lg p-4">
+                <p className="text-sm font-semibold text-green-600 mb-2">✅ Registros borrados correctamente</p>
+                <div className="text-xs space-y-1 text-muted-foreground">
+                  <p>• Préstamos: {resultadoLimpieza.datosBorrados?.prestamos || 0}</p>
+                  <p>• Pagos: {resultadoLimpieza.datosBorrados?.pagos || 0}</p>
+                  <p>• Bitácoras: {resultadoLimpieza.datosBorrados?.bitacoras || 0}</p>
+                  <p>• Firmas: {resultadoLimpieza.datosBorrados?.firmas || 0}</p>
+                  <p>• Códigos confirmación: {resultadoLimpieza.datosBorrados?.codigosConfirmacion || 0}</p>
+                  <p>• Casos jurídicos: {resultadoLimpieza.datosBorrados?.casosJuridicos || 0}</p>
+                  <p>• Movimientos caja: {resultadoLimpieza.datosBorrados?.movimientosCaja || 0}</p>
+                </div>
+              </div>
+              <Button onClick={cerrarModalLimpiar} className="w-full">
+                Cerrar
+              </Button>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-4">
+                <p className="text-sm font-semibold text-red-600 mb-2">⚠️ Acción irreversible</p>
+                <p className="text-xs text-muted-foreground">
+                  Esta acción borrará <strong>TODOS</strong> los préstamos, pagos, bitácoras, firmas electrónicas, códigos de confirmación, casos jurídicos y movimientos de caja asociados. Los clientes NO se borran.
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <Label className="text-sm font-medium">Motivo de la limpieza (opcional)</Label>
+                <Input
+                  value={motivoLimpiar}
+                  onChange={(e) => setMotivoLimpiar(e.target.value)}
+                  placeholder="Ej: Limpieza de datos de prueba"
+                  disabled={limpiando}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label className="text-sm font-medium">
+                  Contraseña de autorización <span className="text-red-500">*</span>
+                </Label>
+                <Input
+                  type="password"
+                  value={passwordLimpiar}
+                  onChange={(e) => setPasswordLimpiar(e.target.value)}
+                  placeholder="Ingresa la contraseña"
+                  disabled={limpiando}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && passwordLimpiar && !limpiando) {
+                      limpiarTodosPrestamos()
+                    }
+                  }}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Pista: la contraseña es una palabra de 7 letras que significa "limpiar"
+                </p>
+              </div>
+
+              <div className="flex gap-2 pt-2">
+                <Button
+                  variant="outline"
+                  onClick={cerrarModalLimpiar}
+                  disabled={limpiando}
+                  className="flex-1"
+                >
+                  Cancelar
+                </Button>
+                <Button
+                  onClick={limpiarTodosPrestamos}
+                  disabled={limpiando || !passwordLimpiar}
+                  className="flex-1 bg-red-600 hover:bg-red-700 text-white"
+                >
+                  {limpiando ? (
+                    <>
+                      <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                      Limpiando...
+                    </>
+                  ) : (
+                    <>
+                      <Trash2 className="w-4 h-4 mr-2" />
+                      Borrar todo
+                    </>
+                  )}
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

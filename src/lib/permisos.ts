@@ -8,11 +8,11 @@
 //
 // Matriz:
 //   ADMIN     → acceso total (operación + sistema + config)
-//   GESTOR    → operación diaria (solicitudes, pagos, clientes,
+//   GESTOR    → operación diaria (préstamos, pagos, clientes,
 //               jurídico, cajas, campañas, comunicaciones,
 //               buzones, portal, notificaciones, exportar,
 //               simulador, manual-sin-config)
-//   CONSULTOR → solo lectura (dashboard, solicitudes, pagos,
+//   CONSULTOR → solo lectura (dashboard, préstamos, pagos,
 //               clientes, jurídico, portal, comunicaciones,
 //               exportar, manual-sin-config)
 //   ABOGADO   → NO usa este menú; ingresa por /juridico
@@ -49,7 +49,6 @@ export const VISTAS_POR_ROL: Record<Rol, ViewKey[]> = {
     'portal',
     'comunicaciones',
     'buzon-solicitudes',
-    'acuerdos-regularizacion',
     'usuarios',
     'conexiones',
     'seguridad',
@@ -76,22 +75,15 @@ export const VISTAS_POR_ROL: Record<Rol, ViewKey[]> = {
     'portal',
     'comunicaciones',
     'buzon-solicitudes',
-    'acuerdos-regularizacion',
     'notificaciones',
     'exportar',
     // 'manual' se incluye abajo — GESTOR ve solo la pestaña de uso
     'manual',
-    // 'seguridad' ahora es accesible para GESTOR porque 'exportar' y 'manual'
-    // son pestañas internas de SeguridadView. Dentro de SeguridadView, los
-    // GESTORs solo verán las pestañas 'exportar' y 'manual' (las que tienen
-    // permiso de usar). El resto (conexiones, usuarios, código fuente,
-    // auditoría, módulos protegidos, etc.) queda oculto.
-    'seguridad',
     // portal-admin: el acompañante administrativo (P_jsadr) usa este módulo
     // como su portal principal. Otros GESTORes pueden acceder también.
     'portal-admin',
     // Ocultos para GESTOR (solo ADMIN):
-    //   usuarios, conexiones, auditoria,
+    //   usuarios, conexiones, seguridad (parcial), auditoria,
     //   admin, configuracion, codigo-fuente,
     //   automatizacion
   ],
@@ -107,14 +99,10 @@ export const VISTAS_POR_ROL: Record<Rol, ViewKey[]> = {
     'exportar',
     // 'manual' se incluye abajo — CONSULTOR ve solo la pestaña de uso
     'manual',
-    // 'seguridad' ahora es accesible para CONSULTOR porque 'exportar' y
-    // 'manual' son pestañas internas de SeguridadView. Dentro de
-    // SeguridadView, los CONSULTORes solo verán 'exportar' y 'manual'.
-    'seguridad',
     // Ocultos para CONSULTOR:
     //   cajas, simulador, campanas, buzon-solicitudes,
-    //   notificaciones, usuarios, conexiones, auditoria,
-    //   admin, portal-admin, configuracion,
+    //   notificaciones, usuarios, conexiones, seguridad,
+    //   auditoria, admin, portal-admin, configuracion,
     //   codigo-fuente, automatizacion
   ],
 

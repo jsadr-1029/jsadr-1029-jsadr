@@ -15,10 +15,7 @@ import { verificarOtp, incrementarIntentoOtp, obtenerIp, obtenerUserAgent } from
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
-    // FIX 2026-08-12: Aceptar `otpIngresado` y `codigo` como aliases de `otp`
-    // para evitar falsos negativos si algún front-end usa otro nombre de campo.
-    const firmaId = body.firmaId
-    const otp = body.otp ?? body.otpIngresado ?? body.codigo
+    const { firmaId, otp } = body
 
     if (!firmaId || !otp) {
       return NextResponse.json({ error: 'firmaId y otp son requeridos' }, { status: 400 })
@@ -36,32 +33,6 @@ export async function POST(req: NextRequest) {
     }
     if (!firma.otpCodigo) {
       return NextResponse.json({ error: 'No hay OTP pendiente. Solicita uno nuevo.' }, { status: 400 })
-    }
-
-    // === v4.6 (QA M03 TC-PRE-011): verificar expiración del OTP ===
-    // El OTP expira a los 5 minutos (definido en solicitar-otp).
-    // Si otpFechaEnvio + 5 min < ahora → rechazar con 400 (no 401, no 500).
-    // Previene que un OTP interceptado se use indefinidamente.
-    const OTP_TTL_MIN = 5
-    if (firma.otpFechaEnvio) {
-      const expiraEn = new Date(firma.otpFechaEnvio.getTime() + OTP_TTL_MIN * 60 * 1000)
-      if (new Date() > expiraEn) {
-        // Marcar la firma como EXPIRADA y limpiar el OTP
-        await db.firmaElectronica.update({
-          where: { id: firmaId },
-          data: {
-            estadoFirma: 'EXPIRADA',
-            otpCodigo: null,
-          },
-        })
-        return NextResponse.json(
-          {
-            error: 'OTP expirado. Solicita un nuevo código para continuar.',
-            codigo: 'OTP_EXPIRADO',
-          },
-          { status: 400 }
-        )
-      }
     }
 
     const ip = obtenerIp(req)
@@ -97,19 +68,6 @@ export async function POST(req: NextRequest) {
         })
       }
 
-      // v4.6 (QA M03 TC-PRE-012): si se exceden los intentos, retornar 429 (Too Many Requests)
-      // en lugar de 401, como espera el estándar y el plan de pruebas.
-      if (bloqueado) {
-        return NextResponse.json(
-          {
-            error: 'Máximo de intentos alcanzado. Firma bloqueada por seguridad.',
-            codigo: 'OTP_BLOQUEADO',
-            bloqueado: true,
-          },
-          { status: 429 }
-        )
-      }
-
       return NextResponse.json({
         error: `OTP incorrecto. Intentos restantes: ${Math.max(0, firma.maxIntentos - nuevosIntentos)}`,
         bloqueado,
@@ -131,7 +89,7 @@ export async function POST(req: NextRequest) {
       },
     })
 
-    // Marcar TyC como aceptado en el solicitud
+    // Marcar TyC como aceptado en el préstamo
     if (firma.prestamoId) {
       await db.prestamo.update({
         where: { id: firma.prestamoId },
@@ -141,7 +99,7 @@ export async function POST(req: NextRequest) {
         },
       })
 
-      // Bitácora del solicitud (modelo correcto: BitacoraPrestamo)
+      // Bitácora del préstamo (modelo correcto: BitacoraPrestamo)
       await db.bitacoraPrestamo.create({
         data: {
           prestamoId: firma.prestamoId,
@@ -166,7 +124,7 @@ export async function POST(req: NextRequest) {
           userAgent: ua,
           accion: 'FIRMA_COMPLETADA',
           exito: true,
-          detalle: `OTP validado, firma completada para solicitud ${firma.prestamo?.codigo || 'N/A'}`,
+          detalle: `OTP validado, firma completada para préstamo ${firma.prestamo?.codigo || 'N/A'}`,
           metadata: firma.prestamoId ? JSON.stringify({ prestamoId: firma.prestamoId }) : null,
         },
       })

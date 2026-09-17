@@ -3,47 +3,28 @@
 import { useState } from 'react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
+import { Textarea } from '@/components/ui/textarea'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
-import {
-  Loader2, CheckCircle2, AlertCircle, FileSpreadsheet,
-  Search, ArrowRight, ArrowLeft, User, Hash, CreditCard, Calendar,
-} from 'lucide-react'
-import { formatearMoneda, formatearFecha } from '@/lib/finanzas'
+import { Loader2, Upload, CheckCircle2, AlertCircle, FileSpreadsheet } from 'lucide-react'
+import { formatearMoneda } from '@/lib/finanzas'
 import { useToast } from '@/hooks/use-toast'
 
-interface PagoPendiente {
-  id: string
-  codigo: string | null
-  numeroCuota: number
-  montoTotal: number
-  fechaVencimiento: string
-  estado: string
+interface Movimiento {
+  fecha: string
+  monto: number
+  referencia: string
+  descripcion?: string
+  matched?: boolean
+  pagoId?: string
+  codigoPago?: string
+  prestamo?: string
+  cliente?: string
+  montoEsperado?: number
+  montoDiferencia?: number
+  montoMatch?: boolean
+  motivo?: string
 }
-
-interface PrestamoResumen {
-  id: string
-  codigo: string
-  estado: string
-  montoPrincipal: number
-  saldoTotal: number
-  numeroCuotas: number
-  cuotasPagadas: number
-  frecuencia: string
-  cliente: { nombre: string; cedula: string; telefono?: string | null }
-  cuotasPendientes: number
-  proximaCuota: {
-    numeroCuota: number
-    montoTotal: number
-    fechaVencimiento: string
-  } | null
-  pagosPendientes: PagoPendiente[]
-}
-
-type Paso = 'buscar' | 'seleccionar' | 'confirmar' | 'resultado'
-type Criterio = 'codigo' | 'cedula'
 
 interface Props {
   abierto: boolean
@@ -52,72 +33,74 @@ interface Props {
 }
 
 export function ConciliacionBancariaModal({ abierto, onCerrar, onAplicado }: Props) {
-  const [paso, setPaso] = useState<Paso>('buscar')
-  const [criterio, setCriterio] = useState<Criterio>('codigo')
-  const [valorBusqueda, setValorBusqueda] = useState('')
-  const [prestamos, setPrestamos] = useState<PrestamoResumen[]>([])
-  const [prestamoSel, setPrestamoSel] = useState<PrestamoResumen | null>(null)
-  const [seleccionados, setSeleccionados] = useState<Set<string>>(new Set())
+  const [paso, setPaso] = useState<'input' | 'preview' | 'resultado'>('input')
+  const [csvText, setCsvText] = useState('')
+  const [movimientos, setMovimientos] = useState<Movimiento[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [seleccionados, setSeleccionados] = useState<Set<string>>(new Set())
   const [resultado, setResultado] = useState<any>(null)
   const { toast } = useToast()
 
-  // ---------- Acción: buscar solicitudes ----------
-  const buscarPrestamos = async () => {
+  const parseCSV = (text: string): Movimiento[] => {
+    const lines = text.trim().split('\n')
+    if (lines.length < 2) throw new Error('El CSV necesita al menos una fila de encabezado y una de datos')
+    // Detectar separador (, o ;)
+    const sep = lines[0].includes(';') ? ';' : ','
+    const headers = lines[0].split(sep).map((h) => h.trim().toLowerCase().replace(/"/g, ''))
+    return lines.slice(1).map((line) => {
+      const cols = line.split(sep).map((c) => c.trim().replace(/"/g, ''))
+      const get = (...names: string[]): string => {
+        for (const n of names) {
+          const idx = headers.indexOf(n)
+          if (idx >= 0 && cols[idx]) return cols[idx]
+        }
+        return ''
+      }
+      return {
+        fecha: get('fecha', 'date'),
+        monto: parseFloat(get('monto', 'amount', 'valor')) || 0,
+        referencia: get('referencia', 'reference', 'ref'),
+        descripcion: get('descripcion', 'description', 'concepto', 'detalle'),
+      }
+    }).filter((m) => m.referencia && m.monto > 0)
+  }
+
+  const previsualizar = async () => {
     setLoading(true)
     setError('')
     try {
+      const movs = parseCSV(csvText)
+      if (movs.length === 0) {
+        setError('No se encontraron movimientos válidos con referencia y monto')
+        return
+      }
       const r = await fetch('/api/pagos/conciliacion', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          accion: 'buscar-prestamos',
-          [criterio]: valorBusqueda.trim(),
-        }),
+        body: JSON.stringify({ accion: 'previsualizar', movimientos: movs }),
       })
       const data = await r.json()
       if (!r.ok || !data.success) {
-        setError(data.error || 'Error al buscar')
+        setError(data.error || 'Error al previsualizar')
         return
       }
-      const lista: PrestamoResumen[] = data.data.prestamos || []
-      if (lista.length === 0) {
-        setError(
-          data.data.mensaje ||
-          `No se encontraron solicitudes activos con cuotas pendientes para ese ${criterio === 'codigo' ? 'código' : 'cédula'}`
-        )
-        return
-      }
-      setPrestamos(lista)
-      // Si solo hay uno, lo seleccionamos automáticamente.
-      if (lista.length === 1) {
-        seleccionarPrestamo(lista[0])
-      } else {
-        setPaso('seleccionar')
-      }
+      setMovimientos(data.data.movimientos)
+      // Pre-seleccionar los que tienen montoMatch
+      const preSel = new Set<string>()
+      data.data.movimientos.forEach((m: Movimiento) => {
+        if (m.matched && m.montoMatch) preSel.add(m.referencia)
+      })
+      setSeleccionados(preSel)
+      setPaso('preview')
     } catch (e: any) {
-      setError(e.message || 'Error de conexión')
+      setError(e.message || 'Error al procesar el CSV')
     } finally {
       setLoading(false)
     }
   }
 
-  // ---------- Helper: seleccionar solicitud y pre-seleccionar todos sus pagos ----------
-  const seleccionarPrestamo = (p: PrestamoResumen) => {
-    setError('')
-    setPrestamoSel(p)
-    // Pre-seleccionar todas las cuotas pendientes para que el usuario
-    // solo tenga que dar clic en "Aplicar" si está de acuerdo.
-    const preSel = new Set<string>(p.pagosPendientes.map((pg) => pg.id))
-    setSeleccionados(preSel)
-    setResultado(null)
-    setPaso('confirmar')
-  }
-
-  // ---------- Acción: aplicar pagos ----------
-  const aplicarPagos = async () => {
-    if (!prestamoSel) return
+  const aplicar = async () => {
     setLoading(true)
     setError('')
     try {
@@ -125,9 +108,9 @@ export function ConciliacionBancariaModal({ abierto, onCerrar, onAplicado }: Pro
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          accion: 'aplicar-pagos',
-          prestamoId: prestamoSel.id,
-          pagoIds: Array.from(seleccionados),
+          accion: 'aplicar',
+          movimientos,
+          seleccionados: Array.from(seleccionados),
         }),
       })
       const data = await r.json()
@@ -148,46 +131,29 @@ export function ConciliacionBancariaModal({ abierto, onCerrar, onAplicado }: Pro
     }
   }
 
-  // ---------- Reset completo ----------
   const cerrar = () => {
-    setPaso('buscar')
-    setCriterio('codigo')
-    setValorBusqueda('')
-    setPrestamos([])
-    setPrestamoSel(null)
+    setPaso('input')
+    setCsvText('')
+    setMovimientos([])
     setSeleccionados(new Set())
     setResultado(null)
     setError('')
     onCerrar()
   }
 
-  const toggleSeleccion = (id: string) => {
+  const toggleSeleccion = (ref: string) => {
     const ns = new Set(seleccionados)
-    if (ns.has(id)) ns.delete(id)
-    else ns.add(id)
+    if (ns.has(ref)) ns.delete(ref)
+    else ns.add(ref)
     setSeleccionados(ns)
   }
 
-  const toggleTodos = () => {
-    if (!prestamoSel) return
-    // Si todos están seleccionados, deseleccionar todos; si no, seleccionar todos
-    const todosSeleccionados = prestamoSel.pagosPendientes.every((pg) => seleccionados.has(pg.id))
-    if (todosSeleccionados) {
-      setSeleccionados(new Set())
-    } else {
-      setSeleccionados(new Set(prestamoSel.pagosPendientes.map((pg) => pg.id)))
-    }
-  }
-
-  const totalSeleccionado = prestamoSel
-    ? prestamoSel.pagosPendientes
-        .filter((pg) => seleccionados.has(pg.id))
-        .reduce((s, pg) => s + pg.montoTotal, 0)
-    : 0
+  const matched = movimientos.filter((m) => m.matched)
+  const noMatched = movimientos.filter((m) => !m.matched)
 
   return (
     <Dialog open={abierto} onOpenChange={(v) => !v && cerrar()}>
-      <DialogContent className="sm:max-w-[760px] max-h-[88vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-[720px] max-h-[85vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-slate-800">
             <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-sky-500 to-blue-600 flex items-center justify-center">
@@ -197,311 +163,128 @@ export function ConciliacionBancariaModal({ abierto, onCerrar, onAplicado }: Pro
           </DialogTitle>
         </DialogHeader>
 
-        {/* ===== Indicador de pasos ===== */}
-        <div className="flex items-center gap-2 text-[11px] text-slate-500 mb-2 flex-wrap">
-          <span className={paso === 'buscar' ? 'font-bold text-sky-700' : ''}>1. Buscar solicitud</span>
-          <ArrowRight className="w-3 h-3" />
-          <span className={paso === 'seleccionar' ? 'font-bold text-sky-700' : ''}>2. Seleccionar</span>
-          <ArrowRight className="w-3 h-3" />
-          <span className={paso === 'confirmar' ? 'font-bold text-sky-700' : ''}>3. Confirmar pagos</span>
-          <ArrowRight className="w-3 h-3" />
-          <span className={paso === 'resultado' ? 'font-bold text-sky-700' : ''}>4. Resultado</span>
-        </div>
-
-        {/* ===== PASO 1: BUSCAR SOLICITUD ===== */}
-        {paso === 'buscar' && (
-          <div className="space-y-4">
+        {paso === 'input' && (
+          <div className="space-y-3">
             <Alert className="bg-sky-50 border-sky-200">
               <AlertDescription className="text-sky-800 text-xs">
-                Para conciliar, primero identifica el <strong>solicitud</strong>. Puedes buscar por
-                <strong> código del solicitud</strong> o por <strong>cédula del cliente</strong>.
-                Si el cliente tiene varios créditos activos, te mostraremos la lista para que elijas cuál aplicar.
-                El sistema <strong>cargará automáticamente</strong> las cuotas pendientes y solo tendrás
-                que confirmar cuáles aplicar.
+                Pega aquí el CSV exportado por tu banco. Formato esperado: <strong>fecha, monto, referencia, descripcion</strong>
+                (separador <code>,</code> o <code>;</code>, primera fila = encabezados).
+                El sistema buscará pagos PENDIENTE con esa referencia y los aplicará automáticamente.
               </AlertDescription>
             </Alert>
+            <Textarea
+              value={csvText}
+              onChange={(e) => setCsvText(e.target.value)}
+              placeholder={`fecha,monto,referencia,descripcion\n2026-01-15,150000,PREST-JA-001-C3,Pago cuota\n2026-01-15,280000,PREST-CA-002-C1,Pago cuota`}
+              className="font-mono text-xs h-56"
+            />
+            {error && <p className="text-sm text-red-600">{error}</p>}
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={cerrar}>Cancelar</Button>
+              <Button
+                onClick={previsualizar}
+                disabled={loading || !csvText.trim()}
+                className="bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-600 hover:to-blue-700 text-white"
+              >
+                {loading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Upload className="w-4 h-4 mr-2" />}
+                Previsualizar
+              </Button>
+            </div>
+          </div>
+        )}
 
-            <div className="space-y-3">
-              <Label className="text-xs font-semibold text-slate-700">Buscar por</Label>
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  onClick={() => setCriterio('codigo')}
-                  className={`flex-1 flex items-center gap-2 px-3 py-2 rounded-lg border text-xs transition ${
-                    criterio === 'codigo'
-                      ? 'bg-sky-50 border-sky-400 text-sky-800 font-semibold'
-                      : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300'
-                  }`}
-                >
-                  <Hash className="w-3.5 h-3.5" />
-                  Código del solicitud
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setCriterio('cedula')}
-                  className={`flex-1 flex items-center gap-2 px-3 py-2 rounded-lg border text-xs transition ${
-                    criterio === 'cedula'
-                      ? 'bg-sky-50 border-sky-400 text-sky-800 font-semibold'
-                      : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300'
-                  }`}
-                >
-                  <User className="w-3.5 h-3.5" />
-                  Cédula del cliente
-                </button>
+        {paso === 'preview' && (
+          <div className="space-y-3">
+            <div className="grid grid-cols-3 gap-2 text-center">
+              <div className="rounded-lg bg-emerald-50 border border-emerald-200 p-2">
+                <div className="text-xl font-bold text-emerald-700">{matched.length}</div>
+                <div className="text-[11px] text-emerald-600">Matched</div>
+              </div>
+              <div className="rounded-lg bg-amber-50 border border-amber-200 p-2">
+                <div className="text-xl font-bold text-amber-700">
+                  {matched.filter((m) => !m.montoMatch).length}
+                </div>
+                <div className="text-[11px] text-amber-600">Monto difiere</div>
+              </div>
+              <div className="rounded-lg bg-red-50 border border-red-200 p-2">
+                <div className="text-xl font-bold text-red-700">{noMatched.length}</div>
+                <div className="text-[11px] text-red-600">Sin match</div>
               </div>
             </div>
 
-            <div className="space-y-2">
-              <Label className="text-xs font-semibold text-slate-700">
-                {criterio === 'codigo' ? 'Código del solicitud' : 'Cédula del cliente'}
-              </Label>
+            <div className="border border-slate-200 rounded-lg overflow-hidden">
+              <div className="max-h-72 overflow-y-auto">
+                <table className="w-full text-xs">
+                  <thead className="bg-slate-50 sticky top-0">
+                    <tr>
+                      <th className="p-2 text-left text-slate-600">Sel.</th>
+                      <th className="p-2 text-left text-slate-600">Fecha</th>
+                      <th className="p-2 text-left text-slate-600">Referencia</th>
+                      <th className="p-2 text-right text-slate-600">Monto</th>
+                      <th className="p-2 text-left text-slate-600">Cliente / Estado</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {movimientos.map((m, i) => (
+                      <tr key={i} className={`border-t border-slate-100 ${m.matched ? 'bg-emerald-50/30' : 'bg-red-50/30'}`}>
+                        <td className="p-2">
+                          <input
+                            type="checkbox"
+                            checked={seleccionados.has(m.referencia)}
+                            onChange={() => toggleSeleccion(m.referencia)}
+                            disabled={!m.matched || !m.montoMatch}
+                          />
+                        </td>
+                        <td className="p-2 text-slate-700">{m.fecha}</td>
+                        <td className="p-2 font-mono text-slate-700">{m.referencia}</td>
+                        <td className="p-2 text-right text-slate-700">{formatearMoneda(m.monto)}</td>
+                        <td className="p-2">
+                          {m.matched ? (
+                            <div>
+                              <div className="text-slate-700">{m.cliente}</div>
+                              <div className="text-[10px] text-slate-500">
+                                Esperado: {formatearMoneda(m.montoEsperado || 0)} ·{' '}
+                                {m.montoMatch ? (
+                                  <span className="text-emerald-600">✓ coincide</span>
+                                ) : (
+                                  <span className="text-red-600">diferencia {formatearMoneda(m.montoDiferencia || 0)}</span>
+                                )}
+                              </div>
+                            </div>
+                          ) : (
+                            <span className="text-red-600 text-[10px]">{m.motivo}</span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {error && <p className="text-sm text-red-600">{error}</p>}
+
+            <div className="flex justify-between items-center">
+              <span className="text-xs text-slate-500">
+                {seleccionados.size} seleccionado(s) · Total: {formatearMoneda(
+                  movimientos.filter((m) => seleccionados.has(m.referencia)).reduce((s, m) => s + m.monto, 0)
+                )}
+              </span>
               <div className="flex gap-2">
-                <Input
-                  value={valorBusqueda}
-                  onChange={(e) => setValorBusqueda(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === 'Enter' && valorBusqueda.trim()) buscarPrestamos() }}
-                  placeholder={criterio === 'codigo' ? 'Ej: PREST-JA-001' : 'Ej: 1234567890'}
-                  className="flex-1"
-                  autoFocus
-                />
+                <Button variant="outline" onClick={() => setPaso('input')}>Volver</Button>
                 <Button
-                  onClick={buscarPrestamos}
-                  disabled={loading || !valorBusqueda.trim()}
-                  className="bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-600 hover:to-blue-700 text-white"
+                  onClick={aplicar}
+                  disabled={loading || seleccionados.size === 0}
+                  className="bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white"
                 >
-                  {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
-                  <span className="ml-2">Buscar</span>
+                  {loading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <CheckCircle2 className="w-4 h-4 mr-2" />}
+                  Aplicar ({seleccionados.size})
                 </Button>
               </div>
             </div>
-
-            {error && <p className="text-sm text-red-600">{error}</p>}
-
-            <div className="flex justify-end">
-              <Button variant="outline" onClick={cerrar}>Cancelar</Button>
-            </div>
           </div>
         )}
 
-        {/* ===== PASO 2: SELECCIONAR SOLICITUD ===== */}
-        {paso === 'seleccionar' && (
-          <div className="space-y-3">
-            <Alert className="bg-amber-50 border-amber-200">
-              <AlertDescription className="text-amber-800 text-xs">
-                Se encontraron <strong>{prestamos.length} solicitudes activos</strong> con cuotas pendientes
-                para {criterio === 'codigo' ? 'ese código' : 'esa cédula'}. Selecciona cuál quieres conciliar.
-              </AlertDescription>
-            </Alert>
-
-            <div className="space-y-2 max-h-[50vh] overflow-y-auto">
-              {prestamos.map((p) => (
-                <button
-                  key={p.id}
-                  type="button"
-                  onClick={() => seleccionarPrestamo(p)}
-                  className="w-full text-left p-3 rounded-lg border border-slate-200 bg-white hover:border-sky-400 hover:bg-sky-50/40 transition"
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-1">
-                        <CreditCard className="w-3.5 h-3.5 text-sky-600" />
-                        <span className="font-mono text-xs font-bold text-slate-800">{p.codigo}</span>
-                        <Badge variant="outline" className="text-[10px] h-4 px-1.5">{p.estado}</Badge>
-                      </div>
-                      <div className="text-xs text-slate-700 mb-1">
-                        <strong>{p.cliente.nombre}</strong> · C.C. {p.cliente.cedula}
-                      </div>
-                      <div className="flex flex-wrap gap-x-4 gap-y-0.5 text-[11px] text-slate-500">
-                        <span>Capital: <strong className="text-slate-700">{formatearMoneda(p.montoPrincipal)}</strong></span>
-                        <span>Saldo: <strong className="text-slate-700">{formatearMoneda(p.saldoTotal)}</strong></span>
-                        <span>Cuotas: <strong className="text-slate-700">{p.cuotasPagadas}/{p.numeroCuotas}</strong></span>
-                        <span>Pendientes: <strong className="text-amber-700">{p.cuotasPendientes}</strong></span>
-                      </div>
-                      {p.proximaCuota && (
-                        <div className="text-[11px] text-sky-700 mt-1">
-                          Próxima cuota #{p.proximaCuota.numeroCuota} · {formatearMoneda(p.proximaCuota.montoTotal)} · vence {formatearFecha(p.proximaCuota.fechaVencimiento)}
-                        </div>
-                      )}
-                    </div>
-                    <ArrowRight className="w-4 h-4 text-slate-400 mt-1" />
-                  </div>
-                </button>
-              ))}
-            </div>
-
-            {error && <p className="text-sm text-red-600">{error}</p>}
-
-            <div className="flex justify-between">
-              <Button variant="outline" onClick={() => { setPaso('buscar'); setError('') }}>
-                <ArrowLeft className="w-4 h-4 mr-2" /> Volver
-              </Button>
-            </div>
-          </div>
-        )}
-
-        {/* ===== PASO 3: CONFIRMAR PAGOS ===== */}
-        {paso === 'confirmar' && prestamoSel && (
-          <div className="space-y-3">
-            {/* Resumen del solicitud seleccionado */}
-            <div className="p-3 rounded-lg border border-sky-200 bg-sky-50/40">
-              <div className="flex items-center gap-2 mb-1">
-                <CreditCard className="w-4 h-4 text-sky-600" />
-                <span className="font-mono text-xs font-bold text-slate-800">{prestamoSel.codigo}</span>
-                <Badge variant="outline" className="text-[10px] h-4 px-1.5">{prestamoSel.estado}</Badge>
-              </div>
-              <div className="text-xs text-slate-700">
-                <strong>{prestamoSel.cliente.nombre}</strong> · C.C. {prestamoSel.cliente.cedula}
-              </div>
-              <div className="flex flex-wrap gap-x-4 gap-y-0.5 text-[11px] text-slate-500 mt-1">
-                <span>Saldo: <strong className="text-slate-700">{formatearMoneda(prestamoSel.saldoTotal)}</strong></span>
-                <span>Cuotas pendientes: <strong className="text-amber-700">{prestamoSel.cuotasPendientes}</strong></span>
-                {prestamoSel.proximaCuota && (
-                  <span>Próxima cuota #{prestamoSel.proximaCuota.numeroCuota}: <strong className="text-slate-700">{formatearMoneda(prestamoSel.proximaCuota.montoTotal)}</strong></span>
-                )}
-              </div>
-            </div>
-
-            <Alert className="bg-emerald-50 border-emerald-200">
-              <AlertDescription className="text-emerald-800 text-xs flex items-start gap-2">
-                <CheckCircle2 className="w-4 h-4 flex-shrink-0 mt-0.5" />
-                <div>
-                  El sistema <strong>cargó automáticamente</strong> las cuotas pendientes de este solicitud.
-                  Todas están pre-seleccionadas. Si quieres excluir alguna, desmárcala; si no, solo da clic en
-                  <strong> Aplicar ({seleccionados.size})</strong> para confirmar la conciliación.
-                </div>
-              </AlertDescription>
-            </Alert>
-
-            {/* Tabla de cuotas pendientes con checkboxes */}
-            <div className="border border-slate-200 rounded-lg overflow-hidden">
-              <div className="bg-slate-50 px-3 py-2 flex items-center justify-between border-b border-slate-200">
-                <Label className="text-xs font-semibold text-slate-700 flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    checked={
-                      prestamoSel.pagosPendientes.length > 0 &&
-                      prestamoSel.pagosPendientes.every((pg) => seleccionados.has(pg.id))
-                    }
-                    onChange={toggleTodos}
-                    className="w-3.5 h-3.5"
-                  />
-                  Cuotas pendientes ({prestamoSel.pagosPendientes.length})
-                </Label>
-                <span className="text-[11px] text-slate-500">
-                  Seleccionadas: <strong className="text-slate-700">{seleccionados.size}</strong>
-                </span>
-              </div>
-
-              {prestamoSel.pagosPendientes.length === 0 ? (
-                <div className="p-6 text-center text-sm text-slate-500">
-                  Este solicitud no tiene cuotas pendientes para conciliar.
-                </div>
-              ) : (
-                <div className="max-h-64 overflow-y-auto">
-                  <table className="w-full text-xs">
-                    <thead className="bg-white sticky top-0">
-                      <tr className="border-b border-slate-200">
-                        <th className="p-2 text-left text-slate-600 w-8"></th>
-                        <th className="p-2 text-left text-slate-600">Cuota</th>
-                        <th className="p-2 text-left text-slate-600">Código</th>
-                        <th className="p-2 text-right text-slate-600">Monto</th>
-                        <th className="p-2 text-left text-slate-600">Vencimiento</th>
-                        <th className="p-2 text-left text-slate-600">Estado</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {prestamoSel.pagosPendientes.map((pg) => (
-                        <tr
-                          key={pg.id}
-                          className={`border-b border-slate-100 cursor-pointer ${
-                            seleccionados.has(pg.id) ? 'bg-emerald-50/40' : 'bg-white'
-                          }`}
-                          onClick={() => toggleSeleccion(pg.id)}
-                        >
-                          <td className="p-2">
-                            <input
-                              type="checkbox"
-                              checked={seleccionados.has(pg.id)}
-                              onChange={() => toggleSeleccion(pg.id)}
-                              onClick={(e) => e.stopPropagation()}
-                              className="w-3.5 h-3.5"
-                            />
-                          </td>
-                          <td className="p-2 text-slate-700 font-semibold">#{pg.numeroCuota}</td>
-                          <td className="p-2 text-slate-600 font-mono text-[11px]">{pg.codigo}</td>
-                          <td className="p-2 text-right text-slate-700 font-semibold">
-                            {formatearMoneda(pg.montoTotal)}
-                          </td>
-                          <td className="p-2 text-slate-600">
-                            <div className="flex items-center gap-1">
-                              <Calendar className="w-3 h-3 text-slate-400" />
-                              {formatearFecha(pg.fechaVencimiento)}
-                            </div>
-                          </td>
-                          <td className="p-2">
-                            <Badge
-                              variant="outline"
-                              className={`text-[10px] h-4 px-1.5 ${
-                                pg.estado === 'VENCIDO'
-                                  ? 'border-red-300 text-red-700 bg-red-50'
-                                  : 'border-amber-300 text-amber-700 bg-amber-50'
-                              }`}
-                            >
-                              {pg.estado}
-                            </Badge>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </div>
-
-            {/* Total a aplicar */}
-            <div className="flex items-center justify-between p-3 rounded-lg bg-sky-50 border border-sky-200">
-              <div>
-                <div className="text-[11px] text-slate-500">Total a conciliar</div>
-                <div className="text-lg font-bold text-sky-700">{formatearMoneda(totalSeleccionado)}</div>
-              </div>
-              <div className="text-right">
-                <div className="text-[11px] text-slate-500">Pagos seleccionados</div>
-                <div className="text-lg font-bold text-slate-700">{seleccionados.size}</div>
-              </div>
-            </div>
-
-            {error && (
-              <Alert variant="destructive">
-                <AlertCircle className="w-4 h-4" />
-                <AlertDescription>{error}</AlertDescription>
-              </Alert>
-            )}
-
-            <div className="flex justify-between">
-              <Button
-                variant="outline"
-                onClick={() => {
-                  setPaso(prestamos.length > 1 ? 'seleccionar' : 'buscar')
-                  setPrestamoSel(null)
-                  setSeleccionados(new Set())
-                  setError('')
-                }}
-              >
-                <ArrowLeft className="w-4 h-4 mr-2" /> Volver
-              </Button>
-              <Button
-                onClick={aplicarPagos}
-                disabled={loading || seleccionados.size === 0}
-                className="bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white"
-              >
-                {loading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <CheckCircle2 className="w-4 h-4 mr-2" />}
-                Aplicar ({seleccionados.size})
-              </Button>
-            </div>
-          </div>
-        )}
-
-        {/* ===== PASO 4: RESULTADO ===== */}
         {paso === 'resultado' && resultado && (
           <div className="space-y-4 py-4">
             <div className="text-center">
@@ -509,11 +292,6 @@ export function ConciliacionBancariaModal({ abierto, onCerrar, onAplicado }: Pro
                 <CheckCircle2 className="w-7 h-7 text-emerald-600" />
               </div>
               <h3 className="text-lg font-bold text-slate-800">Conciliación completada</h3>
-              {resultado.prestamo && (
-                <p className="text-xs text-slate-500 mt-1">
-                  Solicitud <strong className="font-mono">{resultado.prestamo.codigo}</strong> · {resultado.prestamo.cliente}
-                </p>
-              )}
             </div>
             <div className="grid grid-cols-3 gap-2 text-center">
               <div className="rounded-lg bg-emerald-50 border border-emerald-200 p-3">
@@ -534,17 +312,7 @@ export function ConciliacionBancariaModal({ abierto, onCerrar, onAplicado }: Pro
                 <p className="text-xs font-semibold text-amber-700 mb-1">Detalles de errores:</p>
                 {resultado.erroresDetalle.slice(0, 5).map((e: any, i: number) => (
                   <p key={i} className="text-[11px] text-amber-800">
-                    Cuota #{e.numeroCuota} · {e.codigo}: {e.error}
-                  </p>
-                ))}
-              </div>
-            )}
-            {resultado.aplicadosDetalle?.length > 0 && (
-              <div className="border border-emerald-200 rounded-lg p-3 bg-emerald-50/50 max-h-32 overflow-y-auto">
-                <p className="text-xs font-semibold text-emerald-700 mb-1">Pagos aplicados:</p>
-                {resultado.aplicadosDetalle.map((a: any, i: number) => (
-                  <p key={i} className="text-[11px] text-emerald-800">
-                    Cuota #{a.numeroCuota} · {formatearMoneda(a.monto)} · {a.fecha}
+                    {e.movimiento?.referencia}: {e.error}
                   </p>
                 ))}
               </div>

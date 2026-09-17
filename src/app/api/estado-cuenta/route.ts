@@ -2,11 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import {
   calcularPrestamo,
-  calcularPrestamoTasaFijaMensual,
-  corregirFechasPorCorte,
   calcularMoraCompuesta,
   calcularDiasMora, getTasaMoraAnual,
-  calcularCargosInicialesPendientes,
   formatearMoneda,
   formatearFecha,
 } from '@/lib/finanzas'
@@ -42,11 +39,6 @@ export async function GET(req: NextRequest) {
             categoria: { include: { cuentaRecaudo: true } },
             pagos: {
               orderBy: { numeroCuota: 'asc' },
-            },
-            firmas: {  // incluir firmas electrónicas para sección de aceptación
-              where: { estadoFirma: 'COMPLETADA' },
-              orderBy: { fechaFirmaCompleta: 'desc' },
-              take: 3,  // últimas 3 firmas completadas
             },
           },
           orderBy: { createdAt: 'desc' },
@@ -89,99 +81,16 @@ export async function GET(req: NextRequest) {
     let totalPagado = 0
     let totalSaldo = 0
     let totalMora = 0
-    let totalCargosInicialesPendientes = 0  // nuevo (Task 12)
 
     const prestamosCalculados = cliente.prestamos.map((p) => {
-      // === Usar la función de cálculo correcta según la modalidad del solicitud ===
-      // - TASA_FIJA: calcularPrestamoTasaFijaMensual (interés fijo sobre capital inicial,
-      //   cuota constante, mismo capital y mismo interés en todas las cuotas)
-      // - FRANCES (default): calcularPrestamo (sistema francés, interés sobre saldo
-      //   decreciente, capital crece e interés decrece en cada cuota)
-      // - CUOTA_PERSONALIZADA: usar los valores guardados en el solicitud (no recalcular)
-      // - INTERES_FIJO_SIN_CAPITAL: no tiene tabla de amortización tradicional
-      let calculo: any
-      if (p.modalidadAmortizacion === 'TASA_FIJA') {
-        calculo = calcularPrestamoTasaFijaMensual({
-          montoPrincipal: p.montoPrincipal,
-          tasaMensualFija: p.tasaInteresMensual || p.tasaInteresAnual / 12,
-          numeroCuotas: p.numeroCuotas,
-          frecuencia: p.frecuencia as any,
-          // === FIX (2026-08-21): usar fechaInicioAmortizacion si está disponible ===
-          fechaDesembolso: p.fechaInicioAmortizacion || p.fechaDesembolso || undefined,
-        })
-        // === FIX: Respetar el montoCuota guardado en BD si difiere del calculado ===
-        // El montoCuota en BD puede incluir ajustes manuales del admin (ej: +$5.000
-        // por cargo adicional). Si usamos el montoCuota recalculado, el cliente
-        // vería valores distintos a los que realmente debe pagar.
-        //
-        // IMPORTANTE: valorDiasCausados NO se suma a ninguna cuota individual.
-        // Es un cargo único que se documenta en notas pero las cuotas quedan
-        // todas iguales al montoCuota guardado en BD.
-        if (p.montoCuota && p.montoCuota !== calculo.montoCuota) {
-          calculo.tablaAmortizacion = calculo.tablaAmortizacion.map((c: any) => ({
-            ...c,
-            montoCuota: p.montoCuota,  // Todas las cuotas al valor guardado
-          }))
-          calculo.montoCuota = p.montoCuota
-        }
-      } else if (p.modalidadAmortizacion === 'INTERES_FIJO_SIN_CAPITAL') {
-        // Modalidad especial: no hay tabla de amortización tradicional.
-        // El cliente paga intereses fijos mensuales mientras mantenga deuda de capital.
-        // Mostramos una "tabla" informativa con el saldo real y la próxima cuota.
-        calculo = {
-          numeroCuotas: 0,
-          montoCuota: p.interesFijoMensual || 0,
-          totalInteres: 0,
-          totalPagar: p.montoPrincipal,
-          tasaAplicada: 0,
-          tablaAmortizacion: [],
-          fechaVencimiento: null,
-          fondoGarantia: 0,
-        }
-      } else {
-        calculo = calcularPrestamo({
-          montoPrincipal: p.montoPrincipal,
-          tasaInteresAnual: p.tasaInteresAnual,
-          tasaMoraAnual: getTasaMoraAnual(p),
-          plazoMeses: p.plazoMeses,
-          frecuencia: p.frecuencia as any,
-          // === FIX (2026-08-21): usar fechaInicioAmortizacion si está disponible ===
-          fechaDesembolso: p.fechaInicioAmortizacion || p.fechaDesembolso || undefined,
-        })
-      }
-
-      // === Corregir fechas por calendario si hay periodoCorte (ej: '16-01') ===
-      calculo.tablaAmortizacion = corregirFechasPorCorte(calculo.tablaAmortizacion, p.periodoCorte)
-
-      // === FIX Task 12: calcular cargos iniciales pendientes de cobrar ===
-      // Estos cargos (pagaré + carta, tarifa plataforma, flexibilidad financiera,
-      // fondo de garantía) se mostraban en el estado de cuenta como "incluidos
-      // en la primera cuota" pero NUNCA se sumaban al saldo pendiente ni a la
-      // cuota. Ahora se calculan y se exponen al template HTML para que:
-      //   - La primera cuota muestre el monto con cargos incluidos
-      //   - El saldo pendiente incluya los cargos pendientes
-      const cargosInicialesInfo = calcularCargosInicialesPendientes(p)
-
-      // Verificar si la cuota 1 ya fue pagada (APLICADO) para saber si los
-      // cargos del pagaré (que no tiene flag propio) ya se consideran cobrados.
-      const cuota1Aplicada = p.pagos.some(pg => pg.numeroCuota === 1 && pg.estado === 'APLICADO')
-      // Si la cuota 1 fue aplicada, los cargos del pagaré y del fondo de garantía
-      // (que se cobran en cuota 1 y no tienen flag de "aplicado" propio) ya se cobraron.
-      const cargosInicialesInfoAjustada = {
-        ...cargosInicialesInfo,
-        cargos: cargosInicialesInfo.cargos.map(c => {
-          if (c.concepto === 'PAGARE_CARTA' && cuota1Aplicada) {
-            return { ...c, yaCobrado: true }
-          }
-          if (c.concepto === 'FONDO_GARANTIA' && cuota1Aplicada) {
-            return { ...c, yaCobrado: true }
-          }
-          return c
-        }),
-      }
-      const cargosInicialesPendientes = cargosInicialesInfoAjustada.cargos
-        .filter(c => !c.yaCobrado)
-        .reduce((s, c) => s + c.monto, 0)
+      const calculo = calcularPrestamo({
+        montoPrincipal: p.montoPrincipal,
+        tasaInteresAnual: p.tasaInteresAnual,
+        tasaMoraAnual: getTasaMoraAnual(p), // convertir diaria a anual
+        plazoMeses: p.plazoMeses,
+        frecuencia: p.frecuencia as any,
+        fechaDesembolso: p.fechaDesembolso || undefined,
+      })
 
       // Para cada pago, calcular si tiene mora
       const pagosConMora = p.pagos.map((pago) => {
@@ -194,59 +103,14 @@ export async function GET(req: NextRequest) {
 
       totalPrestado += p.montoPrincipal
       totalPagado += p.montoPagado
-      // === FIX Task 12: sumar cargos iniciales pendientes al saldo mostrado ===
-      // IMPORTANTE: Para evitar doble contabilidad, solo sumamos los cargos
-      // iniciales pendientes SI el saldoTotal del solicitud NO los incluye ya.
-      // El saldoTotal del solicitud incluye los cargos cuando:
-      //   - El solicitud fue creado con cargos y el saldo se calculó como
-      //     totalPagar (que incluye los cargos) - montoPagado.
-      // El saldoTotal NO incluye los cargos cuando:
-      //   - El solicitud es legacy (creado antes del fix Task 12).
-      // Para distinguir, comparamos: si (saldoTotal + cargosInicialesPendientes)
-      // excede significativamente el totalPagar teórico (capital + interés + cargos),
-      // es probable que ya estén incluidos.
-      //
-      // SOLUCIÓN SIMPLE: usar el máximo entre saldoTotal y (saldoTotal sin cargos + cargos),
-      // pero evitando doble cuenta. Lo más correcto es:
-      //   - Si saldoTotal ya incluye los cargos (caso nuevo): NO sumarlos de nuevo.
-      //   - Si saldoTotal no los incluye (caso legacy): sumarlos.
-      //
-      // Heurística: si saldoTotal >= montoPrincipal + totalInteres + cargosInicialesPendientes - montoPagado - 1,
-      // entonces saldoTotal ya incluye los cargos.
-      const saldoSinCargos = p.montoPrincipal + p.totalInteres - p.montoPagado
-      const saldoConCargosEsperado = saldoSinCargos + cargosInicialesPendientes
-      // Si el saldoTotal guardado ya es >= al esperado con cargos, no sumar de nuevo
-      const saldoYaIncluyeCargos = p.saldoTotal >= saldoConCargosEsperado - 1
-      const saldoParaMostrar = saldoYaIncluyeCargos
-        ? p.saldoTotal
-        : p.saldoTotal + cargosInicialesPendientes
-      totalSaldo += saldoParaMostrar
+      totalSaldo += p.saldoTotal
       totalMora += p.montoMora
-      totalCargosInicialesPendientes += cargosInicialesPendientes
 
       return {
         ...p,
         tablaAmortizacion: calculo.tablaAmortizacion,
         pagos: pagosConMora,
         cuentaRecaudoPago: p.categoria?.cuentaRecaudo || cliente.categoria?.cuentaRecaudo || null,
-        // === FIX 2026-08-13 (Task 12): incluir datos del cliente para que la
-        // sección de firma electrónica NO muestre "No registrado" cuando el
-        // cliente SÍ tiene email/teléfono. Antes este objeto venía sin
-        // `cliente` y la plantilla caía en `p.cliente?.email || 'No registrado'`.
-        cliente: {
-          nombre: cliente.nombre,
-          cedula: cliente.cedula,
-          telefono: cliente.telefono,
-          email: cliente.email,
-        },
-        // === FIX Task 12: información de cargos iniciales para el template ===
-        cargosInicialesInfo: cargosInicialesInfoAjustada,
-        cargosInicialesPendientes,
-        // === FIX (2026-08-20): flag para evitar doble cuenta de cargos iniciales ===
-        // Si saldoTotal ya incluye los cargos (solicitudes nuevos), el template NO debe
-        // sumarlos de nuevo. Si no los incluye (solicitudes legacy), el template los suma.
-        saldoYaIncluyeCargos,
-        cuota1Aplicada,
       }
     })
 
@@ -272,7 +136,6 @@ export async function GET(req: NextRequest) {
         totalSaldo,
         totalMora,
         numPrestamos: prestamosCalculados.length,
-        totalCargosInicialesPendientes,  // nuevo (Task 12)
       },
       fechaGeneracion: new Date().toISOString(),
     })
@@ -532,7 +395,7 @@ function generarEstadoCuentaHTML({
 
   <div class="header">
     <h1>ESTADO DE CUENTA</h1>
-    <p class="subtitle">Sistema de Gestión de Solicitudes</p>
+    <p class="subtitle">Sistema de Gestión de Préstamos</p>
     <p class="fecha-gen">Generado el ${fechaGen}</p>
   </div>
 
@@ -579,22 +442,13 @@ function generarEstadoCuentaHTML({
           <div class="value">${formatearMoneda(totales.totalMora)}</div>
         </div>
       </div>
-      ${totales.totalCargosInicialesPendientes > 0 ? `
-      <div style="margin-top: 10px; padding: 8px 12px; background: #faf5ff; border-left: 4px solid #7c3aed; border-radius: 0 6px 6px 0; font-size: 11px; color: #4c1d95;">
-        <strong>📌 Cargos iniciales pendientes (incluidos en la primera cuota):</strong> ${formatearMoneda(totales.totalCargosInicialesPendientes)}
-        <div style="font-size: 9px; color: #6d28d9; margin-top: 2px;">
-          Corresponde a Pagaré + Carta, Tarifa de Plataforma, Flexibilidad Financiera y/o Fondo de Garantía que aún no han sido cobrados.
-          Se suman a la primera cuota pendiente del crédito.
-        </div>
-      </div>
-      ` : ''}
       <p style="margin: 8px 0 0 0; color: #6b7280; font-size: 10px;">
-        <strong>${totales.numPrestamos}</strong> solicitud(s) registrado(s)
+        <strong>${totales.numPrestamos}</strong> préstamo(s) registrado(s)
       </p>
     </div>
   </div>
 
-  <!-- Detalle por solicitud -->
+  <!-- Detalle por préstamo -->
   ${prestamos.map((p: any) => {
     const pagosAplicados = p.pagos.filter((pg: any) => pg.estado === 'APLICADO' || pg.estado === 'PAGO_PARCIAL')
     const totalPagosPrestamo = pagosAplicados.reduce((s: number, pg: any) => s + pg.montoTotal, 0)
@@ -608,8 +462,8 @@ function generarEstadoCuentaHTML({
           <div><strong>Monto:</strong> ${formatearMoneda(p.montoPrincipal)}</div>
           <div><strong>Cuota:</strong> ${formatearMoneda(p.montoCuota)}</div>
           <div><strong>Cuotas:</strong> ${p.cuotasPagadas}/${p.numeroCuotas} (${p.frecuencia.toLowerCase()})</div>
-          <div><strong>Total a pagar:</strong> ${formatearMoneda(p.saldoYaIncluyeCargos ? p.totalPagar : p.totalPagar + (p.cargosInicialesPendientes || 0))}${p.cargosInicialesPendientes > 0 ? `<br/><span style="font-size:8px;color:#6d28d9;">incluye ${formatearMoneda(p.cargosInicialesPendientes)} cargos iniciales</span>` : ''}</div>
-          <div><strong>Saldo:</strong> ${formatearMoneda(p.saldoYaIncluyeCargos ? p.saldoTotal : p.saldoTotal + (p.cargosInicialesPendientes || 0))}${(!p.saldoYaIncluyeCargos && p.cargosInicialesPendientes > 0) ? `<br/><span style="font-size:8px;color:#6d28d9;">+${formatearMoneda(p.cargosInicialesPendientes)} cargos pendientes</span>` : ''}</div>
+          <div><strong>Total a pagar:</strong> ${formatearMoneda(p.totalPagar)}</div>
+          <div><strong>Saldo:</strong> ${formatearMoneda(p.saldoTotal)}</div>
           <div><strong>Interés anual:</strong> ${p.tasaInteresAnual}%</div>
           <div><strong>Mora diaria:</strong> ${p.tasaMoraDiaria}%</div>
           <div><strong>Desembolso:</strong> ${p.fechaDesembolso ? formatearFecha(p.fechaDesembolso) : '—'}</div>
@@ -641,10 +495,6 @@ function generarEstadoCuentaHTML({
         <tbody>
           ${p.tablaAmortizacion.map((c: any) => {
             const pago = p.pagos.find((pg: any) => pg.numeroCuota === c.numero && (pg.estado === 'APLICADO' || pg.estado === 'PAGO_PARCIAL'))
-            // === FIX Task 12: en la cuota 1, sumar los cargos iniciales pendientes al total ===
-            // Esto refleja que los cargos (pagaré, tarifa plataforma, flexibilidad, fondo garantía)
-            // se cobran UNA sola vez al inicio y van sumados a la primera cuota.
-            const cargosCuota1 = (c.numero === 1 && !p.cuota1Aplicada) ? (p.cargosInicialesPendientes || 0) : 0
             if (pago) {
               return `
               <tr>
@@ -664,7 +514,6 @@ function generarEstadoCuentaHTML({
               // Cuota pendiente
               const diasMora = calcularDiasMora(c.fechaVencimiento)
               const mora = diasMora > 0 ? calcularMoraCompuesta(p.montoPrincipal, p.tasaMoraDiaria, diasMora) : 0
-              const totalCuotaConCargos = c.montoCuota + mora + cargosCuota1
               return `
               <tr style="background: ${diasMora > 0 ? '#fef2f2' : '#fffbeb'}20;">
                 <td>${c.numero}</td>
@@ -673,7 +522,7 @@ function generarEstadoCuentaHTML({
                 <td class="num">${formatearMoneda(c.capital)}</td>
                 <td class="num">${formatearMoneda(c.interes)}</td>
                 <td class="num">${mora > 0 ? '<span style="color: #dc2626;">' + formatearMoneda(mora) + '</span>' : '—'}</td>
-                <td class="num">${formatearMoneda(totalCuotaConCargos)}${cargosCuota1 > 0 ? `<br/><span style="font-size:8px;color:#6d28d9;">incluye ${formatearMoneda(cargosCuota1)} cargos iniciales</span>` : ''}</td>
+                <td class="num">${formatearMoneda(c.montoCuota + mora)}</td>
                 <td>—</td>
                 <td><span class="badge badge-PENDIENTE">${diasMora > 0 ? 'VENCIDA (' + diasMora + ' días)' : 'PENDIENTE'}</span></td>
               </tr>
@@ -690,177 +539,14 @@ function generarEstadoCuentaHTML({
           </tr>
         </tbody>
       </table>
-
-      ${p.cobroPagareCarta ? `
-      <div class="concepto-cobro" style="margin-top: 12px; border-left: 4px solid #7c3aed; background: #faf5ff; padding: 10px 14px; border-radius: 0 8px 8px 0;">
-        <div style="font-weight: bold; color: #6d28d9; font-size: 11px; margin-bottom: 4px;">📄 CONCEPTO: Pagaré + Carta de Instrucciones</div>
-        <div style="font-size: 10px; color: #4c1d95; line-height: 1.5;">
-          Se cobra un valor único de <strong>${formatearMoneda(p.valorPagareCarta || 19900)}</strong> por la elaboración y gestión del pagaré y la carta de instrucciones
-          asociados al crédito <strong>${p.codigo}</strong>. Este cargo se aplica una sola vez al inicio del crédito y está incluido en la primera cuota.
-          El pagaré y la carta de instrucciones constituyen los documentos legales que respaldan la obligación financiera del cliente.
-        </div>
-      </div>
-      ` : ''}
-
-      ${p.flexibilidadFinanciera ? `
-      <div class="concepto-cobro" style="margin-top: 8px; border-left: 4px solid #059669; background: #ecfdf5; padding: 10px 14px; border-radius: 0 8px 8px 0;">
-        <div style="font-weight: bold; color: #047857; font-size: 11px; margin-bottom: 4px;">✨ CONCEPTO: Flexibilidad Financiera (${p.flexibilidadModalidad || 'BASICA'})</div>
-        <div style="font-size: 10px; color: #064e3b; line-height: 1.5;">
-          Se cobra un valor único de <strong>${formatearMoneda(p.flexibilidadCosto || 0)}</strong> por el beneficio de Flexibilidad Financiera
-          (${p.flexibilidadModalidad === 'PREMIUM' ? 'Premium — 2 usos disponibles' : 'Básica — 1 uso disponible'} durante la vigencia del crédito).
-          Este cargo se aplica una sola vez al inicio del crédito y está incluido en la primera cuota.
-          El beneficio permite al cliente <strong>trasladar una cuota al final del crédito</strong> o <strong>solicitar cambio de fecha de pago</strong>
-          (genera documento "Otro Sí" firmado electrónicamente con OTP), evitando la generación de intereses moratorios por impago puntual.
-          Usos disponibles restantes: <strong>${p.flexibilidadUsosDisponibles ?? (p.flexibilidadModalidad === 'PREMIUM' ? 2 : 1)}</strong> de ${p.flexibilidadModalidad === 'PREMIUM' ? '2' : '1'}.
-          Usos ejercidos: <strong>${p.flexibilidadUsosEjercidos ?? 0}</strong>.
-        </div>
-      </div>
-      ` : ''}
-
-      ${(() => {
-        // === Tarea Q: Historial de cuotas trasladadas por Flexibilidad Financiera ===
-        // Si el solicitud tiene movimientos de flexibilidad registrados (JSON en flexibilidadMovimientos),
-        // mostrar el detalle de cada uso con su cuota, fecha original, fecha nueva, intereses causados.
-        try {
-          if (!p.flexibilidadMovimientos) return ''
-          const movimientos = JSON.parse(p.flexibilidadMovimientos)
-          if (!Array.isArray(movimientos) || movimientos.length === 0) return ''
-          return `
-      <div class="concepto-cobro" style="margin-top: 8px; border-left: 4px solid #0d9488; background: #f0fdfa; padding: 10px 14px; border-radius: 0 8px 8px 0;">
-        <div style="font-weight: bold; color: #0f766e; font-size: 11px; margin-bottom: 6px;">🔄 CONCEPTO: Cuotas trasladadas al final del crédito (uso de Flexibilidad Financiera)</div>
-        <div style="font-size: 10px; color: #134e4a; line-height: 1.5; margin-bottom: 6px;">
-          Las siguientes cuotas fueron trasladadas al final del crédito mediante el ejercicio del beneficio de Flexibilidad Financiera.
-          Los intereses moratorios causados al momento del traslado se incluyen en el monto de la cuota trasladada (NO se cobran aparte),
-          y no se genera mora adicional sobre estas cuotas mientras estén aplazadas.
-        </div>
-        <table style="width: 100%; font-size: 10px; border-collapse: collapse; margin-top: 4px;">
-          <thead>
-            <tr style="background: #ccfbf1; color: #134e4a;">
-              <th style="padding: 4px 6px; text-align: left; border: 1px solid #99f6e4;">#</th>
-              <th style="padding: 4px 6px; text-align: left; border: 1px solid #99f6e4;">Cuota</th>
-              <th style="padding: 4px 6px; text-align: left; border: 1px solid #99f6e4;">Vencimiento original</th>
-              <th style="padding: 4px 6px; text-align: left; border: 1px solid #99f6e4;">Nuevo vencimiento</th>
-              <th style="padding: 4px 6px; text-align: right; border: 1px solid #99f6e4;">Intereses causados</th>
-              <th style="padding: 4px 6px; text-align: left; border: 1px solid #99f6e4;">Fecha uso</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${movimientos.map((m: any, idx: number) => `
-              <tr style="background: ${idx % 2 === 0 ? '#ffffff' : '#f0fdfa'};">
-                <td style="padding: 4px 6px; border: 1px solid #99f6e4;">${idx + 1}</td>
-                <td style="padding: 4px 6px; border: 1px solid #99f6e4; font-weight: bold;">#${m.cuotaTrasladada}</td>
-                <td style="padding: 4px 6px; border: 1px solid #99f6e4;">${formatearFecha(new Date(m.vencimientoOriginal))}</td>
-                <td style="padding: 4px 6px; border: 1px solid #99f6e4; font-weight: bold; color: #0f766e;">${formatearFecha(new Date(m.vencimientoNuevo))}</td>
-                <td style="padding: 4px 6px; border: 1px solid #99f6e4; text-align: right; color: #b91c1c;">+${formatearMoneda(m.interesesCausados || 0)}</td>
-                <td style="padding: 4px 6px; border: 1px solid #99f6e4;">${formatearFecha(new Date(m.fechaUso))}</td>
-              </tr>
-            `).join('')}
-          </tbody>
-        </table>
-        <div style="font-size: 9px; color: #134e4a; margin-top: 6px; font-style: italic;">
-          Cada cuota trasladada se reprograma al final del crédito (después de la última cuota programada), conservando su capital e interés original más los intereses moratorios causados al momento del traslado.
-        </div>
-      </div>
-          `
-        } catch (e) {
-          return ''
-        }
-      })()}
-
-      ${p.fondoGarantiaCargado && p.fondoGarantiaMonto > 0 ? `
-      <div class="concepto-cobro" style="margin-top: 8px; border-left: 4px solid #0891b2; background: #ecfeff; padding: 10px 14px; border-radius: 0 8px 8px 0;">
-        <div style="font-weight: bold; color: #0e7490; font-size: 11px; margin-bottom: 4px;">🛡️ CONCEPTO: Fondo de Garantía</div>
-        <div style="font-size: 10px; color: #155e75; line-height: 1.5;">
-          Se cobra un valor de <strong>${formatearMoneda(p.fondoGarantiaMonto)}</strong> correspondiente al fondo de garantía (${(p.fondoGarantiaTasa * 100).toFixed(2)}% del monto del crédito).
-          Este cargo se aplica una sola vez al inicio del crédito y está incluido en la primera cuota.
-          El fondo protege al cliente en caso de imprevistos y será devuelto al finalizar el crédito, previa verificación de cumplimiento de obligaciones.
-        </div>
-      </div>
-      ` : ''}
-
-      ${p.cobroTarifaPlataforma ? `
-      <div class="concepto-cobro" style="margin-top: 8px; border-left: 4px solid #d97706; background: #fffbeb; padding: 10px 14px; border-radius: 0 8px 8px 0;">
-        <div style="font-weight: bold; color: #b45309; font-size: 11px; margin-bottom: 4px;">💻 CONCEPTO: Tarifa de Uso de Plataforma</div>
-        <div style="font-size: 10px; color: #78350f; line-height: 1.5;">
-          Se cobra un valor único de <strong>${formatearMoneda(p.valorTarifaPlataforma || 4900)}</strong> por el uso de la plataforma tecnológica
-          asociada al crédito <strong>${p.codigo}</strong>. Este cargo se aplica una sola vez al inicio del crédito y está incluido en la primera cuota.
-          La tarifa cubre los costos de gestión digital, firma electrónica, verificación de identidad y disponibilidad del portal del cliente.
-        </div>
-      </div>
-      ` : ''}
-
-      ${p.firmas && p.firmas.length > 0 ? `
-      <div class="firma-aceptacion" style="margin-top: 20px; border: 2px solid #16a34a; border-radius: 10px; padding: 16px 20px; background: linear-gradient(135deg, #f0fdf4 0%, #ecfdf5 100%);">
-        <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 12px; padding-bottom: 10px; border-bottom: 1px dashed #16a34a;">
-          <span style="font-size: 22px;">✍️</span>
-          <h3 style="margin: 0; font-size: 14px; color: #14532d; font-weight: 700; letter-spacing: 0.5px;">ACEPTACIÓN Y FIRMA DEL CLIENTE</h3>
-          <span style="margin-left: auto; background: #16a34a; color: white; padding: 3px 10px; border-radius: 12px; font-size: 10px; font-weight: 700;">✓ FIRMADO</span>
-        </div>
-        ${p.firmas.map((f: any) => {
-          // FIX 2026-08-12 (Task 6): Mostrar el destino concreto del OTP (email
-          // o teléfono confirmado por el cliente) al lado del canal, para que
-          // el estado de cuenta sea trazable y se pueda verificar a qué correo
-          // o WhatsApp llegó el código. Antes solo se veía "EMAIL" / "WHATSAPP"
-          // sin saber a qué contacto se envió.
-          const telCliente = p.cliente?.telefono || '—'
-          const emailCliente = p.cliente?.email || '—'
-          let destinoOtpTxt = 'No especificado'
-          if (f.otpCanal === 'WHATSAPP') destinoOtpTxt = `WhatsApp al ${telCliente}`
-          else if (f.otpCanal === 'EMAIL') destinoOtpTxt = `Correo a ${emailCliente}`
-          else if (f.otpCanal === 'AMBOS') destinoOtpTxt = `WhatsApp ${telCliente} y correo ${emailCliente}`
-          return `
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px 24px; font-size: 11px; color: #14532d;">
-          <div><strong>📄 Tipo documento:</strong> ${f.tipo === 'TYC' ? 'Términos y Condiciones' : f.tipo === 'PAGARE' ? 'Pagaré' : f.tipo === 'CONTRATO' ? 'Contrato' : f.tipo}</div>
-          <div><strong>👤 Firmante:</strong> ${f.firmanteNombre || p.cliente?.nombre || '—'}${f.firmanteRol ? ` (${f.firmanteRol})` : ''}</div>
-          <div><strong>🆔 Cédula firmante:</strong> ${f.firmanteCedula || p.cliente?.cedula || '—'}</div>
-          <div><strong>🔐 Canal OTP:</strong> ${f.otpCanal || '—'}</div>
-          <div style="grid-column: 1 / -1;"><strong>📬 Destino OTP confirmado:</strong> <strong>${destinoOtpTxt}</strong></div>
-          <div><strong>📅 Fecha firma:</strong> ${f.fechaFirmaCompleta ? formatearFecha(f.fechaFirmaCompleta) : '—'} ${f.fechaFirmaCompleta ? new Date(f.fechaFirmaCompleta).toLocaleTimeString('es-CO', { timeZone: 'America/Bogota', hour: '2-digit', minute: '2-digit' }) : ''}</div>
-          <div><strong>🌍 IP origen:</strong> ${f.ipFirma || '—'}</div>
-          <div><strong>🔑 Estado:</strong> <span style="color: #16a34a; font-weight: 700;">COMPLETADA</span></div>
-          <div><strong>🆔 ID firma:</strong> <span style="font-family: 'Courier New', monospace; font-size: 10px;">${f.id.substring(0, 18)}…</span></div>
-        </div>
-        ${f.imagenFirma ? `
-        <div style="margin-top: 14px; padding-top: 12px; border-top: 1px dashed #16a34a; display: flex; align-items: center; gap: 16px;">
-          <div style="background: white; border: 1px solid #d1d5db; border-radius: 6px; padding: 8px 12px;">
-            <img src="${f.imagenFirma.startsWith('data:') ? f.imagenFirma : `data:image/png;base64,${f.imagenFirma}`}" alt="Firma del cliente" style="height: 60px; width: auto; display: block;" />
-            <div style="text-align: center; font-size: 9px; color: #6b7280; margin-top: 2px;">Firma manuscrita digital</div>
-          </div>
-          <div style="font-size: 10px; color: #14532d; line-height: 1.5;">
-            <div style="font-weight: 700; margin-bottom: 4px;">Declaración de aceptación:</div>
-            El cliente declara haber leído, entendido y aceptado voluntariamente los términos y condiciones del solicitud <strong>${p.codigo}</strong>, así como la obligación de pago según el cronograma arriba detallado. La firma electrónica tiene plena validez legal conforme a la Ley 527 de 1999 y el Decreto 1074 de 2015.
-          </div>
-        </div>
-        ` : `
-        <div style="margin-top: 14px; padding-top: 12px; border-top: 1px dashed #16a34a;">
-          <div style="font-size: 10px; color: #14532d; line-height: 1.5;">
-            <div style="font-weight: 700; margin-bottom: 4px;">Declaración de aceptación:</div>
-            El cliente declara haber leído, entendido y aceptado voluntariamente los términos y condiciones del solicitud <strong>${p.codigo}</strong>, así como la obligación de pago según el cronograma arriba detallado. La firma electrónica tiene plena validez legal conforme a la Ley 527 de 1999 y el Decreto 1074 de 2015.
-          </div>
-        </div>
-        `}
-        ` }).join('')}
-      </div>
-      ` : `
-      <div class="firma-aceptacion" style="margin-top: 20px; border: 2px dashed #d1d5db; border-radius: 10px; padding: 16px 20px; background: #f9fafb;">
-        <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px;">
-          <span style="font-size: 18px;">⏳</span>
-          <h3 style="margin: 0; font-size: 13px; color: #6b7280; font-weight: 600;">SIN FIRMA ELECTRÓNICA REGISTRADA</h3>
-          <span style="margin-left: auto; background: #f3f4f6; color: #6b7280; padding: 3px 10px; border-radius: 12px; font-size: 10px; font-weight: 600;">PENDIENTE</span>
-        </div>
-        <div style="font-size: 10px; color: #6b7280; line-height: 1.4;">
-          Este solicitud aún no cuenta con firma electrónica registrada. El cliente debe completar el proceso de aceptación y firma para validar el documento.
-        </div>
-      </div>
-      `}
     </div>
     `
   }).join('')}
 
   <div class="footer">
-    <p>Documento generado automáticamente por el Sistema de Gestión de Solicitudes</p>
+    <p>Documento generado automáticamente por el Sistema de Gestión de Préstamos</p>
     <p>Este estado de cuenta es una referencia de los pagos registrados. En caso de discrepancia, contacte a su gestor.</p>
-    <p>© ${new Date().getFullYear()} - Sistema de Gestión de Solicitudes</p>
+    <p>© ${new Date().getFullYear()} - Sistema de Gestión de Préstamos</p>
   </div>
 
   <script>

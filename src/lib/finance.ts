@@ -1,4 +1,4 @@
-// Cálculos financieros del sistema de solicitudes
+// Cálculos financieros del sistema de préstamos
 
 export type CalcPrestamoInput = {
   monto: number
@@ -18,7 +18,7 @@ export type CalcPrestamoResult = {
 }
 
 /**
- * Calcula el cronograma de un solicitud usando interés simple sobre saldos.
+ * Calcula el cronograma de un préstamo usando interés simple sobre saldos.
  * - Cuota fija = (capital + interés total) / número de cuotas
  * - Interés total = capital * tasa mensual * plazo
  */
@@ -61,7 +61,7 @@ export type CronogramaCuota = {
 }
 
 /**
- * Genera el cronograma de cuotas de un solicitud
+ * Genera el cronograma de cuotas de un préstamo
  */
 export function generarCronograma(input: CalcPrestamoInput): CronogramaCuota[] {
   const calc = calcularPrestamo(input)

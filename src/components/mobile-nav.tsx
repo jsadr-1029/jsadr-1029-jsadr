@@ -14,10 +14,18 @@ import {
   Scale,
   Zap,
   Shield,
+  ShieldAlert,
   Settings,
   Bell,
+  BarChart3,
   ChevronDown,
   Users,
+  Plug,
+  Code2,
+  BookOpen,
+  Landmark as CajasIcon,
+  Calculator,
+  Megaphone,
   type LucideIcon,
 } from 'lucide-react'
 import {
@@ -52,7 +60,7 @@ interface NavItem {
  * El botón central (Inicio/Dashboard) se renderiza aparte con estilo destacado.
  */
 const primaryItems: NavItem[] = [
-  { key: 'prestamos', label: 'Solicitudes', icon: FileText },
+  { key: 'prestamos', label: 'Préstamos', icon: FileText },
   { key: 'pagos', label: 'Pagos', icon: DollarSign },
   { key: 'portal', label: 'Portal', icon: Search },
 ]
@@ -64,30 +72,41 @@ const primaryItems: NavItem[] = [
 
 /**
  * Módulos adicionales que se muestran dentro del Sheet "Más".
- * Estructura simplificada — los submódulos son internos a cada vista:
- *   - Solicitudes: Clientes, Cajas, Campañas, Simulador son internos (tabs)
- *   - Seguridad: Conexiones API, Usuarios, Código Fuente, Manual,
- *     Auditoría Seguridad y Exportar Base de Datos son internos.
+ * Estructura jerárquica coherente con el Sidebar:
+ *   - Préstamos agrupa: Cajas, Campañas, Simulador
+ *   - Seguridad agrupa: Conexiones API, Usuarios, Código Fuente, Manual
  */
 const moreItems: NavItem[] = [
   { key: 'juridico', label: 'Jurídico', icon: Scale },
   { key: 'automatizacion', label: 'Automatización', icon: Zap },
-  { key: 'seguridad', label: 'Seguridad', icon: Shield },
+  {
+    key: 'seguridad',
+    label: 'Seguridad',
+    icon: Shield,
+    children: [
+      { key: 'conexiones', label: 'Conexiones API', icon: Plug },
+      { key: 'usuarios', label: 'Usuarios', icon: Users },
+      { key: 'codigo-fuente', label: 'Código Fuente', icon: Code2 },
+      { key: 'manual', label: 'Manual', icon: BookOpen },
+    ],
+  },
+  { key: 'auditoria', label: 'Auditoría', icon: ShieldAlert },
   { key: 'admin', label: 'Administración', icon: Settings },
+  { key: 'exportar', label: 'Reportes', icon: BarChart3 },
   { key: 'notificaciones', label: 'Notificaciones', icon: Bell },
 ]
 
 /**
- * Grupo de módulos de Solicitudes que se muestra como desplegable en el Sheet.
- * Solo "Clientes" — los demás (cajas, campañas, simulador) son internos
- * a la vista de Solicitudes.
+ * Grupo de módulos de Préstamos que se muestra como desplegable en el Sheet.
  */
 const prestamosGroup: NavItem = {
   key: 'prestamos',
-  label: 'Solicitudes (más)',
+  label: 'Préstamos (más)',
   icon: FileText,
   children: [
-    { key: 'clientes', label: 'Clientes', icon: Users },
+    { key: 'cajas', label: 'Cajas', icon: CajasIcon },
+    { key: 'campanas', label: 'Campañas', icon: Megaphone },
+    { key: 'simulador', label: 'Simulador', icon: Calculator },
   ],
 }
 
@@ -96,7 +115,7 @@ const prestamosGroup: NavItem = {
  *
  * - Visible solo en móvil (`md:hidden`).
  * - Posicionada de forma fija en la parte inferior con glassmorphism.
- * - 5 accesos rápidos: Solicitudes · Pagos · Inicio (central) · Portal · Más.
+ * - 5 accesos rápidos: Préstamos · Pagos · Inicio (central) · Portal · Más.
  * - El botón "Más" abre un `Sheet` con el resto de módulos.
  * - Respeta la safe area de iOS (`env(safe-area-inset-bottom)`).
  */
@@ -107,7 +126,7 @@ export function MobileNav({ current, onChange, forceVisible = false }: MobileNav
   // === Permisos por usuario ===
   // Verifica si el usuario actual puede acceder a cada vista.
   // Esto permite que P_jsadr (bloqueado a portal-admin) NO vea los botones
-  // de Solicitudes/Pagos/Portal que no puede usar.
+  // de Préstamos/Pagos/Portal que no puede usar.
   const user = getUserData()
   const puedeAcceder = (v: ViewKey) => puedeAccederUsuario(user?.username, user?.rol, v)
 
@@ -166,7 +185,7 @@ export function MobileNav({ current, onChange, forceVisible = false }: MobileNav
       aria-label="Navegación principal móvil"
     >
       <div className="grid grid-cols-4 items-center gap-1 px-2 pt-2 pb-2">
-        {/* --- Solicitudes (solo si el usuario tiene acceso) --- */}
+        {/* --- Préstamos (solo si el usuario tiene acceso) --- */}
         {puedeAcceder('prestamos') ? (
           <NavButton
             item={primaryItems[0]}

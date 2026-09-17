@@ -1,12 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { generarCodigoOtp, hashOtp, verificarOtp, registrarOtp, obtenerIp, obtenerUserAgent, validarEmailEntregable } from '@/lib/otp'
+import { generarCodigoOtp, hashOtp, verificarOtp, registrarOtp, obtenerIp, obtenerUserAgent } from '@/lib/otp'
 import { calcularPrestamo } from '@/lib/finanzas'
 import { enviarWhatsApp, mensajeOTPFirma, guardarNotificacion } from '@/lib/whatsapp'
-import { enviarOTPSmart } from '@/lib/whatsapp-cloud'
 import { enviarEmail } from '@/lib/email'
 import { sanitizeError } from '@/lib/error-handler'
-import { buildAbsoluteUrl } from '@/lib/url'
 import crypto from 'crypto'
 
 // POST - crear firma y enviar OTP / guardar fotos / validar OTP
@@ -20,41 +18,30 @@ export async function POST(req: NextRequest) {
     } else if (accion === 'enviar_otp') {
       return await enviarOTP(body)
     } else if (accion === 'guardar_fotos') {
-      // Legacy: acepta ambos fotos ( backward compat con aceptar-tyc-otp )
       return await guardarFotos(body, req)
-    } else if (accion === 'guardar_foto_documento') {
-      // Nuevo paso 1: solo foto del documento
-      return await guardarFotoDocumento(body, req)
     } else if (accion === 'guardar_firma') {
-      // Legacy: completa firma (todavía usado por aceptar-tyc-otp en algunos flujos)
       return await guardarFirma(body, req)
-    } else if (accion === 'guardar_firma_dibujo') {
-      // Nuevo paso 2: guarda la firma manuscrita SIN completar
-      return await guardarFirmaDibujo(body)
     } else if (accion === 'validar_otp') {
       return await validarOTP(body)
-    } else if (accion === 'finalizar_con_selfie') {
-      // Nuevo paso 4: guarda selfie + completa firma + activa solicitud
-      return await finalizarConSelfie(body, req)
     } else if (accion === 'rechazar_firma') {
       return await rechazarFirma(body)
     }
 
-    return NextResponse.json({ success: false, error: 'Acción no válida. Usa: iniciar_firma, enviar_otp, guardar_foto_documento, guardar_firma_dibujo, validar_otp, finalizar_con_selfie, guardar_fotos (legacy), guardar_firma (legacy), rechazar_firma' }, { status: 400 })
+    return NextResponse.json({ success: false, error: 'Acción no válida. Usa: iniciar_firma, enviar_otp, guardar_fotos, guardar_firma, validar_otp, rechazar_firma' }, { status: 400 })
   } catch (error: any) {
     return NextResponse.json({ success: false, error: sanitizeError(error).message }, { status: 500 })
   }
 }
 
 // === INICIAR FIRMA: crea FirmaElectronica + TokenFirma y devuelve info al cliente ===
-// Si el solicitud tiene codeudor, crea DOS firmas (deudor + codeudor) con el mismo canal OTP
+// Si el préstamo tiene codeudor, crea DOS firmas (deudor + codeudor) con el mismo canal OTP
 async function iniciarFirma(body: any, req: NextRequest) {
   const { prestamoId, clienteId, tipo, canal } = body
   if (!clienteId && !prestamoId) {
     return NextResponse.json({ success: false, error: 'clienteId o prestamoId requerido' }, { status: 400 })
   }
 
-  // Buscar cliente y solicitud
+  // Buscar cliente y préstamo
   let cliente: any = null
   let prestamo: any = null
   if (prestamoId) {
@@ -63,7 +50,7 @@ async function iniciarFirma(body: any, req: NextRequest) {
       include: { cliente: true },
     })
     if (!prestamo) {
-      return NextResponse.json({ success: false, error: 'Solicitud no encontrado' }, { status: 404 })
+      return NextResponse.json({ success: false, error: 'Préstamo no encontrado' }, { status: 404 })
     }
     cliente = prestamo.cliente
   } else {
@@ -121,7 +108,8 @@ async function iniciarFirma(body: any, req: NextRequest) {
       },
     })
 
-    const linkFirmaCreado = buildAbsoluteUrl(`/firma/${tokenCreado}`)
+    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'
+    const linkFirmaCreado = `${baseUrl}/firma/${tokenCreado}`
 
     return { firma: firmaCreada, tokenFirma: tokenFirmaCreado, token: tokenCreado, linkFirma: linkFirmaCreado, expiracion: fechaExp }
   }
@@ -129,7 +117,7 @@ async function iniciarFirma(body: any, req: NextRequest) {
   // === Crear firma del DEUDOR ===
   const resultadoDeudor = await crearFirmaYToken(cliente, prestamo, false, canalFinal)
 
-  // === Si el solicitud tiene codeudor, crear firma del CODEUDOR ===
+  // === Si el préstamo tiene codeudor, crear firma del CODEUDOR ===
   let resultadoCodeudor: any = null
   let codeudor: any = null
 
@@ -146,7 +134,7 @@ async function iniciarFirma(body: any, req: NextRequest) {
 
       resultadoCodeudor = await crearFirmaYToken(codeudor, prestamo, true, canalFinal)
 
-      // Vincular la firma del codeudor al solicitud
+      // Vincular la firma del codeudor al préstamo
       await db.prestamo.update({
         where: { id: prestamo.id },
         data: { codeudorFirmaId: resultadoCodeudor.firma.id },
@@ -161,11 +149,11 @@ async function iniciarFirma(body: any, req: NextRequest) {
   // === Generar mensajes de WhatsApp para AMBOS firmantes ===
   const generarMensajeWhatsApp = (nombreFirmante: string, link: string, esCodeudor: boolean) => {
     const rol = esCodeudor ? 'CODEUDOR' : 'DEUDOR'
-    return `🔐 *FIRMA ELECTRÓNICA - SOLICITUD ${prestamo?.codigo || ''}*
+    return `🔐 *FIRMA ELECTRÓNICA - PRÉSTAMO ${prestamo?.codigo || ''}*
 
 Hola *${nombreFirmante}*,
 
-Como *${rol}* del solicitud, necesitas firmar electrónicamente los Términos y Condiciones.
+Como *${rol}* del préstamo, necesitas firmar electrónicamente los Términos y Condiciones.
 
 📋 *Pasos a seguir:*
 1. Ingresa al siguiente link: ${link}
@@ -216,8 +204,8 @@ Si tienes dudas, responde a este mensaje.`
     try {
       envioEmailDeudor = await enviarEmail({
         to: cliente.email,
-        subject: `Firma Electrónica - Solicitud ${prestamo?.codigo || ''}`,
-        text: `Estimado/a ${cliente.nombre},\n\nComo DEUDOR del solicitud, necesitas firmar electrónicamente los Términos y Condiciones.\n\nIngresa al siguiente link: ${linkFirma}\n\nEl link expira en 7 días.`,
+        subject: `Firma Electrónica - Préstamo ${prestamo?.codigo || ''}`,
+        text: `Estimado/a ${cliente.nombre},\n\nComo DEUDOR del préstamo, necesitas firmar electrónicamente los Términos y Condiciones.\n\nIngresa al siguiente link: ${linkFirma}\n\nEl link expira en 7 días.`,
       })
     } catch (e) {
       console.error('[iniciarFirma] Error enviando email al deudor:', e)
@@ -230,8 +218,8 @@ Si tienes dudas, responde a este mensaje.`
     try {
       envioEmailCodeudor = await enviarEmail({
         to: codeudor.email,
-        subject: `Firma Electrónica - Solicitud ${prestamo?.codigo || ''} (Codeudor)`,
-        text: `Estimado/a ${codeudor.nombre},\n\nComo CODEUDOR del solicitud, necesitas firmar electrónicamente los Términos y Condiciones.\n\nIngresa al siguiente link: ${linkFirmaCodeudor}\n\nEl link expira en 7 días.`,
+        subject: `Firma Electrónica - Préstamo ${prestamo?.codigo || ''} (Codeudor)`,
+        text: `Estimado/a ${codeudor.nombre},\n\nComo CODEUDOR del préstamo, necesitas firmar electrónicamente los Términos y Condiciones.\n\nIngresa al siguiente link: ${linkFirmaCodeudor}\n\nEl link expira en 7 días.`,
       })
     } catch (e) {
       console.error('[iniciarFirma] Error enviando email al codeudor:', e)
@@ -332,22 +320,7 @@ async function enviarOTP(body: any) {
       codigoOtp: otp,
       tipoDocumento: firma.tipo === 'TYC' ? 'Términos y Condiciones' : firma.tipo,
     })
-    // v4.13: usar envío inteligente (plantilla Authentication de Meta primero, fallback a texto libre)
-    const otpResult = await enviarOTPSmart(firma.cliente.telefono, otp, mensaje)
-    if (otpResult.exito) {
-      envioWhatsApp = {
-        exito: true,
-        wamid: otpResult.wamid,
-        canal: 'WHATSAPP',
-        modo: otpResult.modo,
-        respuesta: otpResult.respuesta,
-      }
-    } else {
-      envioWhatsApp = await enviarWhatsApp(firma.cliente.telefono, mensaje)
-      if (!envioWhatsApp.exito && otpResult.error) {
-        envioWhatsApp.errorOtpSmart = otpResult.error
-      }
-    }
+    envioWhatsApp = await enviarWhatsApp(firma.cliente.telefono, mensaje)
     await guardarNotificacion({
       db,
       prestamoId: firma.prestamoId || null,
@@ -360,24 +333,8 @@ async function enviarOTP(body: any) {
 
   // Enviar OTP por Email
   if ((canalFinal === 'EMAIL' || canalFinal === 'AMBOS') && firma.cliente.email) {
-    // Validar que el email sea entregable (no @test.com, @example.com, etc.)
-    // Estos dominios no tienen servidor MX y siempre soft-bouncean.
-    const validacion = validarEmailEntregable(firma.cliente.email)
-    if (!validacion.esValido) {
-      console.error('[firma/enviar_otp] Email no entregable:', firma.cliente.email, '—', validacion.motivo)
-      // Si el canal es AMBOS, ya se intentó WhatsApp; si es solo EMAIL, devolver error claro
-      if (canalFinal === 'EMAIL') {
-        return NextResponse.json({
-          success: false,
-          error: validacion.motivo,
-          codigo: 'EMAIL_NO_ENTREGABLE',
-        }, { status: 400 })
-      }
-      // Si es AMBOS, registrar el fallo pero no abortar (ya se envió por WhatsApp)
-      envioEmail = { success: false, error: validacion.motivo }
-    } else {
-      const subject = `Código de Verificación - Firma Electrónica ${firma.prestamo?.codigo || ''}`
-      const textContent = `Estimado/a ${firma.cliente.nombre},
+    const subject = `Código de Verificación - Firma Electrónica ${firma.prestamo?.codigo || ''}`
+    const textContent = `Estimado/a ${firma.cliente.nombre},
 
 Tu código de verificación para completar la firma electrónica es:
 
@@ -387,7 +344,7 @@ Este código expira en 5 minutos.
 No compartas este código con nadie.
 
 Saludos,
-Sistema de Gestión de Solicitudes`
+Sistema de Gestión de Préstamos`
 
     const htmlContent = `
 <div style="font-family: Arial, sans-serif; max-width: 500px; margin: 0 auto; padding: 20px;">
@@ -401,14 +358,13 @@ Sistema de Gestión de Solicitudes`
   ⚠️ No compartas este código con nadie.</p>
 </div>`
 
-      envioEmail = await enviarEmail({
-        to: firma.cliente.email,
-        subject,
-        text: textContent,
-        html: htmlContent,
-      })
-    } // cierra else (email entregable)
-  } // cierra if (canal EMAIL/AMBOS)
+    envioEmail = await enviarEmail({
+      to: firma.cliente.email,
+      subject,
+      text: textContent,
+      html: htmlContent,
+    })
+  }
 
   // Registrar OTP centralizado en OtpRegistro (trazabilidad)
   const otpRegistro = await registrarOtp({
@@ -420,7 +376,7 @@ Sistema de Gestión de Solicitudes`
     destinatario: canalFinal === 'EMAIL' ? (firma.cliente.email || '') : (firma.cliente.telefono || ''),
     tipo: 'FIRMA_ELECTRONICA',
     entidadRefId: firma.id,
-    descripcion: `OTP firma ${firma.tipo} solicitud ${firma.prestamo?.codigo || 'N/A'}`,
+    descripcion: `OTP firma ${firma.tipo} préstamo ${firma.prestamo?.codigo || 'N/A'}`,
     maxIntentos: firma.maxIntentos,
     expiraEnMinutos: 5,
     ipSolicitud: null,
@@ -485,11 +441,11 @@ async function guardarFotos(body: any, req: NextRequest) {
     return NextResponse.json({ success: false, error: 'fotoSelfie debe ser una imagen en base64 (data:image/...)' }, { status: 400 })
   }
 
-  // Validar tamaño (máx 10MB por foto, base64 ~14MB)
+  // Validar tamaño (máx 5MB por foto)
   const tamanoDoc = Buffer.byteLength(fotoDocumento, 'utf8')
   const tamanoSelfie = Buffer.byteLength(fotoSelfie, 'utf8')
-  if (tamanoDoc > 14 * 1024 * 1024 || tamanoSelfie > 14 * 1024 * 1024) {
-    return NextResponse.json({ success: false, error: 'Las fotos no pueden superar 10MB cada una' }, { status: 400 })
+  if (tamanoDoc > 5 * 1024 * 1024 || tamanoSelfie > 5 * 1024 * 1024) {
+    return NextResponse.json({ success: false, error: 'Las fotos no pueden superar 5MB cada una' }, { status: 400 })
   }
 
   // Calcular hashes SHA-256 (para integridad)
@@ -530,317 +486,9 @@ async function guardarFotos(body: any, req: NextRequest) {
   })
 }
 
-// === NUEVO PASO 1: Guardar fotos del documento (frente + reverso, sin selfie) ===
-async function guardarFotoDocumento(body: any, req: NextRequest) {
-  const { firmaId, fotoDocumento, fotoDocumentoReverso, geoUbicacion } = body
-  if (!firmaId) {
-    return NextResponse.json({ success: false, error: 'firmaId requerido' }, { status: 400 })
-  }
-  if (!fotoDocumento) {
-    return NextResponse.json({
-      success: false,
-      error: 'fotoDocumento (frente) es obligatorio (en formato base64)',
-    }, { status: 400 })
-  }
-  if (!fotoDocumentoReverso) {
-    return NextResponse.json({
-      success: false,
-      error: 'fotoDocumentoReverso (reverso de la cédula) es obligatorio (en formato base64)',
-    }, { status: 400 })
-  }
-
-  const firma = await db.firmaElectronica.findUnique({ where: { id: firmaId } })
-  if (!firma) {
-    return NextResponse.json({ success: false, error: 'Firma no encontrada' }, { status: 404 })
-  }
-  if (firma.estadoFirma === 'COMPLETADA') {
-    return NextResponse.json({ success: false, error: 'Esta firma ya fue completada' }, { status: 400 })
-  }
-  if (!fotoDocumento.startsWith('data:image/')) {
-    return NextResponse.json({ success: false, error: 'fotoDocumento debe ser una imagen en base64 (data:image/...)' }, { status: 400 })
-  }
-  if (!fotoDocumentoReverso.startsWith('data:image/')) {
-    return NextResponse.json({ success: false, error: 'fotoDocumentoReverso debe ser una imagen en base64 (data:image/...)' }, { status: 400 })
-  }
-  if (Buffer.byteLength(fotoDocumento, 'utf8') > 14 * 1024 * 1024) {
-    return NextResponse.json({ success: false, error: 'La foto del frente no puede superar 10MB' }, { status: 400 })
-  }
-  if (Buffer.byteLength(fotoDocumentoReverso, 'utf8') > 14 * 1024 * 1024) {
-    return NextResponse.json({ success: false, error: 'La foto del reverso no puede superar 10MB' }, { status: 400 })
-  }
-
-  const hashDoc = crypto.createHash('sha256').update(fotoDocumento).digest('hex')
-  const hashDocReverso = crypto.createHash('sha256').update(fotoDocumentoReverso).digest('hex')
-
-  const forwarded = req.headers.get('x-forwarded-for')
-  const ip = forwarded ? forwarded.split(',')[0] : req.headers.get('x-real-ip') || 'desconocida'
-  const userAgent = req.headers.get('user-agent') || 'desconocido'
-
-  await db.firmaElectronica.update({
-    where: { id: firmaId },
-    data: {
-      fotoDocumento,
-      fotoDocumentoHash: hashDoc,
-      fotoDocumentoReverso,
-      fotoDocumentoReversoHash: hashDocReverso,
-      ipFirma: ip,
-      userAgent,
-      geoUbicacion: geoUbicacion || null,
-      fechaSubidaFotos: new Date(),
-      estadoFirma: 'FOTOS_SUBIDAS',
-    },
-  })
-
-  return NextResponse.json({
-    success: true,
-    data: {
-      firmaId,
-      estado: 'FOTOS_SUBIDAS',
-      hashDocumento: hashDoc,
-      hashDocumentoReverso: hashDocReverso,
-      ip,
-      userAgent,
-    },
-    mensaje: 'Fotos del documento (frente y reverso) guardadas. Ahora puedes dibujar tu firma.',
-  })
-}
-
-// === NUEVO PASO 2: Guardar firma manuscrita SIN completar ===
-async function guardarFirmaDibujo(body: any) {
-  const { firmaId, imagenFirma } = body
-  if (!firmaId || !imagenFirma) {
-    return NextResponse.json(
-      { success: false, error: 'firmaId e imagenFirma son obligatorios' },
-      { status: 400 }
-    )
-  }
-
-  const firma = await db.firmaElectronica.findUnique({ where: { id: firmaId } })
-  if (!firma) {
-    return NextResponse.json({ success: false, error: 'Firma no encontrada' }, { status: 404 })
-  }
-  if (firma.estadoFirma === 'COMPLETADA') {
-    return NextResponse.json({ success: false, error: 'Esta firma ya fue completada' }, { status: 400 })
-  }
-  if (!firma.fotoDocumento) {
-    return NextResponse.json({ success: false, error: 'Debes subir primero la foto del documento' }, { status: 400 })
-  }
-  if (!imagenFirma.startsWith('data:image/png')) {
-    return NextResponse.json({ success: false, error: 'imagenFirma debe ser un PNG en base64' }, { status: 400 })
-  }
-
-  await db.firmaElectronica.update({
-    where: { id: firmaId },
-    data: {
-      imagenFirma,
-      estadoFirma: 'FIRMA_DIBUJADA',
-    },
-  })
-
-  return NextResponse.json({
-    success: true,
-    data: { firmaId, estado: 'FIRMA_DIBUJADA' },
-    mensaje: 'Firma manuscrita guardada. Ahora puedes solicitar el código OTP.',
-  })
-}
-
-// === NUEVO PASO 4: Guardar selfie + completar firma + activar solicitud ===
-async function finalizarConSelfie(body: any, req: NextRequest) {
-  const { firmaId, fotoSelfie, geoUbicacion } = body
-  if (!firmaId || !fotoSelfie) {
-    return NextResponse.json(
-      { success: false, error: 'firmaId y fotoSelfie son obligatorios' },
-      { status: 400 }
-    )
-  }
-
-  const firma = await db.firmaElectronica.findUnique({ where: { id: firmaId } })
-  if (!firma) {
-    return NextResponse.json({ success: false, error: 'Firma no encontrada' }, { status: 404 })
-  }
-  if (firma.estadoFirma === 'COMPLETADA') {
-    return NextResponse.json({ success: false, error: 'Esta firma ya fue completada' }, { status: 400 })
-  }
-  if (!firma.fotoDocumento) {
-    return NextResponse.json({ success: false, error: 'Falta la foto del documento frente (paso 1)' }, { status: 400 })
-  }
-  if (!firma.fotoDocumentoReverso) {
-    return NextResponse.json({ success: false, error: 'Falta la foto del documento reverso (paso 1)' }, { status: 400 })
-  }
-  if (!firma.imagenFirma) {
-    return NextResponse.json({ success: false, error: 'Falta la firma manuscrita (paso 2)' }, { status: 400 })
-  }
-  if (!firma.otpValidado) {
-    return NextResponse.json({ success: false, error: 'Falta validar el código OTP (paso 3)' }, { status: 400 })
-  }
-  if (!fotoSelfie.startsWith('data:image/')) {
-    return NextResponse.json({ success: false, error: 'fotoSelfie debe ser una imagen en base64 (data:image/...)' }, { status: 400 })
-  }
-  if (Buffer.byteLength(fotoSelfie, 'utf8') > 14 * 1024 * 1024) {
-    return NextResponse.json({ success: false, error: 'La selfie no puede superar 10MB' }, { status: 400 })
-  }
-
-  const hashSelfie = crypto.createHash('sha256').update(fotoSelfie).digest('hex')
-
-  const forwarded = req.headers.get('x-forwarded-for')
-  const ip = forwarded ? forwarded.split(',')[0] : req.headers.get('x-real-ip') || firma.ipFirma || 'desconocida'
-  const userAgent = req.headers.get('user-agent') || firma.userAgent || 'desconocido'
-
-  // 1. Guardar selfie + completar firma
-  const firmaActualizada = await db.firmaElectronica.update({
-    where: { id: firmaId },
-    data: {
-      fotoSelfie,
-      fotoSelfieHash: hashSelfie,
-      ipFirma: ip,
-      userAgent,
-      geoUbicacion: geoUbicacion || firma.geoUbicacion || null,
-      estadoFirma: 'COMPLETADA',
-      fechaFirmaCompleta: new Date(),
-    },
-  })
-
-  // 2. Marcar tokens como usados
-  await db.tokenFirma.updateMany({
-    where: { firmaId },
-    data: { usado: true, fechaUsado: new Date() },
-  })
-
-  // === Si la firma es de un Otro Sí, marcarlo como FIRMADO y NO tocar el solicitud ===
-  // (el solicitud ya está ACTIVO, no se debe re-activar ni cambiar fechas)
-  if (firma.tipo === 'ACUERDO_PAGO') {
-    const otroSiVinculado = await db.otroSiCambioFecha.findFirst({
-      where: { firmaId: firma.id },
-      include: { prestamo: { include: { cliente: true } } },
-    })
-    if (otroSiVinculado) {
-      await db.otroSiCambioFecha.update({
-        where: { id: otroSiVinculado.id },
-        data: {
-          estado: 'FIRMADO',
-          fechaFirma: new Date(),
-        },
-      })
-      try {
-        await db.bitacoraPrestamo.create({
-          data: {
-            prestamoId: otroSiVinculado.prestamoId,
-            prestamoCodigo: otroSiVinculado.prestamo.codigo,
-            usuarioNombre: 'Sistema (firma electrónica)',
-            tipo: 'OTRO',
-            titulo: `OTRO SÍ FIRMADO: ${otroSiVinculado.codigo}`,
-            descripcion:
-              `El cliente ${otroSiVinculado.prestamo.cliente?.nombre || ''} completó el flujo de firma electrónica del Otro Sí ${otroSiVinculado.codigo} (${otroSiVinculado.tipoModificacion === 'CAMBIO_FECHA' ? 'Cambio de fecha' : 'Traslado de cuota'}) para el solicitud ${otroSiVinculado.prestamo.codigo}.\n\n` +
-              `Datos de la firma electrónica:\n` +
-              `  • ID firma: ${firma.id}\n` +
-              `  • Fecha: ${new Date().toLocaleString('es-CO', { timeZone: 'America/Bogota' })}\n` +
-              `  • IP: ${ip}\n` +
-              `  • Dispositivo: ${userAgent}\n` +
-              `  • Canal OTP: ${firma.otpCanal || 'N/A'}\n` +
-              `  • Método: foto documento + firma manuscrita + OTP + selfie con cédula\n\n` +
-              `Descripción del Otro Sí: ${otroSiVinculado.descripcion}\n\n` +
-              `El solicitud no fue modificado (sigue ${otroSiVinculado.prestamo.estado}). Solo se actualizó el estado del Otro Sí a FIRMADO.`,
-            resultado: `Otro Sí ${otroSiVinculado.codigo} marcado como FIRMADO`,
-            fechaEvento: new Date(),
-          },
-        })
-      } catch (e) {
-        console.error('[firma] bitácora Otro Sí falló:', e)
-      }
-
-      // Retornar SIN activar solicitud
-      return NextResponse.json({
-        success: true,
-        data: firmaActualizada,
-        esFirmaOtroSi: true,
-        otroSi: {
-          id: otroSiVinculado.id,
-          codigo: otroSiVinculado.codigo,
-          estado: 'FIRMADO',
-        },
-        mensaje: `¡Firma del Otro Sí ${otroSiVinculado.codigo} completada con éxito!`,
-      })
-    }
-    // Si es ACUERDO_PAGO pero no tiene Otro Sí vinculado, caer al flujo normal
-  }
-
-  // 3. Activar solicitud si aplica
-  if (firma.prestamoId) {
-    const prestamoFirma = await db.prestamo.findUnique({
-      where: { id: firma.prestamoId },
-      select: {
-        plazoMeses: true, frecuencia: true, montoPrincipal: true,
-        tasaInteresAnual: true, fechaDesembolso: true, codigo: true,
-        cliente: { select: { nombre: true } },
-      },
-    })
-
-    let fechaVencimientoCalc = new Date()
-    if (prestamoFirma) {
-      try {
-        const calc = calcularPrestamo({
-          montoPrincipal: prestamoFirma.montoPrincipal,
-          tasaInteresAnual: prestamoFirma.tasaInteresAnual,
-          tasaMoraAnual: 0,
-          plazoMeses: prestamoFirma.plazoMeses,
-          frecuencia: prestamoFirma.frecuencia as any,
-          fechaDesembolso: new Date(),
-        })
-        if (calc?.tablaAmortizacion?.length > 0) {
-          fechaVencimientoCalc = new Date(calc.tablaAmortizacion[calc.tablaAmortizacion.length - 1].fechaVencimiento)
-        } else {
-          fechaVencimientoCalc = new Date()
-          fechaVencimientoCalc.setMonth(fechaVencimientoCalc.getMonth() + (prestamoFirma.plazoMeses || 1))
-        }
-      } catch (e) {
-        fechaVencimientoCalc = new Date()
-        fechaVencimientoCalc.setMonth(fechaVencimientoCalc.getMonth() + (prestamoFirma.plazoMeses || 1))
-      }
-    }
-
-    await db.prestamo.update({
-      where: { id: firma.prestamoId },
-      data: {
-        firmaId: firma.id,
-        tycAceptado: true,
-        tycFechaAceptacion: new Date(),
-        estado: 'ACTIVO',
-        fechaDesembolso: new Date(),
-        fechaVencimiento: fechaVencimientoCalc,
-      },
-    })
-
-    if (prestamoFirma) {
-      try {
-        await db.bitacoraPrestamo.create({
-          data: {
-            prestamoId: firma.prestamoId,
-            prestamoCodigo: prestamoFirma.codigo,
-            usuarioNombre: 'Sistema (firma electrónica)',
-            tipo: 'FIRMA',
-            titulo: 'Firma electrónica completada — solicitud activado',
-            descripcion: `El cliente ${prestamoFirma.cliente?.nombre || ''} completó el flujo de firma electrónica (foto documento + firma manuscrita + OTP + selfie con cédula). Solicitud activado con fecha de vencimiento ${fechaVencimientoCalc.toLocaleDateString('es-CO')} (${prestamoFirma.plazoMeses} meses).`,
-            resultado: 'Solicitud pasado a ACTIVO, TyC aceptados, firma vinculada',
-          },
-        })
-      } catch (e) {
-        console.error('[firma] bitácora falló:', e)
-      }
-    }
-  }
-
-  return NextResponse.json({
-    success: true,
-    data: firmaActualizada,
-    mensaje: '¡Firma electrónica completada con éxito! El solicitud ha sido activado.',
-  })
-}
-
 // === VALIDAR OTP (sin guardar firma todavía) ===
 async function validarOTP(body: any) {
-  // FIX 2026-08-12: Aceptar `otp` como alias legacy de `otpIngresado`.
-  const firmaId = body.firmaId
-  const otpIngresado = body.otpIngresado ?? body.otp ?? body.codigo
+  const { firmaId, otpIngresado } = body
   if (!firmaId || !otpIngresado) {
     return NextResponse.json({ success: false, error: 'firmaId y otpIngresado son obligatorios' }, { status: 400 })
   }
@@ -947,58 +595,9 @@ async function guardarFirma(body: any, req: NextRequest) {
     data: { usado: true, fechaUsado: new Date() },
   })
 
-  // === Si la firma es de un Otro Sí, marcarlo como FIRMADO y NO tocar el solicitud ===
-  // (el solicitud ya está ACTIVO, no se debe re-activar ni cambiar fechas)
-  if (firma.tipo === 'ACUERDO_PAGO') {
-    const otroSiVinculado = await db.otroSiCambioFecha.findFirst({
-      where: { firmaId: firma.id },
-      include: { prestamo: { include: { cliente: true } } },
-    })
-    if (otroSiVinculado) {
-      await db.otroSiCambioFecha.update({
-        where: { id: otroSiVinculado.id },
-        data: {
-          estado: 'FIRMADO',
-          fechaFirma: new Date(),
-        },
-      })
-      try {
-        await db.bitacoraPrestamo.create({
-          data: {
-            prestamoId: otroSiVinculado.prestamoId,
-            prestamoCodigo: otroSiVinculado.prestamo.codigo,
-            usuarioNombre: 'Sistema (firma electrónica)',
-            tipo: 'OTRO',
-            titulo: `OTRO SÍ FIRMADO: ${otroSiVinculado.codigo}`,
-            descripcion:
-              `El cliente ${otroSiVinculado.prestamo.cliente?.nombre || ''} completó el flujo de firma electrónica del Otro Sí ${otroSiVinculado.codigo} (${otroSiVinculado.tipoModificacion === 'CAMBIO_FECHA' ? 'Cambio de fecha' : 'Traslado de cuota'}) para el solicitud ${otroSiVinculado.prestamo.codigo}.`,
-            resultado: `Otro Sí ${otroSiVinculado.codigo} marcado como FIRMADO`,
-            fechaEvento: new Date(),
-          },
-        })
-      } catch (e) {
-        console.error('[firma] bitácora Otro Sí falló:', e)
-      }
-
-      // Retornar SIN activar solicitud
-      return NextResponse.json({
-        success: true,
-        data: firmaActualizada,
-        esFirmaOtroSi: true,
-        otroSi: {
-          id: otroSiVinculado.id,
-          codigo: otroSiVinculado.codigo,
-          estado: 'FIRMADO',
-        },
-        mensaje: `¡Firma del Otro Sí ${otroSiVinculado.codigo} completada con éxito!`,
-      })
-    }
-    // Si es ACUERDO_PAGO pero no tiene Otro Sí vinculado, caer al flujo normal
-  }
-
-  // Si es de un solicitud, actualizar referencia y aceptar T&C automáticamente
+  // Si es de un préstamo, actualizar referencia y aceptar T&C automáticamente
   if (firma.prestamoId) {
-    // Calcular fecha de vencimiento real según el plazo del solicitud (fix bug de precedencia JS)
+    // Calcular fecha de vencimiento real según el plazo del préstamo (fix bug de precedencia JS)
     const prestamoFirma = await db.prestamo.findUnique({
       where: { id: firma.prestamoId },
       select: { plazoMeses: true, frecuencia: true, montoPrincipal: true, tasaInteresAnual: true, fechaDesembolso: true, codigo: true, cliente: { select: { nombre: true } } },
@@ -1043,7 +642,7 @@ async function guardarFirma(body: any, req: NextRequest) {
       },
     })
 
-    // Registrar en bitácora del solicitud
+    // Registrar en bitácora del préstamo
     if (prestamoFirma) {
       try {
         await db.bitacoraPrestamo.create({
@@ -1052,9 +651,9 @@ async function guardarFirma(body: any, req: NextRequest) {
             prestamoCodigo: prestamoFirma.codigo,
             usuarioNombre: 'Sistema (firma electrónica)',
             tipo: 'FIRMA',
-            titulo: 'Firma electrónica completada — solicitud activado',
-            descripcion: `El cliente ${prestamoFirma.cliente?.nombre || ''} completó el flujo de firma electrónica (foto + firma + OTP). Solicitud activado con fecha de vencimiento ${fechaVencimientoCalc.toLocaleDateString('es-CO')} (${prestamoFirma.plazoMeses} meses).`,
-            resultado: 'Solicitud pasado a ACTIVO, TyC aceptados, firma vinculada',
+            titulo: 'Firma electrónica completada — préstamo activado',
+            descripcion: `El cliente ${prestamoFirma.cliente?.nombre || ''} completó el flujo de firma electrónica (foto + firma + OTP). Préstamo activado con fecha de vencimiento ${fechaVencimientoCalc.toLocaleDateString('es-CO')} (${prestamoFirma.plazoMeses} meses).`,
+            resultado: 'Préstamo pasado a ACTIVO, TyC aceptados, firma vinculada',
           },
         })
       } catch (e) {
@@ -1066,7 +665,7 @@ async function guardarFirma(body: any, req: NextRequest) {
   return NextResponse.json({
     success: true,
     data: firmaActualizada,
-    mensaje: '¡Firma electrónica completada con éxito! El solicitud ha sido activado.',
+    mensaje: '¡Firma electrónica completada con éxito! El préstamo ha sido activado.',
   })
 }
 

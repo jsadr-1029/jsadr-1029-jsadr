@@ -8,7 +8,6 @@ import {
 } from '@/lib/finanzas'
 import { sanitizeError } from '@/lib/error-handler'
 import { requireRole } from '@/lib/auth-guard'
-import { excluirPruebaPago, excluirPruebaPrestamo } from '@/lib/cliente-prueba'
 
 // GET - informe comparativo (hoy vs ayer, mes vs mes anterior)
 // v4.0: refactor N+1 → groupBy único para reporte anual + auth
@@ -78,9 +77,7 @@ export async function GET(req: NextRequest) {
     const inicioMesAnterior = new Date(hoy.getFullYear(), hoy.getMonth() - 1, 1)
     const finMesAnterior = new Date(hoy.getFullYear(), hoy.getMonth(), 0, 23, 59, 59, 999)
 
-    // Consultas paralelas (excluyendo clientes de prueba)
-    const filtroPago = excluirPruebaPago()
-    const filtroPrestamo = excluirPruebaPrestamo()
+    // Consultas paralelas
     const [
       pagosHoy,
       pagosAyer,
@@ -93,33 +90,33 @@ export async function GET(req: NextRequest) {
       prestamosActivosParaProyeccion,
     ] = await Promise.all([
       db.pago.findMany({
-        where: { estado: 'APLICADO', fechaPago: { gte: hoy, lte: finHoy }, ...filtroPago },
+        where: { estado: 'APLICADO', fechaPago: { gte: hoy, lte: finHoy } },
         include: { prestamo: { include: { cliente: true } } },
       }),
       db.pago.findMany({
-        where: { estado: 'APLICADO', fechaPago: { gte: ayer, lte: finAyer }, ...filtroPago },
+        where: { estado: 'APLICADO', fechaPago: { gte: ayer, lte: finAyer } },
         include: { prestamo: { include: { cliente: true } } },
       }),
       db.pago.findMany({
-        where: { estado: 'APLICADO', fechaPago: { gte: inicioMesActual, lte: finMesActual }, ...filtroPago },
+        where: { estado: 'APLICADO', fechaPago: { gte: inicioMesActual, lte: finMesActual } },
       }),
       db.pago.findMany({
-        where: { estado: 'APLICADO', fechaPago: { gte: inicioMesAnterior, lte: finMesAnterior }, ...filtroPago },
+        where: { estado: 'APLICADO', fechaPago: { gte: inicioMesAnterior, lte: finMesAnterior } },
       }),
       // === Pagos del periodo seleccionado (semana/quincena/mes/año) ===
       db.pago.findMany({
-        where: { estado: 'APLICADO', fechaPago: { gte: inicioPeriodo, lte: finPeriodo }, ...filtroPago },
+        where: { estado: 'APLICADO', fechaPago: { gte: inicioPeriodo, lte: finPeriodo } },
         include: { prestamo: { include: { cliente: true } } },
       }),
-      db.prestamo.count({ where: { estado: 'ACTIVO', ...filtroPrestamo } }),
-      db.prestamo.count({ where: { estado: 'EN_MORA', ...filtroPrestamo } }),
+      db.prestamo.count({ where: { estado: 'ACTIVO' } }),
+      db.prestamo.count({ where: { estado: 'EN_MORA' } }),
       db.prestamo.aggregate({
-        where: { estado: { in: ['ACTIVO', 'EN_MORA'] }, ...filtroPrestamo },
+        where: { estado: { in: ['ACTIVO', 'EN_MORA'] } },
         _sum: { saldoTotal: true },
       }),
-      // === Solicitudes activos para calcular proyecciones ===
+      // === Préstamos activos para calcular proyecciones ===
       db.prestamo.findMany({
-        where: { estado: { in: ['ACTIVO', 'EN_MORA'] }, ...filtroPrestamo },
+        where: { estado: { in: ['ACTIVO', 'EN_MORA'] } },
         include: {
           cliente: true,
           pagos: { where: { estado: { in: ['APLICADO', 'PAGO_PARCIAL'] } } },

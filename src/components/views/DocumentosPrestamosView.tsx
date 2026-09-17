@@ -19,7 +19,6 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useToast } from '@/hooks/use-toast'
 import { formatearFechaHora, formatearMoneda } from '@/lib/finanzas'
-import { abrirHtmlImprimible } from '@/lib/auth-docs'
 import {
   FolderOpen, Upload, Search, Trash2, Eye, FileImage,
   MessageSquare, User, CreditCard, Receipt, File, X, Download,
@@ -29,7 +28,7 @@ import {
 
 // =====================================================
 // DocumentosPrestamosView
-// Gestor documental integrado en el módulo Solicitudes.
+// Gestor documental integrado en el módulo Préstamos.
 // Muestra en pestañas separadas:
 //  1. Documentos subidos manualmente (DocumentoGestor)
 //  2. Firmas electrónicas con fotos selfie + firma dibujada (FirmaElectronica)
@@ -110,36 +109,6 @@ function formatearTamano(bytes: number): string {
 export function DocumentosPrestamosView() {
   const [tab, setTab] = useState('gestor')
   const { toast } = useToast()
-  const [exportando, setExportando] = useState(false)
-
-  async function exportarExcelConsolidado() {
-    try {
-      setExportando(true)
-      toast({ title: 'Generando Excel...', description: 'Esto puede tardar 30-60 segundos si hay muchas fotos.' })
-      const res = await fetch('/api/documentos/exportar-excel', {
-        headers: { Authorization: `Bearer ${localStorage.getItem('access_token') || ''}` },
-      })
-      if (!res.ok) {
-        const j = await res.json().catch(() => ({ error: 'Error desconocido' }))
-        throw new Error(j.error || `HTTP ${res.status}`)
-      }
-      const blob = await res.blob()
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      const today = new Date().toISOString().split('T')[0]
-      a.download = `documentos-prestamos-${today}.xlsx`
-      document.body.appendChild(a)
-      a.click()
-      document.body.removeChild(a)
-      URL.revokeObjectURL(url)
-      toast({ title: '✅ Excel descargado', description: 'Consolidado de documentos generado correctamente.' })
-    } catch (e: any) {
-      toast({ title: '❌ Error al exportar', description: e.message, variant: 'destructive' })
-    } finally {
-      setExportando(false)
-    }
-  }
 
   return (
     <div className="space-y-4">
@@ -147,23 +116,12 @@ export function DocumentosPrestamosView() {
         <div>
           <h3 className="text-sm font-semibold flex items-center gap-2">
             <FolderOpen className="w-4 h-4 text-primary" />
-            Gestor Documental de Solicitudes
+            Gestor Documental de Préstamos
           </h3>
           <p className="text-xs text-muted-foreground mt-0.5">
-            Pagarés, cartas, fotos selfie, firmas electrónicas y documentos vinculados a solicitudes
+            Pagarés, cartas, fotos selfie, firmas electrónicas y documentos vinculados a préstamos
           </p>
         </div>
-        <Button
-          size="sm"
-          variant="outline"
-          onClick={exportarExcelConsolidado}
-          disabled={exportando}
-          className="bg-emerald-50 dark:bg-emerald-900/40 border-emerald-300 dark:border-emerald-600 text-emerald-800 dark:text-emerald-100 hover:bg-emerald-100 dark:hover:bg-emerald-800/60"
-          title="Descargar Excel consolidado con todas las fotos y metadatos"
-        >
-          <Download className={`w-4 h-4 mr-1.5 ${exportando ? 'animate-pulse' : ''}`} />
-          {exportando ? 'Generando...' : 'Exportar Excel consolidado'}
-        </Button>
       </div>
 
       <Tabs value={tab} onValueChange={setTab}>
@@ -399,7 +357,7 @@ function GestorDocumentosTab() {
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <Input
-            placeholder="Buscar por título, cliente, solicitud..."
+            placeholder="Buscar por título, cliente, préstamo..."
             value={busqueda}
             onChange={(e) => setBusqueda(e.target.value)}
             className="pl-9"
@@ -420,10 +378,10 @@ function GestorDocumentosTab() {
         </Select>
         <Select value={filtroPrestamo} onValueChange={setFiltroPrestamo}>
           <SelectTrigger className="w-full sm:w-56">
-            <SelectValue placeholder="Solicitud" />
+            <SelectValue placeholder="Préstamo" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">Todos los solicitudes</SelectItem>
+            <SelectItem value="all">Todos los préstamos</SelectItem>
             {prestamos.map((p) => (
               <SelectItem key={p.id} value={p.id}>
                 {p.codigo} — {p.cliente?.nombre || 'N/A'}
@@ -447,7 +405,7 @@ function GestorDocumentosTab() {
               <TableRow>
                 <TableHead>Tipo</TableHead>
                 <TableHead>Título</TableHead>
-                <TableHead>Solicitud / Cliente</TableHead>
+                <TableHead>Préstamo / Cliente</TableHead>
                 <TableHead>Archivo</TableHead>
                 <TableHead>Subido por</TableHead>
                 <TableHead>Fecha</TableHead>
@@ -555,10 +513,10 @@ function GestorDocumentosTab() {
           </DialogHeader>
           <div className="space-y-4">
             <div className="space-y-2">
-              <Label>Solicitud relacionado (opcional)</Label>
+              <Label>Préstamo relacionado (opcional)</Label>
               <Select value={prestamoSel} onValueChange={setPrestamoSel}>
                 <SelectTrigger>
-                  <SelectValue placeholder="Selecciona un solicitud..." />
+                  <SelectValue placeholder="Selecciona un préstamo..." />
                 </SelectTrigger>
                 <SelectContent>
                   {prestamos.map((p) => (
@@ -569,7 +527,7 @@ function GestorDocumentosTab() {
                 </SelectContent>
               </Select>
               <p className="text-xs text-muted-foreground">
-                Si seleccionas un solicitud, el documento se registrará en su bitácora y se vinculará al cliente.
+                Si seleccionas un préstamo, el documento se registrará en su bitácora y se vinculará al cliente.
               </p>
             </div>
             <div className="space-y-2">
@@ -684,7 +642,7 @@ function GestorDocumentosTab() {
                   <strong>{TIPO_CONFIG[modalVer.tipo]?.label || modalVer.tipo}</strong>
                 </div>
                 <div>
-                  <span className="text-muted-foreground">Solicitud:</span>{' '}
+                  <span className="text-muted-foreground">Préstamo:</span>{' '}
                   <strong className="font-mono">{modalVer.prestamoCodigo || '—'}</strong>
                 </div>
                 <div>
@@ -816,9 +774,7 @@ function FirmasElectronicasTab() {
   }
 
   const verCertificado = (firmaId: string) => {
-    // FIX 2026-08-12: usar abrirHtmlImprimible (fetch autenticado) en vez
-    // de window.open que no envía el header Authorization → 401.
-    abrirHtmlImprimible(`/api/firma/certificado?firmaId=${firmaId}`)
+    window.open(`/api/firma/certificado?firmaId=${firmaId}`, '_blank')
   }
 
   return (
@@ -875,7 +831,7 @@ function FirmasElectronicasTab() {
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <Input
-            placeholder="Buscar por cliente, cédula, código de solicitud, firmante..."
+            placeholder="Buscar por cliente, cédula, código de préstamo, firmante..."
             value={busqueda}
             onChange={(e) => setBusqueda(e.target.value)}
             className="pl-9"
@@ -905,7 +861,7 @@ function FirmasElectronicasTab() {
             <TableHeader>
               <TableRow>
                 <TableHead>Cliente / Firmante</TableHead>
-                <TableHead>Solicitud</TableHead>
+                <TableHead>Préstamo</TableHead>
                 <TableHead>Rol</TableHead>
                 <TableHead>Estado</TableHead>
                 <TableHead>Selfie / Doc / Firma</TableHead>
@@ -1086,7 +1042,7 @@ function FirmasElectronicasTab() {
                   {/* Info */}
                   <div className="grid grid-cols-2 gap-2 text-sm p-3 rounded bg-muted/50">
                     <div>
-                      <span className="text-muted-foreground">Solicitud:</span>{' '}
+                      <span className="text-muted-foreground">Préstamo:</span>{' '}
                       <strong className="font-mono">{detalleFirma.prestamo?.codigo || '—'}</strong>
                     </div>
                     <div>
@@ -1271,7 +1227,7 @@ function GenerarDocumentosTab() {
 
   const generar = () => {
     if (!prestamoSel) {
-      toast({ title: 'Error', description: 'Selecciona un solicitud', variant: 'destructive' })
+      toast({ title: 'Error', description: 'Selecciona un préstamo', variant: 'destructive' })
       return
     }
     const url = `/api/documentos?prestamoId=${prestamoSel}&tipo=${tipoDoc}`
@@ -1294,9 +1250,9 @@ function GenerarDocumentosTab() {
             <div className="text-sm text-blue-900">
               <p className="font-semibold mb-1">Generación de pagarés y cartas de instrucciones</p>
               <p className="text-xs">
-                Selecciona un solicitud y el tipo de documento a generar. El documento se abrirá en una nueva
+                Selecciona un préstamo y el tipo de documento a generar. El documento se abrirá en una nueva
                 pestaña con formato HTML imprimible, incluyendo firmas electrónicas verificadas (con foto selfie,
-                firma dibujada, OTP validado y QR de verificación) cuando el solicitud ya haya sido firmado.
+                firma dibujada, OTP validado y QR de verificación) cuando el préstamo ya haya sido firmado.
               </p>
             </div>
           </div>
@@ -1310,10 +1266,10 @@ function GenerarDocumentosTab() {
         <CardContent className="space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label>Solicitud *</Label>
+              <Label>Préstamo *</Label>
               <Select value={prestamoSel} onValueChange={setPrestamoSel}>
                 <SelectTrigger>
-                  <SelectValue placeholder="Selecciona un solicitud..." />
+                  <SelectValue placeholder="Selecciona un préstamo..." />
                 </SelectTrigger>
                 <SelectContent>
                   {loading ? (
@@ -1353,7 +1309,7 @@ function GenerarDocumentosTab() {
           {prestamoSeleccionado && (
             <div className="p-3 rounded bg-muted/50 border text-sm space-y-1">
               <div>
-                <span className="text-muted-foreground">Solicitud seleccionado:</span>{' '}
+                <span className="text-muted-foreground">Préstamo seleccionado:</span>{' '}
                 <strong className="font-mono">{prestamoSeleccionado.codigo}</strong>
               </div>
               <div>
@@ -1389,7 +1345,7 @@ function GenerarDocumentosTab() {
             <FileCheck className="w-8 h-8 text-rose-600" />
             <h4 className="font-semibold text-sm">Pagaré diligenciado</h4>
             <p className="text-xs text-muted-foreground">
-              Documento legal con todos los datos del solicitud (monto, tasa, cuotas, fechas). Incluye firma
+              Documento legal con todos los datos del préstamo (monto, tasa, cuotas, fechas). Incluye firma
               electrónica verificada del deudor y codeudor (si aplica), con foto selfie, OTP validado y QR de
               verificación anti-falsificación.
             </p>
@@ -1400,7 +1356,7 @@ function GenerarDocumentosTab() {
             <FileText className="w-8 h-8 text-amber-600" />
             <h4 className="font-semibold text-sm">Pagaré en blanco</h4>
             <p className="text-xs text-muted-foreground">
-              Pagaré con campos vacíos para diligenciar manualmente. Útil cuando el solicitud se formaliza
+              Pagaré con campos vacíos para diligenciar manualmente. Útil cuando el préstamo se formaliza
               presencialmente y se llenan los datos a mano. Mantiene las firmas electrónicas verificadas si ya
               existen.
             </p>

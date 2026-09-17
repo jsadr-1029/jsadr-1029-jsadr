@@ -55,7 +55,7 @@ export async function POST(req: NextRequest) {
 
       // Generar secret TOTP
       const secret = totpGenerateSecret()
-      const appName = 'SolicitudesSistema'
+      const appName = 'PréstamosSistema'
       const otpauthUrl = totpGenerateURI(secret, usuario.username, appName)
 
       // Generar QR code como data URL

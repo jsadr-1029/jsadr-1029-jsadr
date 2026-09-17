@@ -9,7 +9,7 @@ export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-    const auth = requireRole(req, ['ADMIN']) // v4.6 (QA M03 TC-PRE-015): solo ADMIN puede reversar pagos
+    const auth = requireRole(req, ['ADMIN', 'GESTOR'])
     if (auth instanceof NextResponse) return auth
   try {
     const { id } = await params
@@ -34,20 +34,6 @@ export async function POST(
     }
 
     if (pago.estado !== 'APLICADO' && pago.estado !== 'PAGO_PARCIAL') {
-      // === v4.7 (QA M04 TC-PAG-007): mensaje específico para pago ya REVERSADO ===
-      // Si el pago ya está REVERSADO, retornar 409 con codigo PAGO_YA_REVERSADO.
-      // Para otros estados (ANULADO, PENDIENTE, etc.) mantener el 400 original.
-      if (pago.estado === 'REVERSADO') {
-        return NextResponse.json(
-          {
-            success: false,
-            error: 'El pago ya está reversado. No se puede reversar dos veces.',
-            codigo: 'PAGO_YA_REVERSADO',
-            estadoActual: pago.estado,
-          },
-          { status: 409 }
-        )
-      }
       return NextResponse.json(
         { success: false, error: `Solo se pueden reversar pagos APLICADOS o PAGO_PARCIAL. Estado actual: ${pago.estado}` },
         { status: 400 }
@@ -68,7 +54,7 @@ export async function POST(
       },
     })
 
-    // 2. Recalcular automáticamente todos los saldos del solicitud
+    // 2. Recalcular automáticamente todos los saldos del préstamo
     // Esto garantiza consistencia total sin cálculos manuales propensos a errores
     const { prestamo: prestamoActualizado, estadisticas } = await recalcularSaldosPrestamo(prestamoId)
 
@@ -81,7 +67,7 @@ export async function POST(
             cajaId: cajaMora.id,
             tipo: 'EGRESO',
             monto: pago.montoMora,
-            concepto: `REVERSIÓN de mora - Solicitud ${prestamo.codigo} - Cuota ${pago.numeroCuota} - ${motivoReversion}`,
+            concepto: `REVERSIÓN de mora - Préstamo ${prestamo.codigo} - Cuota ${pago.numeroCuota} - ${motivoReversion}`,
             referencia: prestamo.codigo,
             prestamoId: prestamo.id,
             creadoPor: usuarioNombre || 'Sistema',
@@ -98,7 +84,7 @@ export async function POST(
       }
     }
 
-    // 4. Crear entrada en la bitácora del solicitud
+    // 4. Crear entrada en la bitácora del préstamo
     await db.bitacoraPrestamo.create({
       data: {
         prestamoId: prestamo.id,
@@ -119,7 +105,7 @@ export async function POST(
         prestamo: prestamoActualizado,
       },
       saldosRecalculados: estadisticas,
-      mensaje: `Pago reversado correctamente. El solicitud ${prestamo.codigo} recalculado: saldo ${estadisticas.saldoTotal} COP, ${estadisticas.cuotasPagadas} cuota(s) pagada(s).`,
+      mensaje: `Pago reversado correctamente. El préstamo ${prestamo.codigo} recalculado: saldo ${estadisticas.saldoTotal} COP, ${estadisticas.cuotasPagadas} cuota(s) pagada(s).`,
     })
   } catch (error: any) {
     return NextResponse.json({ success: false, error: sanitizeError(error).message }, { status: 500 })

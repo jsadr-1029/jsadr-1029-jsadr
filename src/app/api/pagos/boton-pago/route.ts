@@ -4,7 +4,6 @@ import { calcularPrestamo, formatearFecha, formatearMoneda, getTasaMoraAnual } f
 import { enviarWhatsApp, guardarNotificacion, mensajeLinkPago } from '@/lib/whatsapp'
 import { sanitizeError } from '@/lib/error-handler'
 import { requireRole } from '@/lib/auth-guard'
-import { buildAbsoluteUrl } from '@/lib/url'
 
 // POST - generar botón de pago de Bancolombia para una cuota específica
 // v4.0: auth
@@ -41,7 +40,7 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    // Buscar el solicitud
+    // Buscar el préstamo
     const prestamo = await db.prestamo.findUnique({
       where: { id: prestamoId },
       include: { cliente: true, pagos: true },
@@ -49,7 +48,7 @@ export async function POST(req: NextRequest) {
 
     if (!prestamo) {
       return NextResponse.json(
-        { success: false, error: 'Solicitud no encontrado' },
+        { success: false, error: 'Préstamo no encontrado' },
         { status: 404 }
       )
     }
@@ -82,7 +81,7 @@ export async function POST(req: NextRequest) {
 
     const montoCuota = cuota.montoCuota
     const referencia = `${prestamo.codigo}-C${numeroCuota}`
-    const baseUrl = buildAbsoluteUrl('')
+    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'
 
     let linkPago = ''
     let botonGenerado = false
@@ -101,7 +100,7 @@ export async function POST(req: NextRequest) {
             amount: montoCuota,
             currency: 'COP',
             reference: referencia,
-            description: `Cuota ${numeroCuota} - Solicitud ${prestamo.codigo}`,
+            description: `Cuota ${numeroCuota} - Préstamo ${prestamo.codigo}`,
             returnUrl: `${baseUrl}/api/pagos/confirmar?prestamoId=${prestamoId}&cuota=${numeroCuota}`,
             customer: {
               name: prestamo.cliente.nombre,

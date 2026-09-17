@@ -3,75 +3,12 @@ import { db } from '@/lib/db'
 import { sanitizeError } from '@/lib/error-handler'
 
 // GET - portal de consulta por cédula
-// v4.10 (QA M07 TC-PORT-015): validación token vs cédula
-//   - El cliente debe enviar su token de sesión (header x-portal-token o query ?token=).
-//   - Se busca el cliente por tokenSesion y se verifica que su cédula coincida
-//     con la cédula del URL. Si no coinciden → HTTP 403 (cross-cliente bloqueado).
-//   - También se valida tokenExpira > now.
 export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ cedula: string }> }
 ) {
   try {
     const { cedula } = await params
-
-    // === v4.10: Validar token de sesión del portal ===
-    const token =
-      req.headers.get('x-portal-token') ||
-      new URL(req.url).searchParams.get('token')
-
-    if (!token) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: 'Token de sesión requerido. Inicie sesión en el portal.',
-          codigo: 'TOKEN_REQUERIDO',
-        },
-        { status: 401 }
-      )
-    }
-
-    // Buscar al cliente autenticado por tokenSesion (no por la cédula del URL)
-    const clienteAutenticado = await db.cliente.findFirst({
-      where: { tokenSesion: token as string },
-      select: { id: true, cedula: true, nombre: true, tokenExpira: true },
-    })
-
-    if (
-      !clienteAutenticado ||
-      !clienteAutenticado.tokenExpira ||
-      new Date(clienteAutenticado.tokenExpira) < new Date()
-    ) {
-      return NextResponse.json(
-        { success: false, error: 'Sesión expirada', codigo: 'SESSION_EXPIRED' },
-        { status: 401 }
-      )
-    }
-
-    // === Validación cross-cliente: el token debe pertenecer a la cédula del URL ===
-    if (clienteAutenticado.cedula !== cedula) {
-      // Auditoría del intento de acceso cross-cliente
-      await db.accesoPortal.create({
-        data: {
-          clienteId: clienteAutenticado.id,
-          clienteCedula: clienteAutenticado.cedula,
-          clienteNombre: clienteAutenticado.nombre,
-          ipOrigen: req.headers.get('x-forwarded-for') || req.headers.get('x-real-ip') || null,
-          userAgent: req.headers.get('user-agent') || null,
-          accion: 'ACCESO_CROSS_CLIENTE_BLOQUEADO',
-          exito: false,
-          detalle: `Cliente ${clienteAutenticado.cedula} intentó consultar datos de cédula ${cedula} (bloqueado).`,
-        },
-      })
-      return NextResponse.json(
-        {
-          success: false,
-          error: 'No autorizado para ver datos de otro cliente.',
-          codigo: 'CROSS_CLIENTE_BLOQUEADO',
-        },
-        { status: 403 }
-      )
-    }
 
     const cliente = await db.cliente.findUnique({
       where: { cedula },
@@ -100,7 +37,7 @@ export async function GET(
       )
     }
 
-    // Para cada solicitud activo, preparar la información de cuenta de recaudo
+    // Para cada préstamo activo, preparar la información de cuenta de recaudo
     // donde el cliente debe pagar
     const prestamosConCuenta = cliente.prestamos.map((p) => {
       const cuentaRecaudo = p.categoria?.cuentaRecaudo || cliente.categoria?.cuentaRecaudo || null
@@ -131,63 +68,12 @@ export async function GET(
     // Cuenta de recaudo principal (la de la categoría del cliente)
     const cuentaPrincipal = cliente.categoria?.cuentaRecaudo || null
 
-    // === Campañas activas ===
-    // Mostrar:
-    //   1. Campañas con destinatarios='TODOS' (todos los clientes las ven).
-    //   2. Campañas con destinatarios='SELECCIONADOS' que estén asignadas a este cliente
-    //      (tabla CampañaCliente).
-    // Orden: por fecha de creación descendente (más recientes primero).
+    // Campañas activas
     const campanas = await db.campaña.findMany({
-      where: {
-        activa: true,
-        OR: [
-          { destinatarios: 'TODOS' },
-          {
-            destinatarios: 'SELECCIONADOS',
-            clientesSeleccionados: { some: { clienteId: clienteAutenticado.id } }
-          }
-        ],
-      },
+      where: { activa: true },
       orderBy: { createdAt: 'desc' },
-      take: 10,
+      take: 5,
     })
-
-    // === Contar campañas NO VISTAS por el cliente (para mostrar badge de notificación) ===
-    // Una campaña "no vista" es aquella con destinatarios='SELECCIONADOS' asignada a
-    // este cliente donde vistaEnPortal=false. Para las de destinatarios='TODOS',
-    // usamos la tabla CampañaVista (registro existente).
-    const campanasAsignadasNoVistas = await db.campañaCliente.count({
-      where: {
-        clienteId: clienteAutenticado.id,
-        vistaEnPortal: false,
-        campaña: { activa: true, destinatarios: 'SELECCIONADOS' }
-      }
-    })
-    const campanasTodasNoVistas = await db.campaña.count({
-      where: {
-        activa: true,
-        destinatarios: 'TODOS',
-        vistas: { none: { clienteId: clienteAutenticado.id } }
-      }
-    })
-    const campanasNoVistas = campanasAsignadasNoVistas + campanasTodasNoVistas
-
-    // === KEEP-ALIVE: extender la sesión 8h desde ahora ===
-    // Cada vez que el cliente abre/refresca su portal, renovamos tokenExpira
-    // para evitar que la sesión se cierre mientras la usa activamente.
-    // Solo se cierra si el cliente pasa 8h SIN hacer ninguna llamada al API.
-    try {
-      await db.cliente.update({
-        where: { id: clienteAutenticado.id },
-        data: {
-          tokenExpira: new Date(Date.now() + 8 * 60 * 60 * 1000), // +8h
-          ultimoAccesoPortal: new Date(),
-        },
-      })
-    } catch (e) {
-      // No fallar la respuesta si no se puede extender la sesión
-      console.error('[portal/[cedula]] keep-alive error:', e)
-    }
 
     return NextResponse.json({
       success: true,
@@ -203,7 +89,6 @@ export async function GET(
         },
         prestamos: prestamosConCuenta,
         campanas,
-        campanasNoVistas,
         cuentaRecaudoPrincipal: cuentaPrincipal
           ? {
               banco: cuentaPrincipal.banco,

@@ -14,7 +14,6 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { useToast } from '@/hooks/use-toast'
-import FotoCaptureFirma from '@/components/firma/FotoCaptureFirma'
 import { formatearMoneda, formatearFecha } from '@/lib/finanzas'
 import {
   Upload,
@@ -49,35 +48,19 @@ export default function PaginaFirma({ params }: { params: Promise<{ token: strin
   const [token, setToken] = useState<string>('')
   const [datos, setDatos] = useState<DatosFirma | null>(null)
   const [loading, setLoading] = useState(true)
-  // === NUEVO ORDEN DEL FLUJO ===
-  // 1: foto documento
-  // 2: firma manuscrita
-  // 3: OTP
-  // 4: selfie con cédula
-  // 5: completado
-  // 6: rechazado
-  const [paso, setPaso] = useState(1)
+  const [paso, setPaso] = useState(1) // 1: fotos, 2: firma, 3: OTP, 4: completado
 
-  // Paso 1: foto documento (frente + reverso)
+  // Estados de cada paso
   const [fotoDocumento, setFotoDocumento] = useState<string | null>(null)
-  const [fotoDocumentoReverso, setFotoDocumentoReverso] = useState<string | null>(null)
-  const [subiendoFotoDoc, setSubiendoFotoDoc] = useState(false)
-
-  // Paso 2: firma manuscrita
+  const [fotoSelfie, setFotoSelfie] = useState<string | null>(null)
+  const [subiendoFotos, setSubiendoFotos] = useState(false)
   const [firmaDibujada, setFirmaDibujada] = useState<string | null>(null)
-  const [guardandoFirmaDibujo, setGuardandoFirmaDibujo] = useState(false)
-
-  // Paso 3: OTP
   const [otpEnviado, setOtpEnviado] = useState(false)
   const [otpIngresado, setOtpIngresado] = useState('')
   const [enviandoOtp, setEnviandoOtp] = useState(false)
   const [validandoOtp, setValidandoOtp] = useState(false)
+  const [guardandoFirma, setGuardandoFirma] = useState(false)
   const [canalOtp, setCanalOtp] = useState<'WHATSAPP' | 'EMAIL' | 'AMBOS'>('AMBOS')
-
-  // Paso 4: selfie
-  const [fotoSelfie, setFotoSelfie] = useState<string | null>(null)
-  const [fotoSelfieNombre, setFotoSelfieNombre] = useState<string | null>(null)
-  const [finalizando, setFinalizando] = useState(false)
 
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const [dibujando, setDibujando] = useState(false)
@@ -102,25 +85,9 @@ export default function PaginaFirma({ params }: { params: Promise<{ token: strin
         setDatos(json.data)
         // Si la firma ya está completada, ir al paso final
         if (json.data.firma?.estadoFirma === 'COMPLETADA') {
-          setPaso(5)
+          setPaso(4)
         } else if (json.data.firma?.estadoFirma === 'RECHAZADA') {
-          setPaso(6)
-        } else if (json.data.firma?.estadoFirma === 'OTP_ENVIADO' || json.data.firma?.otpValidado) {
-          // Reanudar en paso 3 si el OTP ya fue enviado
-          setPaso(3)
-          if (json.data.firma?.otpValidado) {
-            setOtpEnviado(true)
-          }
-        } else if (json.data.firma?.imagenFirma) {
-          // Reanudar en paso 3 si la firma ya está dibujada
-          setPaso(3)
-        } else if (json.data.firma?.fotoDocumento) {
-          // Reanudar en paso 2 si la foto del documento ya está subida
-          setFotoDocumento(json.data.firma.fotoDocumento)
-          if (json.data.firma?.fotoDocumentoReverso) {
-            setFotoDocumentoReverso(json.data.firma.fotoDocumentoReverso)
-          }
-          setPaso(2)
+          setPaso(5)
         }
       } else {
         setDatos({ estado: 'EXPIRADO', firma: null, mensaje: json.error })
@@ -132,30 +99,124 @@ export default function PaginaFirma({ params }: { params: Promise<{ token: strin
     }
   }
 
-  // === Manejo de archivos de fotos y captura con cámara ===
-  // NOTA: La captura de fotos (cámara + subir archivo) ahora se maneja
-  // internamente en el componente FotoCaptureFirma. Las funciones auxiliares
-  // manejarArchivo() y tomarFoto() ya no son necesarias aquí.
+  // === Manejo de archivos de fotos ===
+  const manejarArchivo = (e: React.ChangeEvent<HTMLInputElement>, tipo: 'documento' | 'selfie') => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    if (!file.type.startsWith('image/')) {
+      toast({ title: 'Error', description: 'El archivo debe ser una imagen', variant: 'destructive' })
+      return
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      toast({ title: 'Error', description: 'La imagen no puede superar 5MB', variant: 'destructive' })
+      return
+    }
+    const reader = new FileReader()
+    reader.onload = () => {
+      const result = reader.result as string
+      if (tipo === 'documento') setFotoDocumento(result)
+      else setFotoSelfie(result)
+    }
+    reader.readAsDataURL(file)
+  }
 
-  // === PASO 1: Guardar foto del documento (frente + reverso) ===
-  const guardarFotoDocumento = async () => {
-    if (!fotoDocumento || !fotoDocumentoReverso || !datos?.firma) return
-    setSubiendoFotoDoc(true)
+  const tomarFoto = async (tipo: 'documento' | 'selfie') => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: tipo === 'selfie' ? 'user' : 'environment' },
+      })
+      const video = document.createElement('video')
+      video.srcObject = stream
+      video.play()
+      const dialogContent = document.createElement('div')
+      dialogContent.style.position = 'fixed'
+      dialogContent.style.top = '0'
+      dialogContent.style.left = '0'
+      dialogContent.style.width = '100%'
+      dialogContent.style.height = '100%'
+      dialogContent.style.backgroundColor = 'rgba(0,0,0,0.9)'
+      dialogContent.style.zIndex = '9999'
+      dialogContent.style.display = 'flex'
+      dialogContent.style.flexDirection = 'column'
+      dialogContent.style.alignItems = 'center'
+      dialogContent.style.justifyContent = 'center'
+      dialogContent.style.padding = '20px'
+
+      video.style.maxWidth = '100%'
+      video.style.maxHeight = '70vh'
+      video.style.borderRadius = '8px'
+
+      const btnCapturar = document.createElement('button')
+      btnCapturar.textContent = '📸 Capturar'
+      btnCapturar.style.marginTop = '16px'
+      btnCapturar.style.padding = '12px 24px'
+      btnCapturar.style.background = '#1e40af'
+      btnCapturar.style.color = 'white'
+      btnCapturar.style.border = 'none'
+      btnCapturar.style.borderRadius = '8px'
+      btnCapturar.style.cursor = 'pointer'
+      btnCapturar.style.fontSize = '16px'
+
+      const btnCerrar = document.createElement('button')
+      btnCerrar.textContent = '✕ Cerrar'
+      btnCerrar.style.marginTop = '8px'
+      btnCerrar.style.padding = '8px 16px'
+      btnCerrar.style.background = '#ef4444'
+      btnCerrar.style.color = 'white'
+      btnCerrar.style.border = 'none'
+      btnCerrar.style.borderRadius = '8px'
+      btnCerrar.style.cursor = 'pointer'
+
+      dialogContent.appendChild(video)
+      dialogContent.appendChild(btnCapturar)
+      dialogContent.appendChild(btnCerrar)
+      document.body.appendChild(dialogContent)
+
+      btnCapturar.onclick = () => {
+        const canvas = document.createElement('canvas')
+        canvas.width = video.videoWidth
+        canvas.height = video.videoHeight
+        const ctx = canvas.getContext('2d')!
+        ctx.drawImage(video, 0, 0)
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.8)
+        if (tipo === 'documento') setFotoDocumento(dataUrl)
+        else setFotoSelfie(dataUrl)
+        stream.getTracks().forEach((t) => t.stop())
+        document.body.removeChild(dialogContent)
+      }
+
+      btnCerrar.onclick = () => {
+        stream.getTracks().forEach((t) => t.stop())
+        document.body.removeChild(dialogContent)
+      }
+    } catch (e: any) {
+      toast({
+        title: 'Error al acceder a la cámara',
+        description: 'Tu navegador no permite acceder a la cámara. Usa la opción de subir archivo.',
+        variant: 'destructive',
+      })
+    }
+  }
+
+  // === Guardar fotos ===
+  const guardarFotos = async () => {
+    if (!fotoDocumento || !fotoSelfie || !datos?.firma) return
+    setSubiendoFotos(true)
     try {
       const res = await fetch('/api/firma', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          accion: 'guardar_foto_documento',
+          accion: 'guardar_fotos',
           firmaId: datos.firma.id,
           fotoDocumento,
-          fotoDocumentoReverso,
+          fotoSelfie,
         }),
       })
       const json = await res.json()
       if (json.success) {
         toast({
-          title: 'Fotos del documento guardadas',
+          title: 'Fotos guardadas',
           description: 'Ahora puedes dibujar tu firma electrónica.',
         })
         setPaso(2)
@@ -165,11 +226,11 @@ export default function PaginaFirma({ params }: { params: Promise<{ token: strin
     } catch (e: any) {
       toast({ title: 'Error', description: e.message, variant: 'destructive' })
     } finally {
-      setSubiendoFotoDoc(false)
+      setSubiendoFotos(false)
     }
   }
 
-  // === Canvas firma (paso 2) ===
+  // === Canvas firma ===
   useEffect(() => {
     if (paso !== 2) return
     const canvas = canvasRef.current
@@ -187,17 +248,9 @@ export default function PaginaFirma({ params }: { params: Promise<{ token: strin
     const canvas = canvasRef.current
     if (!canvas) return
     const ctx = canvas.getContext('2d')!
-    if ('touches' in e) e.preventDefault()
     ctx.beginPath()
     setDibujando(true)
-    const rect = canvas.getBoundingClientRect()
-    const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX
-    const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY
-    const x = ((clientX - rect.left) * canvas.width) / rect.width
-    const y = ((clientY - rect.top) * canvas.height) / rect.height
-    ctx.moveTo(x, y)
-    ctx.lineTo(x + 0.1, y + 0.1)
-    ctx.stroke()
+    moverDibujo(e)
   }
 
   const moverDibujo = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
@@ -205,7 +258,6 @@ export default function PaginaFirma({ params }: { params: Promise<{ token: strin
     const canvas = canvasRef.current
     if (!canvas) return
     const ctx = canvas.getContext('2d')!
-    if ('touches' in e) e.preventDefault()
     const rect = canvas.getBoundingClientRect()
     let x, y
     if ('touches' in e) {
@@ -215,11 +267,11 @@ export default function PaginaFirma({ params }: { params: Promise<{ token: strin
       x = e.clientX - rect.left
       y = e.clientY - rect.top
     }
+    // Escalar a las dimensiones reales del canvas
     x = (x * canvas.width) / rect.width
     y = (y * canvas.height) / rect.height
     ctx.lineTo(x, y)
     ctx.stroke()
-    setFirmaDibujada(canvas.toDataURL('image/png'))
   }
 
   const terminarDibujo = () => {
@@ -239,38 +291,7 @@ export default function PaginaFirma({ params }: { params: Promise<{ token: strin
     setFirmaDibujada(null)
   }
 
-  // === PASO 2: Guardar firma manuscrita ===
-  const guardarFirmaDibujo = async () => {
-    if (!firmaDibujada || !datos?.firma) return
-    setGuardandoFirmaDibujo(true)
-    try {
-      const res = await fetch('/api/firma', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          accion: 'guardar_firma_dibujo',
-          firmaId: datos.firma.id,
-          imagenFirma: firmaDibujada,
-        }),
-      })
-      const json = await res.json()
-      if (json.success) {
-        toast({
-          title: 'Firma guardada',
-          description: 'Ahora solicita el código de verificación OTP.',
-        })
-        setPaso(3)
-      } else {
-        toast({ title: 'Error', description: json.error, variant: 'destructive' })
-      }
-    } catch (e: any) {
-      toast({ title: 'Error', description: e.message, variant: 'destructive' })
-    } finally {
-      setGuardandoFirmaDibujo(false)
-    }
-  }
-
-  // === PASO 3: Enviar OTP ===
+  // === Enviar OTP ===
   const enviarOTP = async () => {
     if (!datos?.firma) return
     setEnviandoOtp(true)
@@ -305,12 +326,13 @@ export default function PaginaFirma({ params }: { params: Promise<{ token: strin
     }
   }
 
-  // === PASO 3: Validar OTP ===
-  const validarOTP = async () => {
-    if (!otpIngresado || !datos?.firma) return
+  // === Validar OTP y guardar firma ===
+  const validarYGuardar = async () => {
+    if (!otpIngresado || !datos?.firma || !firmaDibujada) return
     setValidandoOtp(true)
     try {
-      const res = await fetch('/api/firma', {
+      // Primero validar el OTP
+      const resValidar = await fetch('/api/firma', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -319,51 +341,39 @@ export default function PaginaFirma({ params }: { params: Promise<{ token: strin
           otpIngresado,
         }),
       })
-      const json = await res.json()
-      if (json.success) {
+      const jsonValidar = await resValidar.json()
+      if (!jsonValidar.success) {
+        toast({ title: 'Código incorrecto', description: jsonValidar.error, variant: 'destructive' })
+        setValidandoOtp(false)
+        return
+      }
+
+      // Si el OTP es correcto, guardar la firma
+      setGuardandoFirma(true)
+      const resGuardar = await fetch('/api/firma', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          accion: 'guardar_firma',
+          firmaId: datos.firma.id,
+          imagenFirma: firmaDibujada,
+        }),
+      })
+      const jsonGuardar = await resGuardar.json()
+      if (jsonGuardar.success) {
         toast({
-          title: 'Código verificado',
-          description: 'Ahora toma la selfie con tu cédula para finalizar.',
+          title: '¡Firma completada!',
+          description: 'Tu firma electrónica ha sido guardada con éxito.',
         })
         setPaso(4)
       } else {
-        toast({ title: 'Código incorrecto', description: json.error, variant: 'destructive' })
+        toast({ title: 'Error', description: jsonGuardar.error, variant: 'destructive' })
       }
     } catch (e: any) {
       toast({ title: 'Error', description: e.message, variant: 'destructive' })
     } finally {
       setValidandoOtp(false)
-    }
-  }
-
-  // === PASO 4: Finalizar con selfie ===
-  const finalizarConSelfie = async () => {
-    if (!fotoSelfie || !datos?.firma) return
-    setFinalizando(true)
-    try {
-      const res = await fetch('/api/firma', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          accion: 'finalizar_con_selfie',
-          firmaId: datos.firma.id,
-          fotoSelfie,
-        }),
-      })
-      const json = await res.json()
-      if (json.success) {
-        toast({
-          title: '¡Firma completada!',
-          description: 'Tu firma electrónica ha sido guardada con éxito.',
-        })
-        setPaso(5)
-      } else {
-        toast({ title: 'Error', description: json.error, variant: 'destructive' })
-      }
-    } catch (e: any) {
-      toast({ title: 'Error', description: e.message, variant: 'destructive' })
-    } finally {
-      setFinalizando(false)
+      setGuardandoFirma(false)
     }
   }
 
@@ -408,7 +418,7 @@ export default function PaginaFirma({ params }: { params: Promise<{ token: strin
   }
 
   // === Firma rechazada ===
-  if (paso === 6 || datos.firma?.estadoFirma === 'RECHAZADA') {
+  if (paso === 5 || datos.firma?.estadoFirma === 'RECHAZADA') {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-red-50 to-orange-100 p-4">
         <Card className="max-w-md w-full">
@@ -428,9 +438,8 @@ export default function PaginaFirma({ params }: { params: Promise<{ token: strin
     )
   }
 
-  // === Paso 5: Completado ===
-  if (paso === 5) {
-    const esOtroSi = datos.firma?.tipo === 'ACUERDO_PAGO'
+  // === Paso 4: Completado ===
+  if (paso === 4) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-green-50 to-emerald-100 p-4">
         <Card className="max-w-md w-full">
@@ -439,62 +448,31 @@ export default function PaginaFirma({ params }: { params: Promise<{ token: strin
               <CheckCircle className="w-10 h-10 text-green-600" />
             </div>
             <div>
-              <h2 className="text-xl font-bold text-green-700">
-                {esOtroSi ? '¡Otro Sí Firmado!' : '¡Firma Completada!'}
-              </h2>
+              <h2 className="text-xl font-bold text-green-700">¡Firma Completada!</h2>
               <p className="text-sm text-muted-foreground mt-1">
-                {esOtroSi
-                  ? 'Tu Otro Sí se ha firmado electrónicamente. Queda anexado a tu solicitud sin modificar el pagaré ni la carta de instrucciones originales.'
-                  : 'Tu firma electrónica se ha guardado correctamente.'}
+                Tu firma electrónica se ha guardado correctamente.
               </p>
             </div>
             {datos.prestamo && (
               <div className="bg-muted/50 p-3 rounded-lg w-full text-left space-y-1 text-sm">
                 <div className="flex justify-between">
-                  <span className="text-muted-foreground">Solicitud:</span>
+                  <span className="text-muted-foreground">Préstamo:</span>
                   <span className="font-mono">{datos.prestamo.codigo}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-muted-foreground">Tipo:</span>
-                  <span className="font-medium">
-                    {esOtroSi ? 'Otro Sí (Acuerdo de Pago)' : 'Términos y Condiciones / Pagaré'}
-                  </span>
+                  <span className="text-muted-foreground">Estado:</span>
+                  <Badge className="bg-green-100 text-green-700 hover:bg-green-100">ACTIVO</Badge>
                 </div>
-                {!esOtroSi && (
-                  <>
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Estado:</span>
-                      <Badge className="bg-green-100 text-green-700 hover:bg-green-100">ACTIVO</Badge>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Desembolsado:</span>
-                      <span>{formatearFecha(new Date().toISOString())}</span>
-                    </div>
-                  </>
-                )}
-                {esOtroSi && (
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Fecha firma:</span>
-                    <span>{formatearFecha(new Date().toISOString())}</span>
-                  </div>
-                )}
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Desembolsado:</span>
+                  <span>{formatearFecha(new Date().toISOString())}</span>
+                </div>
               </div>
             )}
             <div className="text-xs text-muted-foreground flex items-center gap-1">
               <Shield className="w-3 h-3" />
-              Firma electrónica con verificación de identidad (OTP + selfie + firma manuscrita)
+              Firma electrónica con verificación de identidad
             </div>
-            {esOtroSi && datos.firma?.id && (
-              <a
-                href={`/api/firma/certificado?firmaId=${datos.firma.id}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-blue-700 bg-blue-50 hover:bg-blue-100 rounded-md border border-blue-200"
-              >
-                <Shield className="w-4 h-4" />
-                Ver certificado de firma electrónica
-              </a>
-            )}
           </CardContent>
         </Card>
       </div>
@@ -504,14 +482,6 @@ export default function PaginaFirma({ params }: { params: Promise<{ token: strin
   const firma = datos.firma
   const cliente = datos.cliente || firma.cliente
   const prestamo = datos.prestamo || firma.prestamo
-
-  // Stepper con 4 pasos
-  const pasosStepper = [
-    { num: 1, label: 'Documento', icon: FileText },
-    { num: 2, label: 'Firma', icon: PenTool },
-    { num: 3, label: 'Verificación', icon: Shield },
-    { num: 4, label: 'Selfie', icon: User },
-  ]
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
@@ -524,12 +494,12 @@ export default function PaginaFirma({ params }: { params: Promise<{ token: strin
               Firma Electrónica con Verificación de Identidad
             </CardTitle>
             <p className="text-sm text-muted-foreground">
-              {firma.tipo === 'TYC' ? 'Términos y Condiciones' : firma.tipo === 'PAGARE' ? 'Pagaré' : firma.tipo === 'ACUERDO_PAGO' ? 'Otro Sí (Acuerdo de Pago)' : firma.tipo} - Documento para firmar
+              {firma.tipo === 'TYC' ? 'Términos y Condiciones' : firma.tipo} - Documento para firmar
             </p>
           </CardHeader>
         </Card>
 
-        {/* Info del cliente y solicitud */}
+        {/* Info del cliente y préstamo */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <Card>
             <CardContent className="p-4">
@@ -546,11 +516,11 @@ export default function PaginaFirma({ params }: { params: Promise<{ token: strin
               <CardContent className="p-4">
                 <div className="flex items-center gap-2 mb-2">
                   <FileText className="w-4 h-4 text-blue-600" />
-                  <span className="text-sm font-semibold">Solicitud</span>
+                  <span className="text-sm font-semibold">Préstamo</span>
                 </div>
                 <p className="font-mono text-sm">{prestamo.codigo}</p>
                 <p className="text-xs text-muted-foreground">
-                  {formatearMoneda(prestamo.montoPrincipal)} · {prestamo.numeroCuotas || prestamo.plazoMeses} cuotas
+                  {formatearMoneda(prestamo.montoPrincipal)} · {prestamo.numeroCuotas} cuotas
                 </p>
               </CardContent>
             </Card>
@@ -560,9 +530,12 @@ export default function PaginaFirma({ params }: { params: Promise<{ token: strin
         {/* Pasos */}
         <Card>
           <CardContent className="p-4">
-            {/* Stepper 4 pasos */}
             <div className="flex items-center justify-between mb-6">
-              {pasosStepper.map((p, idx) => {
+              {[
+                { num: 1, label: 'Fotos', icon: Camera },
+                { num: 2, label: 'Firma', icon: PenTool },
+                { num: 3, label: 'Verificación', icon: Shield },
+              ].map((p, idx) => {
                 const Icon = p.icon
                 const activo = paso === p.num
                 const completado = paso > p.num
@@ -576,38 +549,90 @@ export default function PaginaFirma({ params }: { params: Promise<{ token: strin
                       </div>
                       <span className="text-xs font-semibold hidden sm:block">{p.label}</span>
                     </div>
-                    {idx < pasosStepper.length - 1 && <div className={`flex-1 h-0.5 mx-2 ${completado ? 'bg-green-600' : 'bg-gray-300'}`} />}
+                    {idx < 2 && <div className={`flex-1 h-0.5 mx-2 ${completado ? 'bg-green-600' : 'bg-gray-300'}`} />}
                   </div>
                 )
               })}
             </div>
 
-            {/* PASO 1: Foto del documento (frente + reverso) */}
+            {/* Paso 1: Subir fotos */}
             {paso === 1 && (
               <div className="space-y-4">
                 <div className="bg-blue-50 p-3 rounded-md border border-blue-200">
                   <p className="text-sm text-blue-900">
-                    📷 <strong>Paso 1 de 4:</strong> Toma o sube una foto clara de tu cédula por ambos lados (frente y reverso). Puedes usar la cámara o subir un archivo. Si necesitas cambiar de cámara, usa el botón "Girar cámara".
+                    📸 Para verificar tu identidad, necesitamos dos fotos. Puedes tomarlas con la cámara o subirlas desde tu dispositivo.
                   </p>
                 </div>
 
-                <FotoCaptureFirma
-                  label="Foto de la cédula (frente)"
-                  descripcion="Asegúrate de que se lean todos los datos: nombre, cédula, fecha de nacimiento."
-                  valor={fotoDocumento}
-                  onChange={(v) => setFotoDocumento(v)}
-                  initialFacing="environment"
-                  mirror={false}
-                />
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {/* Foto del documento */}
+                  <div className="space-y-2">
+                    <Label className="font-semibold">Foto del documento de identidad</Label>
+                    <p className="text-xs text-muted-foreground">Cédula, pasaporte o licencia (frente)</p>
+                    {fotoDocumento ? (
+                      <div className="relative">
+                        <img src={fotoDocumento} alt="Documento" className="w-full h-48 object-cover rounded-md border-2 border-green-300" />
+                        <Button
+                          size="sm"
+                          variant="destructive"
+                          className="absolute top-2 right-2"
+                          onClick={() => setFotoDocumento(null)}
+                        >
+                          <Trash2 className="w-3 h-3" />
+                        </Button>
+                      </div>
+                    ) : (
+                      <div className="border-2 border-dashed border-gray-300 rounded-md p-6 text-center space-y-2">
+                        <FileText className="w-8 h-8 mx-auto text-gray-400" />
+                        <div className="flex flex-col gap-2">
+                          <Button size="sm" variant="outline" onClick={() => tomarFoto('documento')}>
+                            <Camera className="w-3.5 h-3.5 mr-1.5" /> Tomar foto
+                          </Button>
+                          <Button size="sm" variant="outline" asChild>
+                            <label className="cursor-pointer">
+                              <Upload className="w-3.5 h-3.5 mr-1.5" /> Subir archivo
+                              <input type="file" accept="image/*" className="hidden" onChange={(e) => manejarArchivo(e, 'documento')} />
+                            </label>
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
 
-                <FotoCaptureFirma
-                  label="Foto de la cédula (reverso)"
-                  descripcion="La cara donde aparece la firma y la huella dactilar."
-                  valor={fotoDocumentoReverso}
-                  onChange={(v) => setFotoDocumentoReverso(v)}
-                  initialFacing="environment"
-                  mirror={false}
-                />
+                  {/* Selfie con cédula */}
+                  <div className="space-y-2">
+                    <Label className="font-semibold">Selfie sosteniendo la cédula</Label>
+                    <p className="text-xs text-muted-foreground">Tu cara y el documento deben verse claramente</p>
+                    {fotoSelfie ? (
+                      <div className="relative">
+                        <img src={fotoSelfie} alt="Selfie" className="w-full h-48 object-cover rounded-md border-2 border-green-300" />
+                        <Button
+                          size="sm"
+                          variant="destructive"
+                          className="absolute top-2 right-2"
+                          onClick={() => setFotoSelfie(null)}
+                        >
+                          <Trash2 className="w-3 h-3" />
+                        </Button>
+                      </div>
+                    ) : (
+                      <div className="border-2 border-dashed border-gray-300 rounded-md p-6 text-center space-y-2">
+                        <User className="w-8 h-8 mx-auto text-gray-400" />
+                        <div className="flex flex-col gap-2">
+                          <Button size="sm" variant="outline" onClick={() => tomarFoto('selfie')}>
+                            <Camera className="w-3.5 h-3.5 mr-1.5" /> Tomar selfie
+                          </Button>
+                          <Button size="sm" variant="outline" asChild>
+                            <label className="cursor-pointer">
+                              <Upload className="w-3.5 h-3.5 mr-1.5" /> Subir archivo
+                              <input type="file" accept="image/*" className="hidden" onChange={(e) => manejarArchivo(e, 'selfie')} />
+                            </label>
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
 
                 <div className="bg-amber-50 p-2 rounded-md border border-amber-200 text-xs text-amber-900">
                   ⚠️ Las fotos serán almacenadas como evidencia de identidad con hash SHA-256 para verificar su integridad.
@@ -615,10 +640,10 @@ export default function PaginaFirma({ params }: { params: Promise<{ token: strin
 
                 <Button
                   className="w-full"
-                  disabled={!fotoDocumento || !fotoDocumentoReverso || subiendoFotoDoc}
-                  onClick={guardarFotoDocumento}
+                  disabled={!fotoDocumento || !fotoSelfie || subiendoFotos}
+                  onClick={guardarFotos}
                 >
-                  {subiendoFotoDoc ? (
+                  {subiendoFotos ? (
                     <>
                       <Loader2 className="w-4 h-4 mr-2 animate-spin" />
                       Guardando fotos...
@@ -633,12 +658,12 @@ export default function PaginaFirma({ params }: { params: Promise<{ token: strin
               </div>
             )}
 
-            {/* PASO 2: Dibujar firma manuscrita */}
+            {/* Paso 2: Dibujar firma */}
             {paso === 2 && (
               <div className="space-y-4">
                 <div className="bg-blue-50 p-3 rounded-md border border-blue-200">
                   <p className="text-sm text-blue-900">
-                    ✍️ <strong>Paso 2 de 4:</strong> Dibuja tu firma en el recuadro siguiente usando el mouse o tu dedo (en móvil).
+                    ✍️ Dibuja tu firma en el recuadro siguiente usando el mouse o tu dedo (en móvil).
                   </p>
                 </div>
 
@@ -674,33 +699,19 @@ export default function PaginaFirma({ params }: { params: Promise<{ token: strin
                   <Button variant="outline" onClick={() => setPaso(1)}>
                     Atrás
                   </Button>
-                  <Button
-                    className="flex-1"
-                    disabled={!firmaDibujada || guardandoFirmaDibujo}
-                    onClick={guardarFirmaDibujo}
-                  >
-                    {guardandoFirmaDibujo ? (
-                      <>
-                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                        Guardando...
-                      </>
-                    ) : (
-                      <>
-                        <CheckCircle className="w-4 h-4 mr-2" />
-                        Continuar a verificación
-                      </>
-                    )}
+                  <Button className="flex-1" disabled={!firmaDibujada} onClick={() => setPaso(3)}>
+                    Continuar a verificación
                   </Button>
                 </div>
               </div>
             )}
 
-            {/* PASO 3: Verificación OTP */}
+            {/* Paso 3: Verificación OTP */}
             {paso === 3 && (
               <div className="space-y-4">
                 <div className="bg-blue-50 p-3 rounded-md border border-blue-200">
                   <p className="text-sm text-blue-900">
-                    🔐 <strong>Paso 3 de 4:</strong> Verifica tu identidad con un código de 6 dígitos.
+                    🔐 Para finalizar, necesitamos verificar tu identidad con un código de 6 dígitos.
                   </p>
                 </div>
 
@@ -769,18 +780,18 @@ export default function PaginaFirma({ params }: { params: Promise<{ token: strin
                       </Button>
                       <Button
                         className="flex-1"
-                        disabled={otpIngresado.length !== 6 || validandoOtp}
-                        onClick={validarOTP}
+                        disabled={otpIngresado.length !== 6 || validandoOtp || guardandoFirma}
+                        onClick={validarYGuardar}
                       >
-                        {validandoOtp ? (
+                        {validandoOtp || guardandoFirma ? (
                           <>
                             <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                            Validando...
+                            {validandoOtp ? 'Validando...' : 'Guardando firma...'}
                           </>
                         ) : (
                           <>
                             <CheckCircle className="w-4 h-4 mr-2" />
-                            Verificar código
+                            Firmar y activar préstamo
                           </>
                         )}
                       </Button>
@@ -791,54 +802,6 @@ export default function PaginaFirma({ params }: { params: Promise<{ token: strin
                 <Button variant="ghost" size="sm" onClick={() => setPaso(2)}>
                   Atrás
                 </Button>
-              </div>
-            )}
-
-            {/* PASO 4: Selfie sosteniendo la cédula */}
-            {paso === 4 && (
-              <div className="space-y-4">
-                <div className="bg-blue-50 p-3 rounded-md border border-blue-200">
-                  <p className="text-sm text-blue-900">
-                    🤳 <strong>Paso 4 de 4:</strong> Toma una selfie sosteniendo tu cédula. Tu cara y el documento deben verse claramente en la foto. Puedes girar la cámara si necesitas usar la cámara frontal.
-                  </p>
-                </div>
-
-                <FotoCaptureFirma
-                  label="Selfie sosteniendo la cédula"
-                  descripcion="Tu rostro completo y la cédula deben verse nítidos. Usa la cámara frontal para mayor comodidad."
-                  valor={fotoSelfie}
-                  nombreArchivo={fotoSelfieNombre}
-                  onChange={(v, n) => { setFotoSelfie(v); setFotoSelfieNombre(n) }}
-                  initialFacing="user"
-                  mirror
-                />
-
-                <div className="bg-amber-50 p-2 rounded-md border border-amber-200 text-xs text-amber-900">
-                  ⚠️ Esta foto es la verificación final de identidad. Se almacenará con hash SHA-256.
-                </div>
-
-                <div className="flex gap-2">
-                  <Button variant="outline" onClick={() => setPaso(3)}>
-                    Atrás
-                  </Button>
-                  <Button
-                    className="flex-1"
-                    disabled={!fotoSelfie || finalizando}
-                    onClick={finalizarConSelfie}
-                  >
-                    {finalizando ? (
-                      <>
-                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                        Finalizando firma...
-                      </>
-                    ) : (
-                      <>
-                        <CheckCircle className="w-4 h-4 mr-2" />
-                        Firmar y activar solicitud
-                      </>
-                    )}
-                  </Button>
-                </div>
               </div>
             )}
           </CardContent>

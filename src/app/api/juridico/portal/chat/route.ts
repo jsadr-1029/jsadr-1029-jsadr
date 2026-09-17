@@ -20,19 +20,6 @@ import {
   obtenerDetalleCaso,
   generarAnalisisCaso,
 } from '@/lib/asesor-juridico'
-// === Memoria persistente + dataset jurídico reforzado ===
-import {
-  guardarMensajeMemoria,
-  cargarContextoMemoria,
-  construirTextoContexto,
-  detectarYRecordarHechos,
-  registrarAprendizaje,
-} from '@/lib/bot-memoria'
-import { buscarMejorMatch } from '@/lib/bot-fuzzy-matcher'
-import { getDatasetPorTipo } from '@/lib/bot-datasets'
-
-const BOT_TIPO = 'JURIDICO'
-const DATASET_JURIDICO_FULL = getDatasetPorTipo(BOT_TIPO)
 
 const CATEGORIA = 'JURIDICO_INTERNO'
 
@@ -93,47 +80,33 @@ async function responderAsesorJuridico(
   const mensaje = (mensajeRaw || '').trim()
   const lower = mensaje.toLowerCase()
 
-  // === 0. Antes de los comandos numéricos: buscar en dataset jurídico reforzado ===
-  // Esto permite responder a "¿qué dice el artículo 1551 del Código Civil?"
-  // o "¿cuándo prescribe una deuda?" usando el dataset expandido con normativa colombiana.
-  if (mensaje.length >= 5 && !/^\d+$/.test(mensaje.trim())) {
-    const match = buscarMejorMatch(mensaje, DATASET_JURIDICO_FULL)
-    if (match && match.item && (match.confianza === 'ALTA' || match.confianza === 'MEDIA')) {
-      return {
-        tipo: 'CONOCIMIENTO_NORMATIVO',
-        respuesta: match.item.respuesta,
-      }
-    }
-  }
-
-  // === Saludo conversacional fluido (NO menú) ===
-  // El bot juridico conversa como un abogado senior, no muestra menú numerado.
+  // === Saludo / menú ===
   if (
     lower === '' ||
+    lower === 'menu' ||
+    lower === 'menú' ||
+    lower === 'ayuda' ||
+    lower === 'help' ||
     lower === 'hola' ||
     lower === 'buenas' ||
     lower === 'buenos días' ||
-    lower === 'buenas tardes' ||
-    lower === 'buenas noches' ||
-    lower === 'saludos' ||
-    lower === 'qué tal' ||
-    lower === 'que tal' ||
-    lower === 'holaa' ||
-    lower === 'holas'
+    lower === 'buenas tardes'
   ) {
     return {
       tipo: 'TEXTO',
       respuesta:
-        `Hola, ${usuarioNombre}. Soy tu asesor jurídico. Cuéntame en qué te puedo ayudar hoy: ¿tienes una consulta sobre normativa colombiana, un caso de cobro, un pagaré, un proceso judicial, o algo relacionado con la cartera? Soy todo oídos.`,
-    }
-  }
-
-  // === "Ayuda" / "menú" → respuesta conversacional, no menú numerado ===
-  if (lower === 'ayuda' || lower === 'help' || lower === 'menu' || lower === 'menú') {
-    return {
-      tipo: 'TEXTO',
-      respuesta:
-        `Claro, te explico cómo te puedo acompañar. Puedo ayudarte con: consultas de normativa colombiana (Código Civil, Comercio, CGP, Habeas Data, Ley 1581 de 2012, etc.), análisis de casos de cobro jurídico, estrategia para demandar o defender un proceso ejecutivo, redacción de requerimientos prejurídicos, revisión de pagarés y títulos valores, gestión de centrales de datos, y seguimiento de la cartera en mora. Si quieres, dime qué tema te trae hoy y lo abordamos paso a paso.`,
+        `⚖️ Hola ${usuarioNombre}, soy Asesor Jurídico, tu asistente del portal jurídico.\n\n` +
+        `═══ MÓDULO JURÍDICO ═══\n` +
+        `1️⃣ Casos activos / resumen\n` +
+        `2️⃣ Candidatos a jurídico (60+ días mora)\n` +
+        `3️⃣ Alertas legales pendientes\n` +
+        `4️⃣ Análisis de un caso\n` +
+        `═══ ASESORÍA JURÍDICA ═══\n` +
+        `5️⃣ Cobranza (persuasiva/prejurídica/judicial)\n` +
+        `6️⃣ Procesos judiciales\n` +
+        `7️⃣ Pagaré / títulos valores\n` +
+        `8️⃣ Habeas Data / Lavado de Activos\n\n` +
+        `💡 Escribe el número o la consulta. Ej: "casos activos", "¿cómo cobrar un pagaré?"`,
     }
   }
 
@@ -160,7 +133,7 @@ async function responderAsesorJuridico(
       return {
         tipo: 'TEXTO',
         respuesta:
-          '✅ No hay candidatos a cobro jurídico actualmente.\n\n(Criterio: solicitudes con 60+ días de mora sin caso jurídico existente)',
+          '✅ No hay candidatos a cobro jurídico actualmente.\n\n(Criterio: préstamos con 60+ días de mora sin caso jurídico existente)',
       }
     }
     let r = `⚖️ CANDIDATOS A COBRO JURÍDICO (${estado.candidatosJuridico.length}):\n\n`
@@ -235,7 +208,7 @@ async function responderAsesorJuridico(
         `• Mandamiento de pago\n` +
         `• Excepciones del demandado\n` +
         `• Sentencia y ejecución\n\n` +
-        `⚠️ Para analizar un caso específico, dame el código del solicitud.`,
+        `⚠️ Para analizar un caso específico, dame el código del préstamo.`,
     }
   }
 
@@ -354,14 +327,17 @@ async function responderAsesorJuridico(
     }
   }
 
-  // === Default conversacional fluido (NO menú) ===
-  // Si el mensaje no coincide con ningún comando ni con el dataset, el bot responde
-  // como un abogado senior: pide contexto, ofrece explorar el tema y registra la
-  // pregunta como aprendizaje pendiente para revisión posterior.
+  // === Default ===
   return {
     tipo: 'TEXTO',
     respuesta:
-      `Mira, ${usuarioNombre}, para responder esa con precisión necesito un poco más de contexto. Cuéntame: ¿es sobre un caso específico de la cartera, una consulta de fondo sobre normativa colombiana, o algo operativo del módulo jurídico? Si me das el detalle del solicitud, del cliente o del documento, te doy una respuesta mucho más útil. También puedo revisar casos activos, candidatos a jurídico o alertas pendientes si me dices qué necesitas ver.`,
+      `⚖️ Soy Asesor Jurídico, tu asistente del portal jurídico.\n\n` +
+      `Escribe "menú" para ver opciones o pregúntame:\n` +
+      `• "casos activos"\n` +
+      `• "candidatos a jurídico"\n` +
+      `• "¿cómo cobrar un pagaré vencido?"\n` +
+      `• "proceso ejecutivo en Colombia"\n` +
+      `• "¿qué dice la ley sobre habeas data?"`,
   }
 }
 
@@ -445,8 +421,7 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
     const token = body.token || req.headers.get('x-juridico-token')
-    // Tolerante a ambos nombres de campo: 'mensaje' (canónico) o 'contenido' (legacy)
-    const mensaje = body.mensaje || body.contenido || body.texto
+    const mensaje = body.mensaje
     const casoId = body.casoId || null
 
     if (!token || !mensaje) {
@@ -485,38 +460,13 @@ export async function POST(req: NextRequest) {
       },
     })
 
-    // === 1b. MEMORIA PERSISTENTE: guardar mensaje + detectar hechos ===
-    // (paralelo, no bloquea la respuesta)
-    const memoriaPromises = [
-      guardarMensajeMemoria({
-        botTipo: BOT_TIPO,
-        usuarioId: usuario.id,
-        usuarioNombre: usuario.nombre,
-        conversacionId: conversacion.id,
-        rol: 'usuario',
-        texto: String(mensaje),
-        categoria: casoId ? 'CASO_ESPECIFICO' : undefined,
-      }),
-      detectarYRecordarHechos({
-        botTipo: BOT_TIPO,
-        usuarioId: usuario.id,
-        usuarioNombre: usuario.nombre,
-        conversacionId: conversacion.id,
-        mensaje: String(mensaje),
-      }),
-    ]
-
     // 2. Generar la respuesta del bot Asesor Jurídico
-    //    (la búsqueda en dataset y la lógica de comandos ocurren dentro)
     const { respuesta, tipo } = await responderAsesorJuridico(
       String(mensaje),
       usuario.id,
       usuario.nombre,
       casoId
     )
-
-    // Esperar las promesas de memoria antes de continuar
-    await Promise.all(memoriaPromises)
 
     // 3. Persistir la respuesta del bot
     const mensajeBot = await db.mensajeChat.create({
@@ -532,28 +482,6 @@ export async function POST(req: NextRequest) {
         metadata: JSON.stringify({ tipo, casoId }),
       },
     })
-
-    // === 3b. MEMORIA PERSISTENTE: guardar respuesta del bot ===
-    guardarMensajeMemoria({
-      botTipo: BOT_TIPO,
-      usuarioId: usuario.id,
-      usuarioNombre: usuario.nombre,
-      conversacionId: conversacion.id,
-      rol: 'bot',
-      texto: respuesta,
-    }).catch(() => {}) // fire-and-forget: no bloquea
-
-    // === 3c. APRENDIZAJE: si la respuesta es el default (no encontró en dataset),
-    //       registrar como aprendizaje pendiente para revisión ===
-    if (tipo === 'DEFAULT' || tipo === 'TEXTO') {
-      registrarAprendizaje({
-        botTipo: BOT_TIPO,
-        pregunta: String(mensaje),
-        respuestaDada: respuesta.slice(0, 500),
-        categoria: 'NO_CLASIFICADO',
-        fuente: 'PORTAL_JURIDICO',
-      }).catch(() => {})
-    }
 
     // 4. Actualizar última actividad
     await db.conversacionChat.update({

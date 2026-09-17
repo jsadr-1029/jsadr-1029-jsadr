@@ -1,20 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import {
-  calcularPrestamo,
-  calcularPrestamoTasaFijaMensual,
-  corregirFechasPorCorte,
-  calcularMoraCompuesta,
-  calcularDiasMora,
-  getTasaMoraDiaria,
-  debeIrAJuridico,
-} from '@/lib/finanzas'
+import { calcularPrestamo, calcularMoraCompuesta, calcularDiasMora, getTasaMoraDiaria, debeIrAJuridico } from '@/lib/finanzas'
 import { sanitizeError } from '@/lib/error-handler'
 import { requireRole as requireRoleAuth } from '@/lib/auth-guard'
-import { buildAbsoluteUrl } from '@/lib/url'
 import { rateLimit, getClientInfo } from '@/lib/security'
 
-// GET - detalle de un solicitud
+// GET - detalle de un préstamo
 export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -43,48 +34,17 @@ export async function GET(
     })
 
     if (!prestamo) {
-      return NextResponse.json({ success: false, error: 'Solicitud no encontrado' }, { status: 404 })
+      return NextResponse.json({ success: false, error: 'Préstamo no encontrado' }, { status: 404 })
     }
 
-    // === FIX: Respetar la modalidad de amortización y el montoCuota guardado ===
-    // Antes siempre se usaba calcularPrestamo (sistema francés), lo que ignoraba
-    // los préstamos TASA_FIJA y los ajustes manuales del montoCuota en BD.
-    const fechaBase = prestamo.fechaInicioAmortizacion || prestamo.fechaDesembolso || undefined
-    let calculo: any
-    if (prestamo.modalidadAmortizacion === 'TASA_FIJA') {
-      calculo = calcularPrestamoTasaFijaMensual({
-        montoPrincipal: prestamo.montoPrincipal,
-        tasaMensualFija: prestamo.tasaInteresMensual || prestamo.tasaInteresAnual / 12,
-        numeroCuotas: prestamo.numeroCuotas,
-        frecuencia: prestamo.frecuencia as any,
-        fechaDesembolso: fechaBase,
-      })
-    } else {
-      calculo = calcularPrestamo({
-        montoPrincipal: prestamo.montoPrincipal,
-        tasaInteresAnual: prestamo.tasaInteresAnual,
-        tasaMoraAnual: getTasaMoraDiaria(prestamo),
-        plazoMeses: prestamo.plazoMeses,
-        frecuencia: prestamo.frecuencia as any,
-        fechaDesembolso: fechaBase,
-      })
-    }
-
-    // === Aplicar corrección de fechas por calendario si hay periodoCorte ===
-    calculo.tablaAmortizacion = corregirFechasPorCorte(calculo.tablaAmortizacion, prestamo.periodoCorte)
-
-    // === FIX: Respetar el montoCuota guardado en BD si incluye ajustes manuales ===
-    // El admin puede ajustar montoCuota en BD (ej: +$5.000 por cargo adicional).
-    // IMPORTANTE: valorDiasCausados NO se suma a ninguna cuota individual.
-    // Es un cargo único que se documenta en notas pero las cuotas quedan
-    // todas iguales al montoCuota guardado en BD.
-    if (prestamo.montoCuota && prestamo.montoCuota !== calculo.montoCuota) {
-      calculo.tablaAmortizacion = calculo.tablaAmortizacion.map((c: any) => ({
-        ...c,
-        montoCuota: prestamo.montoCuota,  // Todas las cuotas al valor guardado
-      }))
-      calculo.montoCuota = prestamo.montoCuota
-    }
+    const calculo = calcularPrestamo({
+      montoPrincipal: prestamo.montoPrincipal,
+      tasaInteresAnual: prestamo.tasaInteresAnual,
+      tasaMoraAnual: getTasaMoraDiaria(prestamo),
+      plazoMeses: prestamo.plazoMeses,
+      frecuencia: prestamo.frecuencia as any,
+      fechaDesembolso: prestamo.fechaDesembolso || undefined,
+    })
 
     const tasaMoraEfectiva = getTasaMoraDiaria(prestamo)
 
@@ -142,11 +102,10 @@ export async function PATCH(
 ) {
   const auth = requireRoleAuth(req, ['ADMIN', 'GESTOR'])
   if (auth instanceof NextResponse) return auth
-  const user = auth // AuthUser
   try {
     const { id } = await params
     const body = await req.json()
-    const { accion, tasaMoraPersonalizada, datosFirma, motivo } = body
+    const { accion, tasaMoraPersonalizada, datosFirma } = body
 
     const prestamo = await db.prestamo.findUnique({
       where: { id },
@@ -154,7 +113,7 @@ export async function PATCH(
     })
 
     if (!prestamo) {
-      return NextResponse.json({ success: false, error: 'Solicitud no encontrado' }, { status: 404 })
+      return NextResponse.json({ success: false, error: 'Préstamo no encontrado' }, { status: 404 })
     }
 
     let datosActualizacion: any = {}
@@ -165,7 +124,7 @@ export async function PATCH(
         // Guard: solo se puede aprobar desde SOLICITUD
         if (prestamo.estado !== 'SOLICITUD') {
           return NextResponse.json(
-            { success: false, error: `No se puede aprobar: el solicitud está en estado ${prestamo.estado} (solo se aprueba desde SOLICITUD).` },
+            { success: false, error: `No se puede aprobar: el préstamo está en estado ${prestamo.estado} (solo se aprueba desde SOLICITUD).` },
             { status: 400 }
           )
         }
@@ -173,7 +132,8 @@ export async function PATCH(
         const { generarTokenTyC } = await import('@/lib/finanzas')
         const { enviarWhatsApp, mensajeAprobacionTyC } = await import('@/lib/whatsapp')
         const tycToken = generarTokenTyC()
-        const linkAceptacion = buildAbsoluteUrl(`/?tyc=${tycToken}`)
+        const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'
+        const linkAceptacion = `${baseUrl}/?tyc=${tycToken}`
 
         datosActualizacion = {
           estado: 'PENDIENTE_ACEPTACION',
@@ -205,8 +165,8 @@ export async function PATCH(
         })
         bitacoraEntrada = {
           tipo: 'APROBACION',
-          titulo: 'Solicitud aprobado y TyC enviado',
-          descripcion: `Se aprobó el solicitud ${prestamo.codigo} por $${prestamo.montoPrincipal.toLocaleString()} (${prestamo.plazoMeses} meses, ${prestamo.numeroCuotas} cuotas). Se envió el link de aceptación de TyC al cliente ${prestamo.cliente.nombre} por WhatsApp.`,
+          titulo: 'Préstamo aprobado y TyC enviado',
+          descripcion: `Se aprobó el préstamo ${prestamo.codigo} por $${prestamo.montoPrincipal.toLocaleString()} (${prestamo.plazoMeses} meses, ${prestamo.numeroCuotas} cuotas). Se envió el link de aceptación de TyC al cliente ${prestamo.cliente.nombre} por WhatsApp.`,
           resultado: envio.exito ? 'TyC enviado correctamente al cliente' : `Envío falló: ${envio.error || 'error desconocido'}`,
         }
         break
@@ -216,14 +176,14 @@ export async function PATCH(
         // Guard: solo se puede aceptar TyC desde PENDIENTE_ACEPTACION
         if (prestamo.estado !== 'PENDIENTE_ACEPTACION') {
           return NextResponse.json(
-            { success: false, error: `No se puede aceptar TyC: el solicitud está en estado ${prestamo.estado} (solo se acepta desde PENDIENTE_ACEPTACION).` },
+            { success: false, error: `No se puede aceptar TyC: el préstamo está en estado ${prestamo.estado} (solo se acepta desde PENDIENTE_ACEPTACION).` },
             { status: 400 }
           )
         }
         // ====================================================
         // SEGURIDAD: Validar tycToken Y que todos los OTPs
         // requeridos estén verificados (deudor + codeudor si aplica).
-        // Esto evita que un gestor active un solicitud sin que el
+        // Esto evita que un gestor active un préstamo sin que el
         // cliente haya confirmado mediante el flujo de OTP dual.
         // ====================================================
         const tycTokenRecibido = body.tycToken
@@ -254,7 +214,7 @@ export async function PATCH(
           return NextResponse.json(
             {
               success: false,
-              error: `No se puede activar el solicitud: faltan verificar los códigos OTP de los roles: ${faltantes.join(', ')}.`,
+              error: `No se puede activar el préstamo: faltan verificar los códigos OTP de los roles: ${faltantes.join(', ')}.`,
               faltantes,
             },
             { status: 400 }
@@ -271,9 +231,9 @@ export async function PATCH(
         }
         bitacoraEntrada = {
           tipo: 'ACTIVACION',
-          titulo: 'Solicitud activado (TyC aceptado)',
-          descripcion: `El cliente ${prestamo.cliente.nombre} aceptó los Términos y Condiciones${requiereCodeudorAceptacion ? ' (junto con el codeudor)' : ''}. Solicitud ${prestamo.codigo} pasa a estado ACTIVO con fecha de desembolso ${new Date().toLocaleString('es-CO')}.`,
-          resultado: 'Solicitud activado y desembolsado',
+          titulo: 'Préstamo activado (TyC aceptado)',
+          descripcion: `El cliente ${prestamo.cliente.nombre} aceptó los Términos y Condiciones${requiereCodeudorAceptacion ? ' (junto con el codeudor)' : ''}. Préstamo ${prestamo.codigo} pasa a estado ACTIVO con fecha de desembolso ${new Date().toLocaleString('es-CO')}.`,
+          resultado: 'Préstamo activado y desembolsado',
         }
         break
       }
@@ -282,16 +242,16 @@ export async function PATCH(
         // Guard: solo se puede rechazar desde SOLICITUD o PENDIENTE_ACEPTACION
         if (!['SOLICITUD', 'PENDIENTE_ACEPTACION'].includes(prestamo.estado)) {
           return NextResponse.json(
-            { success: false, error: `No se puede rechazar: el solicitud está en estado ${prestamo.estado}.` },
+            { success: false, error: `No se puede rechazar: el préstamo está en estado ${prestamo.estado}.` },
             { status: 400 }
           )
         }
         datosActualizacion = { estado: 'RECHAZADO' }
         bitacoraEntrada = {
           tipo: 'RECHAZO',
-          titulo: 'Solicitud rechazado',
-          descripcion: `Se rechazó el solicitud ${prestamo.codigo} del cliente ${prestamo.cliente.nombre}.`,
-          resultado: 'Solicitud marcado como RECHAZADO',
+          titulo: 'Préstamo rechazado',
+          descripcion: `Se rechazó el préstamo ${prestamo.codigo} del cliente ${prestamo.cliente.nombre}.`,
+          resultado: 'Préstamo marcado como RECHAZADO',
         }
         break
 
@@ -299,7 +259,7 @@ export async function PATCH(
         // Guard: solo se puede cerrar desde ACTIVO, EN_MORA o JURIDICO
         if (!['ACTIVO', 'EN_MORA', 'JURIDICO'].includes(prestamo.estado)) {
           return NextResponse.json(
-            { success: false, error: `No se puede cerrar: el solicitud está en estado ${prestamo.estado}.` },
+            { success: false, error: `No se puede cerrar: el préstamo está en estado ${prestamo.estado}.` },
             { status: 400 }
           )
         }
@@ -311,52 +271,9 @@ export async function PATCH(
         }
         bitacoraEntrada = {
           tipo: 'CIERRE',
-          titulo: 'Solicitud cerrado/liquidado',
-          descripcion: `Se cerró el solicitud ${prestamo.codigo}. Saldo anterior: capital $${prestamo.saldoCapital?.toLocaleString() || 0}, interés $${prestamo.saldoInteres?.toLocaleString() || 0}, total $${prestamo.saldoTotal?.toLocaleString() || 0}.`,
-          resultado: 'Solicitud marcado como CANCELADO con saldos en cero',
-        }
-        break
-
-      case 'anular':
-        // === v4.6 (QA M03 TC-PRE-009): anular solicitud ===
-        // Solo ADMIN puede anular. Solo se puede anular desde ACTIVO (sin pagos).
-        // El Excel espera estado=ANULADO. El schema actual no contempla ANULADO
-        // como valor distinto de CANCELADO/RECHAZADO, así que mapeamos a RECHAZADO
-        // (que es el estado canónico del sistema para "solicitud cancelado sin desembolsar/fallido").
-        // Guard: solo ADMIN
-        if (user.rol !== 'ADMIN') {
-          return NextResponse.json(
-            { success: false, error: 'Solo el ADMIN puede anular solicitudes.', code: 'FORBIDDEN' },
-            { status: 403 }
-          )
-        }
-        // Guard: solo desde ACTIVO o SOLICITUD o PENDIENTE_ACEPTACION, y sin pagos aplicados
-        if (!['ACTIVO', 'SOLICITUD', 'PENDIENTE_ACEPTACION'].includes(prestamo.estado)) {
-          return NextResponse.json(
-            { success: false, error: `No se puede anular: el solicitud está en estado ${prestamo.estado}.` },
-            { status: 400 }
-          )
-        }
-        if (prestamo.estado === 'ACTIVO') {
-          const pagosAplicados = await db.pago.count({
-            where: { prestamoId: id, estado: 'APLICADO' },
-          })
-          if (pagosAplicados > 0) {
-            return NextResponse.json(
-              { success: false, error: `No se puede anular: el solicitud tiene ${pagosAplicados} pago(s) aplicado(s). Revierta los pagos primero o use la acción 'cerrar'.` },
-              { status: 400 }
-            )
-          }
-        }
-        datosActualizacion = {
-          estado: 'RECHAZADO', // estado canónico del sistema para anulado/rechazado
-          notas: (prestamo.notas || '') + `\n[ANULADO ${new Date().toISOString()}] Motivo: ${motivo || 'No especificado'}`,
-        }
-        bitacoraEntrada = {
-          tipo: 'ANULACION',
-          titulo: 'Solicitud anulado',
-          descripcion: `Solicitud ${prestamo.codigo} anulado por ${user?.nombre || 'ADMIN'}. Motivo: ${motivo || 'No especificado'}.`,
-          resultado: 'Solicitud marcado como RECHAZADO (anulado)',
+          titulo: 'Préstamo cerrado/liquidado',
+          descripcion: `Se cerró el préstamo ${prestamo.codigo}. Saldo anterior: capital $${prestamo.saldoCapital?.toLocaleString() || 0}, interés $${prestamo.saldoInteres?.toLocaleString() || 0}, total $${prestamo.saldoTotal?.toLocaleString() || 0}.`,
+          resultado: 'Préstamo marcado como CANCELADO con saldos en cero',
         }
         break
 
@@ -364,37 +281,37 @@ export async function PATCH(
         // Guard: solo se puede enviar a jurídico desde EN_MORA
         if (prestamo.estado !== 'EN_MORA') {
           return NextResponse.json(
-            { success: false, error: `No se puede enviar a jurídico: el solicitud está en estado ${prestamo.estado} (solo se envía desde EN_MORA).` },
+            { success: false, error: `No se puede enviar a jurídico: el préstamo está en estado ${prestamo.estado} (solo se envía desde EN_MORA).` },
             { status: 400 }
           )
         }
         datosActualizacion = { estado: 'JURIDICO' }
         bitacoraEntrada = {
           tipo: 'JURIDICO',
-          titulo: 'Solicitud enviado a jurídico',
-          descripcion: `El solicitud ${prestamo.codigo} del cliente ${prestamo.cliente.nombre} fue enviado a cobro jurídico. Días de mora previos: ${prestamo.diasMora}.`,
-          resultado: 'Solicitud marcado como JURIDICO',
+          titulo: 'Préstamo enviado a jurídico',
+          descripcion: `El préstamo ${prestamo.codigo} del cliente ${prestamo.cliente.nombre} fue enviado a cobro jurídico. Días de mora previos: ${prestamo.diasMora}.`,
+          resultado: 'Préstamo marcado como JURIDICO',
         }
         break
 
       case 'actualizar_tasa_mora':
-        // Modificar la tasa moratoria de este solicitud
+        // Modificar la tasa moratoria de este préstamo
         datosActualizacion = {
           tasaMoraPersonalizada: parseFloat(tasaMoraPersonalizada),
         }
         bitacoraEntrada = {
           tipo: 'OTRO',
           titulo: 'Tasa de mora actualizada',
-          descripcion: `Se actualizó la tasa moratoria personalizada del solicitud ${prestamo.codigo} a ${tasaMoraPersonalizada}%. Tasa anterior: ${prestamo.tasaMoraPersonalizada ?? 'no personalizada (usaba diaria*360)'}.`,
+          descripcion: `Se actualizó la tasa moratoria personalizada del préstamo ${prestamo.codigo} a ${tasaMoraPersonalizada}%. Tasa anterior: ${prestamo.tasaMoraPersonalizada ?? 'no personalizada (usaba diaria*360)'}.`,
           resultado: 'Tasa de mora personalizada guardada',
         }
         break
 
       case 'guardar_firma':
-        // Guard: la firma solo aplica a solicitudes que ya fueron desembolsados (ACTIVO, EN_MORA, JURIDICO)
+        // Guard: la firma solo aplica a préstamos que ya fueron desembolsados (ACTIVO, EN_MORA, JURIDICO)
         if (!['ACTIVO', 'EN_MORA', 'JURIDICO', 'PENDIENTE_ACEPTACION'].includes(prestamo.estado)) {
           return NextResponse.json(
-            { success: false, error: `No se puede guardar firma: el solicitud está en estado ${prestamo.estado}.` },
+            { success: false, error: `No se puede guardar firma: el préstamo está en estado ${prestamo.estado}.` },
             { status: 400 }
           )
         }
@@ -420,8 +337,8 @@ export async function PATCH(
           bitacoraEntrada = {
             tipo: 'FIRMA',
             titulo: `Firma electrónica guardada (${datosFirma.firmanteRol || 'DEUDOR'})`,
-            descripcion: `Se registró firma electrónica ${firma.id} para el solicitud ${prestamo.codigo}. OTP validado: ${datosFirma.otpValidado ? 'sí' : 'no'}.`,
-            resultado: 'Firma electrónica persistida y vinculada al solicitud',
+            descripcion: `Se registró firma electrónica ${firma.id} para el préstamo ${prestamo.codigo}. OTP validado: ${datosFirma.otpValidado ? 'sí' : 'no'}.`,
+            resultado: 'Firma electrónica persistida y vinculada al préstamo',
           }
         }
         break
@@ -436,7 +353,7 @@ export async function PATCH(
       include: { cliente: true },
     })
 
-    // Registrar en bitácora del solicitud (todas las acciones excepto guardar_firma pura sin contexto)
+    // Registrar en bitácora del préstamo (todas las acciones excepto guardar_firma pura sin contexto)
     if (bitacoraEntrada) {
       try {
         await db.bitacoraPrestamo.create({
@@ -457,8 +374,8 @@ export async function PATCH(
 
     // NOTA: La carga del fondo de garantía a la caja CAJA-GARANTIA se hace
     // MANUALMENTE por el administrador desde el módulo de Cajas Menores.
-    // Ya no se carga automáticamente al activar el solicitud.
-    // El solicitud sigue registrado con el monto del fondo de garantía
+    // Ya no se carga automáticamente al activar el préstamo.
+    // El préstamo sigue registrado con el monto del fondo de garantía
     // (campo fondoGarantiaMonto) para referencia, pero el saldo de la caja
     // se gestiona 100% manual.
 
@@ -468,9 +385,9 @@ export async function PATCH(
   }
 }
 
-// === DELETE - ELIMINAR SOLICITUD COMPLETO (con todos sus registros) ===
+// === DELETE - ELIMINAR PRÉSTAMO COMPLETO (con todos sus registros) ===
 // Borra en cascada: pagos, firmas electrónicas, tokens de firma, notificaciones,
-// documentos del gestor, bitácora, caso jurídico (si existe), y el solicitud mismo.
+// documentos del gestor, bitácora, caso jurídico (si existe), y el préstamo mismo.
 // Útil para corregir errores de creación.
 export async function DELETE(
   req: NextRequest,
@@ -493,7 +410,7 @@ export async function DELETE(
     const { searchParams } = new URL(req.url)
     const motivo = searchParams.get('motivo') || 'Eliminación por error'
 
-    // Buscar el solicitud con todas sus relaciones
+    // Buscar el préstamo con todas sus relaciones
     const prestamo = await db.prestamo.findUnique({
       where: { id },
       include: {
@@ -515,7 +432,7 @@ export async function DELETE(
 
     if (!prestamo) {
       return NextResponse.json(
-        { success: false, error: 'Solicitud no encontrado' },
+        { success: false, error: 'Préstamo no encontrado' },
         { status: 404 }
       )
     }
@@ -557,10 +474,10 @@ export async function DELETE(
       // 4. Borrar notificaciones
       await tx.notificacionLog.deleteMany({ where: { prestamoId: id } })
 
-      // 5. Borrar documentos del gestor vinculados al solicitud
+      // 5. Borrar documentos del gestor vinculados al préstamo
       await tx.documentoGestor.deleteMany({ where: { prestamoId: id } })
 
-      // 6. Borrar bitácora del solicitud
+      // 6. Borrar bitácora del préstamo
       await tx.bitacoraPrestamo.deleteMany({ where: { prestamoId: id } })
 
       // 7. Borrar caso jurídico (si existe) y sus relaciones
@@ -573,13 +490,13 @@ export async function DELETE(
       }
 
       // 8. Borrar FKs faltantes que causaban P2003
-      // Refinanciaciones donde este solicitud es el origen (relación 1:N)
+      // Refinanciaciones donde este préstamo es el origen (relación 1:N)
       await tx.refinanciacion.deleteMany({ where: { prestamoId: id } }).catch(() => {})
 
       // Pagos programados (si existen como tabla separada)
       await tx.pagoProgramado.deleteMany({ where: { prestamoId: id } }).catch(() => {})
 
-      // Movimientos de caja asociados al solicitud (no los borramos —
+      // Movimientos de caja asociados al préstamo (no los borramos —
       // son registros contables; en su lugar, desvinculamos el FK
       // seteando prestamoId=null para preservar la trazabilidad)
       await tx.movimientoCaja.updateMany({
@@ -590,7 +507,7 @@ export async function DELETE(
       // Códigos de confirmación (OTP dual)
       await tx.codigoConfirmacion.deleteMany({ where: { prestamoId: id } }).catch(() => {})
 
-      // 9. Borrar el solicitud
+      // 9. Borrar el préstamo
       await tx.prestamo.delete({ where: { id } })
     })
 
@@ -615,7 +532,7 @@ export async function DELETE(
 
     return NextResponse.json({
       success: true,
-      mensaje: `Solicitud ${prestamo.codigo} eliminado completamente. Se borraron: ${infoPrestamo.totalPagos} pagos, ${infoPrestamo.totalFirmas} firmas, ${infoPrestamo.totalNotificaciones} notificaciones, ${infoPrestamo.totalDocumentos} documentos, ${infoPrestamo.totalBitacoras} entradas de bitácora${infoPrestamo.tieneCasoJuridico ? ', 1 caso jurídico' : ''}.`,
+      mensaje: `Préstamo ${prestamo.codigo} eliminado completamente. Se borraron: ${infoPrestamo.totalPagos} pagos, ${infoPrestamo.totalFirmas} firmas, ${infoPrestamo.totalNotificaciones} notificaciones, ${infoPrestamo.totalDocumentos} documentos, ${infoPrestamo.totalBitacoras} entradas de bitácora${infoPrestamo.tieneCasoJuridico ? ', 1 caso jurídico' : ''}.`,
       data: {
         codigo: prestamo.codigo,
         cliente: prestamo.cliente.nombre,
@@ -631,7 +548,7 @@ export async function DELETE(
       },
     })
   } catch (error: any) {
-    console.error('[DELETE solicitud] error:', error)
+    console.error('[DELETE préstamo] error:', error)
     return NextResponse.json(
       { success: false, error: sanitizeError(error).message },
       { status: 500 }

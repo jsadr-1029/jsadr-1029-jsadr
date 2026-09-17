@@ -1,17 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { sanitizeError } from '@/lib/error-handler'
-import { requireRole } from '@/lib/auth-guard'
 
 // GET - obtener un cliente por id (incluye referidor y referidos)
-// v4.9 (QA M06 TC-SEC-002): cualquier rol autenticado puede consultar
 export async function GET(
-  req: NextRequest,
+  _req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const authResult = requireRole(req, ['ADMIN', 'GESTOR', 'CONSULTOR'])
-    if (authResult instanceof NextResponse) return authResult
     const { id } = await params
     const cliente = await db.cliente.findUnique({
       where: { id },
@@ -43,28 +39,6 @@ export async function GET(
         },
         categoria: true,
         cuentaRecaudo: true,
-        // FIX 2026-08-12 (Task 6): Incluir el registro fotográfico del cliente
-        // (cédula frente/reverso + selfie) que se carga desde la solicitud de
-        // nuevo cliente al ser convertida, y también las fotos subidas en el
-        // flujo de firma electrónica. Así el gestor puede disponer de la cédula
-        // y la foto del cliente desde Solicitudes > Clientes > Detalle.
-        documentosGestor: {
-          where: {
-            tipo: { in: ['FOTO_DOCUMENTO', 'FOTO_CEDULA', 'FOTO_SELFI', 'FOTO_DOCUMENTO_REVERSO'] },
-          },
-          select: {
-            id: true,
-            tipo: true,
-            titulo: true,
-            descripcion: true,
-            archivoBase64: true,
-            archivoNombre: true,
-            archivoTipo: true,
-            subidoPor: true,
-            fechaSubida: true,
-          },
-          orderBy: { fechaSubida: 'desc' },
-        },
         _count: { select: { prestamos: true, referidos: true } },
       },
     })
@@ -86,16 +60,11 @@ export async function GET(
 }
 
 // PUT - actualizar un cliente
-// v4.9 (QA M06 TC-SEC-002): RBAC — solo ADMIN/GESTOR pueden actualizar clientes.
 export async function PUT(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const authResult = requireRole(req, ['ADMIN', 'GESTOR'])
-    if (authResult instanceof NextResponse) return authResult
-    const user = authResult as any
-
     const { id } = await params
     const body = await req.json()
     const {
@@ -123,32 +92,7 @@ export async function PUT(
       instruccionCuentaId,
       instruccionCuentaNota,
       instruccionCuentaExpira,
-      // === Preferencia de notificación (v4.4) ===
-      preferenciaNotificacion,
     } = body
-
-    // Validar preferenciaNotificacion (si viene)
-    const PREF_VALIDAS = ['WHATSAPP', 'EMAIL', 'AMBOS', 'NINGUNO']
-    let prefFinal: string | undefined = undefined
-    if (preferenciaNotificacion !== undefined) {
-      if (!PREF_VALIDAS.includes(preferenciaNotificacion)) {
-        return NextResponse.json(
-          { success: false, error: `Preferencia de notificación inválida. Valores válidos: ${PREF_VALIDAS.join(', ')}` },
-          { status: 400 }
-        )
-      }
-      // Si el cliente elige EMAIL o AMBOS, debe tener email
-      if ((preferenciaNotificacion === 'EMAIL' || preferenciaNotificacion === 'AMBOS')) {
-        const emailFinal = email !== undefined ? email : (await db.cliente.findUnique({ where: { id }, select: { email: true } }))?.email
-        if (!emailFinal) {
-          return NextResponse.json(
-            { success: false, error: 'Si la preferencia de notificación es EMAIL o AMBOS, el correo electrónico es obligatorio.' },
-            { status: 400 }
-          )
-        }
-      }
-      prefFinal = preferenciaNotificacion
-    }
 
     // Validar cédula única si se cambia
     if (cedula) {
@@ -162,28 +106,6 @@ export async function PUT(
         return NextResponse.json(
           { success: false, error: 'Ya existe un cliente con esa cédula' },
           { status: 400 }
-        )
-      }
-    }
-
-    // === v4.5 (QA M02-Clientes TC-CLI-014): email único al actualizar ===
-    // Previene que un gestor asigne un email que ya pertenece a otro cliente (riesgo suplantación).
-    if (email !== undefined && email && email.trim() !== '') {
-      const emailExistente = await db.cliente.findFirst({
-        where: {
-          email: { equals: email, mode: 'insensitive' },
-          NOT: { id },
-        },
-        select: { id: true, nombre: true, cedula: true },
-      })
-      if (emailExistente) {
-        return NextResponse.json(
-          {
-            success: false,
-            error: `El correo "${email}" ya está asignado a otro cliente (${emailExistente.nombre}, cédula ${emailExistente.cedula}). No se permiten emails duplicados para prevenir suplantación.`,
-            codigo: 'EMAIL_DUPLICADO',
-          },
-          { status: 409 }
         )
       }
     }
@@ -252,8 +174,6 @@ export async function PUT(
         ...(instruccionCuentaExpira !== undefined && {
           instruccionCuentaExpira: instruccionCuentaExpira ? new Date(instruccionCuentaExpira) : null,
         }),
-        // === Preferencia de notificación (v4.4) ===
-        ...(prefFinal !== undefined && { preferenciaNotificacion: prefFinal }),
       },
       include: {
         referidoPor: {
@@ -285,16 +205,11 @@ export async function PUT(
 }
 
 // PATCH - cambiar estado (activo/inactivo)
-// v4.9 (QA M06 TC-SEC-002): RBAC — solo ADMIN puede activar/desactivar clientes.
 export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const authResult = requireRole(req, ['ADMIN'])
-    if (authResult instanceof NextResponse) return authResult
-    const user = authResult as any
-
     const { id } = await params
     const body = await req.json()
     const { activo } = body

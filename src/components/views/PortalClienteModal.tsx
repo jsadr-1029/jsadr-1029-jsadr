@@ -30,7 +30,6 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { useToast } from '@/hooks/use-toast'
-import FotoCaptureFirma from '@/components/firma/FotoCaptureFirma'
 import {
   calcularPrestamo,
   calcularPrestamoTasaFijaMensual,
@@ -51,8 +50,6 @@ import {
   Bell,
   Award,
   CalendarClock,
-  Calendar,
-  Info,
   HeartPulse,
   CreditCard,
   FileCheck,
@@ -86,18 +83,8 @@ import {
   MessagesSquare,
   Clock3,
   Lock,
-  BellRing,
-  Repeat,
-  Zap,
-  BadgeCheck,
-  Trophy,
-  Handshake,
-  ChevronRight,
 } from 'lucide-react'
 import { CentroComunicacionesPortal } from '@/components/views/CentroComunicacionesPortal'
-import { useInactivityAutoLogout } from '@/hooks/use-inactivity-auto-logout'
-import { PasaporteConfianzaView } from '@/components/views/pasaporte/PasaporteConfianzaView'
-import { RegularizacionInteligenteModal } from '@/components/views/portal/RegularizacionInteligenteModal'
 
 // =====================================================
 // Tipos (sin cambios — preserva contrato de API)
@@ -164,7 +151,6 @@ interface PortalData {
   kpis?: PortalKPIS
   prestamos: any[]
   campanas: any[]
-  campanasNoVistas?: number  // campañas no vistas por el cliente (para badge de notificación)
   notificaciones?: NotificacionItem[]
   notificacionesStats?: NotificacionesStats
   cuentaRecaudoPrincipal?: CuentaRecaudoInfo | null
@@ -173,7 +159,7 @@ interface PortalData {
 // =====================================================
 // Configuración visual del Hub Circular
 // =====================================================
-type HubItemId = 'prestamos' | 'proximos' | 'simulador' | 'solicitudes' | 'comunicaciones' | 'historial' | 'pasaporte'
+type HubItemId = 'prestamos' | 'proximos' | 'simulador' | 'solicitudes' | 'comunicaciones' | 'historial'
 
 interface HubItemConfig {
   id: HubItemId
@@ -201,106 +187,6 @@ export function PortalClienteModal({
   // === Vista activa del portal: 'hub' ( pantalla principal) o un HubItemId / secciones inferiores
   const [vista, setVista] = useState<'hub' | HubItemId | 'avisos' | 'campanas'>('hub')
 
-  // === Pila de navegación para botón "Atrás" real ===
-  // Cada vez que el cliente entra a una sección (simulador, solicitudes, etc.)
-  // empujamos un estado al historial del navegador. Cuando el cliente presiona
-  // "Atrás" en el navegador/celular, interceptamos popstate y volvemos a la
-  // vista anterior del portal en lugar de cerrar la sesión.
-  const vistaHistoryRef = useRef<Array<'hub' | HubItemId | 'avisos' | 'campanas'>>(['hub'])
-  const isInternalNavigationRef = useRef(false)
-  // Ref para distinguir cierre explícito (botón "Cerrar sesión") de cierre
-  // accidental (Escape, clic fuera del modal). Solo el botón explícito debe
-  // activar el logout.
-  const confirmLogoutRef = useRef(false)
-
-  // Navega a una nueva vista, empujando estado al historial del navegador
-  const navegarA = (nuevaVista: 'hub' | HubItemId | 'avisos' | 'campanas') => {
-    if (nuevaVista === vista) return
-    // Empujar la vista anterior a la pila interna
-    vistaHistoryRef.current.push(vista)
-    // Empujar estado al historial del navegador para interceptar "Atrás"
-    if (typeof window !== 'undefined' && !isInternalNavigationRef.current) {
-      isInternalNavigationRef.current = true
-      window.history.pushState({ portalVista: nuevaVista, ts: Date.now() }, '')
-      isInternalNavigationRef.current = false
-    }
-    setVista(nuevaVista)
-    // Scroll al inicio de la nueva vista
-    if (typeof document !== 'undefined') {
-      const scrollable = document.querySelector('.flex-1.overflow-y-auto')
-      if (scrollable) scrollable.scrollTop = 0
-    }
-  }
-
-  // Vuelve a la vista anterior (si existe), sino vuelve al hub.
-  // No cierra la sesión ni el modal.
-  const volverAtras = () => {
-    const anterior = vistaHistoryRef.current.pop()
-    const destino = anterior || 'hub'
-    // Si la pila quedó vacía, asegurar que tenga al menos 'hub'
-    if (vistaHistoryRef.current.length === 0) {
-      vistaHistoryRef.current.push('hub')
-    }
-    isInternalNavigationRef.current = true
-    if (typeof window !== 'undefined') {
-      // Reemplazar el estado actual en lugar de push para no inflar el historial
-      window.history.replaceState({ portalVista: destino, ts: Date.now() }, '')
-    }
-    setVista(destino)
-    isInternalNavigationRef.current = false
-    // Scroll al inicio
-    if (typeof document !== 'undefined') {
-      const scrollable = document.querySelector('.flex-1.overflow-y-auto')
-      if (scrollable) scrollable.scrollTop = 0
-    }
-  }
-
-  // === Intercepta el botón "Atrás" del navegador/celular ===
-  // Cuando el usuario presiona "Atrás", el navegador dispara popstate.
-  // Si estamos en una vista != 'hub', volvemos a la vista anterior del portal.
-  // Si estamos en 'hub', dejamos que el navegador haga su comportamiento normal
-  // (pero NO cerramos la sesión — eso solo pasa con el botón explícito de logout).
-  useEffect(() => {
-    if (typeof window === 'undefined') return
-    const handler = (_e: PopStateEvent) => {
-      if (isInternalNavigationRef.current) return
-      const actual = vistaHistoryRef.current[vistaHistoryRef.current.length - 1] || 'hub'
-      if (actual !== 'hub' || vistaHistoryRef.current.length > 1) {
-        // Volver a la vista anterior del portal, no cerrar sesión
-        const anterior = vistaHistoryRef.current.pop() || 'hub'
-        const destino = vistaHistoryRef.current[vistaHistoryRef.current.length - 1] || 'hub'
-        if (vistaHistoryRef.current.length === 0) {
-          vistaHistoryRef.current.push('hub')
-        }
-        setVista(destino)
-        // Volver a empujar el estado para mantener el comportamiento en futuros "Atrás"
-        isInternalNavigationRef.current = true
-        window.history.pushState({ portalVista: destino, ts: Date.now() }, '')
-        isInternalNavigationRef.current = false
-        // Scroll
-        const scrollable = document.querySelector('.flex-1.overflow-y-auto')
-        if (scrollable) scrollable.scrollTop = 0
-        // Toast informativo (sutil)
-        toast({
-          title: 'Volviste',
-          description: 'Estás en: ' + (destino === 'hub' ? 'Hub' : destino.charAt(0).toUpperCase() + destino.slice(1)),
-        })
-      }
-      // Si está en hub y no hay historial, no hacer nada — el navegador decide
-    }
-    window.addEventListener('popstate', handler)
-    // Inicializar historial con un estado para poder interceptar el primer "Atrás"
-    if (vistaHistoryRef.current.length === 1 && vistaHistoryRef.current[0] === 'hub') {
-      isInternalNavigationRef.current = true
-      window.history.replaceState({ portalVista: 'hub', ts: Date.now() }, '')
-      isInternalNavigationRef.current = false
-    }
-    return () => {
-      window.removeEventListener('popstate', handler)
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-
   // === Flujo de aceptación TyC con OTP + Selfie (PRESERVADO) ===
   const [tycPrestamoId, setTycPrestamoId] = useState<string | null>(null)
   const [tycPrestamoCodigo, setTycPrestamoCodigo] = useState<string>('')
@@ -315,51 +201,12 @@ export function PortalClienteModal({
   const [tycGuardando, setTycGuardando] = useState(false)
   const tycIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
-  // === Modal de Regularización Inteligente ===
-  const [regularizacionOpen, setRegularizacionOpen] = useState(false)
-
   // Headers estándar para llamadas autenticadas del portal
   const portalHeaders = () => {
     const h: Record<string, string> = { 'Content-Type': 'application/json' }
     if (token) h['x-portal-token'] = token
     return h
   }
-
-  // === Auto-logout por inactividad (10 minutos continuos) ===
-  // Por seguridad del cliente: si no hay actividad (mouse, teclado, scroll,
-  // touch) durante 10 minutos, la sesión se cierra automáticamente y se
-  // muestra una advertencia 1 minuto antes para que el usuario pueda
-  // extenderla con un clic.
-  const cerrarSesionPorInactividad = () => {
-    try {
-      // Toast rápido antes de cerrar (best-effort)
-      toast({
-        title: 'Sesión cerrada por inactividad',
-        description: 'Por seguridad, tu sesión se cerró tras 10 minutos sin actividad.',
-        variant: 'destructive',
-      })
-    } catch {}
-    // Marcar como logout explícito para que onClose se procese
-    confirmLogoutRef.current = true
-    // Limpiar el historial interno del portal para no afectar al navegador
-    if (typeof window !== 'undefined' && vistaHistoryRef.current.length > 1) {
-      try {
-        window.history.go(-(vistaHistoryRef.current.length - 1))
-      } catch {}
-    }
-    onClose()
-  }
-
-  const {
-    warning: inactivityWarning,
-    secondsLeft: inactivitySecondsLeft,
-    extend: extenderSesion,
-  } = useInactivityAutoLogout({
-    timeoutMs: 10 * 60 * 1000,    // 10 minutos
-    warningAtMs: 9 * 60 * 1000,   // advertir a los 9 minutos (1 min antes)
-    onTimeout: cerrarSesionPorInactividad,
-    enabled: true,
-  })
 
   useEffect(() => {
     cargar()
@@ -377,28 +224,6 @@ export function PortalClienteModal({
       setLoading(false)
     }
   }
-
-  // === Cargar contador de novedades del Pasaporte de Confianza ===
-  // Muestra un badge en el botón "Pasaporte" del hub radial cuando hay
-  // novedades de pago (vencidos, no registrados, parciales, próximos a vencer).
-  const [novedadesPasaporteCount, setNovedadesPasaporteCount] = useState(0)
-  useEffect(() => {
-    if (!token) return
-    let cancelado = false
-    ;(async () => {
-      try {
-        const res = await fetch(`/api/portal/pasaporte?token=${encodeURIComponent(token)}`)
-        const json = await res.json()
-        if (!cancelado && json.success && Array.isArray(json.data?.novedades)) {
-          setNovedadesPasaporteCount(json.data.novedades.length)
-        }
-      } catch (e) {
-        // Silencioso: no bloquear la carga del portal si falla el pasaporte
-        console.error('[Pasaporte] Error cargando novedades:', e)
-      }
-    })()
-    return () => { cancelado = true }
-  }, [token])
 
   // === Abrir flujo TyC completo (OTP + foto cédula + selfie) — PRESERVADO ===
   const abrirFlujoTyC = async (prestamoId: string, codigo: string) => {
@@ -509,11 +334,153 @@ export function PortalClienteModal({
     }
   }
 
-  // === Captura de fotos (TyC) ===
-  // NOTA: La captura de fotos (cámara + subir archivo) ahora se maneja
-  // internamente en el componente FotoCaptureFirma. Las funciones auxiliares
-  // tomarFotoSelfie(), tomarFotoDocumento(), subirFotoSelfieArchivo() y
-  // subirFotoDocumentoArchivo() ya no son necesarias aquí.
+  const tomarFotoSelfie = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: 'user', width: { ideal: 1280 }, height: { ideal: 720 } },
+      })
+      const video = document.createElement('video')
+      video.srcObject = stream
+      video.autoplay = true
+      video.playsInline = true
+      const modal = document.createElement('div')
+      modal.style.cssText =
+        'position:fixed;inset:0;background:rgba(0,0,0,0.92);z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:20px;'
+      video.style.cssText = 'max-width:90vw;max-height:70vh;border-radius:16px;'
+      const btnContainer = document.createElement('div')
+      btnContainer.style.cssText = 'margin-top:16px;display:flex;gap:12px;'
+      const btnCapturar = document.createElement('button')
+      btnCapturar.textContent = 'Capturar'
+      btnCapturar.style.cssText =
+        'padding:12px 28px;background:linear-gradient(135deg,#6366f1,#a855f7);color:white;border:none;border-radius:12px;font-size:16px;font-weight:600;cursor:pointer;box-shadow:0 8px 24px -6px rgba(99,102,241,0.5);'
+      const btnCancelar = document.createElement('button')
+      btnCancelar.textContent = 'Cancelar'
+      btnCancelar.style.cssText =
+        'padding:12px 28px;background:rgba(255,255,255,0.1);color:white;border:1px solid rgba(255,255,255,0.2);border-radius:12px;font-size:16px;cursor:pointer;'
+      btnContainer.appendChild(btnCancelar)
+      btnContainer.appendChild(btnCapturar)
+      modal.appendChild(video)
+      modal.appendChild(btnContainer)
+      document.body.appendChild(modal)
+      btnCancelar.onclick = () => {
+        stream.getTracks().forEach((t) => t.stop())
+        document.body.removeChild(modal)
+      }
+      btnCapturar.onclick = () => {
+        const canvas = document.createElement('canvas')
+        canvas.width = video.videoWidth
+        canvas.height = video.videoHeight
+        const ctx = canvas.getContext('2d')!
+        ctx.drawImage(video, 0, 0)
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.85)
+        setTycFotoSelfie(dataUrl)
+        stream.getTracks().forEach((t) => t.stop())
+        document.body.removeChild(modal)
+      }
+    } catch (e: any) {
+      toast({
+        title: 'Cámara no disponible',
+        description: 'Usa la opción de subir archivo.',
+        variant: 'destructive',
+      })
+    }
+  }
+
+  const subirFotoSelfieArchivo = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    if (!file.type.startsWith('image/')) {
+      toast({ title: 'Archivo inválido', description: 'Debe ser una imagen.', variant: 'destructive' })
+      return
+    }
+    if (file.type === 'image/svg+xml') {
+      toast({ title: 'Formato no permitido', description: 'Usa JPG, PNG o WebP.', variant: 'destructive' })
+      return
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      toast({ title: 'Archivo muy grande', description: 'Máximo 5MB.', variant: 'destructive' })
+      return
+    }
+    const reader = new FileReader()
+    reader.onload = (ev) => {
+      setTycFotoSelfie(ev.target?.result as string)
+    }
+    reader.readAsDataURL(file)
+  }
+
+  // === Tomar/subir foto de la cédula (paso 3) ===
+  const tomarFotoDocumento = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } },
+      })
+      const video = document.createElement('video')
+      video.srcObject = stream
+      video.autoplay = true
+      video.playsInline = true
+      const overlay = document.createElement('div')
+      overlay.style.cssText = `position:fixed;inset:0;background:rgba(0,0,0,0.88);z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:20px;`
+      overlay.appendChild(video)
+      video.style.cssText = `max-width:90vw;max-height:60vh;border-radius:12px;`
+      const captureBtn = document.createElement('button')
+      captureBtn.textContent = 'Capturar foto de la cédula'
+      captureBtn.style.cssText = `padding:12px 28px;background:linear-gradient(135deg,#6366f1,#a855f7);color:white;border:none;border-radius:12px;font-size:14px;font-weight:600;cursor:pointer;box-shadow:0 8px 24px -6px rgba(99,102,241,0.5);`
+      const cancelBtn = document.createElement('button')
+      cancelBtn.textContent = 'Cancelar'
+      cancelBtn.style.cssText = `padding:12px 28px;background:rgba(255,255,255,0.1);color:white;border:1px solid rgba(255,255,255,0.2);border-radius:12px;font-size:14px;cursor:pointer;`
+      const hint = document.createElement('p')
+      hint.textContent = 'Coloca tu cédula en el cuadro y asegúrate de que se vea nítida.'
+      hint.style.cssText = `color:#e5e7eb;font-size:12px;text-align:center;max-width:480px;`
+      overlay.appendChild(hint)
+      overlay.appendChild(captureBtn)
+      overlay.appendChild(cancelBtn)
+      document.body.appendChild(overlay)
+      const cleanup = () => {
+        stream.getTracks().forEach((t) => t.stop())
+        if (overlay.parentNode) overlay.parentNode.removeChild(overlay)
+      }
+      cancelBtn.onclick = () => cleanup()
+      captureBtn.onclick = () => {
+        const canvas = document.createElement('canvas')
+        canvas.width = video.videoWidth
+        canvas.height = video.videoHeight
+        const ctx = canvas.getContext('2d')
+        if (!ctx) return cleanup()
+        ctx.drawImage(video, 0, 0)
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.85)
+        setTycFotoDocumento(dataUrl)
+        cleanup()
+      }
+    } catch (e: any) {
+      toast({
+        title: 'Cámara no disponible',
+        description: 'Usa la opción de subir archivo.',
+        variant: 'destructive',
+      })
+    }
+  }
+
+  const subirFotoDocumentoArchivo = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    if (!file.type.startsWith('image/')) {
+      toast({ title: 'Archivo inválido', description: 'Debe ser una imagen.', variant: 'destructive' })
+      return
+    }
+    if (file.type === 'image/svg+xml') {
+      toast({ title: 'Formato no permitido', description: 'Usa JPG, PNG o WebP.', variant: 'destructive' })
+      return
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      toast({ title: 'Archivo muy grande', description: 'Máximo 5MB.', variant: 'destructive' })
+      return
+    }
+    const reader = new FileReader()
+    reader.onload = (ev) => {
+      setTycFotoDocumento(ev.target?.result as string)
+    }
+    reader.readAsDataURL(file)
+  }
 
   const confirmarAceptacionTyC = async () => {
     if (!tycPrestamoId || !tycFotoDocumento || !tycFotoSelfie) return
@@ -533,7 +500,7 @@ export function PortalClienteModal({
         toast({
           title: '¡Términos aceptados!',
           description:
-            'Tu solicitud ha sido activado. Se guardaron tu foto de cédula y selfie como respaldo de firma.',
+            'Tu préstamo ha sido activado. Se guardaron tu foto de cédula y selfie como respaldo de firma.',
         })
         cerrarFlujoTyC()
         cargar()
@@ -558,7 +525,7 @@ export function PortalClienteModal({
       if (json.success) {
         toast({
           title: '¡Términos aceptados!',
-          description: 'Tu solicitud ha sido activado. Recibirás el desembolso pronto.',
+          description: 'Tu préstamo ha sido activado. Recibirás el desembolso pronto.',
         })
         cargar()
       } else {
@@ -569,30 +536,13 @@ export function PortalClienteModal({
     }
   }
 
-  // Generar paz y salvo para solicitudes cancelados
-  // Si el solicitud NO está saldado/cancelado, mostrar mensaje al cliente
-  // indicando que el crédito aún se encuentra vigente.
-  const generarPazYSalvo = (prestamoId: string, codigo: string, estado?: string, saldoTotal?: number, cuotasPagadas?: number, numeroCuotas?: number) => {
-    // Validación local: el endpoint ya valida, pero damos feedback
-    // inmediato sin necesidad de abrir una nueva pestaña.
-    const estaCancelado = estado === 'CANCELADO'
-    const estaSaldado = (saldoTotal ?? 0) <= 0 && (cuotasPagadas ?? 0) >= (numeroCuotas ?? 0)
-    if (!estaCancelado && !estaSaldado) {
-      const saldoPendiente = formatearMoneda(saldoTotal ?? 0)
-      const cuotasFaltantes = Math.max(0, (numeroCuotas ?? 0) - (cuotasPagadas ?? 0))
-      toast({
-        title: '🔒 Crédito vigente',
-        description: `Tu crédito ${codigo} aún se encuentra vigente. Saldo pendiente: ${saldoPendiente} · Cuotas restantes: ${cuotasFaltantes}. Solo podrás descargar el paz y salvo cuando el crédito esté 100% saldado.`,
-        variant: 'destructive',
-        duration: 6000,
-      })
-      return
-    }
+  // Generar paz y salvo para préstamos cancelados
+  const generarPazYSalvo = (prestamoId: string, codigo: string) => {
     const tokenParam = token ? `&token=${encodeURIComponent(token)}` : ''
-    window.open(`/api/paz-y-salvo?prestamoId=${prestamoId}&codigo=${codigo}${tokenParam}&auto=1`, '_blank')
+    window.open(`/api/paz-y-salvo?prestamoId=${prestamoId}&codigo=${codigo}${tokenParam}`, '_blank')
   }
 
-  // Descargar estado de cuenta (global o por solicitud)
+  // Descargar estado de cuenta (global o por préstamo)
   const descargarEstadoCuenta = (prestamoId?: string) => {
     const tokenParam = token ? `&token=${encodeURIComponent(token)}` : ''
     const url = prestamoId
@@ -658,7 +608,7 @@ export function PortalClienteModal({
     )
   }
 
-  const { cliente, resumen, prestamos, campanas, campanasNoVistas } = data
+  const { cliente, resumen, prestamos, campanas } = data
   const kpis = data.kpis || {
     scorePago: 0,
     estadoSalud: 'N/D',
@@ -671,9 +621,7 @@ export function PortalClienteModal({
   const notificaciones = data.notificaciones || []
   const notifStats = data.notificacionesStats || { total: 0, noLeidas: 0, pendientes: 0 }
 
-  // Configuración del Hub (7 items alrededor del logo) — Iconos premium
-  // Layout redistribuido a 7 posiciones (ángulos de ~51.43°) para incluir
-  // el "Pasaporte de Confianza" como ítem premium visible junto a los demás.
+  // Configuración del Hub (6 items alrededor del logo) — Iconos premium
   const hubItems: HubItemConfig[] = [
     {
       id: 'prestamos',
@@ -681,9 +629,8 @@ export function PortalClienteModal({
       icon: Landmark,
       color: 'text-indigo-300',
       gradient: 'from-indigo-500 via-indigo-600 to-violet-700',
-      // Posición 1 (top, 0°)
       position: { x: 0, y: -110 },
-      // Sin badge: los pendientes se muestran en Solicitudes
+      badge: prestamos.filter(p => p.estado === 'PENDIENTE_ACEPTACION').length || undefined,
     },
     {
       id: 'proximos',
@@ -691,8 +638,7 @@ export function PortalClienteModal({
       icon: AlarmClockCheck,
       color: 'text-cyan-300',
       gradient: 'from-cyan-400 via-cyan-600 to-blue-700',
-      // Posición 2 (~51°, top-right)
-      position: { x: 86, y: -69 },
+      position: { x: 95, y: -55 },
     },
     {
       id: 'simulador',
@@ -700,8 +646,7 @@ export function PortalClienteModal({
       icon: SlidersHorizontal,
       color: 'text-violet-300',
       gradient: 'from-violet-400 via-violet-600 to-purple-700',
-      // Posición 3 (~103°, right)
-      position: { x: 107, y: 25 },
+      position: { x: 95, y: 55 },
     },
     {
       id: 'solicitudes',
@@ -709,10 +654,7 @@ export function PortalClienteModal({
       icon: FileSignature,
       color: 'text-amber-300',
       gradient: 'from-amber-400 via-amber-600 to-orange-700',
-      // Posición 4 (~154°, bottom-right)
-      position: { x: 48, y: 99 },
-      // Badge: cuenta solicitudes pendientes de aceptación ( TyC ) que requieren firma electrónica
-      badge: prestamos.filter(p => p.estado === 'PENDIENTE_ACEPTACION').length || undefined,
+      position: { x: 0, y: 110 },
     },
     {
       id: 'comunicaciones',
@@ -720,8 +662,7 @@ export function PortalClienteModal({
       icon: MessagesSquare,
       color: 'text-emerald-300',
       gradient: 'from-emerald-400 via-emerald-600 to-teal-700',
-      // Posición 5 (~206°, bottom-left)
-      position: { x: -48, y: 99 },
+      position: { x: -95, y: 55 },
     },
     {
       id: 'historial',
@@ -729,19 +670,7 @@ export function PortalClienteModal({
       icon: Clock3,
       color: 'text-fuchsia-300',
       gradient: 'from-fuchsia-400 via-fuchsia-600 to-pink-700',
-      // Posición 6 (~257°, left)
-      position: { x: -107, y: 25 },
-    },
-    {
-      id: 'pasaporte',
-      label: 'Pasaporte',
-      icon: Trophy,
-      color: 'text-yellow-300',
-      gradient: 'from-amber-300 via-yellow-500 to-amber-600',
-      // Posición 7 (~309°, top-left)
-      position: { x: -86, y: -69 },
-      // Badge: cuenta novedades del pasaporte (vencidos, no registrados, etc.)
-      badge: novedadesPasaporteCount || undefined,
+      position: { x: -95, y: -55 },
     },
   ]
 
@@ -753,19 +682,10 @@ export function PortalClienteModal({
   }
 
   return (
-    <Dialog open={true} onOpenChange={(open) => { /* Solo cerrar vía botón explícito */ if (open === false && confirmLogoutRef.current) { onClose() } }}>
+    <Dialog open={true} onOpenChange={onClose}>
       <DialogContent
         className="max-w-md w-full h-[100vh] sm:h-[95vh] sm:max-h-[860px] flex flex-col p-0 gap-0 overflow-hidden portal-bg border-0 sm:rounded-3xl"
         showCloseButton={false}
-        // === Bloquear cierre accidental del modal ===
-        // Antes: si el cliente presionaba Escape o hacía clic fuera del modal,
-        // se disparaba onClose() → se borraban los tokens de localStorage →
-        // el cliente perdía la sesión sin querer. Ahora SOLO el botón
-        // explícito "Cerrar sesión" (que pone confirmLogoutRef=true antes de
-        // llamar a onClose) puede cerrar el modal.
-        onEscapeKeyDown={(e) => e.preventDefault()}
-        onPointerDownOutside={(e) => e.preventDefault()}
-        onInteractOutside={(e) => e.preventDefault()}
       >
         <VisuallyHidden>
           <DialogTitle>Portal del Cliente — {cliente.nombre}</DialogTitle>
@@ -775,12 +695,11 @@ export function PortalClienteModal({
           <div className="flex items-center justify-between gap-3">
             {vista !== 'hub' ? (
               <button
-                onClick={volverAtras}
+                onClick={() => setVista('hub')}
                 className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors btn-press"
-                title="Volver a la sección anterior"
               >
                 <ArrowLeft className="w-4 h-4" />
-                <span>Atrás</span>
+                <span>Hub</span>
               </button>
             ) : (
               <div className="flex items-center gap-2.5 min-w-0">
@@ -807,21 +726,7 @@ export function PortalClienteModal({
                 </span>
               )}
               <button
-                onClick={() => {
-                  // Confirmación explícita de cierre de sesión.
-                  // Esto distingue un logout intencional de un cierre accidental
-                  // (Escape, clic fuera) que NO debe cerrar la sesión.
-                  if (confirm('¿Seguro que deseas cerrar la sesión?')) {
-                    confirmLogoutRef.current = true
-                    // Limpiar la pila de historial que creamos para la navegación
-                    // interna del portal, para no afectar el historial del navegador
-                    // después del logout.
-                    if (typeof window !== 'undefined' && vistaHistoryRef.current.length > 1) {
-                      window.history.go(-(vistaHistoryRef.current.length - 1))
-                    }
-                    onClose()
-                  }
-                }}
+                onClick={onClose}
                 className="w-9 h-9 rounded-full flex items-center justify-center bg-red-500/10 hover:bg-red-500/20 text-red-300 border border-red-500/20 btn-press transition-colors"
                 title="Cerrar sesión"
               >
@@ -859,24 +764,18 @@ export function PortalClienteModal({
               kpis={kpis}
               resumen={resumen}
               hubItems={hubItems}
-              onSelect={(id) => navegarA(id)}
+              onSelect={(id) => setVista(id)}
               cuentaRecaudoPrincipal={data.cuentaRecaudoPrincipal}
-              onEstadoCuenta={descargarEstadoCuenta}
-              prestamos={prestamos}
-              onRegularizar={() => setRegularizacionOpen(true)}
             />
           )}
 
           {vista === 'prestamos' && (
             <PrestamosView
-              // FILTRO: solicitudes PENDIENTE_ACEPTACION ya NO se muestran en Créditos.
-              // Se muestran únicamente en la vista de Solicitudes.
-              prestamos={prestamos.filter(p => p.estado !== 'PENDIENTE_ACEPTACION')}
+              prestamos={prestamos}
               onAbrirTyC={abrirFlujoTyC}
               onAceptarTyC={aceptarTyC}
               onPazYSalvo={generarPazYSalvo}
               onEstadoCuenta={descargarEstadoCuenta}
-              onRegularizar={() => setRegularizacionOpen(true)}
             />
           )}
 
@@ -884,7 +783,6 @@ export function PortalClienteModal({
             <ProximosPagosView
               prestamos={prestamos}
               onPagar={pagarBancolombia}
-              onRegularizar={() => setRegularizacionOpen(true)}
             />
           )}
 
@@ -904,12 +802,7 @@ export function PortalClienteModal({
           )}
 
           {vista === 'solicitudes' && (
-            <MisSolicitudesPanel
-              cedula={cliente.cedula}
-              token={token}
-              prestamosPendientes={prestamos.filter(p => p.estado === 'PENDIENTE_ACEPTACION')}
-              onAbrirTyC={abrirFlujoTyC}
-            />
+            <MisSolicitudesPanel cedula={cliente.cedula} token={token} />
           )}
 
           {vista === 'comunicaciones' && (
@@ -928,17 +821,7 @@ export function PortalClienteModal({
           )}
 
           {vista === 'campanas' && (
-            <CampanasView campanas={campanas} clienteCedula={cliente.cedula} />
-          )}
-
-          {vista === 'pasaporte' && token && (
-            <PasaporteConfianzaView token={token} />
-          )}
-
-          {vista === 'pasaporte' && !token && (
-            <div className="p-6 text-center text-sm text-muted-foreground">
-              Sesión no disponible. Cierra e inicia sesión nuevamente para ver tu Pasaporte de Confianza.
-            </div>
+            <CampanasView campanas={campanas} />
           )}
         </div>
 
@@ -946,7 +829,7 @@ export function PortalClienteModal({
         <div className="bottom-nav shrink-0 px-2 pt-1.5 pb-2 safe-bottom">
           <div className="grid grid-cols-4 gap-1">
             <button
-              onClick={() => navegarA('hub')}
+              onClick={() => setVista('hub')}
               className={`bottom-nav-item ${vista === 'hub' ? 'active' : ''}`}
             >
               <Home className="w-5 h-5" />
@@ -954,7 +837,7 @@ export function PortalClienteModal({
             </button>
 
             <button
-              onClick={() => navegarA('avisos')}
+              onClick={() => setVista('avisos')}
               className={`bottom-nav-item ${vista === 'avisos' ? 'active' : ''}`}
             >
               <div className="relative">
@@ -969,17 +852,10 @@ export function PortalClienteModal({
             </button>
 
             <button
-              onClick={() => navegarA('campanas')}
+              onClick={() => setVista('campanas')}
               className={`bottom-nav-item ${vista === 'campanas' ? 'active' : ''}`}
             >
-              <div className="relative">
-                <Megaphone className="w-5 h-5" />
-                {campanasNoVistas && campanasNoVistas > 0 && (
-                  <span className="absolute -top-1.5 -right-2 bg-purple-500 text-white text-[9px] rounded-full min-w-[15px] h-[15px] px-1 flex items-center justify-center font-bold pulse-glow">
-                    {campanasNoVistas > 9 ? '9+' : campanasNoVistas}
-                  </span>
-                )}
-              </div>
+              <Megaphone className="w-5 h-5" />
               <span className="text-[10px] font-medium">Campañas</span>
             </button>
 
@@ -1190,18 +1066,64 @@ export function PortalClienteModal({
                       Identidad verificada
                     </p>
                     <p className="text-xs text-emerald-100/80">
-                      Ahora toma o sube una foto clara de tu cédula de ciudadanía. Puedes usar la cámara o subir un archivo. Si necesitas cambiar de cámara, usa el botón "Girar cámara".
+                      Ahora sube una foto clara de tu cédula de ciudadanía. Asegúrate
+                      de que se vean todos los datos (frente completo).
                     </p>
                   </div>
 
-                  <FotoCaptureFirma
-                    label="Foto de la cédula (frente)"
-                    descripcion="Asegúrate de que se vean todos los datos (frente completo)."
-                    valor={tycFotoDocumento}
-                    onChange={(v) => setTycFotoDocumento(v)}
-                    initialFacing="environment"
-                    mirror={false}
-                  />
+                  {tycFotoDocumento ? (
+                    <div className="space-y-2">
+                      <div className="relative rounded-xl overflow-hidden border-2 border-emerald-400/50">
+                        <img
+                          src={tycFotoDocumento}
+                          alt="Foto de la cédula"
+                          className="w-full h-48 object-cover"
+                        />
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          className="absolute top-2 right-2"
+                          onClick={() => setTycFotoDocumento(null)}
+                        >
+                          Cambiar
+                        </Button>
+                      </div>
+                      <p className="text-xs text-emerald-300 flex items-center gap-1">
+                        <CheckCircle className="w-3 h-3" />
+                        Foto de cédula lista
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-2 gap-2">
+                      <Button
+                        variant="outline"
+                        onClick={tomarFotoDocumento}
+                        className="flex flex-col items-center gap-2 h-24 rounded-xl border-dashed input-premium"
+                      >
+                        <Camera className="w-6 h-6" />
+                        <span className="text-xs">Tomar foto</span>
+                      </Button>
+                      <label className="flex flex-col items-center gap-2 h-24 justify-center rounded-xl border border-dashed border-white/15 hover:border-primary cursor-pointer transition-colors">
+                        <Upload className="w-6 h-6" />
+                        <span className="text-xs">Subir archivo</span>
+                        <input
+                          type="file"
+                          accept="image/jpeg,image/png,image/webp"
+                          className="hidden"
+                          onChange={subirFotoDocumentoArchivo}
+                        />
+                      </label>
+                    </div>
+                  )}
+
+                  <div className="p-2.5 rounded-lg bg-white/5 text-xs text-muted-foreground">
+                    <p className="font-semibold mb-1 text-foreground/80">Requisitos de la foto:</p>
+                    <ul className="space-y-0.5 ml-3 list-disc">
+                      <li>Cédula completa y legible (frente)</li>
+                      <li>Sin reflejos ni sombras</li>
+                      <li>Buena iluminación · Máximo 5MB</li>
+                    </ul>
+                  </div>
 
                   <Button
                     className="w-full gradient-premium gradient-premium-hover btn-press"
@@ -1250,14 +1172,59 @@ export function PortalClienteModal({
                     </div>
                   </div>
 
-                  <FotoCaptureFirma
-                    label="Selfie sosteniendo la cédula"
-                    descripcion="Tu rostro completo y la cédula deben verse nítidos. Usa la cámara frontal para mayor comodidad."
-                    valor={tycFotoSelfie}
-                    onChange={(v) => setTycFotoSelfie(v)}
-                    initialFacing="user"
-                    mirror
-                  />
+                  {tycFotoSelfie ? (
+                    <div className="space-y-2">
+                      <div className="relative rounded-xl overflow-hidden border-2 border-emerald-400/50">
+                        <img
+                          src={tycFotoSelfie}
+                          alt="Selfie con cédula"
+                          className="w-full h-48 object-cover"
+                        />
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          className="absolute top-2 right-2"
+                          onClick={() => setTycFotoSelfie(null)}
+                        >
+                          Cambiar
+                        </Button>
+                      </div>
+                      <p className="text-xs text-emerald-300 flex items-center gap-1">
+                        <CheckCircle className="w-3 h-3" />
+                        Selfie lista para enviar
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-2 gap-2">
+                      <Button
+                        variant="outline"
+                        onClick={tomarFotoSelfie}
+                        className="flex flex-col items-center gap-2 h-24 rounded-xl border-dashed input-premium"
+                      >
+                        <Camera className="w-6 h-6" />
+                        <span className="text-xs">Tomar foto</span>
+                      </Button>
+                      <label className="flex flex-col items-center gap-2 h-24 justify-center rounded-xl border border-dashed border-white/15 hover:border-primary cursor-pointer transition-colors">
+                        <Upload className="w-6 h-6" />
+                        <span className="text-xs">Subir archivo</span>
+                        <input
+                          type="file"
+                          accept="image/jpeg,image/png,image/webp"
+                          className="hidden"
+                          onChange={subirFotoSelfieArchivo}
+                        />
+                      </label>
+                    </div>
+                  )}
+
+                  <div className="p-2.5 rounded-lg bg-white/5 text-xs text-muted-foreground">
+                    <p className="font-semibold mb-1 text-foreground/80">Requisitos del selfie:</p>
+                    <ul className="space-y-0.5 ml-3 list-disc">
+                      <li>Rostro completo sin lentes/gorra</li>
+                      <li>Cédula visible junto al rostro</li>
+                      <li>Buena iluminación · Máximo 5MB</li>
+                    </ul>
+                  </div>
 
                   <Button
                     className="w-full gradient-premium gradient-premium-hover btn-press"
@@ -1267,12 +1234,12 @@ export function PortalClienteModal({
                     {tycGuardando ? (
                       <>
                         <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                        Activando solicitud...
+                        Activando préstamo...
                       </>
                     ) : (
                       <>
                         <ShieldCheck className="w-4 h-4 mr-2" />
-                        Confirmar y activar solicitud
+                        Confirmar y activar préstamo
                       </>
                     )}
                   </Button>
@@ -1292,71 +1259,6 @@ export function PortalClienteModal({
             </DialogContent>
           </Dialog>
         )}
-
-        {/* === MODAL DE ADVERTENCIA DE INACTIVIDAD === */}
-        {inactivityWarning && (
-          <div className="absolute inset-0 z-[60] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
-            <div className="bg-slate-900 border border-amber-500/40 rounded-2xl shadow-2xl max-w-sm w-full overflow-hidden">
-              <div className="bg-gradient-to-r from-amber-500 to-orange-600 p-4 text-white">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center">
-                    <Clock3 className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <h3 className="text-base font-bold">¿Sigues ahí?</h3>
-                    <p className="text-xs opacity-90">Tu sesión está por expirar</p>
-                  </div>
-                </div>
-              </div>
-              <div className="p-5 space-y-3 text-center">
-                <p className="text-sm text-slate-300 leading-relaxed">
-                  Por seguridad, cerraremos tu sesión en{' '}
-                  <strong className="text-amber-300 text-lg">
-                    {inactivitySecondsLeft}
-                  </strong>{' '}
-                  segundo{inactivitySecondsLeft === 1 ? '' : 's'} por inactividad.
-                </p>
-                <p className="text-xs text-slate-400">
-                  Si deseas continuar, haz clic en el botón para extender tu sesión.
-                </p>
-                <div className="flex gap-2 pt-2">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => {
-                      confirmLogoutRef.current = true
-                      if (typeof window !== 'undefined' && vistaHistoryRef.current.length > 1) {
-                        try {
-                          window.history.go(-(vistaHistoryRef.current.length - 1))
-                        } catch {}
-                      }
-                      onClose()
-                    }}
-                    className="flex-1 border-slate-700 text-slate-300 hover:bg-slate-800"
-                  >
-                    Cerrar ahora
-                  </Button>
-                  <Button
-                    type="button"
-                    onClick={extenderSesion}
-                    className="flex-1 bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700 text-white"
-                  >
-                    <Clock3 className="w-4 h-4 mr-1.5" />
-                    Seguir conectado
-                  </Button>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* === MODAL DE REGULARIZACIÓN INTELIGENTE === */}
-        <RegularizacionInteligenteModal
-          open={regularizacionOpen}
-          onClose={() => setRegularizacionOpen(false)}
-          cedula={cedula}
-          token={token || ''}
-        />
       </DialogContent>
     </Dialog>
   )
@@ -1460,9 +1362,6 @@ function HubView({
   hubItems,
   onSelect,
   cuentaRecaudoPrincipal,
-  onEstadoCuenta,
-  prestamos,
-  onRegularizar,
 }: {
   cliente: PortalClienteInfo
   kpis: PortalKPIS
@@ -1470,64 +1369,9 @@ function HubView({
   hubItems: HubItemConfig[]
   onSelect: (id: HubItemId) => void
   cuentaRecaudoPrincipal?: CuentaRecaudoInfo | null
-  onEstadoCuenta?: (prestamoId?: string) => void
-  prestamos?: any[]
-  onRegularizar?: () => void
 }) {
-  // === Detectar si hay préstamos con mora ===
-  const prestamosEnMora = (prestamos || []).filter(
-    (p) => p.diasMora > 0 && p.estado === 'EN_MORA'
-  )
-  const tieneMora = prestamosEnMora.length > 0
-  const totalMora = prestamosEnMora.reduce((s, p) => s + (p.montoMora || 0), 0)
-  const totalDiasMora = prestamosEnMora.reduce((s, p) => s + (p.diasMora || 0), 0)
-  const totalCuotasVencidas = prestamosEnMora.reduce(
-    (s, p) => s + (p.pagos?.filter((pg: any) => pg.estado === 'PENDIENTE' && new Date(pg.fechaVencimiento) < new Date()).length || 0),
-    0
-  )
-
   return (
     <div className="space-y-5 fade-scale">
-      {/* === BANNER DESTACADO: REGULARIZACIÓN INTELIGENTE === */}
-      {tieneMora && onRegularizar && (
-        <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-red-500/15 via-amber-500/10 to-indigo-500/15 border-2 border-red-400/40 p-4">
-          {/* Patrón decorativo */}
-          <div className="absolute -top-4 -right-4 w-24 h-24 bg-red-500/10 rounded-full blur-xl"></div>
-          <div className="absolute -bottom-4 -left-4 w-20 h-20 bg-amber-500/10 rounded-full blur-xl"></div>
-
-          <div className="relative flex items-start gap-3">
-            <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-red-500 to-amber-500 flex items-center justify-center shrink-0 shadow-lg">
-              <Handshake className="w-6 h-6 text-white" />
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-xs font-bold text-red-300 uppercase tracking-wider mb-1 flex items-center gap-1">
-                <AlertTriangle className="w-3 h-3" />
-                Tienes cuotas vencidas
-              </p>
-              <h3 className="text-white font-bold text-base leading-tight mb-1">
-                ¡Regulariza tu deuda ahora!
-              </h3>
-              <p className="text-[11px] text-slate-300 leading-snug mb-3">
-                Tienes <strong className="text-white">{prestamosEnMora.length} crédito(s)</strong> con mora
-                ({totalDiasMora} días acumulados · {formatearMoneda(totalMora)} en intereses moratorios).
-                Te ayudamos a encontrar una solución personalizada y sostenible.
-              </p>
-              <button
-                onClick={onRegularizar}
-                className="w-full flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 transition-all shadow-lg hover:shadow-indigo-500/30"
-              >
-                <Handshake className="w-4 h-4 text-white" />
-                <span className="text-white font-bold text-sm">Regularizar inteligentemente</span>
-                <ChevronRight className="w-4 h-4 text-white/80" />
-              </button>
-              <p className="text-[9px] text-slate-400 mt-2 text-center">
-                Asistente conversacional · Sin costo · 100% en línea
-              </p>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* === LETRERO ELECTRÓNICO — AVISO DE CUENTA DE PAGO === */}
       <AvisoCuentaPago cuenta={cuentaRecaudoPrincipal} />
 
@@ -1727,7 +1571,11 @@ function HubView({
             <Button
               size="sm"
               className="gradient-premium gradient-premium-hover btn-press h-8 text-[11px]"
-              onClick={() => onEstadoCuenta?.()}
+              onClick={() => {
+                const tokenParam = typeof window !== 'undefined' ? '' : ''
+                const url = `/api/estado-cuenta?cedula=${encodeURIComponent(cliente.cedula)}${tokenParam}`
+                window.open(url, '_blank')
+              }}
             >
               <Printer className="w-3 h-3 mr-1" />
               Ver
@@ -1748,14 +1596,12 @@ function PrestamosView({
   onAceptarTyC,
   onPazYSalvo,
   onEstadoCuenta,
-  onRegularizar,
 }: {
   prestamos: any[]
   onAbrirTyC: (prestamoId: string, codigo: string) => void
   onAceptarTyC: (prestamoId: string) => Promise<void>
-  onPazYSalvo: (prestamoId: string, codigo: string, estado?: string, saldoTotal?: number, cuotasPagadas?: number, numeroCuotas?: number) => void
+  onPazYSalvo: (prestamoId: string, codigo: string) => void
   onEstadoCuenta: (prestamoId?: string) => void
-  onRegularizar: () => void
 }) {
   if (prestamos.length === 0) {
     return (
@@ -1856,22 +1702,11 @@ function PrestamosView({
 
               {/* Banner mora */}
               {p.diasMora > 0 && p.estado === 'EN_MORA' && (
-                <div className="mb-2 p-2 rounded-lg bg-red-500/10 border border-red-400/30">
-                  <div className="flex items-center gap-2 mb-2">
-                    <AlertTriangle className="w-3.5 h-3.5 text-red-400 shrink-0" />
-                    <p className="text-[11px] text-red-200">
-                      <strong>En mora:</strong> {p.diasMora} días · {formatearMoneda(p.montoMora)}
-                    </p>
-                  </div>
-                  <button
-                    onClick={onRegularizar}
-                    className="w-full flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-md bg-indigo-600/20 hover:bg-indigo-600/30 border border-indigo-400/40 transition-all"
-                  >
-                    <Handshake className="w-3.5 h-3.5 text-indigo-300" />
-                    <span className="text-[11px] font-semibold text-indigo-200">
-                      Regularizar inteligentemente
-                    </span>
-                  </button>
+                <div className="mb-2 p-2 rounded-lg bg-red-500/10 border border-red-400/30 flex items-center gap-2">
+                  <AlertTriangle className="w-3.5 h-3.5 text-red-400 shrink-0" />
+                  <p className="text-[11px] text-red-200">
+                    <strong>En mora:</strong> {p.diasMora} días · {formatearMoneda(p.montoMora)}
+                  </p>
                 </div>
               )}
 
@@ -1883,7 +1718,7 @@ function PrestamosView({
                     Requiere tu aceptación
                   </p>
                   <p className="text-[10px] text-amber-100/80 mb-2">
-                    Activa tu solicitud con verificación OTP + foto selfie con cédula.
+                    Activa tu préstamo con verificación OTP + foto selfie con cédula.
                   </p>
                   <Button
                     size="sm"
@@ -1931,20 +1766,17 @@ function PrestamosView({
                   <FileDown className="w-3 h-3 mr-1" />
                   Estado cuenta
                 </Button>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => onPazYSalvo(p.id, p.codigo, p.estado, p.saldoTotal, p.cuotasPagadas, p.numeroCuotas)}
-                  className={`text-[10px] h-7 ${
-                    cancelado
-                      ? 'border-emerald-400/40 text-emerald-300 hover:bg-emerald-500/10'
-                      : 'border-amber-400/40 text-amber-300 hover:bg-amber-500/10'
-                  }`}
-                  title={cancelado ? 'Descargar certificado de paz y salvo' : 'El crédito aún está vigente'}
-                >
-                  <FileCheck className="w-3 h-3 mr-1" />
-                  {cancelado ? 'Paz y salvo' : '🔒 Paz y salvo'}
-                </Button>
+                {cancelado && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => onPazYSalvo(p.id, p.codigo)}
+                    className="text-[10px] h-7 border-emerald-400/40 text-emerald-300 hover:bg-emerald-500/10"
+                  >
+                    <FileCheck className="w-3 h-3 mr-1" />
+                    Paz y salvo
+                  </Button>
+                )}
               </div>
             </CardContent>
           </Card>
@@ -1960,11 +1792,9 @@ function PrestamosView({
 function ProximosPagosView({
   prestamos,
   onPagar,
-  onRegularizar,
 }: {
   prestamos: any[]
   onPagar: (prestamoId: string, monto: number, numeroCuota: number) => void
-  onRegularizar?: () => void
 }) {
   const proximos = prestamos
     .filter((p) => p.estado === 'ACTIVO' || p.estado === 'EN_MORA')
@@ -1985,92 +1815,18 @@ function ProximosPagosView({
     )
   }
 
-  // === Identificar el próximo pago más urgente (vence hoy o mañana) ===
-  const hoy = new Date()
-  hoy.setHours(0, 0, 0, 0)
-  const proximoUrgente = proximos.find((pg) => {
-    const venc = new Date(pg.fechaVencimiento)
-    venc.setHours(0, 0, 0, 0)
-    const diff = Math.round((venc.getTime() - hoy.getTime()) / (1000 * 60 * 60 * 24))
-    return diff >= 0 && diff <= 1
-  })
-
-  // === Identificar pagos vencidos ===
-  const vencidos = proximos.filter((pg) => {
-    const venc = new Date(pg.fechaVencimiento)
-    venc.setHours(0, 0, 0, 0)
-    return venc.getTime() < hoy.getTime()
-  })
-
   return (
     <div className="space-y-3 fade-scale">
-      {/* Banner destacado: cuotas vencidas → regularizar */}
-      {vencidos.length > 0 && onRegularizar && (
-        <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-red-500/20 via-amber-500/15 to-indigo-500/20 border-2 border-red-400/50 p-4">
-          <div className="flex items-start gap-3">
-            <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-red-500 to-amber-500 flex items-center justify-center shrink-0 shadow-lg">
-              <Handshake className="w-6 h-6 text-white" />
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-xs font-bold text-red-300 uppercase tracking-wider mb-0.5 flex items-center gap-1">
-                <AlertTriangle className="w-3 h-3" />
-                {vencidos.length} cuota(s) vencida(s)
-              </p>
-              <h3 className="text-white font-bold text-sm leading-tight mb-2">
-                ¿No puedes pagar todo hoy? Negocia tu deuda
-              </h3>
-              <p className="text-[11px] text-slate-300 leading-snug mb-3">
-                Te ayudamos a encontrar una fecha y forma de pago viable. Calculamos escenarios en tiempo real para que veas el costo de esperar.
-              </p>
-              <button
-                onClick={onRegularizar}
-                className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 transition-all"
-              >
-                <Handshake className="w-4 h-4 text-white" />
-                <span className="text-white font-bold text-xs">Regularizar inteligentemente</span>
-                <ChevronRight className="w-3.5 h-3.5 text-white/80" />
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Banner de recordatorio destacado (solo si hay cuota que vence hoy o mañana) */}
-      {proximoUrgente && (
-        <div className="rounded-xl p-3 bg-gradient-to-r from-amber-500/20 to-orange-500/20 border-2 border-amber-400/60">
-          <div className="flex items-start gap-2">
-            <BellRing className="w-4 h-4 text-amber-400 mt-0.5 shrink-0" />
-            <div className="flex-1 min-w-0">
-              <p className="text-xs font-bold text-amber-200">
-                ⏰ Recordatorio: cuota vence {new Date(proximoUrgente.fechaVencimiento).toDateString() === hoy.toDateString() ? 'hoy' : 'mañana'}
-              </p>
-              <p className="text-[10px] text-amber-100/80 mt-0.5">
-                Solicitud <span className="font-mono font-bold">{proximoUrgente.prestamo.codigo}</span> · Cuota {proximoUrgente.numeroCuota} · <span className="font-bold">{formatearMoneda(proximoUrgente.montoTotal)}</span>
-              </p>
-              <p className="text-[10px] text-amber-100/70 mt-1">
-                Recuerda que enviamos un recordatorio automático el día anterior al vencimiento a tu correo y WhatsApp según tus preferencias.
-              </p>
-            </div>
-          </div>
-        </div>
-      )}
-
       {proximos.map((pg: any) => {
         const venc = new Date(pg.fechaVencimiento)
-        venc.setHours(0, 0, 0, 0)
-        const hoyMid = new Date()
-        hoyMid.setHours(0, 0, 0, 0)
-        const dias = Math.round((venc.getTime() - hoyMid.getTime()) / (1000 * 60 * 60 * 24))
+        const hoy = new Date()
+        const dias = Math.ceil((venc.getTime() - hoy.getTime()) / (1000 * 60 * 60 * 24))
         const vencido = dias < 0
-        const esHoy = dias === 0
-        const esManana = dias === 1
-        const recordatorioEnviado = !!pg.recordatorioEnviadoEn
-
         return (
           <Card
             key={pg.id}
             className={`premium-card premium-card-hover rounded-2xl ${
-              vencido ? 'border-red-400/40' : (esHoy || esManana) ? 'border-amber-400/50' : ''
+              vencido ? 'border-red-400/40' : ''
             }`}
           >
             <CardContent className="p-3.5">
@@ -2082,22 +1838,10 @@ function ProximosPagosView({
                     {vencido && (
                       <Badge variant="destructive" className="text-[10px] h-5">Vencido</Badge>
                     )}
-                    {esHoy && (
-                      <Badge className="text-[10px] h-5 bg-orange-500/30 text-orange-200 border-orange-400/50">Vence hoy</Badge>
-                    )}
-                    {esManana && (
-                      <Badge className="text-[10px] h-5 bg-amber-500/30 text-amber-200 border-amber-400/50">Vence mañana</Badge>
-                    )}
-                    {recordatorioEnviado && !vencido && (
-                      <Badge variant="outline" className="text-[10px] h-5 border-blue-400/40 text-blue-300">
-                        <BellRing className="w-2.5 h-2.5 mr-1" />
-                        Recordatorio enviado
-                      </Badge>
-                    )}
                   </div>
                   <p className="text-[10px] text-muted-foreground mt-1">
                     Vence: <strong>{formatearFecha(pg.fechaVencimiento)}</strong>
-                    {vencido ? ` · ${Math.abs(dias)}d atrás` : dias === 0 ? ' · hoy' : ` · en ${dias}d`}
+                    {vencido ? ` · ${Math.abs(dias)}d atrás` : ` · en ${dias}d`}
                   </p>
                 </div>
                 <DiasRestantesBadge dias={dias} />
@@ -2106,12 +1850,6 @@ function ProximosPagosView({
               <p className="text-xl font-black text-amber-300 mb-2.5">
                 {formatearMoneda(pg.montoTotal)}
               </p>
-
-              {(esHoy || esManana) && (
-                <p className="text-[10px] text-amber-200/80 mb-2 italic">
-                  💡 Paga a tiempo para evitar intereses moratorios.
-                </p>
-              )}
 
               <Button
                 size="sm"
@@ -2274,23 +2012,7 @@ function AvisosView({
 // =====================================================
 // VISTA: CAMPAÑAS
 // =====================================================
-function CampanasView({ campanas, clienteCedula }: { campanas: any[]; clienteCedula?: string }) {
-  // === Marcar campaña como vista al hacer clic en ella ===
-  // Llama al endpoint /api/portal/marcar-campana-vista para que el badge
-  // de notificación desaparezca después de que el cliente vea la campaña.
-  const marcarVista = async (campañaId: string) => {
-    if (!clienteCedula) return
-    try {
-      await fetch('/api/portal/marcar-campana-vista', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ cedula: clienteCedula, campañaId }),
-      })
-    } catch (e) {
-      // Silencioso: no bloquear la visualización si falla el marcado
-    }
-  }
-
+function CampanasView({ campanas }: { campanas: any[] }) {
   if (campanas.length === 0) {
     return (
       <EmptyStatePremium
@@ -2304,11 +2026,7 @@ function CampanasView({ campanas, clienteCedula }: { campanas: any[]; clienteCed
   return (
     <div className="space-y-3 fade-scale">
       {campanas.map((c) => (
-        <Card
-          key={c.id}
-          className="premium-card premium-card-hover rounded-2xl overflow-hidden cursor-pointer"
-          onClick={() => marcarVista(c.id)}
-        >
+        <Card key={c.id} className="premium-card premium-card-hover rounded-2xl overflow-hidden">
           <CardContent className="p-0">
             <div className="h-1.5 bg-gradient-to-r from-indigo-500 via-violet-500 to-fuchsia-500"></div>
             <div className="p-3.5">
@@ -2319,11 +2037,6 @@ function CampanasView({ campanas, clienteCedula }: { campanas: any[]; clienteCed
                 <span className="chip-premium !text-[9px] !py-0.5">
                   {c.tipo}
                 </span>
-                {c.destinatarios === 'SELECCIONADOS' && (
-                  <span className="chip-premium !text-[9px] !py-0.5 bg-purple-500/20 text-purple-300">
-                    Exclusiva para ti
-                  </span>
-                )}
               </div>
               <h4 className="font-bold text-sm">{c.titulo}</h4>
               <p className="text-xs text-muted-foreground mt-1">{c.descripcion}</p>
@@ -2508,57 +2221,21 @@ function SimuladorCredito({
   const [enviando, setEnviando] = useState(false)
   const [resultado, setResultado] = useState<ResultadoCalculo | null>(null)
 
-  // === Flexibilidad Financiera (beneficio visible para TODOS los clientes) ===
-  // DOS tarifas:
-  //   - BASICA:  $15.000 COP — 1 uso durante la vigencia
-  //   - PREMIUM: $34.900 COP — 2 usos durante la vigencia
-  // Regla de negocio: la opción DEBE aparecer en todas las simulaciones del
-  // portal del cliente. Solo se puede ACTIVAR si la simulación tiene 4 o más
-  // cuotas; con menos cuotas se muestra inhabilitada con explicación.
-  const [flexibilidadFinanciera, setFlexibilidadFinanciera] = useState(false)
-  const [flexibilidadModalidad, setFlexibilidadModalidad] = useState<'BASICA' | 'PREMIUM'>('BASICA')
-  const FLEXIBILIDAD_COSTO_BASICA = 15000
-  const FLEXIBILIDAD_COSTO_PREMIUM = 34900
-  const FLEXIBILIDAD_COSTO = flexibilidadModalidad === 'PREMIUM' ? FLEXIBILIDAD_COSTO_PREMIUM : FLEXIBILIDAD_COSTO_BASICA
-
-  // === Periodo de corte (2026-08-21) ===
-  // El cliente puede elegir si sus fechas de pago serán con corte del 5-20, 15-30,
-  // o una fecha personalizada (ej: 16-1, 6-20). El sistema calcula cuántos días
-  // faltan para el corte y cuánto se cobraría como días causados.
-  const [periodoCorte, setPeriodoCorte] = useState<string>('')
-  const [fechaSolicitudSim, setFechaSolicitudSim] = useState<string>(
-    new Date().toISOString().slice(0, 10)
-  )
-
-  // === Renovación Anticipada (beneficio opcional con cobro único) ===
-  // El cliente puede activar este beneficio en el simulador del portal
-  // por un cobro único de $9.900 COP. Le da derecho a:
-  //   - Reserva anticipada de su cupo para el siguiente ciclo
-  //   - Prioridad en el procesamiento de su próxima solicitud
-  //   - Tasa preferencial mantenida (sin re-evaluación)
-  //   - Aceleración del proceso de desembolso
-  // El cobro se hace UNA sola vez al inicio del crédito y se registra
-  // automáticamente en la caja CAJA-RENOVACIONES.
-  const [renovacionAnticipada, setRenovacionAnticipada] = useState(false)
-  const RENOVACION_ANTICIPADA_COSTO = 9900
-
-  // === Estado para el flujo de envío de solicitud (2026-08-29) ===
-  // El cliente primero simula, ve los resultados con todos los cargos,
-  // luego hace clic en "Enviar Solicitud", se le pide confirmación,
-  // y al confirmar se envía la solicitud directamente (sin Clave Dinámica).
-  const [mostrarConfirmacionEnvio, setMostrarConfirmacionEnvio] = useState(false)
+  // === Flujo de Clave Dinámica (confirmación para enviar solicitud) ===
+  const [claveDinamicaSolicitada, setClaveDinamicaSolicitada] = useState(false)
+  const [claveDinamicaEnviando, setClaveDinamicaEnviando] = useState(false)
+  const [claveDinamicaValor, setClaveDinamicaValor] = useState<string>('')
+  const [claveDinamicaValidando, setClaveDinamicaValidando] = useState(false)
+  const [claveDinamicaVerificada, setClaveDinamicaVerificada] = useState(false)
+  const [otpRegistroId, setOtpRegistroId] = useState<string | null>(null)
+  const [codigoConfirmacion, setCodigoConfirmacion] = useState<string | null>(null)
+  const [emailEnmascarado, setEmailEnmascarado] = useState<string | null>(null)
+  const [expiraEn, setExpiraEn] = useState<string | null>(null)
+  const [segundosRestantes, setSegundosRestantes] = useState<number>(0)
+  const [intentosClave, setIntentosClave] = useState<number>(3)
 
   const tieneTasaPers = !!tasaPersonalizadaInicial?.tiene
   const tasaPersValor = tasaPersonalizadaInicial?.valor ?? 0
-
-  // === Tarifa de Plataforma (2026-08-29) ===
-  // $4.900 COP — cobro único cuando la tasa mensual es ≥ 15%.
-  // Se cobra una sola vez durante la vigencia, cargado en la primera cuota.
-  const TARIFA_PLATAFORMA = 4900
-  const TASA_MIN_PARA_TARIFA = 15
-  const tasaSimulacion = tieneTasaPers && tasaPersValor > 0 ? tasaPersValor : TASA_GENERAL_DEFAULT_SIM
-  const tarifaPlataformaAplica = tasaSimulacion >= TASA_MIN_PARA_TARIFA
-  const tarifaPlataformaMonto = tarifaPlataformaAplica ? TARIFA_PLATAFORMA : 0
 
   const calcularSimulacion = () => {
     const valor = parseFloat(valorSolicitado)
@@ -2579,23 +2256,7 @@ function SimuladorCredito({
       })
       return
     }
-    // === FIX (2026-08-29): Periodo de corte OBLIGATORIO ===
-    // El cliente debe seleccionar una fecha de pago antes de simular.
-    if (!periodoCorte || periodoCorte === 'NINGUNO') {
-      toast({
-        title: '⚠️ Debes seleccionar una fecha de pago',
-        description: 'Elige una fecha de corte (5-20, 15-30, 1-16, etc.) para continuar. Es obligatorio.',
-        variant: 'destructive',
-      })
-      return
-    }
-    // === FIX (2026-08-21): usar la fecha actual como fecha de desembolso, NO fechaPrimerPago ===
-    // Antes se usaba fechaPrimerPago como fechaDesembolso, lo que hacía que el
-    // sistema contara desde esa fecha como si el crédito empezara ese día.
-    // Ahora: fechaDesembolso = hoy (cuando se solicita el solicitud).
-    // fechaPrimerPago se usa solo como referencia para el primer vencimiento,
-    // pero el cálculo de la tabla de amortización empieza desde hoy.
-    const fechaDesembolso = new Date()
+    const fechaDesembolso = fechaPrimerPago ? new Date(fechaPrimerPago) : new Date()
     let res: ResultadoCalculo
     if (tieneTasaPers && tasaPersValor > 0) {
       res = calcularPrestamoTasaFijaMensual({
@@ -2617,15 +2278,109 @@ function SimuladorCredito({
       })
     }
     setResultado(res)
-    
-    // === FIX (2026-08-29): Mostrar tarifa de plataforma automáticamente ===
-    // La tarifa de $4.900 se cobra cuando la tasa mensual es ≥ 15%.
-    // Se calcula localmente y se muestra en los resultados de la simulación.
-    // No es necesario llamar al API para esto — el cálculo es simple.
-    // El valor se suma al total a pagar y a la primera cuota.
   }
 
-  // === Enviar Solicitud (directo, sin Clave Dinámica) ===
+  // === Solicitar Clave Dinámica (envía OTP al correo del cliente) ===
+  const solicitarClaveDinamica = async () => {
+    if (!token) {
+      toast({
+        title: 'Sesión requerida',
+        description: 'Inicia sesión para solicitar la clave.',
+        variant: 'destructive',
+      })
+      return
+    }
+    try {
+      setClaveDinamicaEnviando(true)
+      setClaveDinamicaSolicitada(false)
+      setClaveDinamicaVerificada(false)
+      setClaveDinamicaValor('')
+      setCodigoConfirmacion(null)
+      setIntentosClave(3)
+
+      const res = await fetch('/api/portal/clave-dinamica/solicitar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ clienteId, token }),
+      })
+      const json = await res.json()
+
+      if (json.success) {
+        setClaveDinamicaSolicitada(true)
+        setOtpRegistroId(json.otpRegistroId)
+        setEmailEnmascarado(json.emailEnmascarado)
+        setExpiraEn(json.expiraEn)
+        toast({
+          title: 'Clave enviada',
+          description: `Hemos enviado tu clave dinámica al correo ${json.emailEnmascarado}. Válida por 5 minutos.`,
+        })
+      } else {
+        toast({
+          title: 'No se pudo enviar la clave',
+          description: json.error || 'Intenta nuevamente',
+          variant: 'destructive',
+        })
+      }
+    } catch (e: any) {
+      toast({ title: 'Error', description: e.message, variant: 'destructive' })
+    } finally {
+      setClaveDinamicaEnviando(false)
+    }
+  }
+
+  // === Validar Clave Dinámica (verifica OTP y obtiene codigoConfirmacion) ===
+  const validarClaveDinamica = async () => {
+    if (!token || !otpRegistroId) return
+    if (!claveDinamicaValor || claveDinamicaValor.trim().length !== 6) {
+      toast({
+        title: 'Clave inválida',
+        description: 'Ingresa los 6 dígitos de tu clave dinámica.',
+        variant: 'destructive',
+      })
+      return
+    }
+    try {
+      setClaveDinamicaValidando(true)
+      const res = await fetch('/api/portal/clave-dinamica/validar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          clienteId,
+          token,
+          otpRegistroId,
+          clave: claveDinamicaValor.trim(),
+        }),
+      })
+      const json = await res.json()
+
+      if (json.success) {
+        setClaveDinamicaVerificada(true)
+        setCodigoConfirmacion(json.codigoConfirmacion)
+        toast({
+          title: 'Clave verificada',
+          description: 'Ya puedes enviar tu solicitud de crédito.',
+        })
+      } else {
+        const restantes = json.intentosRestantes ?? 3
+        setIntentosClave(restantes)
+        if (json.bloqueado) {
+          setClaveDinamicaSolicitada(false)
+          setOtpRegistroId(null)
+        }
+        toast({
+          title: 'Clave incorrecta',
+          description: json.error || 'Intenta nuevamente',
+          variant: 'destructive',
+        })
+      }
+    } catch (e: any) {
+      toast({ title: 'Error', description: e.message, variant: 'destructive' })
+    } finally {
+      setClaveDinamicaValidando(false)
+    }
+  }
+
+  // === Enviar Solicitud (requiere codigoConfirmacion ya obtenido) ===
   const enviarSolicitud = async () => {
     if (!token) {
       toast({
@@ -2635,13 +2390,19 @@ function SimuladorCredito({
       })
       return
     }
+    if (!claveDinamicaVerificada || !codigoConfirmacion) {
+      toast({
+        title: 'Verificación requerida',
+        description: 'Debes validar tu Clave Dinámica antes de enviar la solicitud.',
+        variant: 'destructive',
+      })
+      return
+    }
     try {
       setEnviando(true)
-      const headers: Record<string, string> = { 'Content-Type': 'application/json' }
-      if (token) headers['x-portal-token'] = token
       const res = await fetch('/api/solicitudes-web', {
         method: 'POST',
-        headers,
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           clienteId,
           token,
@@ -2649,29 +2410,29 @@ function SimuladorCredito({
           numeroCuotas: parseInt(numeroCuotas, 10),
           frecuencia,
           primerPagoFecha: fechaPrimerPago,
-          // === Flexibilidad Financiera (2 tarifas) ===
-          flexibilidadFinanciera,
-          flexibilidadModalidad,
-          flexibilidadCosto: FLEXIBILIDAD_COSTO,
-          // === Renovación Anticipada (cobro único $9.900) ===
-          renovacionAnticipada,
-          renovacionAnticipadaCosto: RENOVACION_ANTICIPADA_COSTO,
-          // === Periodo de corte ===
-          periodoCorte: periodoCorte && periodoCorte !== 'NINGUNO' ? periodoCorte : undefined,
-          fechaSolicitud: fechaSolicitudSim,
-          // === Tarifa de Plataforma ===
-          cobroTarifaPlataforma: tarifaPlataformaAplica,
-          valorTarifaPlataforma: tarifaPlataformaMonto,
+          codigoConfirmacion,
         }),
       })
       const json = await res.json()
       if (json.success) {
         toast({
-          title: '✅ Solicitud enviada',
+          title: 'Solicitud enviada',
           description: `Código: ${json.data?.codigo}. Un asesor la revisará pronto.`,
         })
-        setMostrarConfirmacionEnvio(false)
+        // Reset del flujo de clave dinámica tras envío exitoso
+        setClaveDinamicaSolicitada(false)
+        setClaveDinamicaVerificada(false)
+        setClaveDinamicaValor('')
+        setCodigoConfirmacion(null)
+        setOtpRegistroId(null)
       } else {
+        // Si falla por codigoConfirmacion inválido, reset del flujo
+        if (json.code === 'INVALID_CODIGO_CONFIRMACION') {
+          setClaveDinamicaSolicitada(false)
+          setClaveDinamicaVerificada(false)
+          setCodigoConfirmacion(null)
+          setOtpRegistroId(null)
+        }
         toast({
           title: 'Error',
           description: json.error || 'No se pudo enviar la solicitud',
@@ -2762,80 +2523,6 @@ function SimuladorCredito({
                 className="input-premium"
               />
             </div>
-
-            {/* === Periodo de corte OBLIGATORIO (2026-08-29) === */}
-            {/* El cliente DEBE escoger una fecha de corte obligatoriamente. */}
-            {/* Se le advierte que si el pago se pasa de la fecha de corte, */}
-            {/* se calculará mora del 1% diario. */}
-            <div className="space-y-2 p-3 rounded-lg bg-indigo-500/10 border-2 border-indigo-500/40">
-              <Label className="text-xs font-bold text-indigo-200 flex items-center gap-1.5">
-                <Calendar className="w-3.5 h-3.5" />
-                Fechas de pago (obligatorio) *
-              </Label>
-              <p className="text-[10px] text-muted-foreground">
-                Debes escoger la fecha de pagos para tu crédito. Las cuotas se
-                programarán según el periodo de corte que selecciones.
-              </p>
-              <div className="grid grid-cols-2 gap-2">
-                <div className="space-y-1">
-                  <Label className="text-[10px] text-muted-foreground font-semibold">Periodo de corte *</Label>
-                  <Select value={periodoCorte} onValueChange={setPeriodoCorte}>
-                    <SelectTrigger className={`input-premium h-8 text-xs ${(!periodoCorte || periodoCorte === 'NINGUNO') ? 'border-red-500/50' : ''}`}>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="5-20">📅 Cortes 5 y 20</SelectItem>
-                      <SelectItem value="15-30">📅 Cortes 15 y 30</SelectItem>
-                      <SelectItem value="1-16">📅 Cortes 1 y 16</SelectItem>
-                      <SelectItem value="6-20">📅 Cortes 6 y 20</SelectItem>
-                      <SelectItem value="10-25">📅 Cortes 10 y 25</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-[10px] text-muted-foreground font-semibold">Fecha de solicitud</Label>
-                  <Input
-                    type="date"
-                    value={fechaSolicitudSim}
-                    onChange={(e) => setFechaSolicitudSim(e.target.value)}
-                    className="input-premium h-8 text-xs"
-                  />
-                </div>
-              </div>
-
-              {/* === Mensaje informativo sobre el corte seleccionado === */}
-              {periodoCorte && periodoCorte !== 'NINGUNO' && (
-                <div className="p-2 rounded bg-indigo-500/10 border border-indigo-500/20 text-[10px] text-indigo-200">
-                  <p>
-                    💡 Las cuotas se programarán desde la fecha de corte más cercana.
-                    Si la solicitud no cae en un día de corte, se cobrarán días causados adicionales.
-                  </p>
-                </div>
-              )}
-
-              {/* === Advertencia de mora (siempre visible) === */}
-              <div className="p-2 rounded bg-red-500/10 border border-red-500/30 text-[10px] text-red-200 flex items-start gap-1.5">
-                <AlertTriangle className="w-3.5 h-3.5 text-red-400 mt-0.5 shrink-0" />
-                <div>
-                  <p className="font-semibold text-red-200">⚠️ Importante sobre mora</p>
-                  <p className="text-red-100/80 mt-0.5">
-                    Si tu pago se pasa de la fecha de corte seleccionada, se calculará
-                    <strong className="text-red-200"> mora del 1% diario</strong> sobre el saldo pendiente,
-                    calculada de forma compuesta. Asegúrate de cumplir con las fechas de pago.
-                  </p>
-                </div>
-              </div>
-
-              {/* === Aviso si no ha seleccionado corte === */}
-              {(!periodoCorte || periodoCorte === 'NINGUNO') && (
-                <div className="p-2 rounded bg-red-500/10 border border-red-500/30 text-[10px] text-red-200 flex items-center gap-1.5">
-                  <AlertTriangle className="w-3.5 h-3.5 text-red-400 shrink-0" />
-                  <span className="font-semibold">
-                    Debes seleccionar una fecha de corte para continuar.
-                  </span>
-                </div>
-              )}
-            </div>
           </div>
           <Button
             onClick={calcularSimulacion}
@@ -2920,430 +2607,136 @@ function SimuladorCredito({
             </p>
           </div>
 
-          {/* === Flexibilidad Financiera (visible para TODOS los clientes) === */}
-          {/* DOS tarifas: Básica $15.000 (1 uso) | Premium $34.900 (2 usos) */}
-          {/* Regla: la opción siempre se muestra. Si la simulación tiene < 4 cuotas, */}
-          {/* se muestra inhabilitada con explicación. Si tiene ≥ 4, se puede activar. */}
-          {(() => {
-            const cuotas = parseInt(numeroCuotas, 10) || 0
-            const elegible = cuotas >= 4
-            return (
-              <Card className={`premium-card rounded-2xl border-2 transition-colors ${
-                flexibilidadFinanciera && elegible
-                  ? 'border-emerald-500/60'
-                  : elegible
-                    ? 'border-emerald-500/20'
-                    : 'border-muted-foreground/20'
-              }`}>
-                <CardContent className="p-3 space-y-2">
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-2 min-w-0">
-                      <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${
-                        flexibilidadFinanciera && elegible
-                          ? 'bg-gradient-to-br from-emerald-500 to-teal-600'
-                          : 'bg-muted/40'
-                      }`}>
-                        <Sparkles className={`w-3.5 h-3.5 ${
-                          flexibilidadFinanciera && elegible ? 'text-white' : 'text-muted-foreground'
-                        }`} />
-                      </div>
-                      <div className="min-w-0">
-                        <p className="text-xs font-bold flex items-center gap-1.5">
-                          Flexibilidad Financiera
-                          <Badge
-                            variant="outline"
-                            className={`text-[9px] px-1.5 py-0 ${
-                              flexibilidadFinanciera && elegible
-                                ? 'text-emerald-300 border-emerald-500/40 bg-emerald-500/10'
-                                : 'text-muted-foreground'
-                            }`}
-                          >
-                            {flexibilidadFinanciera && elegible
-                              ? `✨ ${flexibilidadModalidad} · +${formatearMoneda(FLEXIBILIDAD_COSTO)}`
-                              : 'Opcional — 2 tarifas'}
-                          </Badge>
-                        </p>
-                        <p className="text-[10px] text-muted-foreground truncate">
-                          {elegible
-                            ? flexibilidadFinanciera
-                              ? `Activa · ${flexibilidadModalidad === 'PREMIUM' ? '2 usos' : '1 uso'} en la vigencia`
-                              : 'Beneficio opcional disponible'
-                            : `Requiere 4+ cuotas · Actual: ${cuotas}`}
-                        </p>
-                      </div>
-                    </div>
-                    <input
-                      type="checkbox"
-                      id="flexFlexPortalModal"
-                      checked={flexibilidadFinanciera && elegible}
-                      disabled={!elegible}
-                      onChange={(e) => setFlexibilidadFinanciera(e.target.checked)}
-                      className="w-4 h-4 accent-emerald-500 shrink-0 cursor-pointer disabled:cursor-not-allowed"
-                      aria-label="Activar Flexibilidad Financiera"
-                    />
-                  </div>
-                  <div className="text-[10px] text-muted-foreground/90 leading-relaxed">
-                    {elegible ? (
-                      <ul className="list-disc list-inside space-y-0.5 ml-1">
-                        <li>Trasladar UNA cuota al final del crédito</li>
-                        <li>Solicitar cambio de fecha de pago (genera "Otro Sí" firmado con OTP)</li>
-                      </ul>
-                    ) : (
-                      <p>
-                        ℹ️ Esta simulación tiene <strong>{cuotas}</strong> cuota(s).
-                        Flexibilidad Financiera está disponible a partir de <strong>4 cuotas</strong>.
-                        Aumenta el plazo o reduce el monto para acceder al beneficio.
-                      </p>
-                    )}
-                  </div>
-
-                  {/* === Selector de modalidad (2 tarifas) === */}
-                  {flexibilidadFinanciera && elegible && (
-                    <div className="grid grid-cols-2 gap-2 mt-2">
-                      <button
-                        type="button"
-                        onClick={() => setFlexibilidadModalidad('BASICA')}
-                        className={`text-left p-2 rounded-lg border transition-all ${
-                          flexibilidadModalidad === 'BASICA'
-                            ? 'border-emerald-500 bg-emerald-500/15'
-                            : 'border-emerald-500/30 bg-emerald-500/5 hover:border-emerald-400'
-                        }`}
-                      >
-                        <div className="flex items-center justify-between mb-0.5">
-                          <span className="text-[11px] font-bold">Básica</span>
-                          <span className="text-sm font-bold text-emerald-300">$15.000</span>
-                        </div>
-                        <p className="text-[9px] text-muted-foreground leading-tight">
-                          1 uso · una vez en la vigencia
-                        </p>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setFlexibilidadModalidad('PREMIUM')}
-                        className={`text-left p-2 rounded-lg border transition-all ${
-                          flexibilidadModalidad === 'PREMIUM'
-                            ? 'border-emerald-500 bg-emerald-500/15'
-                            : 'border-emerald-500/30 bg-emerald-500/5 hover:border-emerald-400'
-                        }`}
-                      >
-                        <div className="flex items-center justify-between mb-0.5">
-                          <span className="text-[11px] font-bold flex items-center gap-1">
-                            Premium
-                            <span className="text-[8px] px-1 py-0 rounded bg-amber-400/20 text-amber-300 border border-amber-400/30">REC</span>
-                          </span>
-                          <span className="text-sm font-bold text-emerald-300">$34.900</span>
-                        </div>
-                        <p className="text-[9px] text-muted-foreground leading-tight">
-                          2 usos · para las dos cuotas del mes
-                        </p>
-                      </button>
-                    </div>
-                  )}
-
-                  {/* === Ejemplo de beneficio === */}
-                  {flexibilidadFinanciera && elegible && (
-                    <div className="mt-2 p-2 rounded-md bg-amber-500/10 border border-amber-500/30 text-[10px] text-amber-100 leading-relaxed">
-                      <div className="font-semibold mb-0.5">💡 ¿Cómo te beneficia?</div>
-                      <p>
-                        Si tu cuota es <strong>$200.000</strong> y no puedes pagar a tiempo, se generarían
-                        intereses moratorios diarios (ej: <strong>$6.000/día</strong>) — en 5 días serían{' '}
-                        <strong>$30.000</strong> solo en mora.
-                      </p>
-                      <p className="mt-1">
-                        Con Flexibilidad Financiera puedes <strong>trasladar la cuota al final del crédito</strong> o{' '}
-                        <strong>cambiar la fecha de pago</strong>, <strong>evitando el cobro de mora</strong>.
-                        {' '}El cobro de <strong>{formatearMoneda(FLEXIBILIDAD_COSTO)}</strong> se hace una sola vez al inicio del crédito (cargado en la primera cuota).
-                      </p>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            )
-          })()}
-
-          {/* === Renovación Anticipada (2026-08-29 rediseñado) === */}
-          {/* Pregunta clara al cliente: ¿Desea generar renovación anticipada? */}
-          {/* Si responde SÍ, se cargan $9.900 y se explica por qué. */}
-          <Card className={`premium-card rounded-2xl border-2 transition-colors ${
-            renovacionAnticipada
-              ? 'border-amber-500/60'
-              : 'border-amber-500/20'
-          }`}>
-            <CardContent className="p-3 space-y-3">
-              {/* === Pregunta principal === */}
-              <div className="flex items-center gap-2">
-                <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${
-                  renovacionAnticipada
-                    ? 'bg-gradient-to-br from-amber-500 to-orange-600'
-                    : 'bg-muted/40'
-                }`}>
-                  <Repeat className={`w-3.5 h-3.5 ${renovacionAnticipada ? 'text-white' : 'text-muted-foreground'}`} />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-xs font-bold">
-                    ¿Desea generar renovación anticipada para este crédito?
-                  </p>
-                  <p className="text-[10px] text-muted-foreground">
-                    Reserve su cupo para el siguiente ciclo de crédito
-                  </p>
-                </div>
-              </div>
-
-              {/* === Botones Sí / No === */}
-              <div className="grid grid-cols-2 gap-2">
-                <button
-                  type="button"
-                  onClick={() => setRenovacionAnticipada(false)}
-                  className={`p-2.5 rounded-lg text-xs font-semibold transition-all ${
-                    !renovacionAnticipada
-                      ? 'bg-slate-600 text-white border-2 border-slate-400'
-                      : 'bg-muted/30 text-muted-foreground border-2 border-transparent hover:bg-muted/50'
-                  }`}
-                >
-                  No, gracias
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setRenovacionAnticipada(true)}
-                  className={`p-2.5 rounded-lg text-xs font-semibold transition-all ${
-                    renovacionAnticipada
-                      ? 'bg-gradient-to-r from-amber-500 to-orange-600 text-white border-2 border-amber-300'
-                      : 'bg-muted/30 text-muted-foreground border-2 border-transparent hover:bg-muted/50'
-                  }`}
-                >
-                  <Repeat className="w-3 h-3 inline mr-1" />
-                  Sí, renovar
-                </button>
-              </div>
-
-              {/* === Explicación del cobro de $9.900 (siempre visible) === */}
-              <div className="p-2.5 rounded-md bg-amber-500/10 border border-amber-500/30 text-[10px] text-amber-100 leading-relaxed space-y-2">
-                <div className="font-semibold flex items-center gap-1">
-                  <Info className="w-3 h-3" /> ¿Qué es la Renovación Anticipada?
-                </div>
-                <p>
-                  Es un beneficio que te permite <strong>reservar tu cupo de crédito</strong> para
-                  el siguiente ciclo. Al activarlo, se cobrarán{' '}
-                  <strong className="text-amber-200">{formatearMoneda(RENOVACION_ANTICIPADA_COSTO)}</strong>{' '}
-                  una sola vez al inicio del crédito (cargados en la primera cuota).
-                </p>
-
-                {/* === Explicación de por qué se cobra aunque no se use === */}
-                <div className="p-2 rounded bg-amber-900/20 border border-amber-700/30">
-                  <p className="font-semibold text-amber-200 mb-1">💰 ¿Por qué se cobra $9.900?</p>
-                  <p className="text-[10px] text-amber-100/80">
-                    Este valor corresponde a una <strong>reserva de cupo</strong>. Se cobra
-                    <strong> se utilice o no</strong> el beneficio, porque:
-                  </p>
-                  <ul className="list-disc list-inside space-y-0.5 mt-1 text-[10px] text-amber-100/80">
-                    <li>Se <strong>reserva el capital</strong> para tu próximo crédito desde ya, inmovilizando recursos.</li>
-                    <li>Se <strong>asigna prioridad</strong> en la fila de procesamiento de solicitudes.</li>
-                    <li>Se <strong>mantienen tus condiciones</strong> (tasa, monto) sin re-evaluación.</li>
-                    <li>Se <strong>agiliza el desembolso</strong> del nuevo crédito (&lt; 24 horas hábiles).</li>
-                  </ul>
-                  <p className="mt-1.5 text-[10px] text-amber-200/80 italic">
-                    ⚠️ Si activas este beneficio y decides no usarlo, el cobro de{' '}
-                    <strong>{formatearMoneda(RENOVACION_ANTICIPADA_COSTO)}</strong> ya se habrá
-                    aplicado y <strong>no es reembolsable</strong>, ya que la reserva del cupo
-                    estuvo vigente durante el ciclo del crédito.
-                  </p>
-                </div>
-
-                {/* === Beneficios === */}
-                <div>
-                  <p className="font-semibold text-amber-200 mb-1">✅ Beneficios al activar:</p>
-                  <ul className="list-disc list-inside space-y-0.5 text-[10px] text-amber-100/80">
-                    <li><strong>Reserva anticipada:</strong> tu monto queda asegurado para el siguiente crédito.</li>
-                    <li><strong>Prioridad:</strong> tu próxima solicitud pasa al frente de la fila.</li>
-                    <li><strong>Tasa preferencial:</strong> conservas la tasa actual sin re-evaluación.</li>
-                    <li><strong>Desembolso acelerado:</strong> el nuevo crédito se desembolsa en menos de 24h.</li>
-                    <li><strong>Trámite simplificado:</strong> omites cargue de documentos y validación de identidad.</li>
-                  </ul>
-                </div>
-              </div>
-
-              {/* === Banner de confirmación cuando está activado === */}
-              {renovacionAnticipada && (
-                <div className="p-2 rounded-md bg-emerald-500/10 border border-emerald-500/30 text-[10px] text-emerald-100 flex items-center gap-1.5">
-                  <BadgeCheck className="w-3.5 h-3.5 shrink-0" />
-                  <span>
-                    ✅ Renovación Anticipada activada. Se cobrarán{' '}
-                    <strong>{formatearMoneda(RENOVACION_ANTICIPADA_COSTO)}</strong> una
-                    sola vez al inicio del crédito (en la primera cuota). Este cobro aplica
-                    <strong> se utilice o no</strong> el beneficio, ya que reserva tu cupo
-                    desde el inicio. Tu solicitud tendrá marcador de prioridad para el asesor.
-                  </span>
-                </div>
-              )}
-
-              {/* === Banner cuando NO está activado === */}
-              {!renovacionAnticipada && (
-                <div className="p-2 rounded-md bg-muted/20 border border-border/30 text-[10px] text-muted-foreground flex items-center gap-1.5">
-                  <Info className="w-3.5 h-3.5 shrink-0" />
-                  <span>
-                    No has activado la renovación anticipada. Podrás activarla en una
-                    próxima solicitud si lo deseas.
-                  </span>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* === RESUMEN DE CARGOS Y BOTÓN ENVIAR SOLICITUD (2026-08-29) === */}
-          {/* El cliente ve el resumen completo de cargos (tarifa plataforma, */}
-          {/* flexibilidad, renovación, días causados) y luego hace clic en */}
-          {/* "Enviar Solicitud". Solo después de confirmar, se solicita la */}
-          {/* clave dinámica. */}
-          {!mostrarConfirmacionEnvio && (
-            <Card className="premium-card rounded-2xl border-cyan-500/30">
-              <CardContent className="p-3.5 space-y-3">
+          {/* === PASO 1: Solicitar Clave Dinámica === */}
+          {!claveDinamicaSolicitada && !claveDinamicaVerificada && (
+            <Card className="premium-card rounded-2xl border-violet-500/30">
+              <CardContent className="p-3.5 space-y-2.5">
                 <div className="flex items-center gap-2">
-                  <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center shadow-md">
-                    <Send className="w-4 h-4 text-white" />
+                  <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center shadow-md">
+                    <KeyRound className="w-4 h-4 text-white" />
                   </div>
                   <div className="flex-1">
-                    <p className="text-xs font-bold">Enviar Solicitud</p>
+                    <p className="text-xs font-bold">Confirmar con Clave Dinámica</p>
                     <p className="text-[10px] text-muted-foreground">
-                      Revisa los cargos y envía tu solicitud al asesor
+                      Para enviar tu solicitud, verifica tu identidad
                     </p>
                   </div>
                 </div>
-
-                {/* === Resumen de cargos === */}
-                <div className="space-y-1.5 p-2.5 rounded-lg bg-background/50 border border-border/50">
-                  <div className="flex justify-between text-[11px]">
-                    <span className="text-muted-foreground">Capital solicitado:</span>
-                    <strong>{formatearMoneda(parseFloat(valorSolicitado) || 0)}</strong>
-                  </div>
-                  <div className="flex justify-between text-[11px]">
-                    <span className="text-muted-foreground">Total intereses:</span>
-                    <strong className="text-amber-300">{resultado ? formatearMoneda(resultado.totalInteres) : '—'}</strong>
-                  </div>
-                  <div className="flex justify-between text-[11px]">
-                    <span className="text-muted-foreground">Cuota base:</span>
-                    <strong className="text-cyan-300">{resultado ? formatearMoneda(resultado.montoCuota) : '—'}</strong>
-                  </div>
-                  <div className="flex justify-between text-[11px]">
-                    <span className="text-muted-foreground">N° cuotas:</span>
-                    <strong>{numeroCuotas} ({frecuencia.toLowerCase()})</strong>
-                  </div>
-
-                  {/* === Tarifa de Plataforma $4.900 (automática cuando tasa ≥ 15%) === */}
-                  {tarifaPlataformaAplica && (
-                    <div className="flex justify-between text-[11px] pt-1.5 mt-1 border-t border-border/30">
-                      <span className="text-blue-300">
-                        💻 Tarifa Uso de Plataforma
-                        <span className="block text-[9px] text-muted-foreground">Cobro único · 1ª cuota · tasa ≥ {TASA_MIN_PARA_TARIFA}%</span>
-                      </span>
-                      <strong className="text-blue-300">{formatearMoneda(TARIFA_PLATAFORMA)}</strong>
-                    </div>
-                  )}
-                  {!tarifaPlataformaAplica && (
-                    <div className="flex justify-between text-[11px] pt-1.5 mt-1 border-t border-border/30">
-                      <span className="text-emerald-300">
-                        💻 Tarifa Uso de Plataforma
-                        <span className="block text-[9px] text-muted-foreground">No aplica (tasa &lt; {TASA_MIN_PARA_TARIFA}%)</span>
-                      </span>
-                      <strong className="text-emerald-300">$0</strong>
-                    </div>
-                  )}
-
-                  {/* === Flexibilidad Financiera (si está activada) === */}
-                  {flexibilidadFinanciera && (
-                    <div className="flex justify-between text-[11px]">
-                      <span className="text-emerald-300">
-                        ✨ Flexibilidad {flexibilidadModalidad}
-                      </span>
-                      <strong className="text-emerald-300">{formatearMoneda(FLEXIBILIDAD_COSTO)}</strong>
-                    </div>
-                  )}
-
-                  {/* === Renovación Anticipada (si está activada) === */}
-                  {renovacionAnticipada && (
-                    <div className="flex justify-between text-[11px]">
-                      <span className="text-violet-300">
-                        🔄 Renovación Anticipada
-                      </span>
-                      <strong className="text-violet-300">{formatearMoneda(RENOVACION_ANTICIPADA_COSTO)}</strong>
-                    </div>
-                  )}
-
-                  {/* === Total con cargos === */}
-                  <div className="flex justify-between text-xs pt-1.5 mt-1 border-t border-border/30">
-                    <span className="font-bold">Total a pagar (con cargos):</span>
-                    <strong className="text-emerald-300 text-sm">
-                      {formatearMoneda(
-                        (resultado?.totalPagar || 0) +
-                        tarifaPlataformaMonto +
-                        (flexibilidadFinanciera ? FLEXIBILIDAD_COSTO : 0) +
-                        (renovacionAnticipada ? RENOVACION_ANTICIPADA_COSTO : 0)
-                      )}
-                    </strong>
-                  </div>
-                  {tarifaPlataformaAplica && (
-                    <p className="text-[9px] text-blue-300/70 italic">
-                      💡 La 1ª cuota incluirá {formatearMoneda(tarifaPlataformaMonto)} por tarifa de plataforma (cobro único).
-                      Primera cuota total: <strong>{formatearMoneda((resultado?.montoCuota || 0) + tarifaPlataformaMonto + (flexibilidadFinanciera ? FLEXIBILIDAD_COSTO : 0) + (renovacionAnticipada ? RENOVACION_ANTICIPADA_COSTO : 0))}</strong>
-                    </p>
-                  )}
-                </div>
-
+                <p className="text-[10px] text-muted-foreground leading-relaxed">
+                  Te enviaremos una clave de 6 dígitos a tu correo registrado.
+                  Deberás ingresarla para confirmar el envío de tu solicitud.
+                </p>
                 <Button
-                  onClick={() => setMostrarConfirmacionEnvio(true)}
+                  onClick={solicitarClaveDinamica}
+                  disabled={claveDinamicaEnviando}
                   className="w-full gradient-premium gradient-premium-hover btn-press"
                 >
-                  <Send className="w-4 h-4 mr-2" />
-                  Enviar Solicitud
+                  {claveDinamicaEnviando ? (
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  ) : (
+                    <KeyRound className="w-4 h-4 mr-2" />
+                  )}
+                  {claveDinamicaEnviando ? 'Enviando clave...' : 'Solicitar Clave Dinámica'}
                 </Button>
               </CardContent>
             </Card>
           )}
 
-          {/* === CONFIRMACIÓN: ¿Está seguro que desea enviar? === */}
-          {mostrarConfirmacionEnvio && !enviando && (
-            <Card className="premium-card rounded-2xl border-amber-500/40 fade-scale">
-              <CardContent className="p-3.5 space-y-3">
+          {/* === PASO 2: Ingresar y validar Clave Dinámica === */}
+          {claveDinamicaSolicitada && !claveDinamicaVerificada && (
+            <Card className="premium-card rounded-2xl border-cyan-500/30 fade-scale">
+              <CardContent className="p-3.5 space-y-2.5">
                 <div className="flex items-center gap-2">
-                  <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-amber-500 to-orange-600 flex items-center justify-center shadow-md">
-                    <AlertTriangle className="w-4 h-4 text-white" />
+                  <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center shadow-md">
+                    <Smartphone className="w-4 h-4 text-white" />
                   </div>
-                  <div className="flex-1">
-                    <p className="text-xs font-bold text-amber-200">¿Está seguro?</p>
-                    <p className="text-[10px] text-muted-foreground">
-                      Confirma que deseas enviar esta solicitud
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-bold">Ingresa tu Clave</p>
+                    <p className="text-[10px] text-muted-foreground truncate">
+                      Enviada a: {emailEnmascarado}
                     </p>
                   </div>
                 </div>
-                <p className="text-[11px] text-muted-foreground leading-relaxed">
-                  Vas a enviar una solicitud de crédito por{' '}
-                  <strong className="text-foreground">{formatearMoneda(parseFloat(valorSolicitado) || 0)}</strong>{' '}
-                  a {numeroCuotas} cuotas {frecuencia.toLowerCase()}s.
-                  {tarifaPlataformaAplica && (
-                    <> Incluye tarifa de plataforma de <strong className="text-blue-300">{formatearMoneda(TARIFA_PLATAFORMA)}</strong> (cobro único en la primera cuota).</>
-                  )}
-                  {' '}Un asesor la revisará y se comunicará contigo.
-                </p>
+
+                <Input
+                  type="text"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  maxLength={6}
+                  value={claveDinamicaValor}
+                  onChange={(e) => {
+                    const v = e.target.value.replace(/\D/g, '').slice(0, 6)
+                    setClaveDinamicaValor(v)
+                  }}
+                  placeholder="______"
+                  className="input-premium text-center text-2xl font-mono tracking-[0.5em] font-bold"
+                  disabled={claveDinamicaValidando}
+                />
+
+                <div className="flex items-center justify-between text-[10px]">
+                  <span className="text-muted-foreground">
+                    Intentos restantes: <span className="font-bold text-amber-300">{intentosClave}</span>
+                  </span>
+                  <span className="text-muted-foreground">Expira en 5 min</span>
+                </div>
+
                 <div className="grid grid-cols-2 gap-2">
                   <Button
-                    onClick={() => setMostrarConfirmacionEnvio(false)}
+                    onClick={solicitarClaveDinamica}
+                    disabled={claveDinamicaEnviando || claveDinamicaValidando}
                     variant="outline"
                     size="sm"
                     className="border-white/20 hover:bg-white/5"
                   >
-                    Cancelar
+                    <RefreshCw className="w-3 h-3 mr-1.5" />
+                    Reenviar
                   </Button>
                   <Button
-                    onClick={() => {
-                      setMostrarConfirmacionEnvio(false)
-                      enviarSolicitud()
-                    }}
+                    onClick={validarClaveDinamica}
+                    disabled={claveDinamicaValidando || claveDinamicaValor.length !== 6}
                     className="gradient-premium gradient-premium-hover btn-press"
                     size="sm"
                   >
-                    <CheckCircle className="w-3.5 h-3.5 mr-1.5" />
-                    Sí, enviar
+                    {claveDinamicaValidando ? (
+                      <Loader2 className="w-3 h-3 mr-1.5 animate-spin" />
+                    ) : (
+                      <CheckCircle className="w-3 h-3 mr-1.5" />
+                    )}
+                    {claveDinamicaValidando ? 'Validando...' : 'Validar Clave'}
                   </Button>
                 </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* === PASO 3: Clave verificada — Enviar solicitud === */}
+          {claveDinamicaVerificada && (
+            <Card className="premium-card rounded-2xl border-emerald-500/40 fade-scale">
+              <CardContent className="p-3.5 space-y-2.5">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center shadow-md">
+                    <ShieldCheck className="w-4 h-4 text-white" />
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-xs font-bold text-emerald-200">Identidad verificada</p>
+                    <p className="text-[10px] text-muted-foreground">
+                      Ya puedes enviar tu solicitud
+                    </p>
+                  </div>
+                  <CheckCircle className="w-5 h-5 text-emerald-400" />
+                </div>
+                <Button
+                  onClick={enviarSolicitud}
+                  disabled={enviando}
+                  className="w-full gradient-premium gradient-premium-hover btn-press"
+                >
+                  {enviando ? (
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  ) : (
+                    <Send className="w-4 h-4 mr-2" />
+                  )}
+                  {enviando ? 'Enviando...' : 'Enviar Solicitud de Crédito'}
+                </Button>
               </CardContent>
             </Card>
           )}
@@ -3374,29 +2767,13 @@ interface SolicitudWebItem {
   fechaRevision: string | null
   fechaConversion: string | null
   prestamoCreadoId: string | null
-  // === Campos nuevos: flujo de firma + flexibilidad ===
-  estadoFlujoFirma?: string
-  flexibilidadFinanciera?: boolean
-  flexibilidadModalidad?: string | null
-  flexibilidadCosto?: number
 }
 
-function MisSolicitudesPanel({
-  cedula,
-  token,
-  prestamosPendientes = [],
-  onAbrirTyC,
-}: {
-  cedula: string
-  token?: string
-  prestamosPendientes?: any[]
-  onAbrirTyC?: (prestamoId: string, codigo: string) => void
-}) {
+function MisSolicitudesPanel({ cedula, token }: { cedula: string; token?: string }) {
   const { toast } = useToast()
   const [solicitudes, setSolicitudes] = useState<SolicitudWebItem[]>([])
   const [loading, setLoading] = useState(true)
   const [expandida, setExpandida] = useState<string | null>(null)
-  const [generandoToken, setGenerandoToken] = useState<string | null>(null)
 
   const cargar = async () => {
     if (!token) {
@@ -3405,12 +2782,8 @@ function MisSolicitudesPanel({
     }
     try {
       setLoading(true)
-      // FIX: incluir x-portal-token header además del token en query string.
-      const headers: Record<string, string> = {}
-      if (token) headers['x-portal-token'] = token
       const res = await fetch(
-        `/api/solicitudes-web/cliente/${cedula}?token=${encodeURIComponent(token)}`,
-        { headers }
+        `/api/solicitudes-web/cliente/${cedula}?token=${encodeURIComponent(token)}`
       )
       const json = await res.json()
       if (json.success) {
@@ -3429,40 +2802,6 @@ function MisSolicitudesPanel({
     cargar()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cedula, token])
-
-  // === Generar token de firma electrónica y redirigir a /firma/[token] ===
-  const iniciarFirmaElectronica = async (prestamoId: string, codigo: string) => {
-    if (!token) {
-      toast({ title: 'Error', description: 'Tu sesión ha expirado. Vuelve a iniciar sesión.', variant: 'destructive' })
-      return
-    }
-    setGenerandoToken(prestamoId)
-    try {
-      const res = await fetch('/api/portal/iniciar-firma', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-portal-token': token,
-        },
-        body: JSON.stringify({ prestamoId }),
-      })
-      const json = await res.json()
-      if (json.success && json.data?.linkFirma) {
-        toast({
-          title: 'Abriendo firma electrónica',
-          description: `Solicitud ${codigo} — completing los 4 pasos en una nueva pestaña.`,
-        })
-        // Abrir el flujo de firma en una nueva pestaña
-        window.open(json.data.linkFirma, '_blank', 'noopener,noreferrer')
-      } else {
-        toast({ title: 'Error', description: json.error || 'No se pudo iniciar la firma', variant: 'destructive' })
-      }
-    } catch (e: any) {
-      toast({ title: 'Error', description: e.message, variant: 'destructive' })
-    } finally {
-      setGenerandoToken(null)
-    }
-  }
 
   if (!token) {
     return (
@@ -3483,8 +2822,8 @@ function MisSolicitudesPanel({
     )
   }
 
-  const total = solicitudes.length + prestamosPendientes.length
-  const pendientes = solicitudes.filter((s) => s.estado === 'PENDIENTE').length + prestamosPendientes.length
+  const total = solicitudes.length
+  const pendientes = solicitudes.filter((s) => s.estado === 'PENDIENTE').length
   const enProceso = solicitudes.filter((s) => s.estado === 'EN_REVISION').length
   const finalizadas = solicitudes.filter(
     (s) => s.estado === 'CONVERTIDA' || s.estado === 'APROBADA' || s.estado === 'RECHAZADA'
@@ -3524,84 +2863,7 @@ function MisSolicitudesPanel({
         </Card>
       </div>
 
-      {/* === SECCIÓN NUEVA: Solicitudes pendientes de aceptación de TyC === */}
-      {prestamosPendientes.length > 0 && (
-        <div className="space-y-2">
-          <div className="flex items-center gap-2 px-1">
-            <ShieldCheck className="w-4 h-4 text-amber-300" />
-            <p className="text-xs font-semibold text-amber-200 uppercase tracking-wide">
-              Pendientes de firma electrónica
-            </p>
-          </div>
-          {prestamosPendientes.map((p) => (
-            <Card key={p.id} className="premium-card premium-card-hover rounded-2xl border-amber-400/50">
-              <CardContent className="p-3.5">
-                <div className="flex items-start justify-between gap-2 mb-2">
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="font-mono text-sm font-bold">{p.codigo}</span>
-                      <EstadoBadge estado={p.estado} />
-                    </div>
-                    <p className="text-[10px] text-muted-foreground mt-1">
-                      Solicitado: {formatearFecha(p.fechaSolicitud || p.createdAt)}
-                    </p>
-                  </div>
-                  <div className="text-right shrink-0">
-                    <p className="text-[9px] text-muted-foreground uppercase tracking-wide">Principal</p>
-                    <p className="font-bold text-amber-300 text-sm">{formatearMoneda(p.montoPrincipal)}</p>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-3 gap-2 text-xs mb-2.5">
-                  <div className="p-2 rounded-lg bg-white/5">
-                    <p className="text-[9px] text-muted-foreground uppercase tracking-wide">Cuotas</p>
-                    <p className="font-semibold text-[11px]">{p.numeroCuotas || p.plazoMeses}</p>
-                  </div>
-                  <div className="p-2 rounded-lg bg-white/5">
-                    <p className="text-[9px] text-muted-foreground uppercase tracking-wide">Cuota</p>
-                    <p className="font-semibold text-[11px]">{formatearMoneda(p.montoCuota)}</p>
-                  </div>
-                  <div className="p-2 rounded-lg bg-white/5">
-                    <p className="text-[9px] text-muted-foreground uppercase tracking-wide">Total</p>
-                    <p className="font-semibold text-[11px]">{formatearMoneda(p.totalPagar || p.saldoTotal)}</p>
-                  </div>
-                </div>
-
-                <div className="mb-2.5 p-2.5 rounded-lg bg-amber-500/10 border border-amber-400/30">
-                  <p className="text-xs font-semibold text-amber-200 mb-0.5 flex items-center gap-1">
-                    <AlertTriangle className="w-3.5 h-3.5" />
-                    Requiere tu aceptación
-                  </p>
-                  <p className="text-[10px] text-amber-100/80 mb-2">
-                    Inicia el flujo de firma electrónica: foto del documento → firma manuscrita → código OTP → selfie con cédula.
-                  </p>
-                  <Button
-                    size="sm"
-                    onClick={() => iniciarFirmaElectronica(p.id, p.codigo)}
-                    disabled={generandoToken === p.id}
-                    className="gradient-premium gradient-premium-hover btn-press w-full h-8"
-                  >
-                    {generandoToken === p.id ? (
-                      <>
-                        <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
-                        Generando enlace...
-                      </>
-                    ) : (
-                      <>
-                        <ShieldCheck className="w-3.5 h-3.5 mr-1.5" />
-                        Iniciar firma electrónica
-                      </>
-                    )}
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      )}
-
-      {/* === Solicitudes web (modelo SolicitudWeb) === */}
-      {solicitudes.length === 0 && prestamosPendientes.length === 0 ? (
+      {solicitudes.length === 0 ? (
         <EmptyStatePremium
           icon={ClipboardList}
           title="No tienes solicitudes"
@@ -3659,23 +2921,6 @@ function MisSolicitudesPanel({
                   <SolicitudTimeline estado={s.estado} />
                 </div>
 
-                {/* === Flujo de firma del cliente (cuando la solicitud fue aprobada) === */}
-                {/* Cuando el admin aprueba/crea solicitud, el cliente debe: */}
-                {/* 1) Cargar fotos (cédula + selfie) */}
-                {/* 2) Firma manuscrita */}
-                {/* 3) Código OTP */}
-                {(s.estado === 'APROBADA' || s.estado === 'CONVERTIDA') && s.prestamoCreadoId && (
-                  <div className="mt-2.5">
-                    <FlujoFirmaClient
-                      solicitudId={s.id}
-                      prestamoId={s.prestamoCreadoId}
-                      estadoFlujoFirma={s.estadoFlujoFirma || 'EN_FIRMA_CLIENTE'}
-                      token={token}
-                      onCompletado={() => cargar()}
-                    />
-                  </div>
-                )}
-
                 {expanded && (
                   <div className="mt-2.5 pt-2 border-t border-white/10 space-y-2 fade-scale">
                     <div className="grid grid-cols-2 gap-2 text-[10px]">
@@ -3720,453 +2965,6 @@ function MisSolicitudesPanel({
         })
       )}
     </div>
-  )
-}
-
-// =====================================================
-// Componente: Flujo de firma del cliente (cargue fotos + firma + OTP)
-// Se muestra cuando una solicitud fue aprobada y se creó el solicitud.
-// El cliente debe completar 3 pasos:
-//   1. Cargar foto de cédula + selfie
-//   2. Dibujar firma manuscrita
-//   3. Ingresar código OTP recibido por correo/WhatsApp
-// =====================================================
-function FlujoFirmaClient({
-  solicitudId,
-  prestamoId,
-  estadoFlujoFirma,
-  token,
-  onCompletado,
-}: {
-  solicitudId: string
-  prestamoId: string
-  estadoFlujoFirma: string
-  token?: string
-  onCompletado?: () => void
-}) {
-  const { toast } = useToast()
-  const [paso, setPaso] = useState<1 | 2 | 3 | 4>(1) // 1=fotos, 2=firma, 3=OTP, 4=completado
-  const [fotoDocumento, setFotoDocumento] = useState<string | null>(null)
-  const [fotoSelfie, setFotoSelfie] = useState<string | null>(null)
-  const [guardandoFotos, setGuardandoFotos] = useState(false)
-  const [firmaDibujada, setFirmaDibujada] = useState<string | null>(null)
-  const [guardandoFirma, setGuardandoFirma] = useState(false)
-  const [otpEnviado, setOtpEnviado] = useState(false)
-  const [otpValor, setOtpValor] = useState('')
-  const [enviandoOtp, setEnviandoOtp] = useState(false)
-  const [validandoOtp, setValidandoOtp] = useState(false)
-  const [otpCanal, setOtpCanal] = useState<'EMAIL' | 'WHATSAPP'>('EMAIL')
-  const canvasRef = useRef<HTMLCanvasElement | null>(null)
-  const isDrawing = useRef(false)
-
-  // === Si el flujo ya está completado, mostrar pantalla final ===
-  useEffect(() => {
-    if (estadoFlujoFirma === 'FIRMA_COMPLETADA') setPaso(4)
-  }, [estadoFlujoFirma])
-
-  // === Inicializar canvas con fondo blanco cuando se entra al paso 2 ===
-  // Sin esto, el canvas arranca transparente y al exportar el PNG puede
-  // quedar ilegible. También reinicia el fondo al limpiar.
-  useEffect(() => {
-    if (paso !== 2) return
-    const canvas = canvasRef.current
-    if (!canvas) return
-    const ctx = canvas.getContext('2d')
-    if (!ctx) return
-    // Pintar fondo blanco
-    ctx.fillStyle = '#ffffff'
-    ctx.fillRect(0, 0, canvas.width, canvas.height)
-    // Configurar estilo de trazo
-    ctx.lineWidth = 2.5
-    ctx.lineCap = 'round'
-    ctx.lineJoin = 'round'
-    ctx.strokeStyle = '#0f172a'
-  }, [paso])
-
-  // === Helper: convertir coordenadas de evento a coordenadas reales del canvas ===
-  // El canvas puede estar escalado por CSS, por lo que necesitamos mapear
-  // las coordenadas de pantalla a las dimensiones internas (400x140).
-  const getCanvasCoords = (
-    e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>
-  ): { x: number; y: number } => {
-    const canvas = canvasRef.current
-    if (!canvas) return { x: 0, y: 0 }
-    const rect = canvas.getBoundingClientRect()
-    const clientX = 'touches' in e
-      ? (e.touches[0]?.clientX ?? (e as React.TouchEvent).changedTouches[0]?.clientX ?? 0)
-      : (e as React.MouseEvent).clientX
-    const clientY = 'touches' in e
-      ? (e.touches[0]?.clientY ?? (e as React.TouchEvent).changedTouches[0]?.clientY ?? 0)
-      : (e as React.MouseEvent).clientY
-    const x = ((clientX - rect.left) * canvas.width) / rect.width
-    const y = ((clientY - rect.top) * canvas.height) / rect.height
-    return { x, y }
-  }
-
-  // === Manejo del canvas para firma manuscrita ===
-  const empezarDibujo = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
-    const canvas = canvasRef.current
-    if (!canvas) return
-    const ctx = canvas.getContext('2d')
-    if (!ctx) return
-    // Prevenir scroll en mobile
-    if ('touches' in e) e.preventDefault()
-    isDrawing.current = true
-    const { x, y } = getCanvasCoords(e)
-    ctx.beginPath()
-    ctx.moveTo(x, y)
-    // Dibujar un punto inicial para clicks simples
-    ctx.lineTo(x + 0.1, y + 0.1)
-    ctx.stroke()
-  }
-  const moverDibujo = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
-    if (!isDrawing.current) return
-    const canvas = canvasRef.current
-    if (!canvas) return
-    const ctx = canvas.getContext('2d')
-    if (!ctx) return
-    // Prevenir scroll en mobile mientras dibuja
-    if ('touches' in e) e.preventDefault()
-    const { x, y } = getCanvasCoords(e)
-    ctx.lineTo(x, y)
-    ctx.stroke()
-    // Actualizar preview en tiempo real para que el usuario vea que se está dibujando
-    setFirmaDibujada(canvas.toDataURL('image/png'))
-  }
-  const terminarDibujo = () => {
-    if (!isDrawing.current) return
-    isDrawing.current = false
-    const canvas = canvasRef.current
-    if (canvas) setFirmaDibujada(canvas.toDataURL('image/png'))
-  }
-  const limpiarFirma = () => {
-    const canvas = canvasRef.current
-    if (!canvas) return
-    const ctx = canvas.getContext('2d')
-    if (!ctx) return
-    // Repintar fondo blanco
-    ctx.fillStyle = '#ffffff'
-    ctx.fillRect(0, 0, canvas.width, canvas.height)
-    setFirmaDibujada(null)
-  }
-
-  // === Paso 1: Guardar fotos ===
-  const guardarFotos = async () => {
-    if (!fotoDocumento || !fotoSelfie) {
-      toast({ title: 'Faltan fotos', description: 'Sube la foto de tu cédula y tu selfie.', variant: 'destructive' })
-      return
-    }
-    try {
-      setGuardandoFotos(true)
-      const headers: Record<string, string> = { 'Content-Type': 'application/json' }
-      if (token) headers['x-portal-token'] = token
-      const res = await fetch(`/api/prestamos/${prestamoId}/aceptar-tyc-otp`, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({
-          accion: 'guardar_fotos_simple',
-          fotoDocumentoBase64: fotoDocumento,
-          fotoSelfieBase64: fotoSelfie,
-        }),
-      })
-      const json = await res.json()
-      if (json.success) {
-        toast({ title: 'Fotos guardadas', description: 'Ahora dibuja tu firma manuscrita.' })
-        setPaso(2)
-      } else {
-        toast({ title: 'Error', description: json.error || 'No se pudieron guardar las fotos', variant: 'destructive' })
-      }
-    } catch (e: any) {
-      toast({ title: 'Error', description: e.message, variant: 'destructive' })
-    } finally {
-      setGuardandoFotos(false)
-    }
-  }
-
-  // === Paso 2: Guardar firma manuscrita ===
-  const guardarFirma = async () => {
-    if (!firmaDibujada) {
-      toast({ title: 'Firma requerida', description: 'Dibuja tu firma en el recuadro.', variant: 'destructive' })
-      return
-    }
-    try {
-      setGuardandoFirma(true)
-      const headers: Record<string, string> = { 'Content-Type': 'application/json' }
-      if (token) headers['x-portal-token'] = token
-      const res = await fetch(`/api/prestamos/${prestamoId}/aceptar-tyc-otp`, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({
-          accion: 'guardar_firma_manuscrita',
-          imagenFirmaBase64: firmaDibujada,
-        }),
-      })
-      const json = await res.json()
-      if (json.success) {
-        toast({ title: 'Firma guardada', description: 'Ahora solicita tu código OTP.' })
-        setPaso(3)
-      } else {
-        toast({ title: 'Error', description: json.error || 'No se pudo guardar la firma', variant: 'destructive' })
-      }
-    } catch (e: any) {
-      toast({ title: 'Error', description: e.message, variant: 'destructive' })
-    } finally {
-      setGuardandoFirma(false)
-    }
-  }
-
-  // === Paso 3: Enviar OTP ===
-  const enviarOTP = async () => {
-    try {
-      setEnviandoOtp(true)
-      const headers: Record<string, string> = { 'Content-Type': 'application/json' }
-      if (token) headers['x-portal-token'] = token
-      const res = await fetch(`/api/prestamos/${prestamoId}/aceptar-tyc-otp`, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({ accion: 'enviar_otp', canal: otpCanal }),
-      })
-      const json = await res.json()
-      if (json.success) {
-        setOtpEnviado(true)
-        toast({ title: 'Código enviado', description: `Revisa tu ${otpCanal === 'EMAIL' ? 'correo' : 'WhatsApp'}.` })
-      } else {
-        toast({ title: 'Error', description: json.error || 'No se pudo enviar el OTP', variant: 'destructive' })
-      }
-    } catch (e: any) {
-      toast({ title: 'Error', description: e.message, variant: 'destructive' })
-    } finally {
-      setEnviandoOtp(false)
-    }
-  }
-
-  // === Paso 3b: Validar OTP y activar solicitud ===
-  const validarOTP = async () => {
-    if (!otpValor || otpValor.length !== 6) {
-      toast({ title: 'Código inválido', description: 'Ingresa los 6 dígitos.', variant: 'destructive' })
-      return
-    }
-    try {
-      setValidandoOtp(true)
-      const headers: Record<string, string> = { 'Content-Type': 'application/json' }
-      if (token) headers['x-portal-token'] = token
-      // 1. Validar OTP
-      // FIX 2026-08-12: El backend espera `otpIngresado`, no `otp`.
-      // Antes se enviaba `{ otp: otpValor }` y el backend leía `otpIngresado`
-      // (undefined), devolviendo "Código requerido" → el cliente veía
-      // "OTP inválido" aunque el código fuera correcto.
-      const resVal = await fetch(`/api/prestamos/${prestamoId}/aceptar-tyc-otp`, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({ accion: 'validar_otp', otpIngresado: otpValor }),
-      })
-      const jsonVal = await resVal.json()
-      if (!jsonVal.success) {
-        toast({ title: 'OTP inválido', description: jsonVal.error || 'Verifica el código e intenta nuevamente', variant: 'destructive' })
-        return
-      }
-      // 2. Confirmar (activa el solicitud)
-      const resConf = await fetch(`/api/prestamos/${prestamoId}/aceptar-tyc-otp`, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({ accion: 'confirmar_activacion' }),
-      })
-      const jsonConf = await resConf.json()
-      if (jsonConf.success) {
-        toast({ title: '¡Solicitud activado!', description: 'Tu crédito ha sido activado correctamente.' })
-        setPaso(4)
-        onCompletado?.()
-      } else {
-        toast({ title: 'Activación pendiente', description: jsonConf.error || 'Tu OTP fue validado. Contacta al asesor para activar el crédito.' })
-      }
-    } catch (e: any) {
-      toast({ title: 'Error', description: e.message, variant: 'destructive' })
-    } finally {
-      setValidandoOtp(false)
-    }
-  }
-
-  // === Captura de fotos (FlujoFirmaClient) ===
-  // NOTA: La captura de fotos (cámara + subir archivo + girar cámara) ahora
-  // se maneja internamente en el componente FotoCaptureFirma.
-
-  const pasos = [
-    { n: 1, label: 'Fotos', icon: Camera },
-    { n: 2, label: 'Firma', icon: FileSignature },
-    { n: 3, label: 'OTP', icon: KeyRound },
-    { n: 4, label: 'Activado', icon: CheckCircle },
-  ] as const
-
-  return (
-    <Card className="premium-card rounded-2xl border-2 border-violet-500/40 bg-gradient-to-br from-violet-500/5 to-fuchsia-500/5">
-      <CardContent className="p-3 space-y-3">
-        <div className="flex items-center gap-2">
-          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-violet-500 to-fuchsia-600 flex items-center justify-center shadow-md">
-            <FileSignature className="w-4 h-4 text-white" />
-          </div>
-          <div className="flex-1">
-            <p className="text-xs font-bold">Flujo de firma del crédito</p>
-            <p className="text-[10px] text-muted-foreground">
-              Tu solicitud fue aprobada. Completa estos 3 pasos para activar tu crédito.
-            </p>
-          </div>
-        </div>
-
-        {/* === Indicador de pasos === */}
-        <div className="flex items-center gap-1">
-          {pasos.map((p, i) => {
-            const completado = paso > p.n
-            const activo = paso === p.n
-            const Icon = p.icon
-            return (
-              <div key={p.n} className="flex items-center flex-1 min-w-0">
-                <div className="flex flex-col items-center gap-0.5 min-w-0">
-                  <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold border transition-all ${
-                    completado
-                      ? 'bg-emerald-500 text-white border-emerald-400'
-                      : activo
-                        ? 'bg-violet-500 text-white border-violet-400 shadow-md shadow-violet-500/40'
-                        : 'bg-white/5 text-muted-foreground border-white/10'
-                  }`}>
-                    {completado ? <CheckCircle className="w-3 h-3" /> : <Icon className="w-3 h-3" />}
-                  </div>
-                  <span className={`text-[8px] truncate ${completado || activo ? 'text-violet-300' : 'text-muted-foreground'}`}>{p.label}</span>
-                </div>
-                {i < pasos.length - 1 && (
-                  <div className={`h-0.5 flex-1 mx-0.5 ${completado ? 'bg-emerald-500/40' : 'bg-white/10'}`} />
-                )}
-              </div>
-            )
-          })}
-        </div>
-
-        {/* === Paso 1: Cargue de fotos === */}
-        {paso === 1 && (
-          <div className="space-y-2 fade-scale">
-            <p className="text-[11px] text-muted-foreground">
-              Toma o sube una foto nítida de tu cédula (frente) y un selfie sosteniéndola. Puedes usar la cámara o subir un archivo. Si necesitas cambiar de cámara, usa el botón "Girar cámara".
-            </p>
-            <FotoCaptureFirma
-              label="Foto cédula (frente)"
-              descripcion="Asegúrate de que se lean todos los datos."
-              valor={fotoDocumento}
-              onChange={(v) => setFotoDocumento(v)}
-              initialFacing="environment"
-              mirror={false}
-            />
-            <FotoCaptureFirma
-              label="Selfie con cédula"
-              descripcion="Tu rostro completo y la cédula deben verse nítidos."
-              valor={fotoSelfie}
-              onChange={(v) => setFotoSelfie(v)}
-              initialFacing="user"
-              mirror
-            />
-            <Button onClick={guardarFotos} disabled={!fotoDocumento || !fotoSelfie || guardandoFotos} className="w-full h-8 text-[11px]" size="sm">
-              {guardandoFotos ? <><Loader2 className="w-3 h-3 mr-1 animate-spin" /> Guardando…</> : 'Continuar a firma →'}
-            </Button>
-          </div>
-        )}
-
-        {/* === Paso 2: Firma manuscrita === */}
-        {paso === 2 && (
-          <div className="space-y-2 fade-scale">
-            <Label className="text-[10px] font-semibold">Dibuja tu firma manuscrita</Label>
-            <p className="text-[9px] text-muted-foreground">
-              Usa el dedo (en móvil) o el mouse para dibujar tu firma en el recuadro blanco.
-            </p>
-            <canvas
-              ref={canvasRef}
-              width={400}
-              height={140}
-              onMouseDown={empezarDibujo}
-              onMouseMove={moverDibujo}
-              onMouseUp={terminarDibujo}
-              onMouseLeave={terminarDibujo}
-              onTouchStart={empezarDibujo}
-              onTouchMove={moverDibujo}
-              onTouchEnd={terminarDibujo}
-              className="w-full h-28 bg-white rounded-md border-2 border-violet-500/30 touch-none cursor-crosshair"
-            />
-            <div className="flex items-center justify-between gap-2">
-              <span className="text-[9px] text-muted-foreground">
-                {firmaDibujada ? '✓ Firma capturada' : 'Dibuja tu firma arriba'}
-              </span>
-              <div className="flex gap-2">
-                <Button variant="outline" onClick={limpiarFirma} className="h-8 text-[11px]" size="sm">
-                  Limpiar
-                </Button>
-                <Button onClick={guardarFirma} disabled={!firmaDibujada || guardandoFirma} className="h-8 text-[11px]" size="sm">
-                  {guardandoFirma ? <><Loader2 className="w-3 h-3 mr-1 animate-spin" /> Guardando…</> : 'Continuar a OTP →'}
-                </Button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* === Paso 3: OTP === */}
-        {paso === 3 && (
-          <div className="space-y-2 fade-scale">
-            <Label className="text-[10px] font-semibold">Verifica tu identidad con OTP</Label>
-            <p className="text-[10px] text-muted-foreground">
-              Te enviaremos un código de 6 dígitos para confirmar la activación del crédito.
-            </p>
-            <div className="flex gap-2">
-              <button
-                type="button"
-                onClick={() => setOtpCanal('EMAIL')}
-                className={`flex-1 p-2 rounded-md border text-[10px] flex items-center justify-center gap-1 ${otpCanal === 'EMAIL' ? 'border-violet-500 bg-violet-500/15 text-violet-200' : 'border-white/15 text-muted-foreground'}`}
-              >
-                <Mail className="w-3 h-3" /> Correo
-              </button>
-              <button
-                type="button"
-                onClick={() => setOtpCanal('WHATSAPP')}
-                className={`flex-1 p-2 rounded-md border text-[10px] flex items-center justify-center gap-1 ${otpCanal === 'WHATSAPP' ? 'border-violet-500 bg-violet-500/15 text-violet-200' : 'border-white/15 text-muted-foreground'}`}
-              >
-                <Smartphone className="w-3 h-3" /> WhatsApp
-              </button>
-            </div>
-            {!otpEnviado ? (
-              <Button onClick={enviarOTP} disabled={enviandoOtp} className="w-full h-8 text-[11px]" size="sm">
-                {enviandoOtp ? <><Loader2 className="w-3 h-3 mr-1 animate-spin" /> Enviando…</> : 'Enviar código OTP'}
-              </Button>
-            ) : (
-              <>
-                <Input
-                  type="text"
-                  inputMode="numeric"
-                  maxLength={6}
-                  placeholder="______"
-                  value={otpValor}
-                  onChange={(e) => setOtpValor(e.target.value.replace(/\D/g, ''))}
-                  className="text-center text-lg tracking-widest h-10 font-mono"
-                />
-                <Button onClick={validarOTP} disabled={otpValor.length !== 6 || validandoOtp} className="w-full h-8 text-[11px]" size="sm">
-                  {validandoOtp ? <><Loader2 className="w-3 h-3 mr-1 animate-spin" /> Validando…</> : 'Validar y activar crédito'}
-                </Button>
-                <button type="button" onClick={enviarOTP} disabled={enviandoOtp} className="w-full text-[10px] text-muted-foreground hover:text-foreground">
-                  ¿No recibiste el código? Reenviar
-                </button>
-              </>
-            )}
-          </div>
-        )}
-
-        {/* === Paso 4: Completado === */}
-        {paso === 4 && (
-          <div className="text-center py-4 fade-scale">
-            <div className="w-12 h-12 mx-auto rounded-full bg-emerald-500/20 flex items-center justify-center mb-2">
-              <CheckCircle className="w-7 h-7 text-emerald-400" />
-            </div>
-            <p className="text-sm font-bold text-emerald-300">¡Crédito activado!</p>
-            <p className="text-[10px] text-muted-foreground mt-1">
-              Tu solicitud fue activado correctamente. Ya puedes verlo en la sección "Mis Solicitudes".
-            </p>
-          </div>
-        )}
-      </CardContent>
-    </Card>
   )
 }
 

@@ -28,19 +28,10 @@ import {
 } from '@/components/ui/table'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Badge } from '@/components/ui/badge'
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
 import { EstadoBadge } from '@/components/ui-basics'
 import { BitacoraPanel } from '@/components/views/BitacoraPanel'
 import { useToast } from '@/hooks/use-toast'
 import { formatearMoneda, formatearFecha, formatearFechaHora } from '@/lib/finanzas'
-import { abrirHtmlImprimible, descargarArchivo } from '@/lib/auth-docs'
 import {
   X,
   Printer,
@@ -60,8 +51,6 @@ import {
   Sparkles,
   Plus,
   RefreshCw,
-  ChevronDown,
-  FileSignature,
 } from 'lucide-react'
 
 interface PrestamoDetalle {
@@ -154,7 +143,7 @@ export function PrestamoDetalleModal({
 
   // === Otro Sí — Flexibilidad Financiera ===
   const [otrosSi, setOtrosSi] = useState<any[]>([])
-  const [flexInfo, setFlexInfo] = useState<any>(null) // info de flexibilidad del solicitud
+  const [flexInfo, setFlexInfo] = useState<any>(null) // info de flexibilidad del préstamo
   const [cargandoOtrosSi, setCargandoOtrosSi] = useState(false)
   const [modalNuevoOtroSi, setModalNuevoOtroSi] = useState(false)
   const [otroSiTipo, setOtroSiTipo] = useState<'CAMBIO_FECHA' | 'TRASLADO_CUOTA'>('CAMBIO_FECHA')
@@ -203,12 +192,12 @@ export function PrestamoDetalleModal({
           setEstadoVerificacion(null)
         }
       } else {
-        throw new Error(json.error || 'No se pudo cargar el solicitud')
+        throw new Error(json.error || 'No se pudo cargar el préstamo')
       }
     } catch (e: any) {
       if (e?.name !== 'AbortError') {
         console.error(e)
-        setErrorCarga(e.message || 'Error desconocido al cargar el solicitud')
+        setErrorCarga(e.message || 'Error desconocido al cargar el préstamo')
       }
     } finally {
       if (!signal?.aborted) setLoading(false)
@@ -225,7 +214,7 @@ export function PrestamoDetalleModal({
     }
   }
 
-  // Carga el estado de verificación de códigos OTP del solicitud
+  // Carga el estado de verificación de códigos OTP del préstamo
   // (deudor y, si aplica, codeudor). Permite mostrar badges de
   // "verificado / pendiente" en la UI.
   const cargarEstadoVerificacion = async (signal?: AbortSignal) => {
@@ -242,7 +231,7 @@ export function PrestamoDetalleModal({
     }
   }
 
-  // === Otro Sí — Cargar lista de Otros Síes del solicitud ===
+  // === Otro Sí — Cargar lista de Otros Síes del préstamo ===
   const cargarOtrosSi = async () => {
     try {
       setCargandoOtrosSi(true)
@@ -413,42 +402,6 @@ export function PrestamoDetalleModal({
     }, 500)
   }
 
-  // === Otro Sí — Ver / Imprimir un Otro Sí existente (firmado) ===
-  // Abre el HTML del Otro Sí en una nueva pestaña para que el usuario
-  // pueda imprimirlo o guardarlo como PDF. Solo se debe invocar para
-  // Otros Síes que ya estén FIRMADOS.
-  const verOtroSiFirmado = async (otroSiId: string, codigo: string) => {
-    const url = `/api/prestamos/${prestamoId}/otro-si/${otroSiId}`
-    const ok = await abrirHtmlImprimible(url)
-    if (!ok) {
-      toast({
-        title: 'No se pudo abrir',
-        description: `Otro Sí ${codigo} — intenta nuevamente.`,
-        variant: 'destructive',
-      })
-    }
-  }
-
-  // === Otro Sí — Descargar un Otro Sí existente (firmado) ===
-  // Fuerza la descarga del HTML del Otro Sí como archivo .html
-  // (el usuario puede abrirlo e imprimirlo offline, o convertirlo a PDF
-  // desde su navegador). Solo se debe invocar para Otros Síes firmados.
-  const descargarOtroSiFirmado = async (otroSiId: string, codigo: string) => {
-    const url = `/api/prestamos/${prestamoId}/otro-si/${otroSiId}?descargar=1`
-    const nombreLimpio = codigo.replace(/[^A-Za-z0-9-]/g, '_')
-    const ok = await descargarArchivo(url, `OtroSi_${nombreLimpio}.html`)
-    if (!ok) {
-      toast({
-        title: 'No se pudo descargar',
-        description: `Otro Sí ${codigo} — intenta nuevamente.`,
-        variant: 'destructive',
-      })
-    }
-  }
-
-  // Otros Síes firmados (ordenados por createdAt desc — el más reciente primero)
-  const otrosSiFirmados = otrosSi.filter((os) => os.estado === 'FIRMADO')
-
   const registrarPago = async (e: React.FormEvent) => {
     e.preventDefault()
     try {
@@ -572,19 +525,9 @@ export function PrestamoDetalleModal({
     }
   }
 
-  const descargarPagos = async (formato: 'csv' | 'json', cuota?: string) => {
+  const descargarPagos = (formato: 'csv' | 'json', cuota?: string) => {
     const url = `/api/prestamos/${prestamoId}/pagos-export?formato=${formato}${cuota ? `&cuota=${cuota}` : ''}`
-    // IMPORTANTE: usar descargarArchivo (fetch + Blob) en lugar de window.open,
-    // porque window.open NO puede añadir el header Authorization: Bearer y en
-    // producción el endpoint devuelve 401 "No autorizado. Token requerido."
-    const ok = await descargarArchivo(url)
-    if (!ok) {
-      toast({
-        title: 'No se pudo descargar',
-        description: 'Verifica tu sesión e intenta nuevamente.',
-        variant: 'destructive',
-      })
-    }
+    window.open(url, '_blank', 'noopener,noreferrer')
   }
 
   // Marcar notificación como ENVIADA después de abrir WhatsApp manualmente
@@ -612,7 +555,7 @@ export function PrestamoDetalleModal({
         <DialogContent className="max-w-5xl">
           <div className="py-8 text-center text-muted-foreground flex flex-col items-center gap-3">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
-            <span>Cargando solicitud...</span>
+            <span>Cargando préstamo...</span>
           </div>
         </DialogContent>
       </Dialog>
@@ -626,7 +569,7 @@ export function PrestamoDetalleModal({
           <div className="py-8 text-center space-y-4">
             <AlertTriangle className="w-12 h-12 text-red-500 mx-auto" />
             <div>
-              <p className="font-semibold text-red-700">Error cargando el solicitud</p>
+              <p className="font-semibold text-red-700">Error cargando el préstamo</p>
               <p className="text-sm text-muted-foreground mt-1">{errorCarga}</p>
             </div>
             <div className="flex justify-center gap-2">
@@ -648,7 +591,7 @@ export function PrestamoDetalleModal({
       <Dialog open={true} onOpenChange={onClose}>
         <DialogContent className="max-w-5xl">
           <div className="py-8 text-center space-y-4">
-            <p className="text-muted-foreground">No se encontraron datos del solicitud.</p>
+            <p className="text-muted-foreground">No se encontraron datos del préstamo.</p>
             <Button variant="outline" size="sm" onClick={onClose}>
               Cerrar
             </Button>
@@ -681,7 +624,7 @@ export function PrestamoDetalleModal({
               <Button
                 size="sm"
                 variant="outline"
-                onClick={() => abrirHtmlImprimible(`/api/estado-cuenta?cedula=${encodeURIComponent(data.cliente.cedula)}&prestamoId=${data.id}`)}
+                onClick={() => window.open(`/api/estado-cuenta?cedula=${encodeURIComponent(data.cliente.cedula)}&prestamoId=${data.id}`, '_blank', 'noopener,noreferrer')}
                 title="Ver estado de cuenta"
               >
                 <FileText className="w-4 h-4 mr-1" />
@@ -917,16 +860,14 @@ export function PrestamoDetalleModal({
                       {data.codeudorFirmaId ? (
                         <span className="inline-flex items-center gap-2">
                           <strong className="text-emerald-700">✓ Registrada</strong>
-                          {/* FIX 2026-08-12: el <a href target=_blank> no envía el
-                              header Authorization → 401. Usamos un botón que invoca
-                              abrirHtmlImprimible (fetch autenticado → blob URL). */}
-                          <button
-                            type="button"
-                            onClick={() => abrirHtmlImprimible(`/api/firma/certificado?firmaId=${data.codeudorFirmaId}`)}
-                            className="inline-flex items-center gap-1 text-blue-700 hover:underline cursor-pointer bg-transparent border-0 p-0"
+                          <a
+                            href={`/api/firma/certificado?firmaId=${data.codeudorFirmaId}`}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="inline-flex items-center gap-1 text-blue-700 hover:underline"
                           >
                             <FileText className="w-3 h-3" /> Ver certificado
-                          </button>
+                          </a>
                         </span>
                       ) : (
                         <strong className="text-amber-700">⏳ Pendiente</strong>
@@ -944,7 +885,7 @@ export function PrestamoDetalleModal({
                   variant="outline"
                   size="sm"
                   onClick={() =>
-                    abrirHtmlImprimible(`/api/documentos?prestamoId=${data.id}&tipo=pagare`)
+                    window.open(`/api/documentos?prestamoId=${data.id}&tipo=pagare`, '_blank', 'noopener,noreferrer')
                   }
                 >
                   <Printer className="w-4 h-4 mr-2" />
@@ -956,7 +897,7 @@ export function PrestamoDetalleModal({
                   variant="outline"
                   size="sm"
                   onClick={() =>
-                    abrirHtmlImprimible(`/api/documentos?prestamoId=${data.id}&tipo=carta`)
+                    window.open(`/api/documentos?prestamoId=${data.id}&tipo=carta`, '_blank', 'noopener,noreferrer')
                   }
                 >
                   <Printer className="w-4 h-4 mr-2" />
@@ -968,130 +909,13 @@ export function PrestamoDetalleModal({
                   variant="default"
                   size="sm"
                   onClick={() =>
-                    abrirHtmlImprimible(`/api/documentos?prestamoId=${data.id}&tipo=combinado`)
+                    window.open(`/api/documentos?prestamoId=${data.id}&tipo=combinado`, '_blank', 'noopener,noreferrer')
                   }
                   title="Genera un único PDF con el Pagaré y la Carta de Instrucciones, cada uno con su propia sección de firma electrónica, fotos y OTP"
                 >
                   <Printer className="w-4 h-4 mr-2" />
                   Ver Pagaré + Carta (PDF único)
                 </Button>
-              )}
-
-              {/* === Otro Sí — Ver / Descargar (solo si hay Otros Síes firmados) === */}
-              {/* Solo se muestra cuando al menos un Otro Sí del solicitud ya está FIRMADO. */}
-              {/* Si hay uno solo → botones directos. Si hay varios → dropdown. */}
-              {otrosSiFirmados.length === 1 && (
-                <>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() =>
-                      verOtroSiFirmado(otrosSiFirmados[0].id, otrosSiFirmados[0].codigo)
-                    }
-                    title={`Ver / imprimir el Otro Sí ${otrosSiFirmados[0].codigo} (firmado)`}
-                  >
-                    <Printer className="w-4 h-4 mr-2" />
-                    Ver Otro Sí {otrosSiFirmados[0].codigo}
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() =>
-                      descargarOtroSiFirmado(otrosSiFirmados[0].id, otrosSiFirmados[0].codigo)
-                    }
-                    title={`Descargar el Otro Sí ${otrosSiFirmados[0].codigo} (firmado)`}
-                  >
-                    <FileSignature className="w-4 h-4 mr-2" />
-                    Descargar Otro Sí {otrosSiFirmados[0].codigo}
-                  </Button>
-                </>
-              )}
-              {otrosSiFirmados.length > 1 && (
-                <>
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button variant="outline" size="sm">
-                        <Printer className="w-4 h-4 mr-2" />
-                        Ver Otro Sí
-                        <ChevronDown className="w-3.5 h-3.5 ml-1.5" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="start">
-                      <DropdownMenuLabel>
-                        Otros Síes firmados ({otrosSiFirmados.length})
-                      </DropdownMenuLabel>
-                      <DropdownMenuSeparator />
-                      {otrosSiFirmados.map((os) => {
-                        let mods: any[] = []
-                        try {
-                          mods = JSON.parse(os.fechasAnteriores || '[]')
-                        } catch {}
-                        return (
-                          <DropdownMenuItem
-                            key={os.id}
-                            onClick={() => verOtroSiFirmado(os.id, os.codigo)}
-                          >
-                            <div className="flex flex-col">
-                              <span>
-                                <span className="font-mono font-bold text-blue-700">{os.codigo}</span>
-                                <span className="text-xs text-muted-foreground ml-2">
-                                  {os.tipoModificacion === 'CAMBIO_FECHA'
-                                    ? 'Cambio de fecha'
-                                    : 'Traslado de cuota'}
-                                </span>
-                              </span>
-                              <span className="text-[11px] text-muted-foreground">
-                                {mods.length} cuota(s) · {formatearFechaHora(os.createdAt)}
-                              </span>
-                            </div>
-                          </DropdownMenuItem>
-                        )
-                      })}
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button variant="outline" size="sm">
-                        <FileSignature className="w-4 h-4 mr-2" />
-                        Descargar Otro Sí
-                        <ChevronDown className="w-3.5 h-3.5 ml-1.5" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="start">
-                      <DropdownMenuLabel>
-                        Descargar Otro Sí firmado
-                      </DropdownMenuLabel>
-                      <DropdownMenuSeparator />
-                      {otrosSiFirmados.map((os) => {
-                        let mods: any[] = []
-                        try {
-                          mods = JSON.parse(os.fechasAnteriores || '[]')
-                        } catch {}
-                        return (
-                          <DropdownMenuItem
-                            key={os.id}
-                            onClick={() => descargarOtroSiFirmado(os.id, os.codigo)}
-                          >
-                            <div className="flex flex-col">
-                              <span>
-                                <span className="font-mono font-bold text-blue-700">{os.codigo}</span>
-                                <span className="text-xs text-muted-foreground ml-2">
-                                  {os.tipoModificacion === 'CAMBIO_FECHA'
-                                    ? 'Cambio de fecha'
-                                    : 'Traslado de cuota'}
-                                </span>
-                              </span>
-                              <span className="text-[11px] text-muted-foreground">
-                                {mods.length} cuota(s) · {formatearFechaHora(os.createdAt)}
-                              </span>
-                            </div>
-                          </DropdownMenuItem>
-                        )
-                      })}
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </>
               )}
               <Button
                 variant="outline"
@@ -1128,16 +952,16 @@ export function PrestamoDetalleModal({
                 <div className="flex items-start gap-2 flex-wrap w-full">
                   {/* Si el método fue CORREO (o null/legacy — el endpoint enviar-codigo
                       siempre manda por correo y ahora setea metodoConfirmacion='CORREO',
-                      pero los solicitudes creados antes del fix tienen metodoConfirmacion=null),
+                      pero los préstamos creados antes del fix tienen metodoConfirmacion=null),
                       mostrar input de código de verificación OTP */}
                   {(data.metodoConfirmacion === 'CORREO' || !data.metodoConfirmacion) && (
                     <div className="w-full space-y-2">
                       {/* === Aviso de doble confirmación cuando hay codeudor === */}
                       {estadoVerificacion?.requiereCodeudor && (
                         <div className="w-full bg-violet-50 border border-violet-200 rounded-md p-3 text-sm text-violet-900">
-                          <div className="font-semibold mb-1">⚠️ Solicitud con codeudor — requiere doble confirmación</div>
+                          <div className="font-semibold mb-1">⚠️ Préstamo con codeudor — requiere doble confirmación</div>
                           <div className="text-xs">
-                            El solicitud se activará <strong>ÚNICAMENTE</strong> cuando tanto el <strong>Titular</strong>
+                            El préstamo se activará <strong>ÚNICAMENTE</strong> cuando tanto el <strong>Titular</strong>
                             {' '}como el <strong>Codeudor</strong> verifiquen su respectivo código OTP enviado por correo.
                           </div>
                           <div className="flex flex-wrap gap-2 mt-2 text-xs">
@@ -1188,7 +1012,7 @@ export function PrestamoDetalleModal({
                               const json = await res.json()
                               if (json.success) {
                                 toast({
-                                  title: json.data?.activado ? '✅ Solicitud activado' : '✅ Código verificado',
+                                  title: json.data?.activado ? '✅ Préstamo activado' : '✅ Código verificado',
                                   description: json.mensaje,
                                   duration: 8000,
                                 })
@@ -1244,7 +1068,7 @@ export function PrestamoDetalleModal({
                                 const json = await res.json()
                                 if (json.success) {
                                   toast({
-                                    title: json.data?.activado ? '✅ Solicitud activado' : '✅ Código verificado',
+                                    title: json.data?.activado ? '✅ Préstamo activado' : '✅ Código verificado',
                                     description: json.mensaje,
                                     duration: 8000,
                                   })
@@ -1650,7 +1474,7 @@ export function PrestamoDetalleModal({
                 ) : (
                   <div className="text-center py-8 text-muted-foreground text-sm">
                     <PenTool className="w-12 h-12 mx-auto mb-2 opacity-40" />
-                    No hay firmas electrónicas registradas para este solicitud.
+                    No hay firmas electrónicas registradas para este préstamo.
                     <p className="text-xs mt-2">
                       Las firmas se realizan desde el portal del cliente con OTP por WhatsApp.
                     </p>
@@ -1773,7 +1597,7 @@ export function PrestamoDetalleModal({
                 ) : otrosSi.length === 0 ? (
                   <div className="text-center py-8 text-muted-foreground text-sm">
                     <FileText className="w-10 h-10 mx-auto mb-2 opacity-40" />
-                    No hay Otros Síes generados para este solicitud.
+                    No hay Otros Síes generados para este préstamo.
                     {flexInfo?.flexibilidadFinanciera && flexInfo?.flexibilidadActivada && (
                       <p className="text-xs mt-2 text-emerald-700">
                         Presiona "Generar Otro Sí" para crear el primer acuerdo de cambio de fechas.
@@ -1825,35 +1649,9 @@ export function PrestamoDetalleModal({
                                   : 'Traslado de cuota'}
                               </span>
                             </div>
-                            <div className="flex items-center gap-2">
-                              <span className="text-xs text-muted-foreground">
-                                {formatearFechaHora(os.createdAt)}
-                              </span>
-                              {os.estado === 'FIRMADO' && (
-                                <div className="flex items-center gap-1">
-                                  <Button
-                                    size="sm"
-                                    variant="ghost"
-                                    className="h-7 px-2 text-xs"
-                                    onClick={() => verOtroSiFirmado(os.id, os.codigo)}
-                                    title={`Ver / imprimir Otro Sí ${os.codigo}`}
-                                  >
-                                    <Printer className="w-3.5 h-3.5 mr-1" />
-                                    Ver
-                                  </Button>
-                                  <Button
-                                    size="sm"
-                                    variant="ghost"
-                                    className="h-7 px-2 text-xs text-blue-700 hover:text-blue-800"
-                                    onClick={() => descargarOtroSiFirmado(os.id, os.codigo)}
-                                    title={`Descargar Otro Sí ${os.codigo}`}
-                                  >
-                                    <FileSignature className="w-3.5 h-3.5 mr-1" />
-                                    Descargar
-                                  </Button>
-                                </div>
-                              )}
-                            </div>
+                            <span className="text-xs text-muted-foreground">
+                              {formatearFechaHora(os.createdAt)}
+                            </span>
                           </div>
                           <div className="text-xs space-y-1">
                             <p className="text-muted-foreground">
@@ -1902,7 +1700,7 @@ export function PrestamoDetalleModal({
               ¿Cómo enviar la confirmación al cliente?
             </DialogTitle>
             <p className="text-sm text-muted-foreground mt-1">
-              Solicitud: <strong>{data.codigo}</strong> · Cliente: <strong>{data.cliente.nombre}</strong>
+              Préstamo: <strong>{data.codigo}</strong> · Cliente: <strong>{data.cliente.nombre}</strong>
             </p>
           </DialogHeader>
           <div className="space-y-3">
@@ -2064,7 +1862,7 @@ export function PrestamoDetalleModal({
               Generar Otro Sí — Acuerdo de Cambio de Fechas
             </DialogTitle>
             <p className="text-sm text-muted-foreground mt-1">
-              Solicitud: <strong>{data?.codigo}</strong> · Cliente: <strong>{data?.cliente?.nombre}</strong>
+              Préstamo: <strong>{data?.codigo}</strong> · Cliente: <strong>{data?.cliente?.nombre}</strong>
             </p>
           </DialogHeader>
           <form onSubmit={crearOtroSi} className="space-y-4">

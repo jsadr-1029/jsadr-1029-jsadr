@@ -16,14 +16,6 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
-import {
   Table,
   TableBody,
   TableCell,
@@ -46,14 +38,11 @@ import {
 } from '@/components/ui/dialog'
 import { useToast } from '@/hooks/use-toast'
 import { formatearMoneda, formatearFecha } from '@/lib/finanzas'
-import { abrirHtmlImprimible, descargarArchivo } from '@/lib/auth-docs'
 import {
   DollarSign, Bell, RefreshCw, Undo2, RotateCcw, Trash2, Plus,
   TrendingUp, TrendingDown, Calendar, Users, AlertTriangle, Clock,
   Search, CheckCircle, Banknote, Wallet, FileText, Download,
   Handshake, Save, Sparkles, Brain, FileSpreadsheet, CalendarDays, Receipt,
-  Info, ChevronDown,
-  Menu,
 } from 'lucide-react'
 import { BotIcons } from '@/components/views/BotIcons'
 import { PagosCharts } from '@/components/views/pagos/PagosCharts'
@@ -88,7 +77,6 @@ interface PrestamoAplicar {
   id: string
   codigo: string
   cliente: { id: string; nombre: string; cedula: string; telefono: string }
-  montoPrincipal?: number
   montoCuota: number
   numeroCuotas: number
   cuotasPagadas: number
@@ -121,37 +109,6 @@ interface PrestamoAplicar {
   cuentaRecaudo: any
   estado: string
   frecuencia: string
-  // === Tarea Q: Flexibilidad Financiera ===
-  flexibilidadFinanciera?: boolean
-  flexibilidadActivada?: boolean
-  flexibilidadModalidad?: string | null
-  flexibilidadUsosDisponibles?: number
-  flexibilidadUsosEjercidos?: number
-  flexibilidadCosto?: number
-  flexibilidadElegible?: boolean
-  flexibilidadRazonInelegible?: string | null
-  // === Modalidad INTERES_FIJO_SIN_CAPITAL ===
-  modalidadAmortizacion?: string
-  interesFijoMensual?: number
-  capitalPagadoExtra?: number
-  saldoReal?: number
-  proximaCuotaInteresFecha?: string | null
-  // === Detalle de la cuota pendiente (de calcularPrestamo/ calcularPrestamoTasaFijaMensual) ===
-  cuotaPendiente?: {
-    numero: number
-    fechaVencimiento: string
-    montoCuota: number
-    capital: number
-    interes: number
-    saldoCapital: number
-  }
-  // === Cargos iniciales (pagare+carta, tarifa plataforma, flexibilidad, fondo garantía) ===
-  cargosInicialesPendientes?: Array<{ concepto: string; etiqueta: string; monto: number; yaCobrado: boolean }>
-  cargosInicialesPendientesMonto?: number
-  totalCuotaConCargos?: number  // cuota base + mora + cargos iniciales
-  // === FIX (2026-09-04): sincronizar con estado de cuenta ===
-  totalPagar?: number  // total a pagar del préstamo (con cargos, igual que estado de cuenta)
-  saldoYaIncluyeCargos?: boolean  // si saldoTotal ya incluye cargos
 }
 
 interface ProximoPago {
@@ -266,9 +223,6 @@ export function PagosView({ onChanged }: { onChanged: () => void }) {
   const [montoRecibido, setMontoRecibido] = useState('')
   const [cuentaRecaudoId, setCuentaRecaudoId] = useState('')
   const [aplicandoPago, setAplicandoPago] = useState(false)
-  // === Abono extraordinario al capital (modalidad INTERES_FIJO_SIN_CAPITAL) ===
-  const [abonarAlCapital, setAbonarAlCapital] = useState(false)
-  const [montoAbonoCapital, setMontoAbonoCapital] = useState('')
 
   // === Modal renegociar / anular mora ===
   const [modalRenegociarMora, setModalRenegociarMora] = useState(false)
@@ -276,20 +230,12 @@ export function PagosView({ onChanged }: { onChanged: () => void }) {
   const [nuevaMoraValor, setNuevaMoraValor] = useState('')
   const [observacionMora, setObservacionMora] = useState('')
   const [renegociandoMora, setRenegociandoMora] = useState(false)
-
-  // === Tarea Q: Modal Flexibilidad Financiera ===
-  const [modalFlexibilidad, setModalFlexibilidad] = useState(false)
-  const [observacionFlexibilidad, setObservacionFlexibilidad] = useState('')
-  const [usandoFlexibilidad, setUsandoFlexibilidad] = useState(false)
-  const [confirmacionFlexibilidad, setConfirmacionFlexibilidad] = useState(false)
   
   // Próximos pagos
   const [proximos, setProximos] = useState<ProximoPago[]>([])
   const [loadingProximos, setLoadingProximos] = useState(false)
   const [resumenProximos, setResumenProximos] = useState<any>(null)
-  const [exportando, setExportando] = useState(false)
-  const [exportandoAnio, setExportandoAnio] = useState(false)
-
+  
   // Informe
   const [informe, setInforme] = useState<InformeData | null>(null)
   const [loadingInforme, setLoadingInforme] = useState(false)
@@ -406,8 +352,6 @@ export function PagosView({ onChanged }: { onChanged: () => void }) {
     setReferencia('')
     setMontoRecibido('')
     setCuentaRecaudoId('')
-    setAbonarAlCapital(false)
-    setMontoAbonoCapital('')
     await buscarPrestamosAplicar('')
   }
 
@@ -435,10 +379,6 @@ export function PagosView({ onChanged }: { onChanged: () => void }) {
 
   // === Cálculo de desglose en tiempo real (para preview del pago parcial) ===
   // Usa los datos del API: cuota base, mora pendiente, ya pagado
-  // FIX (2026-08-20): usar los valores REALES de capital e interés de la cuota
-  // pendiente (devueltos por el API en `cuotaPendiente`), en lugar de las
-  // aproximaciones anteriores (30% interés / 70% capital) que eran incorrectas
-  // para solicitudes TASA_FIJA (donde el interés es constante del 20% mensual).
   const desglosePago = (() => {
     if (!prestamoSeleccionadoAplicar || !montoRecibido) return null
     const monto = parseFloat(montoRecibido)
@@ -455,16 +395,12 @@ export function PagosView({ onChanged }: { onChanged: () => void }) {
     // Distribución del nuevo pago (mora → interés → capital)
     // Solo sobre lo pendiente
     const moraPendienteCuota = p.moraPendiente
-    // === FIX (2026-08-20): usar los valores reales de la cuota pendiente ===
-    // El API devuelve cuotaPendiente con capital e interés exactos según la
-    // modalidad del solicitud (TASA_FIJA: constantes; FRANCES: variables).
-    // Antes se usaba p.cuotaBase * 0.3 (interés) y p.cuotaBase * 0.7 (capital)
-    // como aproximación, lo que era incorrecto para solicitudes TASA_FIJA.
-    const interesCuota = p.cuotaPendiente?.interes ?? (p.cuotaBase * 0.3)
-    const capitalCuota = p.cuotaPendiente?.capital ?? (p.cuotaBase * 0.7)
+    const interesPendienteCuota = Math.max(0, (p.cuotaBase - p.capitalPagadoCuota) - (p.cuotaBase - p.interesPagadoCuota - p.capitalPagadoCuota))
     // Interés pendiente = interés de la cuota - ya pagado
-    const interesBasePendiente = Math.max(0, interesCuota - p.interesPagadoCuota)
-    const capitalBasePendiente = Math.max(0, capitalCuota - p.capitalPagadoCuota)
+    const interesCuotaTotal = p.cuotaBase - (p.montoCuota - (p.montoCuota * 0.3)) // aproximado
+    // Mejor: usar el cuotaPendiente si está disponible
+    const interesBasePendiente = Math.max(0, p.cuotaBase * 0.3 - p.interesPagadoCuota) // ~30% interés
+    const capitalBasePendiente = Math.max(0, p.cuotaBase * 0.7 - p.capitalPagadoCuota)
 
     let resto = monto
     let moraPagada = 0
@@ -508,70 +444,6 @@ export function PagosView({ onChanged }: { onChanged: () => void }) {
 
   const confirmarAplicarPago = async () => {
     if (!prestamoSeleccionadoAplicar) return
-
-    // === Caso especial: Abono extraordinario al capital ===
-    // Si el solicitud es INTERES_FIJO_SIN_CAPITAL y el gestor marcó "Abonar al capital",
-    // enviamos una acción diferente al backend (accion: 'abonar_capital') que registra
-    // el pago como abono extraordinario y actualiza el saldo real sin tocar la cuota mensual.
-    if (abonarAlCapital) {
-      const montoAbono = parseFloat(montoAbonoCapital)
-      if (!montoAbonoCapital || isNaN(montoAbono) || montoAbono <= 0) {
-        toast({ title: 'Error', description: 'Ingresa un monto de abono válido', variant: 'destructive' })
-        return
-      }
-      const saldoRealMax = prestamoSeleccionadoAplicar.saldoReal || prestamoSeleccionadoAplicar.montoPrincipal || 0
-      if (montoAbono > saldoRealMax) {
-        toast({
-          title: 'Error',
-          description: `El monto del abono (${formatearMoneda(montoAbono)}) no puede exceder el saldo real del capital (${formatearMoneda(saldoRealMax)}).`,
-          variant: 'destructive',
-        })
-        return
-      }
-      setAplicandoPago(true)
-      try {
-        const body: any = {
-          accion: 'abonar_capital',
-          prestamoId: prestamoSeleccionadoAplicar.id,
-          montoAbono: montoAbono,
-          metodoPago,
-          referencia: referencia || `Abono al capital - ${prestamoSeleccionadoAplicar.codigo}`,
-          cuentaRecaudoId: cuentaRecaudoId || null,
-        }
-        const res = await fetch('/api/pagos', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(body),
-        })
-        const json = await res.json()
-        if (json.success) {
-          toast({
-            title: '✅ Abono al capital aplicado',
-            description: json.mensaje || `Abono de ${formatearMoneda(montoAbono)} registrado. Nuevo saldo: ${formatearMoneda(json.nuevoSaldoReal)}.`,
-          })
-          setModalAplicar(false)
-          setPrestamoSeleccionadoAplicar(null)
-          setMontoAbonoCapital('')
-          setAbonarAlCapital(false)
-          setReferencia('')
-          setMontoRecibido('')
-          cargarPagos()
-          onChanged()
-          if (json.data?.id) {
-            setTimeout(() => setReciboPagoId(json.data.id), 400)
-          }
-        } else {
-          toast({ title: 'Error', description: json.error, variant: 'destructive' })
-        }
-      } catch (e: any) {
-        toast({ title: 'Error', description: e.message, variant: 'destructive' })
-      } finally {
-        setAplicandoPago(false)
-      }
-      return
-    }
-
-    // === Flujo normal de pago de cuota ===
     if (!montoRecibido) {
       toast({ title: 'Error', description: 'Ingresa el monto recibido', variant: 'destructive' })
       return
@@ -627,70 +499,6 @@ export function PagosView({ onChanged }: { onChanged: () => void }) {
     setMotivoReversion('')
   }
 
-  // === Tarea Q: USAR FLEXIBILIDAD FINANCIERA ===
-  // Abre el modal de confirmación para trasladar la cuota pendiente al final del crédito.
-  const abrirModalFlexibilidad = () => {
-    if (!prestamoSeleccionadoAplicar) return
-    if (!prestamoSeleccionadoAplicar.flexibilidadElegible) {
-      toast({
-        title: 'No disponible',
-        description: prestamoSeleccionadoAplicar.flexibilidadRazonInelegible || 'No se puede usar Flexibilidad Financiera en este momento.',
-        variant: 'destructive',
-      })
-      return
-    }
-    setObservacionFlexibilidad('')
-    setConfirmacionFlexibilidad(false)
-    setModalFlexibilidad(true)
-  }
-
-  const confirmarUsarFlexibilidad = async () => {
-    if (!prestamoSeleccionadoAplicar) return
-    if (!confirmacionFlexibilidad) {
-      toast({
-        title: 'Confirmación requerida',
-        description: 'Debes marcar la casilla de confirmación para usar el beneficio.',
-        variant: 'destructive',
-      })
-      return
-    }
-    setUsandoFlexibilidad(true)
-    try {
-      const body: any = {
-        accion: 'usar_flexibilidad',
-        prestamoId: prestamoSeleccionadoAplicar.id,
-        observacion: observacionFlexibilidad.trim() || null,
-      }
-      const res = await fetch('/api/pagos', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      })
-      const json = await res.json()
-      if (json.success) {
-        toast({
-          title: '✅ Flexibilidad aplicada',
-          description: json.mensaje,
-        })
-        setModalFlexibilidad(false)
-        setModalAplicar(false)
-        setPrestamoSeleccionadoAplicar(null)
-        setMontoRecibido('')
-        setReferencia('')
-        setObservacionFlexibilidad('')
-        setConfirmacionFlexibilidad(false)
-        cargarPagos()
-        onChanged()
-      } else {
-        toast({ title: 'Error', description: json.error, variant: 'destructive' })
-      }
-    } catch (e: any) {
-      toast({ title: 'Error', description: e.message, variant: 'destructive' })
-    } finally {
-      setUsandoFlexibilidad(false)
-    }
-  }
-
   // === RENEGOCIAR / ANULAR MORA ===
   const abrirModalRenegociarMora = () => {
     if (!prestamoSeleccionadoAplicar) return
@@ -743,9 +551,9 @@ export function PagosView({ onChanged }: { onChanged: () => void }) {
           description: json.mensaje,
         })
         setModalRenegociarMora(false)
-        // Recargar el solicitud seleccionado para reflejar la nueva mora
+        // Recargar el préstamo seleccionado para reflejar la nueva mora
         await buscarPrestamosAplicar(busquedaAplicar)
-        // Actualizar el solicitud seleccionado
+        // Actualizar el préstamo seleccionado
         const actualizado = await fetch(
           `/api/pagos/aplicar?q=${encodeURIComponent(prestamoSeleccionadoAplicar.codigo)}`
         )
@@ -874,47 +682,12 @@ export function PagosView({ onChanged }: { onChanged: () => void }) {
 
   // === DESCARGAR ESTADO DE CUENTA ===
   const descargarEstadoCuenta = (cedula: string, nombre: string) => {
-    abrirHtmlImprimible(`/api/estado-cuenta?cedula=${encodeURIComponent(cedula)}`)
+    window.open(`/api/estado-cuenta?cedula=${encodeURIComponent(cedula)}`, '_blank')
     toast({
       title: 'Estado de cuenta abierto',
       description: `Se abrió el estado de cuenta de ${nombre}. Usa el botón "Imprimir / Guardar PDF" para descargarlo.`,
       duration: 6000,
     })
-  }
-
-  // === Exportar todos los pagos del año vigente en Excel ===
-  // Llama al endpoint /api/pagos/export-anio y descarga el .xlsx
-  // Incluye TODOS los datos del cliente y del crédito en cada fila.
-  const exportarAnio = async (anio: number, estado: 'APLICADO' | 'TODOS') => {
-    try {
-      setExportandoAnio(true)
-      const params = new URLSearchParams()
-      params.set('anio', String(anio))
-      params.set('estado', estado)
-      const ok = await descargarArchivo(`/api/pagos/export-anio?${params.toString()}`)
-      if (ok) {
-        toast({
-          title: 'Excel generado correctamente',
-          description: `Se descargó el listado de pagos del año ${anio} (${estado === 'APLICADO' ? 'solo aplicados' : 'todos los estados'}), con todos los datos de clientes y créditos.`,
-          duration: 6000,
-        })
-      } else {
-        toast({
-          title: 'No se pudo exportar',
-          description: 'Verifica tu sesión e intenta nuevamente.',
-          variant: 'destructive',
-        })
-      }
-    } catch (e: any) {
-      console.error('[exportarAnio] Error:', e)
-      toast({
-        title: 'Error al exportar',
-        description: e?.message || 'Error inesperado',
-        variant: 'destructive',
-      })
-    } finally {
-      setExportandoAnio(false)
-    }
   }
 
   // === Cálculos ===
@@ -925,130 +698,50 @@ export function PagosView({ onChanged }: { onChanged: () => void }) {
   // === RENDER ===
   return (
     <div className="space-y-6">
-      {/* === HEADER RESPONSIVE === */}
-      {/* Desktop: muestra todos los botones inline */}
-      {/* Mobile/Tablet: colapsa en un menú desplegable */}
       <PageHeader
         title="Pagos"
         subtitle="Recaudo, aplicación y gestión de pagos"
         icon={<DollarSign className="w-5 h-5" />}
         actions={
           <>
-            {/* Botón principal siempre visible */}
             <Button onClick={abrirModalAplicar} className="bg-emerald-600 hover:bg-emerald-700">
               <Plus className="w-4 h-4 mr-2" />
-              <span className="hidden sm:inline">Aplicar Pago</span>
-              <span className="sm:hidden">Pago</span>
+              Aplicar Pago
             </Button>
-
-            {/* === Acciones secundarias colapsables en móvil === */}
-            <div className="hidden md:flex items-center gap-2">
-              <Button
-                variant="outline"
-                onClick={() => setModalConciliacion(true)}
-                title="Importar CSV del banco y conciliar pagos pendientes"
-              >
-                <FileSpreadsheet className="w-4 h-4 mr-2" />
-                Conciliación
-              </Button>
-              <Button
-                variant="outline"
-                className="text-purple-700 border-purple-300 hover:bg-purple-50"
-                onClick={() => setModalPrediccion(true)}
-                title="Análisis predictivo de mora con IA"
-              >
-                <Brain className="w-4 h-4 mr-2" />
-                IA Mora
-              </Button>
-              <Button
-                variant="outline"
-                onClick={dispararRecordatorios}
-                disabled={enviandoNotif}
-              >
-                <Bell className="w-4 h-4 mr-2" />
-                Recordatorios
-              </Button>
-              <Button
-                variant="outline"
-                className="text-amber-700 border-amber-300 hover:bg-amber-50"
-                onClick={avisosMora}
-                disabled={enviandoNotif}
-              >
-                <Bell className="w-4 h-4 mr-2" />
-                Avisos Mora
-              </Button>
-            </div>
-
-            {/* === Menú hamburguesa en móvil/tablet === */}
-            <div className="md:hidden">
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="outline" size="sm" className="px-2">
-                    <Menu className="w-4 h-4" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-56">
-                  <DropdownMenuLabel className="text-xs text-muted-foreground">
-                    Acciones rápidas
-                  </DropdownMenuLabel>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem
-                    className="cursor-pointer"
-                    onSelect={(e) => {
-                      e.preventDefault()
-                      setModalConciliacion(true)
-                    }}
-                  >
-                    <FileSpreadsheet className="w-4 h-4 mr-2 text-blue-600" />
-                    <span className="flex flex-col">
-                      <span className="font-medium">Conciliación</span>
-                      <span className="text-xs text-muted-foreground">Importar CSV del banco</span>
-                    </span>
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    className="cursor-pointer"
-                    onSelect={(e) => {
-                      e.preventDefault()
-                      setModalPrediccion(true)
-                    }}
-                  >
-                    <Brain className="w-4 h-4 mr-2 text-purple-600" />
-                    <span className="flex flex-col">
-                      <span className="font-medium">IA Mora</span>
-                      <span className="text-xs text-muted-foreground">Análisis predictivo</span>
-                    </span>
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    className="cursor-pointer"
-                    disabled={enviandoNotif}
-                    onSelect={(e) => {
-                      e.preventDefault()
-                      dispararRecordatorios()
-                    }}
-                  >
-                    <Bell className="w-4 h-4 mr-2 text-cyan-600" />
-                    <span className="flex flex-col">
-                      <span className="font-medium">Recordatorios</span>
-                      <span className="text-xs text-muted-foreground">Enviar a clientes</span>
-                    </span>
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    className="cursor-pointer"
-                    disabled={enviandoNotif}
-                    onSelect={(e) => {
-                      e.preventDefault()
-                      avisosMora()
-                    }}
-                  >
-                    <Bell className="w-4 h-4 mr-2 text-amber-600" />
-                    <span className="flex flex-col">
-                      <span className="font-medium">Avisos Mora</span>
-                      <span className="text-xs text-muted-foreground">Notificar clientes en mora</span>
-                    </span>
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </div>
+            <Button
+              variant="outline"
+              onClick={() => setModalConciliacion(true)}
+              title="Importar CSV del banco y conciliar pagos pendientes"
+            >
+              <FileSpreadsheet className="w-4 h-4 mr-2" />
+              Conciliación
+            </Button>
+            <Button
+              variant="outline"
+              className="text-purple-700 border-purple-300 hover:bg-purple-50"
+              onClick={() => setModalPrediccion(true)}
+              title="Análisis predictivo de mora con IA"
+            >
+              <Brain className="w-4 h-4 mr-2" />
+              IA Mora
+            </Button>
+            <Button
+              variant="outline"
+              onClick={dispararRecordatorios}
+              disabled={enviandoNotif}
+            >
+              <Bell className="w-4 h-4 mr-2" />
+              Recordatorios
+            </Button>
+            <Button
+              variant="outline"
+              className="text-amber-700 border-amber-300 hover:bg-amber-50"
+              onClick={avisosMora}
+              disabled={enviandoNotif}
+            >
+              <Bell className="w-4 h-4 mr-2" />
+              Avisos Mora
+            </Button>
           </>
         }
       />
@@ -1057,221 +750,89 @@ export function PagosView({ onChanged }: { onChanged: () => void }) {
       <BotIcons modulo="pagos" />
 
       <Tabs value={tab} onValueChange={setTab}>
-        {/* === Layout responsive: tabs arriba, exportar abajo en móvil === */}
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          {/* === Tabs: en móvil solo iconos + etiqueta corta === */}
-          <TabsList className="grid grid-cols-5 w-full sm:max-w-2xl h-auto">
-            <TabsTrigger value="pagos-dia" className="flex flex-col gap-0.5 py-1.5 px-1 sm:flex-row sm:py-1.5 sm:px-3">
-              <DollarSign className="w-4 h-4 sm:w-3.5 sm:h-3.5 sm:mr-1.5" />
-              <span className="text-[10px] leading-tight sm:text-sm sm:leading-normal">Pagos día</span>
+        <div className="flex items-center justify-between flex-wrap gap-2">
+          <TabsList className="grid grid-cols-5 w-full max-w-2xl">
+            <TabsTrigger value="pagos-dia">
+              <DollarSign className="w-3.5 h-3.5 mr-1.5" />
+              Pagos del día
             </TabsTrigger>
-            <TabsTrigger value="proximos" className="flex flex-col gap-0.5 py-1.5 px-1 sm:flex-row sm:py-1.5 sm:px-3">
-              <Clock className="w-4 h-4 sm:w-3.5 sm:h-3.5 sm:mr-1.5" />
-              <span className="text-[10px] leading-tight sm:text-sm sm:leading-normal">Próximos</span>
+            <TabsTrigger value="proximos">
+              <Clock className="w-3.5 h-3.5 mr-1.5" />
+              Próximos
             </TabsTrigger>
-            <TabsTrigger value="calendario" className="flex flex-col gap-0.5 py-1.5 px-1 sm:flex-row sm:py-1.5 sm:px-3">
-              <CalendarDays className="w-4 h-4 sm:w-3.5 sm:h-3.5 sm:mr-1.5" />
-              <span className="text-[10px] leading-tight sm:text-sm sm:leading-normal">Calendario</span>
+            <TabsTrigger value="calendario">
+              <CalendarDays className="w-3.5 h-3.5 mr-1.5" />
+              Calendario
             </TabsTrigger>
-            <TabsTrigger value="informe" className="flex flex-col gap-0.5 py-1.5 px-1 sm:flex-row sm:py-1.5 sm:px-3">
-              <TrendingUp className="w-4 h-4 sm:w-3.5 sm:h-3.5 sm:mr-1.5" />
-              <span className="text-[10px] leading-tight sm:text-sm sm:leading-normal">Informe</span>
+            <TabsTrigger value="informe">
+              <TrendingUp className="w-3.5 h-3.5 mr-1.5" />
+              Informe
             </TabsTrigger>
-            <TabsTrigger value="graficos" className="flex flex-col gap-0.5 py-1.5 px-1 sm:flex-row sm:py-1.5 sm:px-3">
-              <TrendingUp className="w-4 h-4 sm:w-3.5 sm:h-3.5 sm:mr-1.5" />
-              <span className="text-[10px] leading-tight sm:text-sm sm:leading-normal">Gráficos</span>
+            <TabsTrigger value="graficos">
+              <TrendingUp className="w-3.5 h-3.5 mr-1.5" />
+              Gráficos
             </TabsTrigger>
           </TabsList>
-
-          {/* === Exportar: en móvil dropdown único, en desktop 2 botones === */}
-          <div className="flex items-center gap-2">
-            {/* Desktop: botones separados */}
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={exportando}
-              className="hidden md:inline-flex"
-              onClick={async () => {
-                const params = new URLSearchParams()
-                if (tab === 'pagos-dia') {
-                  params.set('tipo', 'hoy')
-                  if (fechaFiltro) params.set('fecha', fechaFiltro)
-                } else if (tab === 'proximos') {
-                  params.set('tipo', 'rango')
-                  params.set('desde', new Date().toISOString().slice(0, 10))
-                  const fin = new Date()
-                  fin.setDate(fin.getDate() + 30)
-                  params.set('hasta', fin.toISOString().slice(0, 10))
-                } else if (tab === 'informe' || tab === 'graficos') {
-                  params.set('tipo', 'informe')
-                  params.set('periodo', periodoInforme)
-                } else {
-                  params.set('tipo', 'hoy')
-                }
-                // IMPORTANTE: usar descargarArchivo (fetch + Blob) en lugar de
-                // window.open, porque window.open NO puede añadir el header
-                // Authorization: Bearer y en producción el endpoint devuelve
-                // 401 "No autorizado. Token requerido."
-                setExportando(true)
-                const ok = await descargarArchivo(`/api/pagos/export?${params.toString()}`)
-                setExportando(false)
-                if (!ok) {
-                  toast({
-                    title: 'No se pudo exportar',
-                    description: 'Verifica tu sesión e intenta nuevamente.',
-                    variant: 'destructive',
-                  })
-                }
-              }}
-            >
-              <Download className="w-3.5 h-3.5 mr-1.5" />
-              {exportando ? 'Exportando…' : 'Exportar CSV'}
-            </Button>
-
-            {/* === Exportar pagos del año vigente (Excel con TODOS los datos) === */}
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button
-                  variant="default"
-                  size="sm"
-                  disabled={exportandoAnio}
-                  className="bg-emerald-600 hover:bg-emerald-700 text-white w-full md:w-auto"
-                >
-                  <FileSpreadsheet className="w-3.5 h-3.5 mr-1.5" />
-                  <span className="hidden md:inline">{exportandoAnio ? 'Generando Excel…' : 'Exportar Pagos del Año'}</span>
-                  <span className="md:hidden">{exportandoAnio ? 'Generando…' : 'Exportar'}</span>
-                  <ChevronDown className="w-3.5 h-3.5 ml-1.5" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-64">
-                <DropdownMenuLabel className="text-xs text-muted-foreground">
-                  Exportar pagos en Excel con todos los datos
-                </DropdownMenuLabel>
-                <DropdownMenuSeparator />
-                {/* En móvil mostramos también CSV como opción del dropdown */}
-                <DropdownMenuItem
-                  className="cursor-pointer md:hidden"
-                  onSelect={async (e) => {
-                    e.preventDefault()
-                    const params = new URLSearchParams()
-                    if (tab === 'pagos-dia') {
-                      params.set('tipo', 'hoy')
-                      if (fechaFiltro) params.set('fecha', fechaFiltro)
-                    } else if (tab === 'proximos') {
-                      params.set('tipo', 'rango')
-                      params.set('desde', new Date().toISOString().slice(0, 10))
-                      const fin = new Date()
-                      fin.setDate(fin.getDate() + 30)
-                      params.set('hasta', fin.toISOString().slice(0, 10))
-                    } else if (tab === 'informe' || tab === 'graficos') {
-                      params.set('tipo', 'informe')
-                      params.set('periodo', periodoInforme)
-                    } else {
-                      params.set('tipo', 'hoy')
-                    }
-                    setExportando(true)
-                    const ok = await descargarArchivo(`/api/pagos/export?${params.toString()}`)
-                    setExportando(false)
-                    if (!ok) {
-                      toast({
-                        title: 'No se pudo exportar',
-                        description: 'Verifica tu sesión e intenta nuevamente.',
-                        variant: 'destructive',
-                      })
-                    }
-                  }}
-                >
-                  <Download className="w-4 h-4 mr-2 text-blue-600" />
-                  <div className="flex flex-col">
-                    <span className="font-medium">Exportar CSV</span>
-                    <span className="text-xs text-muted-foreground">Exportar vista actual en CSV</span>
-                  </div>
-                </DropdownMenuItem>
-                <DropdownMenuSeparator className="md:hidden" />
-                <DropdownMenuItem
-                  className="cursor-pointer"
-                  onSelect={async (e) => {
-                    e.preventDefault()
-                    await exportarAnio(new Date().getFullYear(), 'APLICADO')
-                  }}
-                >
-                  <div className="flex flex-col">
-                    <span className="font-medium">Pagos Aplicados del {new Date().getFullYear()}</span>
-                    <span className="text-xs text-muted-foreground">
-                      Solo pagos en estado APLICADO
-                    </span>
-                  </div>
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  className="cursor-pointer"
-                  onSelect={async (e) => {
-                    e.preventDefault()
-                    await exportarAnio(new Date().getFullYear(), 'TODOS')
-                  }}
-                >
-                  <div className="flex flex-col">
-                    <span className="font-medium">Todos los Pagos del {new Date().getFullYear()}</span>
-                    <span className="text-xs text-muted-foreground">
-                      Aplicados + Pendientes (excluye anulados)
-                    </span>
-                  </div>
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem
-                  className="cursor-pointer"
-                  onSelect={async (e) => {
-                    e.preventDefault()
-                    await exportarAnio(new Date().getFullYear() - 1, 'APLICADO')
-                  }}
-                >
-                  <div className="flex flex-col">
-                    <span className="font-medium">Pagos del año {new Date().getFullYear() - 1}</span>
-                    <span className="text-xs text-muted-foreground">
-                      Año anterior (comparativo)
-                    </span>
-                  </div>
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              const params = new URLSearchParams()
+              if (tab === 'pagos-dia') {
+                params.set('tipo', 'hoy')
+                if (fechaFiltro) params.set('fecha', fechaFiltro)
+              } else if (tab === 'proximos') {
+                params.set('tipo', 'rango')
+                params.set('desde', new Date().toISOString().slice(0, 10))
+                const fin = new Date()
+                fin.setDate(fin.getDate() + 30)
+                params.set('hasta', fin.toISOString().slice(0, 10))
+              } else if (tab === 'informe' || tab === 'graficos') {
+                params.set('tipo', 'informe')
+                params.set('periodo', periodoInforme)
+              } else {
+                params.set('tipo', 'hoy')
+              }
+              window.open(`/api/pagos/export?${params.toString()}`, '_blank')
+            }}
+          >
+            <Download className="w-3.5 h-3.5 mr-1.5" />
+            Exportar CSV
+          </Button>
         </div>
 
         {/* ============== TAB: PAGOS DEL DÍA ============== */}
         <TabsContent value="pagos-dia" className="space-y-4 mt-4">
-          {/* Resumen del día - responsive: 3 cols siempre, compacto en móvil */}
-          <div className="grid grid-cols-3 gap-2 sm:gap-4">
+          {/* Resumen del día */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <Card>
-              <CardContent className="p-3 sm:p-5">
-                <p className="text-[10px] sm:text-xs text-muted-foreground uppercase tracking-wider">
-                  Recaudado
+              <CardContent className="p-5">
+                <p className="text-xs text-muted-foreground uppercase tracking-wider">
+                  Total Recaudado
                 </p>
-                <p className="text-base sm:text-2xl font-bold text-emerald-700 mt-1">
-                  {formatearMoneda(totalDia)}
-                </p>
+                <p className="text-2xl font-bold text-emerald-700 mt-1">{formatearMoneda(totalDia)}</p>
               </CardContent>
             </Card>
             <Card>
-              <CardContent className="p-3 sm:p-5">
-                <p className="text-[10px] sm:text-xs text-muted-foreground uppercase tracking-wider">
+              <CardContent className="p-5">
+                <p className="text-xs text-muted-foreground uppercase tracking-wider">
                   N° Pagos
                 </p>
-                <p className="text-base sm:text-2xl font-bold mt-1">
-                  {pagos.filter(p => p.estado === 'APLICADO').length}
-                </p>
+                <p className="text-2xl font-bold mt-1">{pagos.filter(p => p.estado === 'APLICADO').length}</p>
               </CardContent>
             </Card>
             <Card>
-              <CardContent className="p-3 sm:p-5 flex items-center gap-2 sm:gap-3">
-                <div className="flex-1 min-w-0">
-                  <p className="text-[10px] sm:text-xs text-muted-foreground uppercase tracking-wider">Fecha</p>
+              <CardContent className="p-5 flex items-center gap-3">
+                <div className="flex-1">
+                  <p className="text-xs text-muted-foreground uppercase tracking-wider">Fecha</p>
                   <Input
                     type="date"
                     value={fechaFiltro}
                     onChange={(e) => setFechaFiltro(e.target.value)}
-                    className="mt-1 h-8 sm:h-10 text-xs sm:text-sm p-2 sm:p-3"
+                    className="mt-1"
                   />
                 </div>
-                <Button variant="ghost" size="sm" onClick={cargarPagos} title="Recargar" className="shrink-0 px-2">
+                <Button variant="ghost" size="sm" onClick={cargarPagos} title="Recargar">
                   <RefreshCw className="w-4 h-4" />
                 </Button>
               </CardContent>
@@ -1280,270 +841,102 @@ export function PagosView({ onChanged }: { onChanged: () => void }) {
 
           <Card>
             <CardContent className="p-0">
-              {/* === Loading / Empty state (compartido desktop y móvil) === */}
-              {loading ? (
-                <div className="text-center py-8 text-muted-foreground text-sm">
-                  <RefreshCw className="w-5 h-5 animate-spin mx-auto mb-2" />
-                  Cargando pagos...
-                </div>
-              ) : pagos.length === 0 ? (
-                <div className="text-center py-8 text-muted-foreground text-sm">
-                  No hay pagos registrados en esta fecha.
-                </div>
-              ) : (
-                <>
-                  {/* === Desktop: tabla completa con scroll horizontal === */}
-                  <div className="hidden lg:block overflow-x-auto">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Fecha</TableHead>
-                          <TableHead>Solicitud</TableHead>
-                          <TableHead>Cliente</TableHead>
-                          <TableHead>Cuota</TableHead>
-                          <TableHead>Capital</TableHead>
-                          <TableHead>Interés</TableHead>
-                          <TableHead>Mora</TableHead>
-                          <TableHead>Total</TableHead>
-                          <TableHead>Método</TableHead>
-                          <TableHead>Estado</TableHead>
-                          <TableHead className="text-right">Acciones</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {pagos.map((p) => (
-                          <TableRow
-                            key={p.id}
-                            className={`hover:bg-muted/40 ${p.estado === 'REVERSADO' ? 'opacity-60 bg-red-50/30' : ''}`}
-                          >
-                            <TableCell className="text-sm">{formatearFecha(p.fechaPago)}</TableCell>
-                            <TableCell className="font-mono text-xs">{p.prestamo.codigo}</TableCell>
-                            <TableCell>
-                              <div className="font-semibold text-sm">{p.prestamo.cliente.nombre}</div>
-                              <div className="text-xs text-muted-foreground">
-                                {p.prestamo.cliente.cedula}
-                              </div>
-                            </TableCell>
-                            <TableCell className="text-sm">{p.numeroCuota}</TableCell>
-                            <TableCell className="text-sm">{formatearMoneda(p.montoCapital)}</TableCell>
-                            <TableCell className="text-sm">{formatearMoneda(p.montoInteres)}</TableCell>
-                            <TableCell className="text-sm">
-                              {p.montoMora > 0 ? (
-                                <span className="text-red-700">{formatearMoneda(p.montoMora)}</span>
-                              ) : (
-                                '—'
-                              )}
-                            </TableCell>
-                            <TableCell className="font-bold text-emerald-700">
-                              {formatearMoneda(p.montoTotal)}
-                            </TableCell>
-                            <TableCell className="text-xs">
-                              <span className="inline-flex items-center px-2 py-0.5 rounded bg-muted text-xs font-medium">
-                                {p.metodoPago}
-                              </span>
-                            </TableCell>
-                            <TableCell>
-                              {p.estado === 'APLICADO' && (
-                                <Badge variant="outline" className="text-emerald-700 border-emerald-300 bg-emerald-50">
-                                  Aplicado
-                                </Badge>
-                              )}
-                              {p.estado === 'PAGO_PARCIAL' && (
-                                <Badge variant="outline" className="text-amber-700 border-amber-300 bg-amber-50">
-                                  ⚡ Pago Parcial
-                                </Badge>
-                              )}
-                              {p.estado === 'REVERSADO' && (
-                                <Badge variant="outline" className="text-red-700 border-red-300 bg-red-50">
-                                  ⚠ Reversado
-                                </Badge>
-                              )}
-                              {p.estado === 'PENDIENTE' && (
-                                <Badge variant="outline" className="text-amber-700 border-amber-300 bg-amber-50">
-                                  Pendiente
-                                </Badge>
-                              )}
-                              {p.estado === 'ANULADO' && (
-                                <Badge variant="outline" className="text-gray-700">
-                                  Anulado
-                                </Badge>
-                              )}
-                            </TableCell>
-                            <TableCell>
-                              <div className="flex gap-1 justify-end">
-                                <Button
-                                  size="sm"
-                                  variant="ghost"
-                                  className="text-blue-700 hover:text-blue-800 hover:bg-blue-50 h-8"
-                                  onClick={() => descargarEstadoCuenta(p.prestamo.cliente.cedula, p.prestamo.cliente.nombre)}
-                                  title="Descargar estado de cuenta del cliente"
-                                >
-                                  <FileText className="w-3.5 h-3.5" />
-                                </Button>
-                                {(p.estado === 'APLICADO' || p.estado === 'PAGO_PARCIAL') && (
-                                  <Button
-                                    size="sm"
-                                    variant="ghost"
-                                    className="text-emerald-700 hover:text-emerald-800 hover:bg-emerald-50 h-8"
-                                    onClick={() => setReciboPagoId(p.id)}
-                                    title="Generar recibo con QR de verificación"
-                                  >
-                                    <Receipt className="w-3.5 h-3.5" />
-                                  </Button>
-                                )}
-                                {p.estado === 'APLICADO' && (
-                                  <>
-                                    <Button
-                                      size="sm"
-                                      variant="ghost"
-                                      className="text-amber-700 hover:text-amber-800 hover:bg-amber-50 h-8"
-                                      onClick={() => abrirModalReversar(p)}
-                                      title="Reversar pago (mantiene registro)"
-                                    >
-                                      <RotateCcw className="w-3.5 h-3.5" />
-                                    </Button>
-                                    <Button
-                                      size="sm"
-                                      variant="ghost"
-                                      className="text-red-700 hover:text-red-800 hover:bg-red-50 h-8"
-                                      onClick={() => abrirModalEliminar(p)}
-                                      title="Eliminar pago (borra el registro)"
-                                    >
-                                      <Trash2 className="w-3.5 h-3.5" />
-                                    </Button>
-                                  </>
-                                )}
-                                {p.estado === 'PAGO_PARCIAL' && (
-                                  <>
-                                    <Button
-                                      size="sm"
-                                      variant="ghost"
-                                      className="text-amber-700 hover:text-amber-800 hover:bg-amber-50 h-8"
-                                      onClick={() => abrirModalReversar(p)}
-                                      title="Reversar pago parcial"
-                                    >
-                                      <RotateCcw className="w-3.5 h-3.5" />
-                                    </Button>
-                                    <Button
-                                      size="sm"
-                                      variant="ghost"
-                                      className="text-red-700 hover:text-red-800 hover:bg-red-50 h-8"
-                                      onClick={() => abrirModalEliminar(p)}
-                                      title="Eliminar pago parcial"
-                                    >
-                                      <Trash2 className="w-3.5 h-3.5" />
-                                    </Button>
-                                  </>
-                                )}
-                                {p.estado === 'REVERSADO' && (
-                                  <Button
-                                    size="sm"
-                                    variant="ghost"
-                                    className="text-red-700 hover:text-red-800 hover:bg-red-50 h-8"
-                                    onClick={() => abrirModalEliminar(p)}
-                                    title="Eliminar pago (borra el registro)"
-                                  >
-                                    <Trash2 className="w-3.5 h-3.5" />
-                                  </Button>
-                                )}
-                              </div>
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  </div>
-
-                  {/* === Mobile/Tablet: cards apilados (1 pago = 1 card) === */}
-                  <div className="lg:hidden divide-y">
-                    {pagos.map((p) => (
-                      <div
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Fecha</TableHead>
+                    <TableHead>Préstamo</TableHead>
+                    <TableHead>Cliente</TableHead>
+                    <TableHead>Cuota</TableHead>
+                    <TableHead>Capital</TableHead>
+                    <TableHead>Interés</TableHead>
+                    <TableHead>Mora</TableHead>
+                    <TableHead>Total</TableHead>
+                    <TableHead>Método</TableHead>
+                    <TableHead>Estado</TableHead>
+                    <TableHead className="text-right">Acciones</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {loading ? (
+                    <TableRow>
+                      <TableCell colSpan={11} className="text-center py-8 text-muted-foreground">
+                        Cargando...
+                      </TableCell>
+                    </TableRow>
+                  ) : pagos.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={11} className="text-center py-8 text-muted-foreground">
+                        No hay pagos registrados en esta fecha.
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    pagos.map((p) => (
+                      <TableRow
                         key={p.id}
-                        className={`p-3 ${p.estado === 'REVERSADO' ? 'opacity-60 bg-red-50/30' : ''}`}
+                        className={`hover:bg-muted/40 ${p.estado === 'REVERSADO' ? 'opacity-60 bg-red-50/30' : ''}`}
                       >
-                        {/* Fila 1: Cliente + Estado */}
-                        <div className="flex items-start justify-between gap-2 mb-2">
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-1.5 mb-0.5">
-                              <span className="font-mono text-[10px] text-muted-foreground shrink-0">
-                                {p.prestamo.codigo}
-                              </span>
-                              <span className="text-[10px] text-muted-foreground">·</span>
-                              <span className="text-[10px] text-muted-foreground shrink-0">
-                                {formatearFecha(p.fechaPago)}
-                              </span>
-                            </div>
-                            <div className="font-semibold text-sm truncate">
-                              {p.prestamo.cliente.nombre}
-                            </div>
-                            <div className="text-[10px] text-muted-foreground">
-                              CC {p.prestamo.cliente.cedula} · Cuota {p.numeroCuota}
-                            </div>
+                        <TableCell className="text-sm">{formatearFecha(p.fechaPago)}</TableCell>
+                        <TableCell className="font-mono text-xs">{p.prestamo.codigo}</TableCell>
+                        <TableCell>
+                          <div className="font-semibold text-sm">{p.prestamo.cliente.nombre}</div>
+                          <div className="text-xs text-muted-foreground">
+                            {p.prestamo.cliente.cedula}
                           </div>
-                          {/* Estado badge */}
-                          <div className="shrink-0">
-                            {p.estado === 'APLICADO' && (
-                              <Badge variant="outline" className="text-emerald-700 border-emerald-300 bg-emerald-50 text-[10px]">
-                                ✓ Aplicado
-                              </Badge>
-                            )}
-                            {p.estado === 'PAGO_PARCIAL' && (
-                              <Badge variant="outline" className="text-amber-700 border-amber-300 bg-amber-50 text-[10px]">
-                                ⚡ Parcial
-                              </Badge>
-                            )}
-                            {p.estado === 'REVERSADO' && (
-                              <Badge variant="outline" className="text-red-700 border-red-300 bg-red-50 text-[10px]">
-                                ⚠ Reversado
-                              </Badge>
-                            )}
-                            {p.estado === 'PENDIENTE' && (
-                              <Badge variant="outline" className="text-amber-700 border-amber-300 bg-amber-50 text-[10px]">
-                                Pendiente
-                              </Badge>
-                            )}
-                            {p.estado === 'ANULADO' && (
-                              <Badge variant="outline" className="text-gray-700 text-[10px]">
-                                Anulado
-                              </Badge>
-                            )}
-                          </div>
-                        </div>
-
-                        {/* Fila 2: Detalle financiero (Capital/Interés/Mora/Total) */}
-                        <div className="grid grid-cols-4 gap-1 mb-2 bg-muted/30 rounded p-2">
-                          <div>
-                            <p className="text-[9px] text-muted-foreground uppercase">Capital</p>
-                            <p className="text-xs font-medium">{formatearMoneda(p.montoCapital)}</p>
-                          </div>
-                          <div>
-                            <p className="text-[9px] text-muted-foreground uppercase">Interés</p>
-                            <p className="text-xs font-medium">{formatearMoneda(p.montoInteres)}</p>
-                          </div>
-                          <div>
-                            <p className="text-[9px] text-muted-foreground uppercase">Mora</p>
-                            <p className={`text-xs font-medium ${p.montoMora > 0 ? 'text-red-700' : ''}`}>
-                              {p.montoMora > 0 ? formatearMoneda(p.montoMora) : '—'}
-                            </p>
-                          </div>
-                          <div className="text-right border-l pl-1">
-                            <p className="text-[9px] text-muted-foreground uppercase">Total</p>
-                            <p className="text-sm font-bold text-emerald-700">{formatearMoneda(p.montoTotal)}</p>
-                          </div>
-                        </div>
-
-                        {/* Fila 3: Método + Acciones */}
-                        <div className="flex items-center justify-between gap-2">
-                          <span className="inline-flex items-center px-2 py-0.5 rounded bg-muted text-[10px] font-medium">
+                        </TableCell>
+                        <TableCell className="text-sm">{p.numeroCuota}</TableCell>
+                        <TableCell className="text-sm">{formatearMoneda(p.montoCapital)}</TableCell>
+                        <TableCell className="text-sm">{formatearMoneda(p.montoInteres)}</TableCell>
+                        <TableCell className="text-sm">
+                          {p.montoMora > 0 ? (
+                            <span className="text-red-700">{formatearMoneda(p.montoMora)}</span>
+                          ) : (
+                            '—'
+                          )}
+                        </TableCell>
+                        <TableCell className="font-bold text-emerald-700">
+                          {formatearMoneda(p.montoTotal)}
+                        </TableCell>
+                        <TableCell className="text-xs">
+                          <span className="inline-flex items-center px-2 py-0.5 rounded bg-muted text-xs font-medium">
                             {p.metodoPago}
                           </span>
-                          <div className="flex gap-1">
+                        </TableCell>
+                        <TableCell>
+                          {p.estado === 'APLICADO' && (
+                            <Badge variant="outline" className="text-emerald-700 border-emerald-300 bg-emerald-50">
+                              Aplicado
+                            </Badge>
+                          )}
+                          {p.estado === 'PAGO_PARCIAL' && (
+                            <Badge variant="outline" className="text-amber-700 border-amber-300 bg-amber-50">
+                              ⚡ Pago Parcial
+                            </Badge>
+                          )}
+                          {p.estado === 'REVERSADO' && (
+                            <Badge variant="outline" className="text-red-700 border-red-300 bg-red-50">
+                              ⚠ Reversado
+                            </Badge>
+                          )}
+                          {p.estado === 'PENDIENTE' && (
+                            <Badge variant="outline" className="text-amber-700 border-amber-300 bg-amber-50">
+                              Pendiente
+                            </Badge>
+                          )}
+                          {p.estado === 'ANULADO' && (
+                            <Badge variant="outline" className="text-gray-700">
+                              Anulado
+                            </Badge>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex gap-1 justify-end">
                             <Button
                               size="sm"
                               variant="ghost"
-                              className="text-blue-700 hover:text-blue-800 hover:bg-blue-50 h-7 w-7 p-0"
+                              className="text-blue-700 hover:text-blue-800 hover:bg-blue-50 h-8"
                               onClick={() => descargarEstadoCuenta(p.prestamo.cliente.cedula, p.prestamo.cliente.nombre)}
-                              title="Estado de cuenta"
+                              title="Descargar estado de cuenta del cliente"
                             >
                               <FileText className="w-3.5 h-3.5" />
                             </Button>
@@ -1551,9 +944,9 @@ export function PagosView({ onChanged }: { onChanged: () => void }) {
                               <Button
                                 size="sm"
                                 variant="ghost"
-                                className="text-emerald-700 hover:text-emerald-800 hover:bg-emerald-50 h-7 w-7 p-0"
+                                className="text-emerald-700 hover:text-emerald-800 hover:bg-emerald-50 h-8"
                                 onClick={() => setReciboPagoId(p.id)}
-                                title="Recibo"
+                                title="Generar recibo con QR de verificación"
                               >
                                 <Receipt className="w-3.5 h-3.5" />
                               </Button>
@@ -1563,18 +956,18 @@ export function PagosView({ onChanged }: { onChanged: () => void }) {
                                 <Button
                                   size="sm"
                                   variant="ghost"
-                                  className="text-amber-700 hover:text-amber-800 hover:bg-amber-50 h-7 w-7 p-0"
+                                  className="text-amber-700 hover:text-amber-800 hover:bg-amber-50 h-8"
                                   onClick={() => abrirModalReversar(p)}
-                                  title="Reversar"
+                                  title="Reversar pago (mantiene registro)"
                                 >
                                   <RotateCcw className="w-3.5 h-3.5" />
                                 </Button>
                                 <Button
                                   size="sm"
                                   variant="ghost"
-                                  className="text-red-700 hover:text-red-800 hover:bg-red-50 h-7 w-7 p-0"
+                                  className="text-red-700 hover:text-red-800 hover:bg-red-50 h-8"
                                   onClick={() => abrirModalEliminar(p)}
-                                  title="Eliminar"
+                                  title="Eliminar pago (borra el registro)"
                                 >
                                   <Trash2 className="w-3.5 h-3.5" />
                                 </Button>
@@ -1585,18 +978,18 @@ export function PagosView({ onChanged }: { onChanged: () => void }) {
                                 <Button
                                   size="sm"
                                   variant="ghost"
-                                  className="text-amber-700 hover:text-amber-800 hover:bg-amber-50 h-7 w-7 p-0"
+                                  className="text-amber-700 hover:text-amber-800 hover:bg-amber-50 h-8"
                                   onClick={() => abrirModalReversar(p)}
-                                  title="Reversar parcial"
+                                  title="Reversar pago parcial"
                                 >
                                   <RotateCcw className="w-3.5 h-3.5" />
                                 </Button>
                                 <Button
                                   size="sm"
                                   variant="ghost"
-                                  className="text-red-700 hover:text-red-800 hover:bg-red-50 h-7 w-7 p-0"
+                                  className="text-red-700 hover:text-red-800 hover:bg-red-50 h-8"
                                   onClick={() => abrirModalEliminar(p)}
-                                  title="Eliminar parcial"
+                                  title="Eliminar pago parcial"
                                 >
                                   <Trash2 className="w-3.5 h-3.5" />
                                 </Button>
@@ -1606,20 +999,20 @@ export function PagosView({ onChanged }: { onChanged: () => void }) {
                               <Button
                                 size="sm"
                                 variant="ghost"
-                                className="text-red-700 hover:text-red-800 hover:bg-red-50 h-7 w-7 p-0"
+                                className="text-red-700 hover:text-red-800 hover:bg-red-50 h-8"
                                 onClick={() => abrirModalEliminar(p)}
-                                title="Eliminar"
+                                title="Eliminar pago (borra el registro)"
                               >
                                 <Trash2 className="w-3.5 h-3.5" />
                               </Button>
                             )}
                           </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </>
-              )}
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
             </CardContent>
           </Card>
         </TabsContent>
@@ -1673,7 +1066,7 @@ export function PagosView({ onChanged }: { onChanged: () => void }) {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Estado</TableHead>
-                    <TableHead>Solicitud / Cliente</TableHead>
+                    <TableHead>Préstamo / Cliente</TableHead>
                     <TableHead>Cuota</TableHead>
                     <TableHead>Vencimiento</TableHead>
                     <TableHead>Días mora</TableHead>
@@ -1796,7 +1189,7 @@ Hola *${p.cliente.nombre}*,
 Te recordamos tu próximo pago:
 
 📋 *Detalle:*
-• Solicitud: ${p.codigo}
+• Préstamo: ${p.codigo}
 • Cuota: ${p.proximaCuota}/${p.totalCuotas}
 • Fecha de vencimiento: ${formatearFecha(p.fechaVencimiento)}
 ${p.diasMora > 0 ? `• Días de mora: ${p.diasMora}\n` : ''}• Valor a pagar: ${formatearMoneda(p.totalCuotaConMora)}
@@ -2019,7 +1412,7 @@ Si ya realizaste el pago, ignora este mensaje.`
                         <TableHeader className="sticky top-0 bg-card">
                           <TableRow>
                             <TableHead>Cliente</TableHead>
-                            <TableHead>Solicitud</TableHead>
+                            <TableHead>Préstamo</TableHead>
                             <TableHead>Cuota</TableHead>
                             <TableHead>Vencimiento</TableHead>
                             <TableHead>Días mora</TableHead>
@@ -2060,7 +1453,7 @@ Hola *${m.clienteNombre}*,
 Te recordamos que tienes un pago pendiente:
 
 📋 *Detalle:*
-• Solicitud: ${m.codigo}
+• Préstamo: ${m.codigo}
 • Cuota #: ${m.cuotaPendiente}
 • Fecha de vencimiento: ${formatearFecha(m.fechaVencimiento)}
 • Días de mora: ${m.diasMora}
@@ -2226,7 +1619,7 @@ Si ya realizaste el pago, ignora este mensaje.`
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                 <Card>
                   <CardContent className="p-4">
-                    <p className="text-xs text-muted-foreground">Solicitudes activos</p>
+                    <p className="text-xs text-muted-foreground">Préstamos activos</p>
                     <p className="text-xl font-bold text-emerald-700">{informe.cartera.prestamosActivos}</p>
                   </CardContent>
                 </Card>
@@ -2345,10 +1738,10 @@ Si ya realizaste el pago, ignora este mensaje.`
 
               <div className="max-h-[60vh] overflow-y-auto">
                 {loadingAplicar ? (
-                  <div className="text-center py-8 text-muted-foreground">Cargando solicitudes...</div>
+                  <div className="text-center py-8 text-muted-foreground">Cargando préstamos...</div>
                 ) : prestamosAplicar.length === 0 ? (
                   <div className="text-center py-8 text-muted-foreground">
-                    No hay solicitudes activos con cuotas pendientes.
+                    No hay préstamos activos con cuotas pendientes.
                   </div>
                 ) : (
                   <div className="space-y-2">
@@ -2395,7 +1788,7 @@ Si ya realizaste el pago, ignora este mensaje.`
             </div>
           ) : (
             <div className="space-y-4">
-              {/* Info del solicitud seleccionado */}
+              {/* Info del préstamo seleccionado */}
               <div className="p-3 rounded-md bg-muted/50 border">
                 <div className="flex items-start justify-between">
                   <div>
@@ -2523,16 +1916,8 @@ Si ya realizaste el pago, ignora este mensaje.`
                   )}
                   <div className="border-t pt-1.5 flex justify-between">
                     <span className="font-semibold text-emerald-700">Total a pagar HOY:</span>
-                    <strong className="text-emerald-700 text-lg">
-                      {formatearMoneda(prestamoSeleccionadoAplicar.totalCuotaConCargos || prestamoSeleccionadoAplicar.totalCuotaConMora)}
-                    </strong>
+                    <strong className="text-emerald-700 text-lg">{formatearMoneda(prestamoSeleccionadoAplicar.totalCuotaConMora)}</strong>
                   </div>
-                  {prestamoSeleccionadoAplicar.cargosInicialesPendientesMonto && prestamoSeleccionadoAplicar.cargosInicialesPendientesMonto > 0 && (
-                    <div className="mt-1 text-xs text-purple-700 bg-purple-50 px-2 py-1 rounded">
-                      Incluye <strong>{formatearMoneda(prestamoSeleccionadoAplicar.cargosInicialesPendientesMonto)}</strong> en cargos iniciales
-                      (pagaré + carta, tarifa plataforma, flexibilidad financiera, fondo de garantía)
-                    </div>
-                  )}
                   {prestamoSeleccionadoAplicar.totalPagadoCuota > 0 && (
                     <div className="flex justify-between text-amber-700 bg-amber-50 px-2 py-1 rounded">
                       <span>💰 Pendiente después de pagos parciales:</span>
@@ -2574,170 +1959,18 @@ Si ya realizaste el pago, ignora este mensaje.`
                     </Button>
                   </div>
                 )}
-
-                {/* === TAREA Q: Banner de Flexibilidad Financiera === */}
-                {/* Si el solicitud tiene el beneficio activado, mostrar banner con estado */}
-                {prestamoSeleccionadoAplicar.flexibilidadFinanciera && (
-                  <div className={`mt-3 p-3 rounded-md border-2 ${
-                    prestamoSeleccionadoAplicar.flexibilidadElegible
-                      ? 'bg-emerald-50/60 border-emerald-300'
-                      : 'bg-amber-50/40 border-amber-200'
-                    }`}>
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="flex-1">
-                        <div className={`text-xs font-bold uppercase tracking-wide flex items-center gap-1 ${
-                          prestamoSeleccionadoAplicar.flexibilidadElegible ? 'text-emerald-800' : 'text-amber-800'
-                        }`}>
-                          <Sparkles className="w-3.5 h-3.5" />
-                          Flexibilidad Financiera {prestamoSeleccionadoAplicar.flexibilidadModalidad || 'BASICA'}
-                        </div>
-                        <div className="text-xs text-muted-foreground mt-1 space-y-0.5">
-                          <div>
-                            • Usos disponibles: <strong>{prestamoSeleccionadoAplicar.flexibilidadUsosDisponibles ?? 0}</strong> de{' '}
-                            {prestamoSeleccionadoAplicar.flexibilidadModalidad === 'PREMIUM' ? '2' : '1'}
-                          </div>
-                          <div>
-                            • Usos ejercidos: <strong>{prestamoSeleccionadoAplicar.flexibilidadUsosEjercidos ?? 0}</strong>
-                          </div>
-                          <div>
-                            • Costo pagado al inicio: <strong>{formatearMoneda(prestamoSeleccionadoAplicar.flexibilidadCosto ?? 0)}</strong>
-                          </div>
-                          {prestamoSeleccionadoAplicar.flexibilidadElegible ? (
-                            <div className="mt-1 text-emerald-700 italic">
-                              ✓ Cuota {prestamoSeleccionadoAplicar.proximaCuota} es elegible para traslado al final del crédito
-                            </div>
-                          ) : (
-                            <div className="mt-1 text-amber-700 italic">
-                              ⚠ {prestamoSeleccionadoAplicar.flexibilidadRazonInelegible}
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-
-                    {prestamoSeleccionadoAplicar.flexibilidadElegible && (
-                      <>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          className="mt-2 w-full bg-emerald-600 hover:bg-emerald-700 text-white border-emerald-700"
-                          onClick={abrirModalFlexibilidad}
-                        >
-                          <Sparkles className="w-4 h-4 mr-2" />
-                          Usar Flexibilidad Financiera para esta cuota
-                        </Button>
-                        <p className="text-[10px] text-muted-foreground mt-1 text-center italic">
-                          La cuota se trasladará al final del crédito junto con los intereses ya causados, evitando mora. No recibe dinero en este momento (el costo ya fue pagado al inicio).
-                        </p>
-                      </>
-                    )}
-                  </div>
-                )}
               </div>
-
-              {/* === Opción Abonar al Capital (solo para modalidad INTERES_FIJO_SIN_CAPITAL) === */}
-              {prestamoSeleccionadoAplicar.modalidadAmortizacion === 'INTERES_FIJO_SIN_CAPITAL' && (
-                <div className="p-3 rounded-md bg-purple-50 dark:bg-purple-900/20 border-2 border-purple-300 dark:border-purple-700 space-y-3">
-                  <div className="flex items-start gap-3">
-                    <input
-                      type="checkbox"
-                      id="abonarAlCapital"
-                      checked={abonarAlCapital}
-                      onChange={(e) => {
-                        setAbonarAlCapital(e.target.checked)
-                        if (e.target.checked) {
-                          setMontoRecibido('')
-                        } else {
-                          setMontoAbonoCapital('')
-                        }
-                      }}
-                      className="w-4 h-4 rounded border-purple-400 text-purple-600 focus:ring-purple-500 mt-0.5"
-                    />
-                    <Label htmlFor="abonarAlCapital" className="text-sm font-semibold cursor-pointer flex-1 text-purple-900 dark:text-purple-100">
-                      💰 Abonar al capital (pago extraordinario)
-                    </Label>
-                  </div>
-                  {abonarAlCapital ? (
-                    <div className="pl-7 space-y-2">
-                      <p className="text-xs text-purple-700 dark:text-purple-300">
-                        Ingresa el valor del abono al capital. Este pago reducirá el saldo real del solicitud
-                        sin modificar la cuota mensual de intereses ({formatearMoneda(prestamoSeleccionadoAplicar.interesFijoMensual || 0)}).
-                      </p>
-                      <div className="space-y-1">
-                        <Label className="text-xs text-purple-900 dark:text-purple-100">
-                          Valor del abono (COP) *
-                        </Label>
-                        <Input
-                          type="number"
-                          step="0.01"
-                          min="1"
-                          max={prestamoSeleccionadoAplicar.saldoReal || prestamoSeleccionadoAplicar.montoPrincipal}
-                          value={montoAbonoCapital}
-                          onChange={(e) => setMontoAbonoCapital(e.target.value)}
-                          placeholder="Ej: 500000"
-                          className="bg-white dark:bg-slate-800 dark:text-white border-purple-300 dark:border-purple-600"
-                          autoFocus
-                        />
-                      </div>
-                      <div className="grid grid-cols-2 gap-2 text-xs text-purple-900 dark:text-purple-100">
-                        <div>
-                          Saldo real actual:{' '}
-                          <strong>{formatearMoneda(prestamoSeleccionadoAplicar.saldoReal || prestamoSeleccionadoAplicar.montoPrincipal || 0)}</strong>
-                        </div>
-                        <div>
-                          Capital abonado acumulado:{' '}
-                          <strong>{formatearMoneda(prestamoSeleccionadoAplicar.capitalPagadoExtra || 0)}</strong>
-                        </div>
-                      </div>
-                      {montoAbonoCapital && parseFloat(montoAbonoCapital) > 0 && (
-                        <div className="text-xs p-2 rounded bg-white/60 dark:bg-purple-950/40 border border-purple-200 dark:border-purple-700">
-                          {parseFloat(montoAbonoCapital) >= (prestamoSeleccionadoAplicar.saldoReal || prestamoSeleccionadoAplicar.montoPrincipal || 0) ? (
-                            <span className="text-emerald-700 dark:text-emerald-300 font-semibold">
-                              ✅ Este abono saldará el solicitud por completo. El solicitud pasará a estado CANCELADO.
-                            </span>
-                          ) : (
-                            <span className="text-purple-900 dark:text-purple-100">
-                              Nuevo saldo real después del abono:{' '}
-                              <strong>
-                                {formatearMoneda(
-                                  (prestamoSeleccionadoAplicar.saldoReal || prestamoSeleccionadoAplicar.montoPrincipal || 0) - parseFloat(montoAbonoCapital)
-                                )}
-                              </strong>
-                              {' '}· La cuota mensual de {formatearMoneda(prestamoSeleccionadoAplicar.interesFijoMensual || 0)} se mantiene igual.
-                            </span>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  ) : (
-                    <p className="text-xs text-purple-700 dark:text-purple-300 pl-7">
-                      Marca esta casilla si el cliente va a abonar al capital (pago extraordinario).
-                      Si no la marcas, el pago se aplicará normalmente a la cuota mensual de intereses.
-                    </p>
-                  )}
-                </div>
-              )}
 
               {/* Formulario */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label>
-                    {abonarAlCapital
-                      ? 'Monto del abono (COP) *'
-                      : 'Monto recibido (COP) *'}
-                  </Label>
+                  <Label>Monto recibido (COP) *</Label>
                   <Input
                     type="number"
                     step="0.01"
-                    value={abonarAlCapital ? montoAbonoCapital : montoRecibido}
-                    onChange={(e) => abonarAlCapital ? setMontoAbonoCapital(e.target.value) : setMontoRecibido(e.target.value)}
-                    disabled={abonarAlCapital && !prestamoSeleccionadoAplicar.modalidadAmortizacion?.includes('INTERES_FIJO')}
+                    value={montoRecibido}
+                    onChange={(e) => setMontoRecibido(e.target.value)}
                   />
-                  {abonarAlCapital && (
-                    <p className="text-[11px] text-purple-700 dark:text-purple-300">
-                      💡 El abono al capital NO cambia la cuota mensual de intereses. Solo reduce el saldo real del solicitud.
-                    </p>
-                  )}
                 </div>
                 <div className="space-y-2">
                   <Label>Método de pago</Label>
@@ -2847,7 +2080,7 @@ Si ya realizaste el pago, ignora este mensaje.`
                 <Button
                   className="bg-emerald-600 hover:bg-emerald-700"
                   onClick={confirmarAplicarPago}
-                  disabled={abonarAlCapital ? (!montoAbonoCapital || aplicandoPago) : (!montoRecibido || aplicandoPago)}
+                  disabled={!montoRecibido || aplicandoPago}
                 >
                   {aplicandoPago ? (
                     <>
@@ -2879,7 +2112,7 @@ Si ya realizaste el pago, ignora este mensaje.`
           {pagoAReversar && (
             <div className="space-y-3">
               <div className="p-3 rounded bg-muted/50 text-sm space-y-1">
-                <p><strong>Solicitud:</strong> {pagoAReversar.prestamo.codigo}</p>
+                <p><strong>Préstamo:</strong> {pagoAReversar.prestamo.codigo}</p>
                 <p><strong>Cliente:</strong> {pagoAReversar.prestamo.cliente.nombre}</p>
                 <p><strong>Cuota:</strong> {pagoAReversar.numeroCuota}</p>
                 <p><strong>Monto:</strong> <span className="font-bold text-red-700">{formatearMoneda(pagoAReversar.montoTotal)}</span></p>
@@ -2889,7 +2122,7 @@ Si ya realizaste el pago, ignora este mensaje.`
                 <p><strong>⚠️ Atención:</strong> Al reversar este pago:</p>
                 <ul className="list-disc list-inside space-y-0.5">
                   <li>El pago queda marcado como REVERSADO (no se borra)</li>
-                  <li>Se descuenta del saldo del solicitud</li>
+                  <li>Se descuenta del saldo del préstamo</li>
                   <li>La cuota vuelve a quedar pendiente</li>
                   <li>Se mantiene el registro para auditoría</li>
                 </ul>
@@ -2943,7 +2176,7 @@ Si ya realizaste el pago, ignora este mensaje.`
           {pagoAEliminar && (
             <div className="space-y-3">
               <div className="p-3 rounded bg-muted/50 text-sm space-y-1">
-                <p><strong>Solicitud:</strong> {pagoAEliminar.prestamo.codigo}</p>
+                <p><strong>Préstamo:</strong> {pagoAEliminar.prestamo.codigo}</p>
                 <p><strong>Cliente:</strong> {pagoAEliminar.prestamo.cliente.nombre}</p>
                 <p><strong>Cuota:</strong> {pagoAEliminar.numeroCuota}</p>
                 <p><strong>Monto:</strong> <span className="font-bold">{formatearMoneda(pagoAEliminar.montoTotal)}</span></p>
@@ -2954,7 +2187,7 @@ Si ya realizaste el pago, ignora este mensaje.`
                 <ul className="list-disc list-inside space-y-0.5">
                   <li><strong>Eliminar</strong>: Borra el pago COMPLETAMENTE de la BD</li>
                   <li>No queda rastro del pago (excepto en audit log)</li>
-                  <li>El solicitud se recalcula automáticamente</li>
+                  <li>El préstamo se recalcula automáticamente</li>
                   <li>Usa esta opción solo para errores obvios (pago duplicado, dato equivocado)</li>
                 </ul>
                 <p className="mt-2"><strong>Recomendación:</strong> Usa "Reversar" si quieres mantener el historial.</p>
@@ -2998,7 +2231,7 @@ Si ya realizaste el pago, ignora este mensaje.`
           </DialogHeader>
           {prestamoSeleccionadoAplicar && (
             <div className="space-y-4">
-              {/* Info del solicitud */}
+              {/* Info del préstamo */}
               <div className="p-3 rounded-md bg-muted/50 border">
                 <div className="font-semibold">{prestamoSeleccionadoAplicar.cliente.nombre}</div>
                 <div className="text-xs text-muted-foreground">
@@ -3132,7 +2365,7 @@ Si ya realizaste el pago, ignora este mensaje.`
                   minLength={10}
                 />
                 <p className="text-xs text-muted-foreground">
-                  Esta observación quedará registrada en la bitácora del solicitud y en el audit log
+                  Esta observación quedará registrada en la bitácora del préstamo y en el audit log
                   inmutable del sistema. Explica claramente el acuerdo tomado con el cliente.
                 </p>
               </div>
@@ -3239,170 +2472,6 @@ Si ya realizaste el pago, ignora este mensaje.`
         pagoId={reciboPagoId}
         onCerrar={() => setReciboPagoId(null)}
       />
-
-      {/* ============== TAREA Q: MODAL USAR FLEXIBILIDAD FINANCIERA ============== */}
-      <Dialog open={modalFlexibilidad} onOpenChange={setModalFlexibilidad}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-emerald-700">
-              <Sparkles className="w-5 h-5" />
-              Usar Flexibilidad Financiera
-            </DialogTitle>
-          </DialogHeader>
-          {prestamoSeleccionadoAplicar && (
-            <div className="space-y-4">
-              {/* Info del solicitud */}
-              <div className="p-3 rounded-md bg-emerald-50/60 border-2 border-emerald-200 space-y-2">
-                <div className="flex items-start justify-between">
-                  <div>
-                    <div className="font-semibold">{prestamoSeleccionadoAplicar.cliente.nombre}</div>
-                    <div className="text-xs text-muted-foreground">
-                      CC {prestamoSeleccionadoAplicar.cliente.cedula} · {prestamoSeleccionadoAplicar.cliente.telefono}
-                    </div>
-                    <div className="text-xs font-mono mt-1">
-                      {prestamoSeleccionadoAplicar.codigo} · Cuota {prestamoSeleccionadoAplicar.proximaCuota}/{prestamoSeleccionadoAplicar.numeroCuotas}
-                    </div>
-                  </div>
-                  <Badge className="bg-emerald-100 text-emerald-800 hover:bg-emerald-100">
-                    {prestamoSeleccionadoAplicar.flexibilidadModalidad || 'BASICA'}
-                  </Badge>
-                </div>
-                <div className="grid grid-cols-3 gap-2 text-xs pt-2 border-t border-emerald-200">
-                  <div>
-                    <div className="text-muted-foreground">Usos disponibles</div>
-                    <div className="font-bold text-emerald-700">
-                      {prestamoSeleccionadoAplicar.flexibilidadUsosDisponibles ?? 0} / {prestamoSeleccionadoAplicar.flexibilidadModalidad === 'PREMIUM' ? '2' : '1'}
-                    </div>
-                  </div>
-                  <div>
-                    <div className="text-muted-foreground">Cuota a trasladar</div>
-                    <div className="font-bold">#{prestamoSeleccionadoAplicar.proximaCuota}</div>
-                  </div>
-                  <div>
-                    <div className="text-muted-foreground">Vencimiento actual</div>
-                    <div className="font-bold text-xs">
-                      {formatearFecha(prestamoSeleccionadoAplicar.fechaVencimiento)}
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Explicación del beneficio */}
-              <div className="p-3 rounded-md bg-blue-50/50 border border-blue-200 text-sm space-y-2">
-                <div className="font-semibold text-blue-900 flex items-center gap-1.5">
-                  <Info className="w-4 h-4" />
-                  ¿Cómo funciona este beneficio?
-                </div>
-                <ul className="list-disc list-inside space-y-1 text-xs text-blue-900">
-                  <li>
-                    La cuota <strong>{prestamoSeleccionadoAplicar.proximaCuota}</strong> se{' '}
-                    <strong>trasladará al FINAL del crédito</strong> (después de la última cuota programada).
-                  </li>
-                  <li>
-                    Los intereses moratorios ya causados ({' '}
-                    <strong>{formatearMoneda(prestamoSeleccionadoAplicar.moraActual)}</strong>
-                    {' '}por {prestamoSeleccionadoAplicar.diasMora} días de mora) se{' '}
-                    <strong>incluyen en la cuota trasladada</strong>, NO se cobran aparte.
-                  </li>
-                  <li>
-                    NO se genera mora futura sobre esta cuota (queda aplazada oficialmente).
-                  </li>
-                  <li>
-                    NO se interpreta como pago de solo intereses (es un traslado de cuota).
-                  </li>
-                  <li>
-                    NO recibes dinero en este momento — el costo del beneficio ya fue pagado al inicio del crédito.
-                  </li>
-                  <li>
-                    Quedarán <strong>{(prestamoSeleccionadoAplicar.flexibilidadUsosDisponibles ?? 0) - 1} uso(s)</strong> disponibles después de este.
-                  </li>
-                </ul>
-              </div>
-
-              {/* Ejemplo de cálculo */}
-              <div className="p-3 rounded-md bg-muted/30 border text-xs space-y-1">
-                <div className="font-semibold text-muted-foreground uppercase tracking-wide mb-1">
-                  Resumen del traslado
-                </div>
-                <div className="grid grid-cols-2 gap-x-4 gap-y-1">
-                  <div className="text-muted-foreground">Capital de la cuota:</div>
-                  <div className="text-right font-mono">
-                    {formatearMoneda(prestamoSeleccionadoAplicar.cuotaBase - (prestamoSeleccionadoAplicar.interesPagadoCuota || 0))}
-                  </div>
-                  <div className="text-muted-foreground">Interés original:</div>
-                  <div className="text-right font-mono">
-                    {formatearMoneda(prestamoSeleccionadoAplicar.interesPagadoCuota || 0)}
-                  </div>
-                  <div className="text-muted-foreground">Intereses moratorios ya causados:</div>
-                  <div className="text-right font-mono text-red-700">
-                    +{formatearMoneda(prestamoSeleccionadoAplicar.moraActual)}
-                  </div>
-                  <div className="col-span-2 border-t my-1"></div>
-                  <div className="font-semibold">Total a pagar al final del crédito:</div>
-                  <div className="text-right font-mono font-bold text-emerald-700">
-                    {formatearMoneda(
-                      prestamoSeleccionadoAplicar.cuotaBase +
-                      (prestamoSeleccionadoAplicar.moraActual || 0)
-                    )}
-                  </div>
-                </div>
-              </div>
-
-              {/* Observación opcional */}
-              <div className="space-y-2">
-                <Label>Observación del gestor (opcional)</Label>
-                <Textarea
-                  value={observacionFlexibilidad}
-                  onChange={(e) => setObservacionFlexibilidad(e.target.value)}
-                  rows={2}
-                  placeholder="Ej: Cliente solicita traslado por dificultades temporales..."
-                />
-              </div>
-
-              {/* Confirmación obligatoria */}
-              <div className="p-3 rounded-md bg-amber-50 border-2 border-amber-300">
-                <label className="flex items-start gap-2 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={confirmacionFlexibilidad}
-                    onChange={(e) => setConfirmacionFlexibilidad(e.target.checked)}
-                    className="mt-0.5 w-4 h-4"
-                  />
-                  <span className="text-xs text-amber-900">
-                    <strong>Confirmo</strong> que el cliente ha solicitado ejercer el beneficio de Flexibilidad Financiera
-                    para la cuota {prestamoSeleccionadoAplicar.proximaCuota}. Entiendo que esta cuota se trasladará al
-                    final del crédito con los intereses ya causados incluidos, y que NO se recibirá dinero en este momento
-                    (el costo del beneficio fue pagado al inicio del crédito).
-                  </span>
-                </label>
-              </div>
-
-              <DialogFooter>
-                <Button variant="outline" onClick={() => setModalFlexibilidad(false)}>
-                  Cancelar
-                </Button>
-                <Button
-                  className="bg-emerald-600 hover:bg-emerald-700"
-                  onClick={confirmarUsarFlexibilidad}
-                  disabled={!confirmacionFlexibilidad || usandoFlexibilidad}
-                >
-                  {usandoFlexibilidad ? (
-                    <>
-                      <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
-                      Aplicando...
-                    </>
-                  ) : (
-                    <>
-                      <Sparkles className="w-4 h-4 mr-2" />
-                      Aplicar Flexibilidad Financiera
-                    </>
-                  )}
-                </Button>
-              </DialogFooter>
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
     </div>
   )
 }

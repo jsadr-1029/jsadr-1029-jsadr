@@ -4,7 +4,6 @@ import { encryptSensitive, decryptSensitive, registrarAuditLog, getClientInfo } 
 import { requireRole } from '@/lib/auth-guard'
 import { probarSmtp, enviarEmail } from '@/lib/email'
 import { sanitizeError } from '@/lib/error-handler'
-import { assertEmailConfigNotLocked, EmailConfigLockError } from '@/lib/email-config-lock'
 
 // FIX-SEGURIDAD-CRITICA #5: redacta campos sensibles de una conexión antes de enviarla al cliente.
 // - password y apiSecret nunca se devuelven (ni siquiera a ADMIN).
@@ -98,23 +97,6 @@ export async function PUT(
         { success: false, error: 'Conexión no encontrada' },
         { status: 404 }
       )
-    }
-
-    // BLOQUEO DE PROTECCIÓN DE CORREO: si la conexión es EMAIL_SMTP y el lock está activo,
-    // rechazar la modificación con HTTP 423 Locked.
-    const tipoTarget = (body.tipo || conexionExistente.tipo) as string
-    if (tipoTarget === 'EMAIL_SMTP') {
-      try {
-        await assertEmailConfigNotLocked('modificar conexión EMAIL_SMTP')
-      } catch (e: any) {
-        if (e instanceof EmailConfigLockError) {
-          return NextResponse.json(
-            { success: false, error: e.message, code: e.code },
-            { status: e.statusCode },
-          )
-        }
-        throw e
-      }
     }
 
     const {
@@ -212,22 +194,6 @@ export async function DELETE(
       )
     }
 
-    // BLOQUEO DE PROTECCIÓN DE CORREO: si la conexión es EMAIL_SMTP y el lock está activo,
-    // rechazar la eliminación con HTTP 423 Locked.
-    if (conexion.tipo === 'EMAIL_SMTP') {
-      try {
-        await assertEmailConfigNotLocked('eliminar conexión EMAIL_SMTP')
-      } catch (e: any) {
-        if (e instanceof EmailConfigLockError) {
-          return NextResponse.json(
-            { success: false, error: e.message, code: e.code },
-            { status: e.statusCode },
-          )
-        }
-        throw e
-      }
-    }
-
     await db.conexionAPI.delete({ where: { id } })
 
     await registrarAuditLog({
@@ -272,21 +238,6 @@ export async function PATCH(
     }
 
     if (accion === 'toggle') {
-      // BLOQUEO DE PROTECCIÓN DE CORREO: no permitir toggle (activar/desactivar)
-      // de conexiones EMAIL_SMTP cuando el lock está activo.
-      if (conexion.tipo === 'EMAIL_SMTP') {
-        try {
-          await assertEmailConfigNotLocked('cambiar estado (toggle) de conexión EMAIL_SMTP')
-        } catch (e: any) {
-          if (e instanceof EmailConfigLockError) {
-            return NextResponse.json(
-              { success: false, error: e.message, code: e.code },
-              { status: e.statusCode },
-            )
-          }
-          throw e
-        }
-      }
       const nuevaActiva = !conexion.activa
       // Si se está activando, desactivar otras del mismo tipo
       if (nuevaActiva) {
@@ -318,30 +269,6 @@ export async function PATCH(
 
       try {
         if (tipo === 'EMAIL_SMTP') {
-          // BLOQUEO DE PROTECCIÓN DE CORREO: si la conexión NO está activa y el
-          // lock está activo, no se puede "probar" porque probar implica activarla
-          // temporalmente (lo que desactivaría la conexión activa actual).
-          // Si YA está activa, la prueba es safe (no modifica estado) → permitir.
-          if (!conexion.activa) {
-            try {
-              await assertEmailConfigNotLocked('probar (activar temporalmente) conexión EMAIL_SMTP no activa')
-            } catch (e: any) {
-              if (e instanceof EmailConfigLockError) {
-                return NextResponse.json(
-                  {
-                    success: false,
-                    error:
-                      e.message +
-                      ' Sugerencia: prueba la conexión actualmente ACTIVA en su lugar, ' +
-                      'o desactiva el bloqueo primero.',
-                    code: e.code,
-                  },
-                  { status: e.statusCode },
-                )
-              }
-              throw e
-            }
-          }
           // Si esta conexión no está activa, activarla temporalmente para la prueba
           if (!conexion.activa) {
             await db.conexionAPI.updateMany({
@@ -358,7 +285,7 @@ export async function PATCH(
           if (smtpResult.success && to) {
             envioPrueba = await enviarEmail({
               to,
-              subject: 'Prueba de SMTP - Sistema de Solicitudes',
+              subject: 'Prueba de SMTP - Sistema de Préstamos',
               text: 'Si recibiste este correo, la configuración SMTP funciona correctamente.',
               html: '<h2>Prueba de SMTP ✅</h2><p>Si recibiste este correo, la configuración SMTP funciona correctamente.</p>',
             })

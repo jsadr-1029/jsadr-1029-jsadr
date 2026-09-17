@@ -1,13 +1,12 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import dynamic from 'next/dynamic'
 import { Sidebar } from '@/components/Sidebar'
 import { RelojColombia } from '@/components/RelojColombia'
 import { ResponsiveViewToggle } from '@/components/ResponsiveViewToggle'
 import { MobileNav } from '@/components/mobile-nav'
-import { InactivityAutoLogout } from '@/components/InactivityAutoLogout'
 import { useToast } from '@/hooks/use-toast'
 import { isAuthenticated, getUserData, logout } from '@/lib/api-client'
 import { puedeAcceder, vistasPermitidas, vistaPorDefecto, puedeAccederUsuario, vistasPermitidasUsuario } from '@/lib/permisos'
@@ -48,7 +47,6 @@ const AuditoriaSeguridadView = dynamic(() => import('@/components/views/Auditori
 const CentroComunicacionesView = dynamic(() => import('@/components/views/CentroComunicacionesView').then(m => ({ default: m.CentroComunicacionesView })), { ssr: false })
 const CentroConfiguracionView = dynamic(() => import('@/components/views/CentroConfiguracionView').then(m => ({ default: m.CentroConfiguracionView })), { ssr: false })
 const BuzonSolicitudesView = dynamic(() => import('@/components/views/BuzonSolicitudesView').then(m => ({ default: m.BuzonSolicitudesView })), { ssr: false })
-const AcuerdosRegularizacionView = dynamic(() => import('@/components/views/AcuerdosRegularizacionView').then(m => ({ default: m.AcuerdosRegularizacionView })), { ssr: false })
 const PortalAdminView = dynamic(() => import('@/components/views/PortalAdminView').then(m => ({ default: m.PortalAdminView })), { ssr: false })
 
 export type ViewKey =
@@ -75,7 +73,6 @@ export type ViewKey =
   | 'manual'
   | 'automatizacion'
   | 'buzon-solicitudes'
-  | 'acuerdos-regularizacion'
 
 export default function Home() {
   const [view, setView] = useState<ViewKey>('prestamos')
@@ -84,13 +81,6 @@ export default function Home() {
   const [portalToken, setPortalToken] = useState<string | null>(null)
   const [refreshKey, setRefreshKey] = useState(0)
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false)
-  // === Solicitud web pendiente de convertir en solicitud ===
-  // Cuando el usuario hace clic en "Solicitud" desde el Buzón de Solicitudes
-  // (vista 'buzon-solicitudes' montada directamente en page.tsx), capturamos
-  // la solicitud aquí y la inyectamos en PrestamosView al cambiar de vista.
-  // PrestamosView la procesa en un useEffect, abre el modal de creación
-  // precargado y nos avisa para limpiar el estado vía onSolicitudConsumida.
-  const [solicitudPendiente, setSolicitudPendiente] = useState<any | null>(null)
   const { toast } = useToast()
   const router = useRouter()
   // Hook reactivo: cuando el rol cambia (switch-user, refresh, login),
@@ -105,117 +95,49 @@ export default function Home() {
   const { mode: responsiveMode } = useResponsiveView()
 
   // === GUARDIA DE AUTENTICACIÓN ===
-  // Si no está autenticado, redirigir a /login preservando el query string.
-  // FIX-LINK-CLIENTE: antes se hacía router.replace('/login') a secas, lo que
-  // perdía los parámetros ?tyc=token / ?pay=codigo / ?recibo=hash que vienen
-  // en los links enviados al cliente por WhatsApp. Tras el login, el cliente
-  // quedaba en el dashboard sin poder aceptar T&C ni pagar.
-  // Ahora guardamos el query string en sessionStorage para que /login pueda
-  // redirigir de vuelta a la URL original post-login.
+  // Si no está autenticado, redirigir a /login
   const [authChecked, setAuthChecked] = useState(false)
   const [esPortalCliente, setEsPortalCliente] = useState(false)
-
-  // === Propagar responsiveMode al <html> ===
-  // Necesario para que el CSS en globals.css (reglas responsivas admin) pueda
-  // alcanzar elementos renderizados fuera del div data-responsive-mode,
-  // incluyendo:
-  //   - Modales (Radix UI Dialog/Sheet usan createPortal → al final del <body>)
-  //   - Tooltips, popovers, dropdowns
-  //   - Notificaciones (toast)
-  // Sin esto, los modales en móvil heredarían el layout desktop y se verían
-  // cortados o con tablas/grid no responsivos.
   useEffect(() => {
-    if (typeof document === 'undefined') return
-    if (esPortalCliente) {
-      document.documentElement.removeAttribute('data-responsive-mode')
-    } else {
-      document.documentElement.setAttribute('data-responsive-mode', responsiveMode)
+    if (!isAuthenticated()) {
+      router.replace('/login')
+      return
     }
-  }, [responsiveMode, esPortalCliente])
-
-  useEffect(() => {
-    // === Timeout de seguridad ===
-    // Si por cualquier motivo el flujo de auth queda bloqueado (token corrupto,
-    // localStorage inaccesible, excepción silenciosa, etc.), forzamos el
-    // redireccionamiento a /login después de 5 segundos. Evita el bug
-    // "Verificando sesión..." colgado indefinidamente.
-    const safetyTimeout = setTimeout(() => {
-      setAuthChecked(true)
-      if (!isAuthenticated()) {
-        try {
-          const qs = window.location.search || ''
-          if (qs && (qs.includes('tyc=') || qs.includes('pay=') || qs.includes('recibo=') || qs.includes('firma='))) {
-            sessionStorage.setItem('pending_redirect', `${window.location.pathname}${qs}`)
-          }
-        } catch {}
-        if (window.location.pathname !== '/login') {
-          window.location.href = '/login'
-        }
-      }
-    }, 5000)
-
-    try {
-      if (!isAuthenticated()) {
-        try {
-          const qs = window.location.search || ''
-          if (qs && (qs.includes('tyc=') || qs.includes('pay=') || qs.includes('recibo=') || qs.includes('firma='))) {
-            sessionStorage.setItem('pending_redirect', `${window.location.pathname}${qs}`)
-          }
-        } catch {}
-        router.replace('/login')
-        clearTimeout(safetyTimeout)
-        return
-      }
-      // Si el usuario inició sesión como CLIENTE, abrir su portal directamente
-      const u = getUserData()
-      if (u?.rol === 'CLIENTE' || u?.esPortalCliente) {
-        setEsPortalCliente(true)
-        // Precargar cédula/token del localStorage (seteados por el login de cliente).
-        // FIX-LOGIN-LOOP: antes se usaba `portal_cliente_id` como cédula, pero
-        // ese valor contiene el ID interno del cliente (p.ej. "cmrskum2..."),
-        // no la cédula. El endpoint /api/portal/[cedula] espera una cédula, así
-        // que devolvía 404 y el portal quedaba cargando indefinidamente.
-        // Usamos u.username (que en el login de cliente se setea a la cédula)
-        // o u.cedula si está disponible.
-        try {
-          const tk = localStorage.getItem('portal_cliente_token')
-          const cedula = u.cedula || u.username || localStorage.getItem('portal_cliente_cedula')
-          if (cedula) setPortalCedula(cedula)
-          if (tk) setPortalToken(tk)
-        } catch {}
-        setView('portal')
-      } else {
-        // Si es usuario interno (ADMIN/GESTOR/CONSULTOR), validar que la
-        // vista inicial esté permitida para su rol/usuario. Si no, ir a la vista
-        // por defecto.
-        // Considera el bloqueo por usuario (P_jsadr → solo 'portal-admin').
-        const permitidas = vistasPermitidasUsuario(u?.username, u?.rol || reactiveRol)
-        if (permitidas.length > 0 && !permitidas.includes('prestamos' as ViewKey)) {
-          // Si el usuario está bloqueado a un portal específico, ir a ese portal
-          const vistaBloqueada = permitidas.length === 1 ? permitidas[0] : null
-          if (vistaBloqueada) {
-            setView(vistaBloqueada)
-          } else {
-            setView(vistaPorDefecto(u?.rol || reactiveRol))
-          }
-        }
-      }
-      setAuthChecked(true)
-      clearTimeout(safetyTimeout)
-    } catch (err) {
-      // Si ocurre cualquier excepción durante el check, limpiar auth y
-      // redirigir a login para evitar pantalla en blanco.
-      clearTimeout(safetyTimeout)
+    // Si el usuario inició sesión como CLIENTE, abrir su portal directamente
+    const u = getUserData()
+    if (u?.rol === 'CLIENTE' || u?.esPortalCliente) {
+      setEsPortalCliente(true)
+      // Precargar cédula/token del localStorage (seteados por el login de cliente).
+      // FIX-LOGIN-LOOP: antes se usaba `portal_cliente_id` como cédula, pero
+      // ese valor contiene el ID interno del cliente (p.ej. "cmrskum2..."),
+      // no la cédula. El endpoint /api/portal/[cedula] espera una cédula, así
+      // que devolvía 404 y el portal quedaba cargando indefinidamente.
+      // Usamos u.username (que en el login de cliente se setea a la cédula)
+      // o u.cedula si está disponible.
       try {
-        localStorage.removeItem('access_token')
-        localStorage.removeItem('refresh_token')
-        localStorage.removeItem('user_data')
+        const tk = localStorage.getItem('portal_cliente_token')
+        const cedula = u.cedula || u.username || localStorage.getItem('portal_cliente_cedula')
+        if (cedula) setPortalCedula(cedula)
+        if (tk) setPortalToken(tk)
       } catch {}
-      setAuthChecked(true)
-      if (window.location.pathname !== '/login') {
-        window.location.href = '/login'
+      setView('portal')
+    } else {
+      // Si es usuario interno (ADMIN/GESTOR/CONSULTOR), validar que la
+      // vista inicial esté permitida para su rol/usuario. Si no, ir a la vista
+      // por defecto.
+      // Considera el bloqueo por usuario (P_jsadr → solo 'portal-admin').
+      const permitidas = vistasPermitidasUsuario(u?.username, u?.rol || reactiveRol)
+      if (permitidas.length > 0 && !permitidas.includes('prestamos' as ViewKey)) {
+        // Si el usuario está bloqueado a un portal específico, ir a ese portal
+        const vistaBloqueada = permitidas.length === 1 ? permitidas[0] : null
+        if (vistaBloqueada) {
+          setView(vistaBloqueada)
+        } else {
+          setView(vistaPorDefecto(u?.rol || reactiveRol))
+        }
       }
     }
+    setAuthChecked(true)
   }, [router, reactiveRol])
 
   // === GUARDIA DE PERMISOS POR VISTA ===
@@ -246,21 +168,6 @@ export default function Home() {
       // Login desde el perfil Cliente: llevar directo a la vista Portal
       setView('portal')
     } else if (viewParam) {
-      // === REDIRECCIÓN DE SUBMÓDULOS DE SEGURIDAD ===
-      // Las vistas 'conexiones', 'usuarios', 'codigo-fuente', 'manual',
-      // 'auditoria' y 'exportar' ahora son pestañas internas de SeguridadView.
-      // Si alguien accede por URL directa (ej: ?view=exportar), lo redirigimos
-      // a la vista 'seguridad' (donde verá la pestaña correspondiente).
-      const SUBMODULOS_SEGURIDAD = ['conexiones', 'usuarios', 'codigo-fuente', 'manual', 'auditoria', 'exportar']
-      if (SUBMODULOS_SEGURIDAD.includes(viewParam)) {
-        const u = getUserData()
-        // Solo redirigir si tiene permiso para 'seguridad'
-        if (u && puedeAccederUsuario(u.username, u.rol, 'seguridad')) {
-          setView('seguridad' as ViewKey)
-          return
-        }
-      }
-
       // Redirección post-login (ej: ?view=portal-admin para P_jsadr)
       // Solo aplicar si la vista está permitida para el rol/usuario.
       const u = getUserData()
@@ -290,34 +197,14 @@ export default function Home() {
   }
   const refresh = () => setRefreshKey((k) => k + 1)
 
-  // Convertir una solicitud web en solicitud: captura la solicitud en el
-  // estado `solicitudPendiente` y cambia a la vista 'prestamos'. Allí,
-  // PrestamosView detecta el cambio vía useEffect, precarga el formulario
-  // con los datos de la solicitud (cliente, monto, tasa, cuotas, frecuencia,
-  // flexibilidad, renovación anticipada) y abre el modal de creación.
-  // Una vez procesada, PrestamosView nos avisa vía onSolicitudConsumida
-  // para limpiar el estado y evitar re-procesamientos.
-  const convertirSolicitudWeb = (solicitud: any) => {
-    if (!solicitud) {
-      setView('prestamos')
-      return
-    }
-    setSolicitudPendiente(solicitud)
+  // Convertir una solicitud web en préstamo (placeholder: navegar a préstamos)
+  const convertirSolicitudWeb = (_solicitud: any) => {
     setView('prestamos')
     toast({
       title: 'Solicitud cargada',
-      description: `Se precargó el formulario con los datos de la solicitud ${solicitud.codigo || ''}. Completa la información restante para crear el solicitud.`,
+      description: 'Completa los datos para crear el préstamo a partir de la solicitud web.',
     })
   }
-
-  // v4.16 — Estabilizamos onSolicitudConsumida con useCallback para evitar
-  // re-disparos del useEffect[solicitudPendiente, onSolicitudConsumida] en
-  // PrestamosView. Antes, la arrow inline se recreaba en cada render del
-  // padre, lo que podía limpiar solicitudPendiente prematuramente y
-  // provocar que el modal de creación de solicitud no se abriera.
-  const handleSolicitudConsumida = useCallback(() => {
-    setSolicitudPendiente(null)
-  }, [])
 
   // Si aún no se verificó la auth, no renderizar nada (evita flash)
   if (!authChecked) {
@@ -382,20 +269,6 @@ export default function Home() {
         style={forzarMobileLayout && contenidoMaxWidth ? { maxWidth: `${contenidoMaxWidth}px` } : undefined}
       >
         <main className="flex-1 overflow-x-hidden bg-background">
-          {/* Auto-logout por inactividad (10 min) con aviso previo (9 min).
-              FIX-LOGOUT-INESPERADO: el usuario reportó que la sesión se cerraba
-              aleatoriamente. Este componente implementa la política esperada:
-              10 min de inactividad → aviso → cierre de sesión. Solo se monta
-              para usuarios internos (no para portal cliente, que tiene su
-              propio manejo en PortalClienteModal). */}
-          {!esPortalCliente && (
-            <InactivityAutoLogout
-              timeoutMs={10 * 60 * 1000}   // 10 minutos
-              warningAtMs={9 * 60 * 1000}  // avisar a los 9 min
-              enabled={true}
-            />
-          )}
-
           {/* Reloj digital Colombia — visible en todos los módulos (zona America/Bogota = Medellín/Bogotá)
               Ubicado al centro horizontal de la ventana, manteniendo la altura (top-3).
               pointer-events-none para no bloquear clics; el contenido tiene pt-16 para evitar superposición. */}
@@ -490,13 +363,7 @@ export default function Home() {
                 {view === 'dashboard' && <DashboardView onAbrirPrestamo={abrirPrestamo} />}
                 {view === 'clientes' && <ClientesView onChanged={refresh} />}
                 {view === 'prestamos' && (
-                  <PrestamosView
-                    onAbrirPrestamo={abrirPrestamo}
-                    onChanged={refresh}
-                    onCambiarVista={(v) => setView(v as ViewKey)}
-                    solicitudPendiente={solicitudPendiente}
-                    onSolicitudConsumida={handleSolicitudConsumida}
-                  />
+                  <PrestamosView onAbrirPrestamo={abrirPrestamo} onChanged={refresh} onCambiarVista={(v) => setView(v as ViewKey)} />
                 )}
                 {view === 'pagos' && <PagosView onChanged={refresh} />}
                 {view === 'juridico' && <JuridicoView onChanged={refresh} />}
@@ -519,9 +386,6 @@ export default function Home() {
                 {view === 'automatizacion' && <AutomatizacionView />}
                 {view === 'buzon-solicitudes' && (
                   <BuzonSolicitudesView onConvertir={convertirSolicitudWeb} />
-                )}
-                {view === 'acuerdos-regularizacion' && (
-                  <AcuerdosRegularizacionView />
                 )}
               </>
             )}
@@ -556,7 +420,6 @@ export default function Home() {
                 localStorage.removeItem('portal_cliente_token')
                 localStorage.removeItem('portal_cliente_id')
                 localStorage.removeItem('portal_cliente_nombre')
-                localStorage.removeItem('portal_cliente_cedula')
               } catch {}
               logout()
             } else {

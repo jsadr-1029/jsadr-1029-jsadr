@@ -532,7 +532,7 @@ function InformeCasos({ token }: { token: string }) {
               <TableHeader>
                 <TableRow>
                   <TableHead>Cliente</TableHead>
-                  <TableHead>Solicitud</TableHead>
+                  <TableHead>Préstamo</TableHead>
                   <TableHead>Estado</TableHead>
                   <TableHead>Juzgado</TableHead>
                   <TableHead>Radicado</TableHead>
@@ -596,7 +596,7 @@ function InformeCasos({ token }: { token: string }) {
                   <p className="font-medium">{casoSeligido.prestamo?.cliente?.nombre}</p>
                 </div>
                 <div>
-                  <p className="text-xs text-muted-foreground">Solicitud</p>
+                  <p className="text-xs text-muted-foreground">Préstamo</p>
                   <p className="font-mono text-xs">{casoSeligido.prestamo?.codigo}</p>
                 </div>
                 <div>
@@ -739,7 +739,7 @@ function ChatInternoAbogado({ token, nombre }: { token: string; nombre: string }
       const res = await fetch('/api/juridico/portal/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token, mensaje: contenido }),
+        body: JSON.stringify({ token, contenido }),
       })
       const json = await res.json()
       if (json.success) {

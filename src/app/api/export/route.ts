@@ -155,7 +155,7 @@ export async function GET(req: NextRequest) {
         )
       })
 
-      // Solicitudes CSV
+      // Préstamos CSV
       csvSections.push('\n=== PRESTAMOS ===')
       csvSections.push('codigo,cliente,cedula,montoPrincipal,tasaInteresAnual,tasaMoraAnual,plazoMeses,frecuencia,numeroCuotas,montoCuota,totalInteres,totalPagar,saldoTotal,cuotasPagadas,montoPagado,estado,fechaSolicitud,fechaDesembolso,fechaVencimiento')
       prestamos.forEach((p) => {

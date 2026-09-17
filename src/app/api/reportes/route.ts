@@ -1,12 +1,12 @@
 // =====================================================
-// /api/reportes — Dashboard unificado + Proyecciones v4.13
+// /api/reportes — Dashboard unificado + Proyecciones v3.0
 // Combina KPIs operacionales, financieros, proyecciones y reportes
-// RBAC: ADMIN, CONSULTOR (lectura), GESTOR (lectura)
+// Requiere autenticación (cualquier rol)
 // =====================================================
 
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { requireRole } from '@/lib/auth-guard'
+import { requireAuth } from '@/lib/auth-guard'
 import { errorResponse, logError } from '@/lib/error-handler'
 import {
   calcularPrestamo,
@@ -15,12 +15,10 @@ import {
   debeIrAJuridico,
   formatearMoneda,
 } from '@/lib/finanzas'
-import { excluirPruebaCliente, excluirPruebaPago, excluirPruebaPrestamo } from '@/lib/cliente-prueba'
 
 export async function GET(req: NextRequest) {
   try {
-    // v4.13 (TC-REP-011): CONSULTOR tiene acceso de lectura a reportes
-    const authResult = requireRole(req, ['ADMIN', 'CONSULTOR', 'GESTOR'])
+    const authResult = requireAuth(req)
     if (authResult instanceof NextResponse) return authResult
 
     const { searchParams } = new URL(req.url)
@@ -49,12 +47,6 @@ export async function GET(req: NextRequest) {
     }
 
     // === CARGA PARALELA DE DATOS ===
-    // Los filtros excluyen automáticamente clientes de prueba (esPrueba=true)
-    // para que no contaminen los saldos reales del sistema.
-    const filtroCliente = excluirPruebaCliente()
-    const filtroPrestamo = excluirPruebaPrestamo()
-    const filtroPago = excluirPruebaPago()
-
     const [
       totalClientes,
       totalPrestamos,
@@ -71,22 +63,22 @@ export async function GET(req: NextRequest) {
       totalMovimientos,
       casosJuridicosRecientes,
     ] = await Promise.all([
-      db.cliente.count({ where: filtroCliente }),
-      db.prestamo.count({ where: filtroPrestamo }),
-      db.prestamo.findMany({ where: { estado: { in: ['ACTIVO', 'EN_MORA'] }, ...filtroPrestamo } }),
-      db.prestamo.findMany({ where: { estado: 'EN_MORA', ...filtroPrestamo } }),
-      db.prestamo.count({ where: { estado: 'JURIDICO', ...filtroPrestamo } }),
+      db.cliente.count(),
+      db.prestamo.count(),
+      db.prestamo.findMany({ where: { estado: { in: ['ACTIVO', 'EN_MORA'] } } }),
+      db.prestamo.findMany({ where: { estado: 'EN_MORA' } }),
+      db.prestamo.count({ where: { estado: 'JURIDICO' } }),
       db.pago.findMany({
-        where: { fechaPago: { gte: hoy, lte: finHoy }, estado: 'APLICADO', ...filtroPago },
+        where: { fechaPago: { gte: hoy, lte: finHoy }, estado: 'APLICADO' },
       }),
       db.pago.findMany({
-        where: { fechaPago: { gte: fechaInicio }, estado: 'APLICADO', ...filtroPago },
+        where: { fechaPago: { gte: fechaInicio }, estado: 'APLICADO' },
       }),
       db.prestamo.findMany({
-        where: { estado: 'ACTIVO', ...filtroPrestamo },
+        where: { estado: 'ACTIVO' },
         include: { cliente: true, pagos: true, categoria: true },
       }),
-      db.casoJuridico.findMany({ where: { estado: { not: 'CERRADO' }, prestamo: filtroPrestamo } }),
+      db.casoJuridico.findMany({ where: { estado: { not: 'CERRADO' } } }),
       db.cajaMenor.findMany({
         include: {
           movimientos: { orderBy: { fechaMovimiento: 'desc' }, take: 10 },
@@ -98,7 +90,7 @@ export async function GET(req: NextRequest) {
         include: {
           _count: { select: { pagos: true, clientes: true } },
           pagos: {
-            where: { estado: 'APLICADO', ...filtroPago },
+            where: { estado: 'APLICADO' },
             select: { montoTotal: true, montoCapital: true, montoInteres: true, montoMora: true },
           },
           clientes: { select: { id: true, nombre: true, cedula: true, activo: true } },
@@ -106,7 +98,7 @@ export async function GET(req: NextRequest) {
       }),
       db.movimientoCaja.count(),
       db.casoJuridico.findMany({
-        where: { estado: { not: 'CERRADO' }, prestamo: filtroPrestamo },
+        where: { estado: { not: 'CERRADO' } },
         include: { prestamo: { include: { cliente: true } } },
         take: 5,
         orderBy: { createdAt: 'desc' },
@@ -226,7 +218,6 @@ export async function GET(req: NextRequest) {
     // === POR CATEGORÍA ===
     const porCategoriaRaw = await db.prestamo.groupBy({
       by: ['categoriaId'],
-      where: filtroPrestamo,
       _count: true,
       _sum: { montoPrincipal: true, saldoTotal: true },
     })
@@ -242,7 +233,7 @@ export async function GET(req: NextRequest) {
 
     // === POR CLIENTE (TOP 15) ===
     const prestamosConCliente = await db.prestamo.findMany({
-      where: { estado: { in: ['ACTIVO', 'EN_MORA'] }, ...filtroPrestamo },
+      where: { estado: { in: ['ACTIVO', 'EN_MORA'] } },
       include: { cliente: true },
     })
 
@@ -272,7 +263,7 @@ export async function GET(req: NextRequest) {
       .sort((a, b) => b.saldoTotal - a.saldoTotal)
       .slice(0, 15)
 
-    // === POR SOLICITUD (TOP 20) ===
+    // === POR PRÉSTAMO (TOP 20) ===
     const porPrestamo = prestamosConCliente
       .map((p) => ({
         id: p.id,
@@ -291,12 +282,11 @@ export async function GET(req: NextRequest) {
     // === RESUMEN POR ESTADO ===
     const resumenEstados = await db.prestamo.groupBy({
       by: ['estado'],
-      where: filtroPrestamo,
       _count: true,
       _sum: { saldoTotal: true, montoPrincipal: true },
     })
 
-    // === ALERTAS JURÍDICO (solicitudes que superan 60 días de mora) ===
+    // === ALERTAS JURÍDICO (préstamos que superan 60 días de mora) ===
     const alertasJuridico: any[] = []
     for (const p of prestamosMora) {
       const diasMora = await calcularDiasMoraPrestamo(p.id)

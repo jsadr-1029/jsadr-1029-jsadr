@@ -1,6 +1,6 @@
 // =====================================================
-// /api/creditos-bancarios — CRUD de Solicitudes Bancarios v3.0
-// Gestiona Solicitudes (tipo=PRESTAMO) y Tarjetas de Crédito (tipo=TARJETA_CREDITO)
+// /api/creditos-bancarios — CRUD de Préstamos Bancarios v3.0
+// Gestiona Préstamos (tipo=PRESTAMO) y Tarjetas de Crédito (tipo=TARJETA_CREDITO)
 // Requiere autenticación JWT (cualquier rol para GET, ADMIN/GESTOR para mutaciones)
 // =====================================================
 
@@ -32,7 +32,7 @@ export async function GET(req: NextRequest) {
   }
 }
 
-// POST - crear nuevo solicitud bancario o tarjeta de crédito
+// POST - crear nuevo préstamo bancario o tarjeta de crédito
 export async function POST(req: NextRequest) {
   try {
     const authResult = requireRole(req, ['ADMIN', 'GESTOR'])
@@ -71,7 +71,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(
         {
           success: false,
-          error: 'Para solicitudes: montoPrincipal y tasaAnual son obligatorios',
+          error: 'Para préstamos: montoPrincipal y tasaAnual son obligatorios',
           code: 'MISSING_FIELDS',
         },
         { status: 400 }
@@ -122,7 +122,7 @@ export async function POST(req: NextRequest) {
   }
 }
 
-// PATCH - actualizar solicitud bancario existente
+// PATCH - actualizar préstamo bancario existente
 export async function PATCH(req: NextRequest) {
   try {
     const authResult = requireRole(req, ['ADMIN', 'GESTOR'])
@@ -192,7 +192,7 @@ export async function PATCH(req: NextRequest) {
   }
 }
 
-// DELETE - eliminar solicitud bancario
+// DELETE - eliminar préstamo bancario
 export async function DELETE(req: NextRequest) {
   try {
     const authResult = requireRole(req, ['ADMIN'])

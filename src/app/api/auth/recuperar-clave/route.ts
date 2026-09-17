@@ -1,114 +1,85 @@
 // =====================================================
-// /api/auth/recuperar-clave — Recuperación de credenciales vía MAGIC LINK
+// /api/auth/recuperar-clave — Recuperación de credenciales
 // -----------------------------------------------------
 // POST /api/auth/recuperar-clave
 //   { identificador: "username" | "email" | "cédula" }
 //
-// Flujo (v4.14 — magic link, sin contraseña temporal por correo):
+// Flujo:
 //   1. Busca al usuario por username, email O cédula en:
 //      - Tabla Usuario (admin/gestor/consultor/abogado)
 //      - Tabla Cliente (clientes del portal)
-//   2. Si existe, genera un token criptográfico de un solo uso
-//      (32 bytes hex = 64 chars) y lo persiste en:
-//        - Usuario.claveResetToken / claveResetExpira
-//        - Cliente.claveResetToken  / claveResetExpira
-//   3. Envía al correo registrado un ENLACE con el token:
-//        https://jsadr.com.co/recuperar-clave?token=<token>
-//   4. Al hacer clic, el usuario llega a la página /recuperar-clave
-//      donde se le pide inmediatamente crear una nueva clave.
-//   5. El token se valida en /api/auth/restablecer-clave y se canela
-//      tras el primer uso (one-shot).
+//   2. Si existe, genera una contraseña temporal.
+//   3. La envía ÚNICAMENTE al correo electrónico registrado
+//      en el sistema para ese usuario.
+//   4. Marca al usuario con mustChangePassword=true.
+//   5. Registra en AuditLog y en bitácora de recuperación.
 //
 // Por seguridad:
 //   - Rate limit: 1 solicitud cada 5 min por IP
 //   - No revela si el usuario existe o no (respuesta genérica)
-//   - Token válido 60 minutos (mucho más corto que la antigua
-//     contraseña temporal de 24h, ya que es un link de un solo uso)
-//   - No se envía ninguna contraseña al correo
+//   - Contraseña temporal válida 24h
+//   - Se hashea con bcrypt rounds=12
 // =====================================================
 
 import { NextRequest, NextResponse } from 'next/server'
 import crypto from 'crypto'
 import { db } from '@/lib/db'
-import { registrarAuditLog, getClientInfo } from '@/lib/security'
+import { hashPassword, registrarAuditLog, getClientInfo } from '@/lib/security'
 import { enviarEmail } from '@/lib/email'
 import { sanitizeError } from '@/lib/error-handler'
-import { getBaseUrl } from '@/lib/url'
 
 // === RATE LIMIT ===
-// Permitir hasta 3 solicitudes cada 5 minutos por IP, y hasta 3 por identificador.
-// Esto evita que varios usuarios detrás de una misma IP (oficina, red móvil)
-// se bloqueen entre sí, pero sigue protegiendo contra abuso real.
-//
-// Por qué no es 1 sola solicitud cada 5 min:
-//   - Varios clientes pueden compartir IP (mismo hogar, oficina, NAT de operador)
-//   - El usuario puede necesitar reintentar si el correo no llegó (spam, etc.)
-//   - El verdadero riesgo de fuerza bruta está en el endpoint /login, no aquí
-//     (aquí solo generamos un magic link, no verificamos credenciales)
+// 1 solicitud cada 5 minutos por IP para evitar abuso
 const RATE_LIMIT_MINUTOS = 5
-const RATE_LIMIT_MAX_INTENTOS = 3
-const RATE_LIMIT_MAP = new Map<string, number[]>()  // clave -> timestamps de intentos recientes
+const RATE_LIMIT_MAP = new Map<string, number>()
 
-// === Duración del magic link ===
-// 60 minutos — más corto que la contraseña temporal de 24h porque es
-// un link de un solo uso y no queremos que quede flotando mucho tiempo.
-const RESET_LINK_EXPIRY_MINUTES = 60
+// === Generador de contraseña temporal robusta ===
+function generarPasswordTemporal(): string {
+  // 12 caracteres: 4 mayúsculas + 4 minúsculas + 3 dígitos + 1 símbolo
+  const mayus = 'ABCDEFGHJKLMNPQRSTUVWXYZ'
+  const minus = 'abcdefghijkmnpqrstuvwxyz'
+  const nums = '23456789'
+  const simb = '!@#$%&*-_=+?'
+  const bytes = crypto.randomBytes(12)
+  const partes = [
+    mayus[bytes[0] % mayus.length],
+    mayus[bytes[1] % mayus.length],
+    mayus[bytes[2] % mayus.length],
+    mayus[bytes[3] % mayus.length],
+    minus[bytes[4] % minus.length],
+    minus[bytes[5] % minus.length],
+    minus[bytes[6] % minus.length],
+    minus[bytes[7] % minus.length],
+    nums[bytes[8] % nums.length],
+    nums[bytes[9] % nums.length],
+    nums[bytes[10] % nums.length],
+    simb[bytes[11] % simb.length],
+  ]
 
-// === Verificar rate limit por IP + identificador ===
-// Combinamos IP e identificador para que:
-//   - Varios usuarios detrás de una misma IP no se bloqueen entre sí
-//   - Un mismo usuario (identificador) tenga su propio límite independiente
-function verificarRateLimit(ip: string, identificador: string): {
-  permitido: boolean
-  minutosRestantes?: number
-  intentosRestantes?: number
-} {
+  // Mezclar aleatoriamente (Fisher-Yates)
+  for (let i = partes.length - 1; i > 0; i--) {
+    const j = crypto.randomInt(0, i + 1)
+    ;[partes[i], partes[j]] = [partes[j], partes[i]]
+  }
+
+  return partes.join('')
+}
+
+// === Verificar rate limit por IP ===
+function verificarRateLimit(ip: string): { permitido: boolean; minutosRestantes?: number } {
   const ahora = Date.now()
-  const ventanaMs = RATE_LIMIT_MINUTOS * 60 * 1000
-
-  // Limpiar entradas viejas (más de 5 min) para evitar memory leak
-  // y solo contar intentos dentro de la ventana actual
-  const limpiarYContar = (lista: number[] | undefined): number[] => {
-    if (!lista) return []
-    return lista.filter((ts) => ahora - ts < ventanaMs)
-  }
-
-  // Verificar rate limit por IP (3 por 5 min)
-  const intentosIP = limpiarYContar(RATE_LIMIT_MAP.get(`ip:${ip}`))
-  if (intentosIP.length >= RATE_LIMIT_MAX_INTENTOS) {
-    const masAntiguo = Math.min(...intentosIP)
-    const minutosRestantes = Math.ceil((ventanaMs - (ahora - masAntiguo)) / 60000)
-    return {
-      permitido: false,
-      minutosRestantes: Math.max(1, minutosRestantes),
-      intentosRestantes: 0,
+  const ultimo = RATE_LIMIT_MAP.get(ip)
+  if (ultimo) {
+    const diffMin = (ahora - ultimo) / 60000
+    if (diffMin < RATE_LIMIT_MINUTOS) {
+      return {
+        permitido: false,
+        minutosRestantes: Math.ceil(RATE_LIMIT_MINUTOS - diffMin),
+      }
     }
   }
-
-  // Verificar rate limit por identificador (3 por 5 min)
-  // Esto permite que varios usuarios detrás de la misma IP hagan reset,
-  // pero bloquea a un usuario que insista demasiado con el mismo identificador
-  const intentosId = limpiarYContar(RATE_LIMIT_MAP.get(`id:${identificador.toLowerCase()}`))
-  if (intentosId.length >= RATE_LIMIT_MAX_INTENTOS) {
-    const masAntiguo = Math.min(...intentosId)
-    const minutosRestantes = Math.ceil((ventanaMs - (ahora - masAntiguo)) / 60000)
-    return {
-      permitido: false,
-      minutosRestantes: Math.max(1, minutosRestantes),
-      intentosRestantes: 0,
-    }
-  }
-
-  // Registrar el intento en ambas listas
-  intentosIP.push(ahora)
-  intentosId.push(ahora)
-  RATE_LIMIT_MAP.set(`ip:${ip}`, intentosIP)
-  RATE_LIMIT_MAP.set(`id:${identificador.toLowerCase()}`, intentosId)
-
-  return {
-    permitido: true,
-    intentosRestantes: RATE_LIMIT_MAX_INTENTOS - intentosIP.length,
-  }
+  RATE_LIMIT_MAP.set(ip, ahora)
+  return { permitido: true }
 }
 
 interface DestinatarioRecuperacion {
@@ -184,47 +155,36 @@ async function buscarDestinatario(
   return null
 }
 
-// === Enviar magic link al correo registrado del usuario ===
-async function enviarMagicLinkPorCorreo(
+// === Enviar credenciales al correo registrado del usuario ===
+async function enviarCredencialesPorCorreo(
   destinatario: DestinatarioRecuperacion,
-  token: string
+  passwordTemporal: string
 ): Promise<{ exito: boolean; destinatario: string; error?: string }> {
-  const baseUrl = getBaseUrl()
-  const link = `${baseUrl}/recuperar-clave?token=${token}`
-  const asunto = `Restablece tu contraseña — ${destinatario.nombre}`.slice(0, 90)
+  const asunto = `Recuperación de contraseña — ${destinatario.nombre}`.slice(0, 90)
 
   const cuerpoHtml = `
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 600px; margin: 0 auto; padding: 24px;">
       <div style="background: linear-gradient(135deg, #6366f1 0%, #a855f7 100%); padding: 24px; border-radius: 12px 12px 0 0; color: white;">
         <h1 style="margin: 0; font-size: 20px; font-weight: 600;">Jsadr · Jo*** Se*** Al*** D** R**</h1>
-        <p style="margin: 4px 0 0 0; opacity: 0.9; font-size: 13px;">Restablecimiento de contraseña</p>
+        <p style="margin: 4px 0 0 0; opacity: 0.9; font-size: 13px;">Recuperación de contraseña</p>
       </div>
       <div style="background: #1a1530; padding: 24px; border-radius: 0 0 12px 12px; color: #e2e8f0;">
         <p style="margin: 0 0 16px 0; font-size: 14px;">Hola <strong>${destinatario.nombre}</strong>,</p>
         <p style="margin: 0 0 16px 0; font-size: 14px; line-height: 1.6;">
-          Hemos recibido una solicitud para restablecer la contraseña de tu cuenta
-          <strong style="color: #c4b5fd;">${destinatario.username}</strong>.
-          Para crear una nueva contraseña, haz clic en el siguiente botón:
+          Se ha solicitado la recuperación de tu contraseña para acceder al sistema Jsadr · Jo*** Se*** Al*** D** R**.
         </p>
-        <div style="text-align: center; margin: 24px 0;">
-          <a href="${link}" style="display: inline-block; background: linear-gradient(135deg, #6366f1 0%, #a855f7 100%); color: white; text-decoration: none; padding: 14px 32px; border-radius: 10px; font-weight: 600; font-size: 15px; box-shadow: 0 4px 14px rgba(168, 85, 247, 0.4);">
-            🔑 Crear nueva contraseña
-          </a>
+        <div style="background: rgba(255,255,255,0.05); border: 1px solid rgba(168, 85, 247, 0.3); border-radius: 8px; padding: 16px; margin: 16px 0;">
+          <p style="margin: 0 0 8px 0; font-size: 12px; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.05em;">Tu identificador</p>
+          <p style="margin: 0 0 12px 0; font-size: 16px; font-family: monospace; color: #e2e8f0;">${destinatario.username}</p>
+          <p style="margin: 0 0 8px 0; font-size: 12px; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.05em;">Contraseña temporal</p>
+          <p style="margin: 0; font-size: 16px; font-family: monospace; color: #a855f7; font-weight: 600;">${passwordTemporal}</p>
         </div>
-        <p style="margin: 16px 0 8px 0; font-size: 12px; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.05em;">
-          Si el botón no funciona, copia y pega este enlace en tu navegador:
-        </p>
-        <p style="margin: 0; font-size: 12px; font-family: monospace; color: #a855f7; word-break: break-all; background: rgba(255,255,255,0.05); padding: 10px; border-radius: 6px; border: 1px solid rgba(168, 85, 247, 0.2);">
-          ${link}
-        </p>
         <p style="margin: 16px 0; font-size: 13px; line-height: 1.6; color: #cbd5e1;">
-          Este enlace es <strong>válido por ${RESET_LINK_EXPIRY_MINUTES} minutos</strong> y se puede usar
-          <strong>una sola vez</strong>. Después de crear tu nueva contraseña, deberás iniciar sesión normalmente.
+          Esta contraseña es <strong>temporal y válida por 24 horas</strong>. Al iniciar sesión, el sistema te pedirá que la cambies por una nueva.
         </p>
         <div style="background: rgba(239, 68, 68, 0.1); border-left: 3px solid #ef4444; padding: 12px; margin: 16px 0; border-radius: 4px;">
           <p style="margin: 0; font-size: 12px; color: #fca5a5;">
-            <strong>⚠️ Seguridad:</strong> Si no solicitaste este cambio, ignora este correo. Tu contraseña actual
-            no será modificada y el enlace expirará automáticamente. Nunca compartas este enlace con nadie.
+            <strong>⚠️ Seguridad:</strong> Si no solicitaste este cambio, ignora este correo y contacta al administrador del sistema. Nunca compartas estas credenciales.
           </p>
         </div>
         <p style="margin: 24px 0 0 0; font-size: 12px; color: #64748b; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 16px;">
@@ -236,19 +196,18 @@ async function enviarMagicLinkPorCorreo(
   `
 
   const cuerpoTexto = `
-Jsadr · Jo*** Se*** Al*** D** R** — Restablecimiento de contraseña
+Jsadr · Jo*** Se*** Al*** D** R** — Recuperación de contraseña
 
 Hola ${destinatario.nombre},
 
-Hemos recibido una solicitud para restablecer la contraseña de tu cuenta ${destinatario.username}.
+Se ha solicitado la recuperación de tu contraseña para acceder al sistema.
 
-Para crear una nueva contraseña, abre el siguiente enlace en tu navegador:
+Tu identificador: ${destinatario.username}
+Contraseña temporal: ${passwordTemporal}
 
-${link}
+Esta contraseña es temporal y válida por 24 horas. Al iniciar sesión, el sistema te pedirá que la cambies.
 
-Este enlace es válido por ${RESET_LINK_EXPIRY_MINUTES} minutos y se puede usar una sola vez.
-
-Si no solicitaste este cambio, ignora este correo. Tu contraseña actual no será modificada.
+Si no solicitaste este cambio, ignora este mensaje y contacta al administrador.
 
 Mensaje automático generado el ${new Date().toLocaleString('es-CO')}.
 © ${new Date().getFullYear()} Jsadr · Jo*** Se*** Al*** D** R**
@@ -283,19 +242,8 @@ export async function POST(req: NextRequest) {
   try {
     const clientInfo = getClientInfo(req)
 
-    const body = await req.json()
-    const { identificador } = body
-
-    if (!identificador || typeof identificador !== 'string' || identificador.trim().length < 3) {
-      return NextResponse.json(
-        { success: false, error: 'Debes ingresar tu usuario, cédula o correo.', code: 'MISSING_FIELDS' },
-        { status: 400 }
-      )
-    }
-
-    // Rate limit — combinamos IP + identificador para que varios usuarios
-    // detrás de la misma IP no se bloqueen entre sí
-    const rl = verificarRateLimit(clientInfo.ip || 'unknown', identificador.trim())
+    // Rate limit
+    const rl = verificarRateLimit(clientInfo.ip || 'unknown')
     if (!rl.permitido) {
       return NextResponse.json(
         {
@@ -308,6 +256,16 @@ export async function POST(req: NextRequest) {
       )
     }
 
+    const body = await req.json()
+    const { identificador } = body
+
+    if (!identificador || typeof identificador !== 'string' || identificador.trim().length < 3) {
+      return NextResponse.json(
+        { success: false, error: 'Debes ingresar tu usuario, cédula o correo.', code: 'MISSING_FIELDS' },
+        { status: 400 }
+      )
+    }
+
     const idLimpio = identificador.trim()
 
     // Buscar destinatario (Usuario o Cliente)
@@ -317,7 +275,7 @@ export async function POST(req: NextRequest) {
     const RESPUESTA_GENERICA = {
       success: true,
       mensaje:
-        'Si la cuenta existe, se ha enviado un enlace de restablecimiento al correo registrado en el sistema. Revisa tu bandeja de entrada y la carpeta de spam. El enlace es válido por 60 minutos.',
+        'Si la cuenta existe, se ha enviado un correo de recuperación al email registrado en el sistema. Revisa tu bandeja de entrada y la carpeta de spam.',
     }
 
     if (!destinatario) {
@@ -334,38 +292,72 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(RESPUESTA_GENERICA)
     }
 
-    // === Generar magic link token (32 bytes hex = 64 chars, one-shot) ===
-    const resetToken = crypto.randomBytes(32).toString('hex')
-    const expira = new Date(Date.now() + RESET_LINK_EXPIRY_MINUTES * 60 * 1000)
+    // Generar nueva contraseña temporal
+    const passwordTemporal = generarPasswordTemporal()
+    const passwordHash = await hashPassword(passwordTemporal)
 
     // Guardar en BD según el tipo de destinatario
     if (destinatario.tipo === 'USUARIO') {
       await db.usuario.update({
         where: { id: destinatario.id },
         data: {
-          claveResetToken: resetToken,
-          claveResetExpira: expira,
-          // No tocamos passwordHash ni mustChangePassword aquí —
-          // el cambio real se hace al confirmar la nueva clave en
-          // /api/auth/restablecer-clave.
+          passwordHash,
+          mustChangePassword: true,
+          intentosFallidos: 0,
+          bloqueadoHasta: null,
         },
       })
     } else {
-      // CLIENTE — usamos claveResetToken (ya existente en el schema)
+      // CLIENTE: la "contraseña" del cliente es su PIN (4 dígitos normalmente),
+      // pero el sistema de recuperación genera una temporal de 12 caracteres.
+      // El cliente debe cambiarla al ingresar (se le pedirá en el primer login).
+      // Para mantener compatibilidad con el PIN actual, también reseteamos pinHash
+      // con la contraseña temporal, lo que le permite entrar con esa clave temporal.
+      // Usar hashPassword() (rounds=12) para consistencia con el resto del sistema.
+      const pinHash = passwordHash // ya hasheado con hashPassword() rounds=12 arriba
       await db.cliente.update({
         where: { id: destinatario.id },
         data: {
-          claveResetToken: resetToken,
-          claveResetExpira: expira,
-          // Marcamos debeCambiarClave=true para que el cambio sea forzado
-          // al llegar al endpoint de restablecer (capa extra de seguridad).
-          debeCambiarClave: true,
+          pinHash,
+          pinCreatedAt: new Date(),
+          pinIntentos: 0,
+          pinBloqueadoHasta: null,
+          claveResetToken: crypto.randomBytes(16).toString('hex'),
+          claveResetExpira: new Date(Date.now() + 24 * 60 * 60 * 1000), // 24h
         },
       })
+
+      // Actualizar también Configuracion.PORTAL_PIN_<cedula> (lo usa /api/portal/auth action=login)
+      try {
+        const pinConfigKey = `PORTAL_PIN_${destinatario.username || destinatario.id}`
+        await db.configuracion.upsert({
+          where: { clave: pinConfigKey },
+          create: {
+            clave: pinConfigKey,
+            valor: JSON.stringify({
+              pinHash,
+              createdAt: new Date().toISOString(),
+              intentos: 0,
+              bloqueadoHasta: null,
+            }),
+            descripcion: `PIN de portal para ${destinatario.nombre} (recuperación)`,
+          },
+          update: {
+            valor: JSON.stringify({
+              pinHash,
+              createdAt: new Date().toISOString(),
+              intentos: 0,
+              bloqueadoHasta: null,
+            }),
+          },
+        })
+      } catch {
+        // No fallar si la clave de configuración ya existe o no se puede escribir
+      }
     }
 
-    // Enviar magic link al correo registrado
-    const resultadoEnvio = await enviarMagicLinkPorCorreo(destinatario, resetToken)
+    // Enviar credenciales al correo registrado
+    const resultadoEnvio = await enviarCredencialesPorCorreo(destinatario, passwordTemporal)
 
     // Registrar en bitácora
     await registrarAuditLog({
@@ -379,8 +371,6 @@ export async function POST(req: NextRequest) {
         destinatarioEmail: destinatario.email,
         exitoEnvio: resultadoEnvio.exito,
         errorEnvio: resultadoEnvio.error,
-        mecanismo: 'MAGIC_LINK',
-        expiraEn: `${RESET_LINK_EXPIRY_MINUTES}min`,
       }),
       exito: resultadoEnvio.exito,
       errorMessage: resultadoEnvio.exito ? undefined : 'No se pudo enviar el correo',
@@ -402,12 +392,10 @@ export async function POST(req: NextRequest) {
             ip: clientInfo.ip,
             userAgent: clientInfo.userAgent,
             emailDestino: destinatario.email,
-            mecanismo: 'MAGIC_LINK',
-            tokenExpira: expira.toISOString(),
             exito: resultadoEnvio.exito,
             error: resultadoEnvio.error,
           }),
-          descripcion: `Recuperación de clave (magic link) — ${destinatario.nombre} (${destinatario.tipo})`,
+          descripcion: `Recuperación de clave — ${destinatario.nombre} (${destinatario.tipo})`,
         },
       })
     } catch {
@@ -420,7 +408,7 @@ export async function POST(req: NextRequest) {
         {
           success: false,
           error:
-            'No se pudo enviar el enlace de recuperación. Verifica que tengas un correo válido registrado o contacta al administrador del sistema.',
+            'No se pudo enviar el correo de recuperación. Verifica que tengas un correo válido registrado o contacta al administrador del sistema.',
           code: 'ENVIO_FALLIDO',
         },
         { status: 500 }

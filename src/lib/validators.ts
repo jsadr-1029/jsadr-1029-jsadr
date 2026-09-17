@@ -22,7 +22,7 @@ export const clienteSchema = z.object({
 })
 export type ClienteInput = z.infer<typeof clienteSchema>
 
-// === 2. SOLICITUD ===
+// === 2. PRÉSTAMO ===
 export const prestamoSchema = z.object({
   clienteId: z.string().min(1, 'Cliente requerido'),
   monto: z.number().positive('Monto debe ser positivo').max(1_000_000_000),

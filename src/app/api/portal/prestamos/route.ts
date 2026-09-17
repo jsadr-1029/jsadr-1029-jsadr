@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 
-// Obtiene solicitudes del cliente autenticado
+// Obtiene préstamos del cliente autenticado
 export async function GET(req: NextRequest) {
   // Token solo desde header (no en URL para evitar filtración en logs)
   const token = req.headers.get('x-portal-token')

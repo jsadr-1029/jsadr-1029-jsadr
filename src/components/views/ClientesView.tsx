@@ -48,12 +48,8 @@ import {
   Landmark,
   Percent,
   AlertCircle,
-  FileText,
-  LayoutGrid,
-  Table2,
 } from 'lucide-react'
 import { SolicitudesPendientesPanel } from './SolicitudesPendientesPanel'
-import { HojaVidaClienteModal } from './HojaVidaClienteModal'
 
 interface ReferidorInfo {
   id: string
@@ -76,22 +72,6 @@ interface ReferidoMini {
   telefono: string
   createdAt: string
   activo: boolean
-}
-
-// FIX 2026-08-12 (Task 6): Registro fotográfico del cliente (cédula + selfie)
-// que se carga al convertir la SolicitudNuevoCliente y/o al firmar
-// electrónicamente. Se muestra en el detalle del cliente para que el gestor
-// pueda disponer de la cédula y la foto en cualquier momento.
-interface DocumentoFotoCliente {
-  id: string
-  tipo: string // FOTO_DOCUMENTO | FOTO_CEDULA | FOTO_SELFI | FOTO_DOCUMENTO_REVERSO
-  titulo: string
-  descripcion: string | null
-  archivoBase64: string
-  archivoNombre: string
-  archivoTipo: string
-  subidoPor: string | null
-  fechaSubida: string
 }
 
 interface Cliente {
@@ -124,18 +104,8 @@ interface Cliente {
   instruccionCuentaId: string | null
   instruccionCuentaNota: string | null
   instruccionCuentaExpira: string | null
-  // === Preferencia de notificación (v4.4) ===
-  preferenciaNotificacion?: 'WHATSAPP' | 'EMAIL' | 'AMBOS' | 'NINGUNO' | null
-  // === Cliente de prueba (v4.14) ===
-  // Si esPrueba=true, este cliente y todos sus solicitudes/pagos se excluyen
-  // automáticamente de los agregados de saldos reales del sistema.
-  esPrueba?: boolean
-  fechaMarcadoPrueba?: string | null
-  motivoPrueba?: string | null
   createdAt: string
   _count?: { prestamos: number; referidos: number }
-  // FIX 2026-08-12 (Task 6): Registro fotográfico del cliente
-  documentosGestor?: DocumentoFotoCliente[]
 }
 
 interface FormData {
@@ -163,8 +133,6 @@ interface FormData {
   instruccionCuentaId: string
   instruccionCuentaNota: string
   instruccionCuentaExpira: string
-  // === Preferencia de notificación (v4.4) ===
-  preferenciaNotificacion: 'WHATSAPP' | 'EMAIL' | 'AMBOS' | 'NINGUNO'
 }
 
 const VACIO: FormData = {
@@ -192,8 +160,6 @@ const VACIO: FormData = {
   instruccionCuentaId: '',
   instruccionCuentaNota: '',
   instruccionCuentaExpira: '',
-  // === Preferencia de notificación (v4.4) ===
-  preferenciaNotificacion: 'WHATSAPP',
 }
 
 export function ClientesView({ onChanged }: { onChanged: () => void }) {
@@ -201,22 +167,14 @@ export function ClientesView({ onChanged }: { onChanged: () => void }) {
   const [categorias, setCategorias] = useState<any[]>([])
   const [cuentas, setCuentas] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
-  const [vistaClientes, setVistaClientes] = useState<'tabla' | 'cards'>('cards')
   const [busqueda, setBusqueda] = useState('')
   const [filtroActivo, setFiltroActivo] = useState<'todos' | 'activos' | 'inactivos'>('todos')
-  // === Filtro adicional: clientes con mora activa o con solicitudes activos ===
-  const [filtroMora, setFiltroMora] = useState<'todos' | 'conMora' | 'sinMora' | 'conPrestamos'>('todos')
   const [modalAbierto, setModalAbierto] = useState(false)
   const [modalDetalle, setModalDetalle] = useState(false)
-  // === Modal Hoja de Vida completo del cliente ===
-  const [modalHojaVida, setModalHojaVida] = useState(false)
-  const [clienteHojaVidaId, setClienteHojaVidaId] = useState<string | null>(null)
   const [editandoId, setEditandoId] = useState<string | null>(null)
   const [clienteDetalle, setClienteDetalle] = useState<Cliente | null>(null)
   const [form, setForm] = useState<FormData>(VACIO)
   const [guardando, setGuardando] = useState(false)
-  // === Estados de mora por cliente (cargados al cargar la lista) ===
-  const [clientesConMora, setClientesConMora] = useState<Set<string>>(new Set())
   const { toast } = useToast()
 
   useEffect(() => {
@@ -231,31 +189,6 @@ export function ClientesView({ onChanged }: { onChanged: () => void }) {
       const res = await fetch('/api/clientes')
       const json = await res.json()
       if (json.success) setClientes(json.data)
-      // === Cargar IDs de clientes con mora activa (EN_MORA o JURIDICO) ===
-      // Consultamos /api/prestamos con filtro estado=EN_MORA y estado=JURIDICO
-      // para construir un Set de clienteIds con mora. Esto permite mostrar
-      // el badge "En mora" en la tabla de clientes y filtrar por mora activa.
-      try {
-        const [resMora, resJuridico] = await Promise.all([
-          fetch('/api/prestamos?estado=EN_MORA'),
-          fetch('/api/prestamos?estado=JURIDICO'),
-        ])
-        const [jsonMora, jsonJuridico] = await Promise.all([resMora.json(), resJuridico.json()])
-        const setMora = new Set<string>()
-        if (jsonMora.success) {
-          for (const p of jsonMora.data || []) {
-            if (p.clienteId) setMora.add(p.clienteId)
-          }
-        }
-        if (jsonJuridico.success) {
-          for (const p of jsonJuridico.data || []) {
-            if (p.clienteId) setMora.add(p.clienteId)
-          }
-        }
-        setClientesConMora(setMora)
-      } catch (e) {
-        console.error('Error cargando mora de clientes:', e)
-      }
     } catch (e) {
       console.error(e)
     } finally {
@@ -290,25 +223,15 @@ export function ClientesView({ onChanged }: { onChanged: () => void }) {
         c.nombre.toLowerCase().includes(q) ||
         c.cedula.includes(q) ||
         c.telefono.includes(q) ||
-        (c.email || '').toLowerCase().includes(q) ||
         (c.municipio || '').toLowerCase().includes(q) ||
-        (c.departamento || '').toLowerCase().includes(q) ||
         (c.referidoPor?.nombre || '').toLowerCase().includes(q)
       const matchEstado =
         filtroActivo === 'todos' ||
         (filtroActivo === 'activos' && c.activo) ||
         (filtroActivo === 'inactivos' && !c.activo)
-      // === Filtro de mora ===
-      const enMora = clientesConMora.has(c.id)
-      const tienePrestamos = (c._count?.prestamos || 0) > 0
-      const matchMora =
-        filtroMora === 'todos' ||
-        (filtroMora === 'conMora' && enMora) ||
-        (filtroMora === 'sinMora' && !enMora) ||
-        (filtroMora === 'conPrestamos' && tienePrestamos)
-      return matchBusqueda && matchEstado && matchMora
+      return matchBusqueda && matchEstado
     })
-  }, [clientes, busqueda, filtroActivo, filtroMora, clientesConMora])
+  }, [clientes, busqueda, filtroActivo])
 
   // Clientes disponibles como referidores (todos menos el que se está editando)
   const referidoresDisponibles = useMemo(() => {
@@ -360,8 +283,6 @@ export function ClientesView({ onChanged }: { onChanged: () => void }) {
       instruccionCuentaExpira: cliente.instruccionCuentaExpira
         ? new Date(cliente.instruccionCuentaExpira).toISOString().slice(0, 10)
         : '',
-      // === Preferencia de notificación (v4.4) ===
-      preferenciaNotificacion: cliente.preferenciaNotificacion || 'WHATSAPP',
     })
     setEditandoId(cliente.id)
     setModalAbierto(true)
@@ -433,46 +354,12 @@ export function ClientesView({ onChanged }: { onChanged: () => void }) {
       })
       const json = await res.json()
       if (json.success) {
-        // === v4.13 — Mostrar información de la clave temporal generada ===
-        // Si el backend envió la clave temporal en la respuesta (porque el cliente
-        // no tiene email o el envío falló), se la mostramos al gestor para que
-        // la comunique por otro canal. Si el email se envió correctamente, sólo
-        // mostramos el mensaje de éxito.
-        if (!editandoId) {
-          if (json.claveTemporal) {
-            // Mostrar la clave temporal en un toast de larga duración
-            toast({
-              title: '🔐 Cliente creado — Clave temporal',
-              description: `${json.mensaje || 'Comunica esta clave al cliente:'} — CLAVE: ${json.claveTemporal}`,
-              duration: 12000,
-            })
-            // También intentar copiar al portapapeles para facilitar la comunicación
-            try {
-              navigator.clipboard?.writeText(json.claveTemporal)
-              toast({
-                title: 'Clave copiada',
-                description: 'La clave temporal se copió al portapapeles.',
-                duration: 4000,
-              })
-            } catch {}
-          } else if (json.emailEnviado) {
-            toast({
-              title: 'Cliente creado',
-              description: json.mensaje || `Se envió la clave temporal al correo del cliente.`,
-              duration: 6000,
-            })
-          } else {
-            toast({
-              title: 'Cliente creado',
-              description: `${form.nombre} registrado correctamente.`,
-            })
-          }
-        } else {
-          toast({
-            title: 'Cliente actualizado',
-            description: `${form.nombre} actualizado correctamente`,
-          })
-        }
+        toast({
+          title: editandoId ? 'Cliente actualizado' : 'Cliente creado',
+          description: `${form.nombre} ${
+            editandoId ? 'actualizado' : 'registrado'
+          } correctamente`,
+        })
         setModalAbierto(false)
         setForm(VACIO)
         setEditandoId(null)
@@ -565,7 +452,7 @@ export function ClientesView({ onChanged }: { onChanged: () => void }) {
         <div className="relative flex-1 max-w-md">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <Input
-            placeholder="Buscar por nombre, cédula, teléfono, email, municipio, departamento o referidor..."
+            placeholder="Buscar por nombre, cédula, teléfono, municipio o referidor..."
             value={busqueda}
             onChange={(e) => setBusqueda(e.target.value)}
             className="pl-9"
@@ -575,136 +462,18 @@ export function ClientesView({ onChanged }: { onChanged: () => void }) {
           value={filtroActivo}
           onValueChange={(v: any) => setFiltroActivo(v)}
         >
-          <SelectTrigger className="w-full sm:w-44">
-            <SelectValue placeholder="Estado cliente" />
+          <SelectTrigger className="w-full sm:w-48">
+            <SelectValue placeholder="Estado" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="todos">Todos los estados</SelectItem>
+            <SelectItem value="todos">Todos</SelectItem>
             <SelectItem value="activos">Solo activos</SelectItem>
             <SelectItem value="inactivos">Solo inactivos</SelectItem>
           </SelectContent>
         </Select>
-        {/* === Filtro avanzado de mora / actividad crediticia === */}
-        <Select
-          value={filtroMora}
-          onValueChange={(v: any) => setFiltroMora(v)}
-        >
-          <SelectTrigger className="w-full sm:w-52">
-            <SelectValue placeholder="Mora / Créditos" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="todos">Todos los clientes</SelectItem>
-            <SelectItem value="conMora">🚫 Con mora activa</SelectItem>
-            <SelectItem value="sinMora">✅ Sin mora</SelectItem>
-            <SelectItem value="conPrestamos">Con solicitudes</SelectItem>
-          </SelectContent>
-        </Select>
       </div>
 
-      {/* Toggle vista tabla/cards */}
-      <div className="flex items-center gap-2">
-        <button
-          onClick={() => setVistaClientes('tabla')}
-          className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${vistaClientes === 'tabla' ? 'bg-primary/20 text-primary' : 'text-muted-foreground hover:bg-white/5'}`}
-          title="Vista de tabla"
-        >
-          <Table2 className="w-4 h-4 inline mr-1" /> Tabla
-        </button>
-        <button
-          onClick={() => setVistaClientes('cards')}
-          className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${vistaClientes === 'cards' ? 'bg-primary/20 text-primary' : 'text-muted-foreground hover:bg-white/5'}`}
-          title="Vista de tarjetas"
-        >
-          <LayoutGrid className="w-4 h-4 inline mr-1" /> Tarjetas
-        </button>
-      </div>
-
-      {/* === Vista de tarjetas === */}
-      {vistaClientes === 'cards' && (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-          {loading ? (
-            <div className="col-span-full text-center py-8 text-muted-foreground">Cargando...</div>
-          ) : clientesFiltrados.length === 0 ? (
-            <div className="col-span-full text-center py-8 text-muted-foreground">No hay clientes que coincidan con el filtro.</div>
-          ) : (
-            clientesFiltrados.map((c) => (
-              <Card key={c.id} className={`bg-card/50 backdrop-blur-sm border-white/10 hover:border-primary/30 transition-all ${!c.activo ? 'opacity-60' : ''}`}>
-                <CardContent className="p-4 space-y-3">
-                  {/* Header */}
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="flex-1 min-w-0">
-                      <div className="font-semibold text-sm flex items-center gap-2">
-                        {c.nombre}
-                        {clientesConMora.has(c.id) && (
-                          <Badge variant="destructive" className="text-[9px]">En mora</Badge>
-                        )}
-                      </div>
-                      <div className="text-xs text-muted-foreground font-mono">{c.cedula}</div>
-                      {c.email && (
-                        <div className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
-                          <Mail className="w-3 h-3" /> {c.email}
-                        </div>
-                      )}
-                    </div>
-                    <div className="flex flex-col items-end gap-1">
-                      {c.activo ? (
-                        <Badge className="bg-green-100 text-green-700 hover:bg-green-100">Activo</Badge>
-                      ) : (
-                        <Badge variant="destructive">Inactivo</Badge>
-                      )}
-                      {c.esPrueba && (
-                        <Badge className="bg-amber-100 text-amber-800 hover:bg-amber-100 border border-amber-300">PRUEBA</Badge>
-                      )}
-                    </div>
-                  </div>
-                  {/* Datos */}
-                  <div className="grid grid-cols-2 gap-2 text-xs">
-                    <div>
-                      <div className="text-muted-foreground">Teléfono</div>
-                      <div className="font-medium flex items-center gap-1"><Phone className="w-3 h-3" /> {c.telefono}</div>
-                    </div>
-                    <div>
-                      <div className="text-muted-foreground">Ubicación</div>
-                      <div className="font-medium flex items-center gap-1">
-                        <MapPin className="w-3 h-3" /> {c.municipio || '—'}{c.departamento ? ` / ${c.departamento}` : ''}
-                      </div>
-                    </div>
-                    <div>
-                      <div className="text-muted-foreground">Tasa</div>
-                      <div>{c.tieneTasaPersonalizada && c.tasaPersonalizada != null ? `${c.tasaPersonalizada}%` : 'Sin tasa'}</div>
-                    </div>
-                    <div>
-                      <div className="text-muted-foreground">Solicitudes</div>
-                      <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-primary/10 text-primary text-xs font-bold">{c._count?.prestamos || 0}</span>
-                    </div>
-                  </div>
-                  {/* Referido */}
-                  {c.referidoPor && (
-                    <div className="text-xs text-muted-foreground flex items-center gap-1">
-                      <UserPlus className="w-3 h-3" /> Referido por: <strong>{c.referidoPor.nombre}</strong>
-                    </div>
-                  )}
-                  {/* Botones */}
-                  <div className="flex gap-1 flex-wrap pt-1 border-t border-white/5">
-                    <Button size="sm" variant="ghost" className="h-7 text-xs text-blue-600" onClick={() => { setClienteHojaVidaId(c.id); setModalHojaVida(true) }} title="Hoja de Vida">
-                      <FileText className="w-3.5 h-3.5" />
-                    </Button>
-                    <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => abrirModalEditar(c)} title="Editar">
-                      <Pencil className="w-3.5 h-3.5" />
-                    </Button>
-                    <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => toggleActivo(c)} title={c.activo ? 'Desactivar' : 'Activar'}>
-                      {c.activo ? <UserX className="w-3.5 h-3.5 text-red-600" /> : <UserCheck className="w-3.5 h-3.5 text-green-600" />}
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-            ))
-          )}
-        </div>
-      )}
-
-      {/* === Vista de tabla === */}
-      {vistaClientes === 'tabla' && (
+      {/* Tabla */}
       <Card>
         <CardContent className="p-0">
           <Table>
@@ -717,7 +486,7 @@ export function ClientesView({ onChanged }: { onChanged: () => void }) {
                 <TableHead>Referido por</TableHead>
                 <TableHead>Tasa</TableHead>
                 <TableHead>Estado</TableHead>
-                <TableHead>Solicitudes</TableHead>
+                <TableHead>Préstamos</TableHead>
                 <TableHead className="text-right">Acciones</TableHead>
               </TableRow>
             </TableHeader>
@@ -742,14 +511,7 @@ export function ClientesView({ onChanged }: { onChanged: () => void }) {
                     onClick={() => abrirModalDetalle(c)}
                   >
                     <TableCell>
-                      <div className="font-semibold flex items-center gap-2">
-                        {c.nombre}
-                        {clientesConMora.has(c.id) && (
-                          <Badge variant="destructive" className="text-[10px]" title="Cliente con mora activa">
-                            <AlertCircle className="w-3 h-3 mr-1" /> En mora
-                          </Badge>
-                        )}
-                      </div>
+                      <div className="font-semibold">{c.nombre}</div>
                       {c.email && (
                         <div className="text-xs text-muted-foreground flex items-center gap-1">
                           <Mail className="w-3 h-3" /> {c.email}
@@ -815,17 +577,6 @@ export function ClientesView({ onChanged }: { onChanged: () => void }) {
                       ) : (
                         <Badge variant="destructive">Inactivo</Badge>
                       )}
-                      {c.esPrueba && (
-                        <Badge
-                          className="ml-1 bg-amber-100 text-amber-800 hover:bg-amber-100 border border-amber-300"
-                          title={
-                            c.motivoPrueba ||
-                            'Cliente de prueba: sus solicitudes y pagos se excluyen automáticamente de los saldos reales del sistema.'
-                          }
-                        >
-                          PRUEBA
-                        </Badge>
-                      )}
                     </TableCell>
                     <TableCell>
                       <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-primary/10 text-primary text-xs font-bold">
@@ -834,21 +585,6 @@ export function ClientesView({ onChanged }: { onChanged: () => void }) {
                     </TableCell>
                     <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
                       <div className="flex justify-end gap-1">
-                        {/* === Hoja de Vida del Cliente — botón destacado === */}
-                        {/* Abre un modal completo con perfil, solicitudes, pagos, */}
-                        {/* comportamiento, fotos y bitácora del cliente. */}
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          className="text-blue-600 hover:text-blue-700"
-                          onClick={() => {
-                            setClienteHojaVidaId(c.id)
-                            setModalHojaVida(true)
-                          }}
-                          title="Ver Hoja de Vida completa del cliente"
-                        >
-                          <FileText className="w-4 h-4" />
-                        </Button>
                         <Button
                           size="sm"
                           variant="ghost"
@@ -878,7 +614,6 @@ export function ClientesView({ onChanged }: { onChanged: () => void }) {
           </Table>
         </CardContent>
       </Card>
-      )}
 
       {/* Modal nuevo/editar cliente */}
       <Dialog open={modalAbierto} onOpenChange={setModalAbierto}>
@@ -938,53 +673,6 @@ export function ClientesView({ onChanged }: { onChanged: () => void }) {
                   onChange={(e) => setForm({ ...form, email: e.target.value })}
                 />
               </div>
-            </div>
-
-            {/* Preferencia de notificación de pagos (v4.4) */}
-            <div className="space-y-3 pt-2 border-t">
-              <div>
-                <h4 className="text-sm font-semibold">Recordatorios de pago</h4>
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  ¿Cómo deseas que el sistema le recuerde al cliente las cuotas próximas a vencer?
-                  Se enviará automáticamente un recordatorio el día anterior al vencimiento.
-                </p>
-              </div>
-              <RadioGroup
-                value={form.preferenciaNotificacion}
-                onValueChange={(val: 'WHATSAPP' | 'EMAIL' | 'AMBOS' | 'NINGUNO') =>
-                  setForm({ ...form, preferenciaNotificacion: val })
-                }
-                className="grid grid-cols-2 sm:grid-cols-4 gap-2"
-              >
-                {[
-                  { value: 'WHATSAPP', label: 'WhatsApp', icon: '💬', desc: 'Solo al teléfono' },
-                  { value: 'EMAIL', label: 'Correo', icon: '📧', desc: 'Solo al email' },
-                  { value: 'AMBOS', label: 'Ambos', icon: '📱', desc: 'WhatsApp + correo', recommended: true },
-                  { value: 'NINGUNO', label: 'Ninguno', icon: '🔕', desc: 'Sin recordatorios' },
-                ].map((opt) => (
-                  <label
-                    key={opt.value}
-                    htmlFor={`pref-${opt.value}`}
-                    className={`flex flex-col gap-1 p-3 rounded-lg border-2 cursor-pointer transition-all hover:bg-accent/40 ${
-                      form.preferenciaNotificacion === opt.value
-                        ? 'border-blue-500 bg-blue-50/40'
-                        : 'border-muted opacity-90'
-                    }`}
-                  >
-                    <div className="flex items-center gap-2">
-                      <RadioGroupItem id={`pref-${opt.value}`} value={opt.value} />
-                      <span className="text-base">{opt.icon}</span>
-                      <span className="text-sm font-semibold">{opt.label}</span>
-                    </div>
-                    <span className="text-[10px] text-muted-foreground pl-6">{opt.desc}</span>
-                  </label>
-                ))}
-              </RadioGroup>
-              {(form.preferenciaNotificacion === 'EMAIL' || form.preferenciaNotificacion === 'AMBOS') && !form.email && (
-                <p className="text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded p-2">
-                  ⚠️ Seleccionaste correo, pero falta el email. Ingrésalo arriba para que el recordatorio llegue.
-                </p>
-              )}
             </div>
 
             {/* Ubicación */}
@@ -1289,17 +977,12 @@ export function ClientesView({ onChanged }: { onChanged: () => void }) {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="none">— Sin categoría —</SelectItem>
-                    {categorias.map((c) => {
-                      const fmtCOP = (n: number) =>
-                        new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 }).format(n)
-                      const maxStr = c.montoMaximo > 0 ? fmtCOP(c.montoMaximo) : 'Sin límite'
-                      return (
+                    {categorias.map((c) => (
                       <SelectItem key={c.id} value={c.id}>
                         {c.codigo} — {c.nombre} ·{' '}
-                        {fmtCOP(c.montoMinimo)}–{maxStr} · {c.tasaInteresAnual}% anual
+                        {new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 }).format(c.montoMinimo)}–{new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 }).format(c.montoMaximo)} · {c.tasaInteresAnual}% anual
                       </SelectItem>
-                      )
-                    })}
+                    ))}
                   </SelectContent>
                 </Select>
                 {/* === Resumen de la categoría seleccionada === */}
@@ -1321,7 +1004,7 @@ export function ClientesView({ onChanged }: { onChanged: () => void }) {
                         </div>
                         <div>
                           <p className="text-slate-500">Monto máx.</p>
-                          <p className="font-semibold text-slate-900">{cat.montoMaximo > 0 ? fmtCOP(cat.montoMaximo) : 'Sin límite'}</p>
+                          <p className="font-semibold text-slate-900">{fmtCOP(cat.montoMaximo)}</p>
                         </div>
                         <div>
                           <p className="text-slate-500">Tasa anual</p>
@@ -1638,12 +1321,6 @@ export function ClientesView({ onChanged }: { onChanged: () => void }) {
                   )}
                 </div>
 
-                {/* Registro fotográfico — cédula y selfie del cliente */}
-                {clienteDetalle.documentosGestor &&
-                  clienteDetalle.documentosGestor.length > 0 && (
-                    <RegistroFotograficoCliente fotos={clienteDetalle.documentosGestor} />
-                  )}
-
                 {/* Referidor */}
                 {clienteDetalle.referidoPor && (
                   <div className="p-3 rounded-md bg-blue-50 border border-blue-200">
@@ -1741,216 +1418,6 @@ export function ClientesView({ onChanged }: { onChanged: () => void }) {
                 </div>
               </div>
             </>
-          )}
-        </DialogContent>
-      </Dialog>
-
-      {/* === Hoja de Vida del Cliente (modal completo) === */}
-      {/* Modal con pestañas: Perfil / Solicitudes / Comportamiento / Pagos / Fotos / Bitácora */}
-      <HojaVidaClienteModal
-        clienteId={clienteHojaVidaId}
-        open={modalHojaVida}
-        onClose={() => {
-          setModalHojaVida(false)
-          setClienteHojaVidaId(null)
-        }}
-      />
-    </div>
-  )
-}
-
-// =====================================================
-// RegistroFotograficoCliente
-// Muestra las fotos del cliente (cédula frente/reverso + selfie) que fueron
-// cargadas al convertir la solicitud de nuevo cliente y/o durante el flujo
-// de firma electrónica. Permite al gestor visualizar, ampliar y descargar
-// la cédula y la selfie directamente desde Clientes > Detalle.
-// =====================================================
-
-// Etiqueta legible según tipo de documento. Distingue cédula frente vs reverso:
-// el tipo puede ser 'FOTO_DOCUMENTO' para ambos (en registros antiguos la
-// migración guardaba ambos con el mismo tipo y se diferenciaban solo por el
-// titulo). Para nuevos registros usamos 'FOTO_DOCUMENTO_REVERSO' explícitamente.
-function etiquetaTipo(foto: DocumentoFotoCliente): { label: string; emoji: string; key: string } {
-  const t = foto.tipo
-  const tituloLower = (foto.titulo || '').toLowerCase()
-  if (t === 'FOTO_DOCUMENTO_REVERSO' || tituloLower.includes('reverso')) {
-    return { label: 'Cédula (reverso)', emoji: '🪪', key: 'FOTO_DOCUMENTO_REVERSO' }
-  }
-  switch (t) {
-    case 'FOTO_DOCUMENTO':
-      return { label: 'Cédula (frente)', emoji: '🪪', key: 'FOTO_DOCUMENTO' }
-    case 'FOTO_CEDULA':
-      return { label: 'Cédula', emoji: '🪪', key: 'FOTO_CEDULA' }
-    case 'FOTO_SELFI':
-      return { label: 'Selfie con cédula', emoji: '📸', key: 'FOTO_SELFI' }
-    default:
-      return { label: t, emoji: '📄', key: t }
-  }
-}
-
-// Normalizar el base64: si viene sin el prefijo data:image/..., agregarlo
-function normalizarSrcFoto(foto: DocumentoFotoCliente): string {
-  if (foto.archivoBase64.startsWith('data:')) return foto.archivoBase64
-  const mime = foto.archivoTipo || 'image/jpeg'
-  return `data:${mime};base64,${foto.archivoBase64}`
-}
-
-const TIPOS_FOTO_ORDEN = ['FOTO_DOCUMENTO', 'FOTO_DOCUMENTO_REVERSO', 'FOTO_CEDULA', 'FOTO_SELFI']
-
-function RegistroFotograficoCliente({ fotos }: { fotos: DocumentoFotoCliente[] }) {
-  const [ampliada, setAmpliada] = useState<DocumentoFotoCliente | null>(null)
-
-  // Como pueden haberse subido múltiples fotos del mismo tipo a lo largo del
-  // tiempo (registro inicial + re-firma), agrupamos por tipo y mostramos la
-  // más reciente de cada uno, más una lista colapsable con el histórico.
-  const fotosPorTipo = useMemo(() => {
-    const map = new Map<string, DocumentoFotoCliente[]>()
-    for (const t of TIPOS_FOTO_ORDEN) map.set(t, [])
-    for (const f of fotos) {
-      const { key } = etiquetaTipo(f)
-      const arr = map.get(key) || []
-      arr.push(f)
-      map.set(key, arr)
-    }
-    // Cada grupo ya viene ordenado por fechaSubida desc desde la API
-    return map
-  }, [fotos])
-
-  const tiposConFotos = TIPOS_FOTO_ORDEN
-    .map((t) => ({ tipo: t, lista: fotosPorTipo.get(t) || [] }))
-    .filter((g) => g.lista.length > 0)
-
-  if (tiposConFotos.length === 0) return null
-
-  const descargarFoto = (foto: DocumentoFotoCliente) => {
-    try {
-      const src = normalizarSrcFoto(foto)
-      const a = document.createElement('a')
-      a.href = src
-      a.download = foto.archivoNombre || `foto_${foto.tipo}.jpg`
-      document.body.appendChild(a)
-      a.click()
-      document.body.removeChild(a)
-    } catch (e) {
-      console.error('[RegistroFotograficoCliente] Error descargando foto:', e)
-    }
-  }
-
-  return (
-    <div className="p-3 rounded-md bg-emerald-50 border border-emerald-200">
-      <div className="text-sm font-semibold text-emerald-900 flex items-center gap-2 mb-3">
-        <span className="text-base">📷</span> Registro fotográfico del cliente
-      </div>
-      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-        {tiposConFotos.map(({ tipo, lista }) => {
-          const foto = lista[0] // más reciente
-          const { label, emoji } = etiquetaTipo(foto)
-          return (
-            <div
-              key={tipo}
-              className="bg-white rounded-md border border-emerald-200 overflow-hidden flex flex-col"
-            >
-              <div className="aspect-[3/4] bg-muted/30 flex items-center justify-center overflow-hidden">
-                <img
-                  src={normalizarSrcFoto(foto)}
-                  alt={label}
-                  className="w-full h-full object-cover cursor-zoom-in hover:opacity-90 transition-opacity"
-                  onClick={() => setAmpliada(foto)}
-                />
-              </div>
-              <div className="p-2 text-xs">
-                <div className="font-semibold text-emerald-900 flex items-center gap-1">
-                  <span>{emoji}</span> {label}
-                </div>
-                <div className="text-muted-foreground mt-0.5">
-                  {formatearFecha(foto.fechaSubida)}
-                </div>
-                {lista.length > 1 && (
-                  <div className="text-emerald-700 mt-0.5">
-                    +{lista.length - 1} versión(es) anterior(es)
-                  </div>
-                )}
-                <div className="flex gap-1 mt-1.5">
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="h-7 text-xs px-2"
-                    onClick={() => setAmpliada(foto)}
-                  >
-                    Ampliar
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="h-7 text-xs px-2"
-                    onClick={() => descargarFoto(foto)}
-                  >
-                    Descargar
-                  </Button>
-                </div>
-              </div>
-            </div>
-          )
-        })}
-      </div>
-      <p className="text-xs text-emerald-700 mt-2">
-        Estas fotos se cargaron cuando el cliente completó su registro inicial y/o
-        durante el proceso de firma electrónica. Se conservan como respaldo de
-        identidad.
-      </p>
-
-      {/* Modal de ampliar foto */}
-      <Dialog open={!!ampliada} onOpenChange={(v) => !v && setAmpliada(null)}>
-        <DialogContent className="max-w-3xl max-h-[95vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle className="text-sm">
-              {ampliada ? etiquetaTipo(ampliada).label : ''}
-              {ampliada?.titulo && (
-                <span className="text-muted-foreground font-normal ml-2">
-                  — {ampliada.titulo}
-                </span>
-              )}
-            </DialogTitle>
-          </DialogHeader>
-          {ampliada && (
-            <div className="space-y-3">
-              <div className="flex justify-center bg-muted/30 rounded-md p-2">
-                <img
-                  src={normalizarSrcFoto(ampliada)}
-                  alt={etiquetaTipo(ampliada).label}
-                  className="max-h-[70vh] max-w-full object-contain rounded"
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-2 text-xs text-muted-foreground">
-                <div>
-                  <span>Subido por: </span>
-                  <strong>{ampliada.subidoPor || '—'}</strong>
-                </div>
-                <div>
-                  <span>Fecha: </span>
-                  <strong>{formatearFecha(ampliada.fechaSubida)}</strong>
-                </div>
-                {ampliada.descripcion && (
-                  <div className="col-span-2">
-                    <span>Descripción: </span>
-                    <strong>{ampliada.descripcion}</strong>
-                  </div>
-                )}
-                <div className="col-span-2">
-                  <span>Archivo: </span>
-                  <strong className="font-mono">{ampliada.archivoNombre}</strong>
-                </div>
-              </div>
-              <div className="flex justify-end gap-2 pt-2 border-t">
-                <Button variant="outline" size="sm" onClick={() => descargarFoto(ampliada)}>
-                  ⬇ Descargar
-                </Button>
-                <Button variant="outline" size="sm" onClick={() => setAmpliada(null)}>
-                  Cerrar
-                </Button>
-              </div>
-            </div>
           )}
         </DialogContent>
       </Dialog>

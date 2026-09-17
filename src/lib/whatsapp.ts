@@ -1,16 +1,12 @@
 // =====================================================
-// Servicio de Notificaciones WhatsApp v4.12
-// Estrategia: 1) WhatsApp Cloud API (Meta)  2) Fallback wa.me link manual
+// Servicio de Notificaciones WhatsApp v2.1
+// Genera enlaces wa.me reales (WhatsApp Web/App)
 // =====================================================
-
-import { enviarWhatsAppCloudAPI, whatsappCloudConfigurado } from './whatsapp-cloud'
 
 interface ResultadoEnvio {
   exito: boolean
   error?: string
   linkWaMe?: string
-  wamid?: string
-  canal?: 'WHATSAPP' | 'WA_ME_LINK'
   respuesta?: any
 }
 
@@ -42,16 +38,14 @@ export function generarLinkWaMe(telefono: string, mensaje: string): string {
 }
 
 /**
- * "Envía" un mensaje de WhatsApp.
+ * "Envía" un mensaje de WhatsApp generando un link wa.me
+ * El administrador debe hacer clic en el link para abrir WhatsApp y enviar el mensaje.
  *
- * Estrategia v4.12:
- *   1. Si WHATSAPP_TOKEN + WHATSAPP_PHONE_NUMBER_ID están configurados, intenta
- *      WhatsApp Cloud API de Meta (envío automático real, retorna wamid).
- *   2. Si Cloud API no está configurado o falla, genera un link wa.me para
- *      envío manual por el administrador.
- *
- * @returns ResultadoEnvio con exito=true si Cloud API envió correctamente,
- *          exito=false + linkWaMe si cae a fallback manual.
+ * Esto se hace así porque el SDK de Z.ai NO tiene funcionalidad de WhatsApp.
+ * Para envío automático real se requiere integrar con:
+ *   - WhatsApp Business API (Meta) — requiere verificación de negocio
+ *   - Twilio WhatsApp API — requiere credenciales
+ *   - Baileys/whatsapp-web.js — requiere escanear QR desde un teléfono
  */
 export async function enviarWhatsApp(telefono: string, mensaje: string): Promise<ResultadoEnvio> {
   try {
@@ -60,28 +54,14 @@ export async function enviarWhatsApp(telefono: string, mensaje: string): Promise
       return { exito: false, error: 'Número de teléfono inválido' }
     }
 
-    // 1. Intentar WhatsApp Cloud API si está configurado
-    if (whatsappCloudConfigurado()) {
-      const cloudResult = await enviarWhatsAppCloudAPI(telefono, mensaje)
-      if (cloudResult.exito) {
-        return {
-          exito: true,
-          wamid: cloudResult.wamid,
-          canal: 'WHATSAPP',
-          respuesta: cloudResult.respuesta,
-        }
-      }
-      // Si falla, continuar al fallback wa.me
-      console.warn('[WhatsApp] Cloud API falló, fallback a wa.me:', cloudResult.error)
-    }
-
-    // 2. Fallback: generar link wa.me para envío manual
     const linkWaMe = generarLinkWaMe(telefono, mensaje)
+
+    // No hay envío automático real disponible en este entorno.
+    // Devolvemos el link wa.me para que el administrador lo abra manualmente.
     return {
-      exito: false,
+      exito: false, // false porque NO se envió automáticamente
       error: 'PENDIENTE_MANUAL',
       linkWaMe,
-      canal: 'WA_ME_LINK',
       respuesta: {
         modo: 'manual',
         telefono: telefonoLimpio,
@@ -110,7 +90,7 @@ export function mensajeSolicitudCreada(d: {
   numeroCuotas: number
   fechaPrimerPago: string
 }): string {
-  return `🏦 *SOLICITUD DE SOLICITUD REGISTRADA*
+  return `🏦 *SOLICITUD DE PRÉSTAMO REGISTRADA*
 
 Hola *${d.nombreCliente}*, tu solicitud ha sido creada.
 
@@ -133,21 +113,19 @@ export function mensajeAprobacionTyC(d: {
   tasaAnual: number
   totalPagar: number
   linkAceptacion: string
-  modalidad?: string  // 'FRANCES' para mostrar la tasa, cualquier otro valor la oculta
 }): string {
-  // La tasa anual NO se envía al cliente por WhatsApp (cambio solicitado).
-  const lineaTasa = ''
-  return `✅ *SOLICITUD APROBADO - REQUIERE ACEPTACIÓN*
+  return `✅ *PRÉSTAMO APROBADO - REQUIERE ACEPTACIÓN*
 
-Hola *${d.nombreCliente}*, tu solicitud ${d.codigoPrestamo} fue aprobado.
+Hola *${d.nombreCliente}*, tu préstamo ${d.codigoPrestamo} fue aprobado.
 
 📋 *Características del crédito:*
 • Monto: $${d.monto.toLocaleString('es-CO')}
 • Cuota fija: $${d.cuota.toLocaleString('es-CO')}
 • N° cuotas: ${d.numeroCuotas}
-${lineaTasa}• Total a pagar: $${d.totalPagar.toLocaleString('es-CO')}
+• Tasa anual: ${d.tasaAnual}%
+• Total a pagar: $${d.totalPagar.toLocaleString('es-CO')}
 
-⚠️ *Para desembolsar el solicitud debes aceptar los Términos y Condiciones.*
+⚠️ *Para desembolsar el préstamo debes aceptar los Términos y Condiciones.*
 
 👉 Haz clic aquí para revisar y aceptar:
 ${d.linkAceptacion}
@@ -170,7 +148,7 @@ export function mensajePagoAplicado(d: {
 Hola *${d.nombreCliente}*, registramos tu pago.
 
 💵 *Detalle:*
-• Solicitud: ${d.codigoPrestamo}
+• Préstamo: ${d.codigoPrestamo}
 • Cuota: ${d.cuotaNumero}/${d.totalCuotas}
 • Pagado: $${d.montoPagado.toLocaleString('es-CO')}
 
@@ -188,7 +166,7 @@ export function mensajePrestamoCancelado(d: {
   montoTotal: number
   fechaCancelacion: string
 }): string {
-  return `🎉 *SOLICITUD CANCELADO*
+  return `🎉 *PRÉSTAMO CANCELADO*
 
 Felicidades *${d.nombreCliente}*, completaste el pago total.
 
@@ -214,7 +192,7 @@ export function mensajeRecordatorioPago(d: {
 Hola *${d.nombreCliente}*, tu cuota vence ${plazoTexto}.
 
 📋 *Detalle:*
-• Solicitud: ${d.codigoPrestamo}
+• Préstamo: ${d.codigoPrestamo}
 • Monto: $${d.montoCuota.toLocaleString('es-CO')}
 • Vence: ${d.fechaVencimiento}
 
@@ -232,17 +210,17 @@ export function mensajeMora(d: {
 }): string {
   return `⚠️ *AVISO DE MORA*
 
-Hola *${d.nombreCliente}*, tu solicitud presenta mora.
+Hola *${d.nombreCliente}*, tu préstamo presenta mora.
 
 📋 *Estado:*
-• Solicitud: ${d.codigoPrestamo}
+• Préstamo: ${d.codigoPrestamo}
 • Días de mora: ${d.diasMora}
 • Cuota pendiente: $${d.montoCuota.toLocaleString('es-CO')}
 • Tasa moratoria: ${d.tasaMora}% anual (compuesta diaria)
 • Mora generada: $${d.montoMora.toLocaleString('es-CO')}
 • *Total a pagar: $${d.totalAdeudado.toLocaleString('es-CO')}*
 
-⚠️ *A los 30 días de mora se iniciará cobro jurídico.*
+⚠️ *A los 60 días de mora se iniciará cobro jurídico.*
 
 Contáctanos para regularizar tu pago.`
 }
@@ -258,7 +236,7 @@ export function mensajeAvisoLegal(d: {
 
 Estimado/a *${d.nombreCliente}*:
 
-Su solicitud *${d.codigoPrestamo}* con saldo de *$${d.saldoTotal.toLocaleString('es-CO')}* fue derivado a cobro jurídico por incumplimiento de pago (30+ días de mora).
+Su préstamo *${d.codigoPrestamo}* con saldo de *$${d.saldoTotal.toLocaleString('es-CO')}* fue derivado a cobro jurídico por incumplimiento de pago (60+ días de mora).
 
 👤 *Abogado asignado:* ${d.abogado}
 📞 *Contacto:* ${d.telefonoAbogado}
@@ -295,7 +273,7 @@ export function mensajeLinkPago(d: {
 }): string {
   return `💳 *LINK DE PAGO*
 
-Hola *${d.nombreCliente}*, genera tu link de pago para la cuota ${d.cuotaNumero} del solicitud ${d.codigoPrestamo}.
+Hola *${d.nombreCliente}*, genera tu link de pago para la cuota ${d.cuotaNumero} del préstamo ${d.codigoPrestamo}.
 
 💵 *Monto a pagar:* $${d.monto.toLocaleString('es-CO')}
 📅 *Vence:* ${d.fechaVencimiento}
@@ -352,11 +330,6 @@ export async function guardarNotificacion(params: {
       estado,
       error: envio.error || null,
       linkWaMe: envio.linkWaMe || null,
-      // v4.12 (QA M09 TC-NOT-003): persistir wamid de WhatsApp Cloud API
-      wamid: envio.wamid || null,
-      // v4.12 (QA M09 TC-NOT-014): registrar canal usado
-      canal: envio.canal || null,
-      fechaEnvio: new Date(),
     },
   })
 }

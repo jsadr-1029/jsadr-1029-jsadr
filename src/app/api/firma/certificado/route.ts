@@ -62,7 +62,7 @@ export async function GET(req: NextRequest) {
       )
     }
 
-    const html = await generarCertificadoHTML(firma, cliente, firma.prestamo, req)
+    const html = await generarCertificadoHTML(firma, cliente, firma.prestamo)
 
     return new NextResponse(html, {
       headers: {
@@ -78,7 +78,7 @@ export async function GET(req: NextRequest) {
   }
 }
 
-async function generarCertificadoHTML(firma: any, cliente: any, prestamo: any, req?: NextRequest): Promise<string> {
+async function generarCertificadoHTML(firma: any, cliente: any, prestamo: any): Promise<string> {
   const fechaFirma = firma.fechaFirmaCompleta || firma.createdAt
   const fechaFormateada = formatearFechaHora(fechaFirma)
   const fechaSolo = formatearFecha(fechaFirma)
@@ -110,7 +110,7 @@ async function generarCertificadoHTML(firma: any, cliente: any, prestamo: any, r
 
   // Hashes de integridad
   const hashFirma = firma.imagenFirma ?
-    crypto.createHash('sha256').update(firma.imagenFirma).digest('hex').substring(0, 32) : 'N/A'
+    require('crypto').createHash('sha256').update(firma.imagenFirma).digest('hex').substring(0, 32) : 'N/A'
   const hashSelfie = firma.fotoSelfieHash?.substring(0, 32) || 'N/A'
   const hashDocumento = firma.fotoDocumentoHash?.substring(0, 32) || 'N/A'
 
@@ -129,13 +129,13 @@ async function generarCertificadoHTML(firma: any, cliente: any, prestamo: any, r
     ? `<img src="${firma.imagenFirma}" alt="Firma electrónica" style="max-width:300px; max-height:150px; border:1px solid #ccc; background:white; border-radius:4px;" />`
     : '<p style="color:#999; font-style:italic;">Firma no disponible</p>'
 
-  // Código del solicitud si existe
+  // Código del préstamo si existe
   const codigoPrestamo = prestamo?.codigo || 'N/A'
   const montoPrestamo = prestamo ? formatearMonedaPrestamo(prestamo.montoPrincipal) : 'N/A'
 
   // ID corto para mostrar
   const idCorto = firma.id.substring(0, 12)
-  const uuidCertificado = crypto.randomUUID()
+  const uuidCertificado = require('crypto').randomUUID()
 
   return `<!DOCTYPE html>
 <html lang="es">
@@ -331,13 +331,13 @@ async function generarCertificadoHTML(firma: any, cliente: any, prestamo: any, r
   </div>
 </div>
 
-<!-- Sección 2: Detalles del Solicitud -->
+<!-- Sección 2: Detalles del Préstamo -->
 <div class="section">
   <div class="section-title">2. Documento Firmado</div>
   <div class="section-body">
     <div class="datos-grid">
-      <div class="dato"><span class="label">Tipo documento:</span> <span class="value">${firma.tipo === 'TYC' ? 'Términos y Condiciones' : firma.tipo === 'PAGARE' ? 'Pagaré' : firma.tipo === 'ACUERDO_PAGO' ? 'Otro Sí (Acuerdo de Pago)' : firma.tipo}</span></div>
-      <div class="dato"><span class="label">Código solicitud:</span> <span class="value"><strong>${codigoPrestamo}</strong></span></div>
+      <div class="dato"><span class="label">Tipo documento:</span> <span class="value">${firma.tipo === 'TYC' ? 'Términos y Condiciones' : firma.tipo === 'PAGARE' ? 'Pagaré' : firma.tipo}</span></div>
+      <div class="dato"><span class="label">Código préstamo:</span> <span class="value"><strong>${codigoPrestamo}</strong></span></div>
       <div class="dato"><span class="label">Monto:</span> <span class="value">${montoPrestamo}</span></div>
       <div class="dato"><span class="label">Estado firma:</span> <span class="value">✓ ${firma.estadoFirma}</span></div>
     </div>
@@ -350,7 +350,7 @@ async function generarCertificadoHTML(firma: any, cliente: any, prestamo: any, r
   <div class="section-body">
     <div class="datos-grid">
       <div class="dato"><span class="label">Fecha de firma:</span> <span class="value"><strong>${fechaSolo}</strong></span></div>
-      <div class="dato"><span class="label">Hora exacta:</span> <span class="value"><strong>${new Date(fechaFirma).toLocaleTimeString('es-CO', { timeZone: 'America/Bogota', hour: '2-digit', minute: '2-digit', second: '2-digit' })}</strong></span></div>
+      <div class="dato"><span class="label">Hora exacta:</span> <span class="value"><strong>${new Date(fechaFirma).toLocaleTimeString('es-CO')}</strong></span></div>
       <div class="dato"><span class="label">Zona horaria:</span> <span class="value">America/Bogota (UTC-5)</span></div>
       <div class="dato"><span class="label">Timestamp ISO:</span> <span class="value" style="font-family:monospace; font-size:10px;">${new Date(fechaFirma).toISOString()}</span></div>
       <div class="dato"><span class="label">Creación registro:</span> <span class="value">${formatearFechaHora(firma.createdAt)}</span></div>
@@ -440,9 +440,9 @@ async function generarCertificadoHTML(firma: any, cliente: any, prestamo: any, r
 <div class="declaracion">
   <strong>DECLARACIÓN:</strong> El presente certificado acredita que el(la) señor(a) <strong>${cliente.nombre}</strong>,
   identificado(a) con cédula de ciudadanía No. <strong>${cliente.cedula}</strong>, firmó electrónicamente
-  el documento <strong>${firma.tipo === 'TYC' ? 'Términos y Condiciones' : firma.tipo === 'PAGARE' ? 'Pagaré' : firma.tipo === 'ACUERDO_PAGO' ? 'Otro Sí (Acuerdo de Pago)' : firma.tipo}</strong>
-  ${prestamo ? `correspondiente al solicitud <strong>${codigoPrestamo}</strong>` : ''}
-  el día <strong>${fechaSolo}</strong> a las <strong>${new Date(fechaFirma).toLocaleTimeString('es-CO', { timeZone: 'America/Bogota', hour: '2-digit', minute: '2-digit', second: '2-digit' })}</strong>,
+  el documento <strong>${firma.tipo === 'TYC' ? 'Términos y Condiciones' : firma.tipo}</strong>
+  ${prestamo ? `correspondiente al préstamo <strong>${codigoPrestamo}</strong>` : ''}
+  el día <strong>${fechaSolo}</strong> a las <strong>${new Date(fechaFirma).toLocaleTimeString('es-CO')}</strong>,
   mediante verificación de identidad con código OTP enviado por ${destinoOTP},
   fotografía selfie con documento de identidad, y firma manuscrita digitalizada.
   Este certificado tiene plena validez legal conforme a la legislación colombiana sobre firma electrónica.
@@ -455,15 +455,7 @@ ${await (async () => {
     crypto.createHash('sha256').update(firma.id + '|' + firma.createdAt.toISOString() + '|certificado').digest('hex').substring(8, 12) + '-' +
     crypto.createHash('sha256').update(firma.id + '|' + firma.createdAt.toISOString() + '|certificado').digest('hex').substring(12, 16)
   const selloDig = crypto.createHash('sha256').update(JSON.stringify({ firmaId: firma.id, cliente: cliente.cedula, codigo: codigoVer, timestamp: new Date().toISOString() })).digest('hex')
-  // Construir URL de verificación usando el dominio canónico de producción
-  // (NEXT_PUBLIC_APP_URL = https://jsadr.com.co). NO usamos req.url porque en
-  // entornos sandbox/preview genera URLs temporales que luego se desactivan
-  // y rompen el QR al escanearlo (error: "sandbox is inactive").
-  const urlBase =
-    process.env.NEXT_PUBLIC_APP_URL ||
-    process.env.NEXT_PUBLIC_BASE_URL ||
-    'https://jsadr.com.co'
-  const urlVerif = urlBase + '/api/verificar?codigo=' + codigoVer
+  const urlVerif = (process.env.NEXT_PUBLIC_BASE_URL || 'https://preview-chat-c04df402-049e-4406-b5d2-c8e07f801c50.space-z.ai') + '/api/verificar?codigo=' + codigoVer
   let qrB64 = ''
   try { qrB64 = await QRCode.toDataURL(urlVerif, { width: 130, margin: 1, color: { dark: '#1e3a5f', light: '#ffffff' } }) } catch {}
   return `
@@ -499,7 +491,7 @@ ${await (async () => {
 <div class="footer-cert">
   <p><strong>Certificado ID:</strong> ${uuidCertificado}</p>
   <p><strong>Generado el:</strong> ${formatearFechaHora(new Date())}</p>
-  <p><strong>Sistema:</strong> Jsadr v3.6.1 — Plataforma de Gestión de Solicitudes</p>
+  <p><strong>Sistema:</strong> Jsadr v3.6.1 — Plataforma de Gestión de Préstamos</p>
   <p>Este documento es generado automáticamente por el sistema y tiene carácter de constancia digital.</p>
   <p>© ${new Date().getFullYear()} Jsadr. Todos los derechos reservados.</p>
 </div>

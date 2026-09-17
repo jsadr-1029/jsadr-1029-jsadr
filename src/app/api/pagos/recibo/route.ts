@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { sanitizeError } from '@/lib/error-handler'
 import { requireRole } from '@/lib/auth-guard'
-import { buildAbsoluteUrl } from '@/lib/url'
 import { registrarAuditLog, getClientInfo } from '@/lib/security'
 import {
   calcularPrestamo,
@@ -15,7 +14,7 @@ import crypto from 'crypto'
 // /api/pagos/recibo v4.1 — RECIBO RE-DISEÑADO
 // -----------------------------------------------------
 // Genera un recibo de pago firmado criptográficamente con:
-//   • Datos completos del pago y el solicitud
+//   • Datos completos del pago y el préstamo
 //   • Número de cuotas pendientes después de este pago
 //   • Flag esUltimaCuota → habilita mensaje de fidelización
 //   • Información de cuenta de recaudo y firma institucional
@@ -46,7 +45,7 @@ function construirContenidoRecibo(pago: any): string {
   ].join('|')
 }
 
-// Calcula cuotas pendientes y esUltimaCuota en base al estado del solicitud
+// Calcula cuotas pendientes y esUltimaCuota en base al estado del préstamo
 // después de aplicar este pago.
 function calcularCuotasPendientes(pago: any, prestamo: any): {
   cuotasPendientes: number
@@ -215,7 +214,8 @@ export async function POST(req: NextRequest) {
       ipOrigen: clientInfo.ip, userAgent: clientInfo.userAgent,
     })
 
-    const urlVerificacion = buildAbsoluteUrl(`/?recibo=${hash}`)
+    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'
+    const urlVerificacion = `${baseUrl}/?recibo=${hash}`
 
     const cuotasInfo = calcularCuotasPendientes(pago, pago.prestamo)
 

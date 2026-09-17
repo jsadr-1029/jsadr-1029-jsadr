@@ -36,14 +36,8 @@ export interface ResultadoCalculo {
   totalPagar: number
   tasaAplicada: number
   tablaAmortizacion: CuotaAmortizacion[]
-  fechaVencimiento: Date | null  // null para modalidades sin vencimiento definido
+  fechaVencimiento: Date
   fondoGarantia: number // 5% del primer préstamo
-  // Campos opcionales para la modalidad INTERES_FIJO_SIN_CAPITAL
-  esInteresFijoSinCapital?: boolean
-  interesFijoMensual?: number
-  proximaCuotaInteresFecha?: Date
-  tasaAnualCalculada?: number
-  tasaMensualCalculada?: number
 }
 
 const PERIODOS_POR_ANIO: Record<Frecuencia, number> = {
@@ -74,97 +68,6 @@ export function calcularFechaVencimiento(
       break
   }
   return fecha
-}
-
-/**
- * Corrige las fechas de la tabla de amortización para que respeten los días
- * de corte del calendario (ej: 16 y 01 de cada mes) en lugar de usar
- * aritmética simple (+15 días).
- *
- * Cuando un préstamo tiene `periodoCorte` definido (ej: '16-01', '5-20'),
- * las fechas de vencimiento deben caer EXACTAMENTE en esos días del mes,
- * sin importar cuántos días tenga cada mes (28, 30, 31).
- *
- * @param tabla - La tabla de amortización calculada (con fechas aritméticas).
- * @param periodoCorte - El periodo de corte (ej: '16-01', '5-20', '15-30').
- * @returns La tabla con las fechas corregidas a días de calendario.
- */
-export function corregirFechasPorCorte(
-  tabla: CuotaAmortizacion[],
-  periodoCorte?: string | null
-): CuotaAmortizacion[] {
-  if (!periodoCorte || periodoCorte === 'NINGUNO') return tabla
-
-  // Parsear los días de corte (ej: '16-01' → [16, 1])
-  const diasCorte = periodoCorte.split('-').map((d) => parseInt(d.trim(), 10))
-  if (diasCorte.length !== 2 || diasCorte.some(isNaN)) return tabla
-
-  // Ordenar los días de menor a mayor para saber cuál va primero en el mes
-  const [diaMenor, diaMayor] = diasCorte.sort((a, b) => a - b)
-
-  // Generar las fechas de calendario
-  // Empezar desde la fecha de la primera cuota y alternar entre los dos días de corte
-  if (tabla.length === 0) return tabla
-
-  const fechasCorregidas: Date[] = []
-  // Primera cuota: mantener la fecha original (puede ser una excepción)
-  fechasCorregidas.push(new Date(tabla[0].fechaVencimiento))
-
-  // A partir de la segunda cuota: alternar entre los dos días de corte del calendario
-  for (let i = 1; i < tabla.length; i++) {
-    const fechaAnterior = new Date(fechasCorregidas[i - 1])
-    const diaAnterior = fechaAnterior.getDate()
-    const nuevaFecha = new Date(fechaAnterior)
-
-    // === Lógica robusta basada en los días EXACTOS del corte ===
-    // Antes se usaban rangos hardcodeados (15-27 / 1-14) que solo funcionaban
-    // para cortes como '16-01', '10-25', etc. Para cortes como '15-30' fallaba
-    // porque día 15 caía en el rango "día mayor" cuando en realidad es el
-    // día menor del corte 15-30.
-    //
-    // Nueva lógica:
-    //   - Si diaAnterior == diaMayor (ej: 30) → siguiente cuota es diaMenor (15) del MES SIGUIENTE
-    //   - Si diaAnterior == diaMenor (ej: 15) → siguiente cuota es diaMayor (30) del MISMO MES
-    //   - Si diaAnterior está entre diaMenor y diaMayor → siguiente cuota es diaMayor del MISMO MES
-    //   - Si diaAnterior > diaMayor (fin de mes) → siguiente cuota es diaMenor del MES SIGUIENTE
-    //   - Si diaAnterior < diaMenor → siguiente cuota es diaMenor del MISMO MES
-
-    const diasEnMesActual = new Date(nuevaFecha.getFullYear(), nuevaFecha.getMonth() + 1, 0).getDate()
-
-    if (diaAnterior === diaMayor) {
-      // Día mayor del corte (ej: 30) → ir a día menor del MES SIGUIENTE (ej: 30/09 → 15/10)
-      nuevaFecha.setDate(1)
-      nuevaFecha.setMonth(nuevaFecha.getMonth() + 1)
-      const diasEnMes = new Date(nuevaFecha.getFullYear(), nuevaFecha.getMonth() + 1, 0).getDate()
-      nuevaFecha.setDate(Math.min(diaMenor, diasEnMes))
-    } else if (diaAnterior === diaMenor) {
-      // Día menor del corte (ej: 15) → ir a día mayor del MISMO MES (ej: 15/09 → 30/09)
-      const diasEnMes = new Date(nuevaFecha.getFullYear(), nuevaFecha.getMonth() + 1, 0).getDate()
-      nuevaFecha.setDate(Math.min(diaMayor, diasEnMes))
-    } else if (diaAnterior > diaMayor) {
-      // Después del día mayor (fin de mes, ej: 31) → ir a día menor del MES SIGUIENTE
-      nuevaFecha.setDate(1)
-      nuevaFecha.setMonth(nuevaFecha.getMonth() + 1)
-      const diasEnMes = new Date(nuevaFecha.getFullYear(), nuevaFecha.getMonth() + 1, 0).getDate()
-      nuevaFecha.setDate(Math.min(diaMenor, diasEnMes))
-    } else if (diaAnterior > diaMenor && diaAnterior < diaMayor) {
-      // Entre diaMenor y diaMayor → ir a día mayor del MISMO MES
-      const diasEnMes = new Date(nuevaFecha.getFullYear(), nuevaFecha.getMonth() + 1, 0).getDate()
-      nuevaFecha.setDate(Math.min(diaMayor, diasEnMes))
-    } else {
-      // Antes del día menor → ir a día menor del MISMO MES
-      const diasEnMes = new Date(nuevaFecha.getFullYear(), nuevaFecha.getMonth() + 1, 0).getDate()
-      nuevaFecha.setDate(Math.min(diaMenor, diasEnMes))
-    }
-
-    fechasCorregidas.push(nuevaFecha)
-  }
-
-  // Aplicar las fechas corregidas a la tabla
-  return tabla.map((cuota, index) => ({
-    ...cuota,
-    fechaVencimiento: fechasCorregidas[index],
-  }))
 }
 
 /**
@@ -248,9 +151,6 @@ export function calcularPrestamo(parametros: ParametrosPrestamo): ResultadoCalcu
 
   const totalPagar = Math.round((montoPrincipal + totalInteres) * 100) / 100
   const fechaVencimiento = calcularFechaVencimiento(fechaInicio, numeroCuotas, frecuencia)
-  // Fondo de Garantía: 5% por defecto (legacy). La tasa real configurable
-  // se calcula en /api/prestamos/route.ts usando el parámetro tasaFondoGarantia.
-  // Este valor aquí es solo un estimado para el simulador/preview.
   const fondoGarantia = Math.round(montoPrincipal * 0.05 * 100) / 100 // 5%
 
   return {
@@ -355,7 +255,6 @@ export function formatearFecha(fecha: Date | string | null | undefined): string 
   if (!fecha) return '—'
   const d = typeof fecha === 'string' ? new Date(fecha) : fecha
   return d.toLocaleDateString('es-CO', {
-    timeZone: 'America/Bogota',
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',
@@ -366,153 +265,12 @@ export function formatearFechaHora(fecha: Date | string | null | undefined): str
   if (!fecha) return '—'
   const d = typeof fecha === 'string' ? new Date(fecha) : fecha
   return d.toLocaleString('es-CO', {
-    timeZone: 'America/Bogota',
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',
     hour: '2-digit',
     minute: '2-digit',
   })
-}
-
-// =====================================================
-// CARGOS INICIALES PENDIENTES DE COBRAR
-// =====================================================
-// Los préstamos pueden tener hasta 4 cargos únicos que se cobran UNA sola vez
-// al inicio del crédito y deben ir sumados a la PRIMERA CUOTA:
-//   1. Pagaré + Carta de Instrucciones (cobroPagareCarta / valorPagareCarta)
-//   2. Tarifa de Uso de Plataforma    (cobroTarifaPlataforma / valorTarifaPlataforma)
-//   3. Flexibilidad Financiera         (flexibilidadFinanciera / flexibilidadCosto)
-//   4. Fondo de Garantía               (fondoGarantiaCargado / fondoGarantiaMonto)
-//
-// Cada uno tiene su propio flag "cobrado/aplicado" que se setea en true
-// cuando el pago de la primera cuota lo cubre. Si el flag ya está en true,
-// el cargo NO se vuelve a cobrar.
-//
-// Esta función devuelve el detalle y el total pendiente para que el estado
-// de cuenta y el flujo de pagos lo sumen a la cuota 1.
-//
-// Política de cobro (FIX 2026-08-13 Task 12):
-//   - El pago de la cuota 1 debe incluir estos cargos.
-//   - Si el cliente paga la cuota 1 sin los cargos (legacy), los cargos
-//     quedan como saldo pendiente adicional hasta que el gestor los cobre
-//     explícitamente con un pago complementario.
-//   - El saldo total del préstamo = totalPagar + cargosInicialesPendientes - montoPagado.
-// =====================================================
-
-export interface CargoInicialDetalle {
-  concepto: 'PAGARE_CARTA' | 'TARIFA_PLATAFORMA' | 'FLEXIBILIDAD' | 'FONDO_GARANTIA'
-  etiqueta: string
-  monto: number
-  yaCobrado: boolean
-  flagCampo?: string  // nombre del campo Prisma que indica si ya fue cobrado
-}
-
-export interface CargosInicialesPendientes {
-  cargos: CargoInicialDetalle[]
-  totalPendiente: number
-  totalConfigurado: number
-  totalYaCobrado: number
-}
-
-export function calcularCargosInicialesPendientes(prestamo: {
-  // Pagaré + Carta
-  cobroPagareCarta?: boolean
-  valorPagareCarta?: number
-  // Tarifa Plataforma
-  cobroTarifaPlataforma?: boolean
-  valorTarifaPlataforma?: number
-  tarifaPlataformaCargada?: boolean
-  // Flexibilidad Financiera
-  flexibilidadFinanciera?: boolean
-  flexibilidadCosto?: number
-  flexibilidadCobroAplicado?: boolean
-  // Fondo de Garantía
-  fondoGarantiaCargado?: boolean
-  fondoGarantiaMonto?: number
-}): CargosInicialesPendientes {
-  const cargos: CargoInicialDetalle[] = []
-
-  // 1. Pagaré + Carta — no tiene flag propio; se considera cobrado solo si
-  //    la primera cuota fue pagada (APLICADO). Para no romper préstamos
-  //    legacy donde la cuota 1 ya se pagó sin el cargo, exponemos el monto
-  //    como "pendiente" y dejamos que el gestor decida. La UI de pagos
-  //    mostrará el cargo solo si la cuota 1 aún no está APLICADO.
-  if (prestamo.cobroPagareCarta) {
-    const monto = Number(prestamo.valorPagareCarta) > 0 ? Number(prestamo.valorPagareCarta) : 19900
-    cargos.push({
-      concepto: 'PAGARE_CARTA',
-      etiqueta: 'Pagaré + Carta de Instrucciones',
-      monto,
-      yaCobrado: false,  // se resuelve dinámicamente con cuota 1
-      flagCampo: 'cuota1Aplicada',
-    })
-  }
-
-  // 2. Tarifa de Plataforma — tiene flag explícito
-  if (prestamo.cobroTarifaPlataforma) {
-    const monto = Number(prestamo.valorTarifaPlataforma) > 0 ? Number(prestamo.valorTarifaPlataforma) : 4900
-    cargos.push({
-      concepto: 'TARIFA_PLATAFORMA',
-      etiqueta: 'Tarifa de Uso de Plataforma',
-      monto,
-      yaCobrado: !!prestamo.tarifaPlataformaCargada,
-      flagCampo: 'tarifaPlataformaCargada',
-    })
-  }
-
-  // 3. Flexibilidad Financiera — tiene flag explícito
-  if (prestamo.flexibilidadFinanciera) {
-    const monto = Number(prestamo.flexibilidadCosto) > 0 ? Number(prestamo.flexibilidadCosto) : 0
-    if (monto > 0) {
-      cargos.push({
-        concepto: 'FLEXIBILIDAD',
-        etiqueta: 'Flexibilidad Financiera',
-        monto,
-        yaCobrado: !!prestamo.flexibilidadCobroAplicado,
-        flagCampo: 'flexibilidadCobroAplicado',
-      })
-    }
-  }
-
-  // 4. Fondo de Garantía — SOLO aparece si el gestor lo activó explícitamente
-  //    al crear el préstamo (fondoGarantiaCargado=true) y tiene monto > 0.
-  //
-  //    Política 2026-08-15 (corregida):
-  //      - NO todos los créditos llevan fondo de garantía. Solo los que el
-  //        gestor determine en el sistema que se les cobre.
-  //      - Cuando está activado (fondoGarantiaCargado=true), el monto se
-  //        SUMA a la PRIMERA CUOTA (igual que Pagaré, Tarifa Plataforma
-  //        y Flexibilidad Financiera) y se marca como cobrado cuando la
-  //        cuota 1 queda APLICADA.
-  //      - El ingreso se carga automáticamente a CAJA-GARANTIA cuando se
-  //        aplica el pago de la cuota 1.
-  //      - Aparece como concepto en el estado de cuenta y en el detalle
-  //        del pago de la primera cuota.
-  //
-  //    Cuando NO está activado (fondoGarantiaCargado=false):
-  //      - No aparece en ningún flujo (estado de cuenta, pagos, caja)
-  //      - El monto y la tasa quedan en 0 en la BD
-  if (prestamo.fondoGarantiaCargado && Number(prestamo.fondoGarantiaMonto) > 0) {
-    cargos.push({
-      concepto: 'FONDO_GARANTIA',
-      etiqueta: 'Fondo de Garantía',
-      monto: Number(prestamo.fondoGarantiaMonto),
-      yaCobrado: false,  // se cobra en cuota 1 (igual que los demás cargos iniciales)
-      flagCampo: 'cuota1Aplicada',  // se considera cobrado cuando la cuota 1 está APLICADA
-    })
-  }
-
-  const totalConfigurado = cargos.reduce((s, c) => s + c.monto, 0)
-  const totalYaCobrado = cargos.filter(c => c.yaCobrado).reduce((s, c) => s + c.monto, 0)
-  const totalPendiente = cargos.filter(c => !c.yaCobrado).reduce((s, c) => s + c.monto, 0)
-
-  return {
-    cargos,
-    totalPendiente,
-    totalConfigurado,
-    totalYaCobrado,
-  }
 }
 
 /**

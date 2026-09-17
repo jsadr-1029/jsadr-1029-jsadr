@@ -115,12 +115,12 @@ export function SolicitudNuevoClienteView() {
         </CardContent>
       </Card>
 
-      {/* Política de Solicitudes */}
+      {/* Política de Préstamos */}
       <Card className="glass-card">
         <CardHeader>
           <CardTitle className="text-base flex items-center gap-2">
             <FileText className="w-4 h-4 text-primary" />
-            Política de Solicitudes
+            Política de Préstamos
             <Button variant="ghost" size="sm" className="ml-auto" onClick={() => setMostrarPolitica(!mostrarPolitica)}>
               {mostrarPolitica ? 'Ocultar' : 'Ver política'}
             </Button>
@@ -130,7 +130,7 @@ export function SolicitudNuevoClienteView() {
           <CardContent className="space-y-4 text-sm">
             <div className="p-3 bg-muted/50 rounded-md space-y-2">
               <p className="font-semibold text-primary">📋 ¿Cómo funciona nuestro proceso de crédito?</p>
-              <p>Nuestro proceso de solicitud es transparente y rápido. Te explicamos cada etapa:</p>
+              <p>Nuestro proceso de préstamo es transparente y rápido. Te explicamos cada etapa:</p>
               <Button variant="link" size="sm" className="p-0 h-auto" onClick={() => setMostrarEtapas(!mostrarEtapas)}>
                 {mostrarEtapas ? 'Ocultar etapas' : 'Ver etapas del proceso →'}
               </Button>

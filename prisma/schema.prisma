@@ -48,11 +48,6 @@ model Usuario {
   mfaSecret        String?  // TOTP secret (base32)
   sessionToken     String?  // JWT refresh token hash
   mustChangePassword Boolean @default(false)
-  // === Recuperación de clave por magic link (v4.14) ===
-  // Reemplaza el envío de contraseña temporal: ahora se envía un enlace
-  // firmado al correo del usuario con un token de un solo uso.
-  claveResetToken  String?
-  claveResetExpira DateTime?
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
@@ -73,10 +68,7 @@ model Cliente {
   nombre          String
   cedula          String   @unique
   telefono        String
-  // v4.5 (QA M02-Clientes TC-CLI-014): email único a nivel BD para prevenir suplantación.
-  // PostgreSQL permite múltiples NULLs en columnas UNIQUE nullable, así que
-  // los clientes sin email no se ven afectados.
-  email           String?  @unique
+  email           String?
   // "Cargo" fue reemplazado por "Referido por" (relación a otro Cliente)
   departamento    String?
   municipio       String?
@@ -92,21 +84,6 @@ model Cliente {
   numeroCuentaCliente String?
   // Estado del cliente (activo/inactivo)
   activo          Boolean  @default(true)
-  // v4.12 (QA M09 TC-NOT-015): cliente desuscrito de notificaciones automáticas
-  optOutNotificaciones Boolean @default(false)
-  // === Cliente de prueba (v4.14) ===
-  // Cuando esPrueba=true, el cliente y TODOS sus préstamos/pagos se excluyen
-  // automáticamente de cualquier agregado de saldos reales (dashboard, reportes,
-  // cartera, balance, morosidad, clientes-activos, mensual-informe, etc.).
-  // El cliente puede seguir haciendo todo el proceso (simular, solicitar, firmar,
-  // pagar, etc.) como si fuera real, pero sus cifras NO contaminan la contabilidad
-  // real del sistema. Sirve para QA, demostraciones y pruebas end-to-end.
-  // La cédula canónica de prueba es 1214731649 (JOHAN SEBASTIAN ALVAREZ DEL RIO).
-  // Ver src/lib/cliente-prueba.ts para la lógica centralizada.
-  esPrueba        Boolean  @default(false)
-  fechaMarcadoPrueba DateTime?
-  marcadoPruebaPorId  String?
-  motivoPrueba    String?
   // === Autenticación del portal (PIN de 4 dígitos) ===
   pinHash            String?
   pinCreatedAt       DateTime?
@@ -122,14 +99,6 @@ model Cliente {
   claveBloqueadoHasta   DateTime?
   claveResetToken       String?  // token temporal para resetear desde un enlace
   claveResetExpira      DateTime?
-  // === v4.13 — Cambio de clave obligatorio en el primer ingreso ===
-  // Cuando el gestor crea el cliente, el sistema auto-genera una clave temporal,
-  // la envía al correo del cliente y marca `debeCambiarClave=true`.
-  // En el primer login exitoso, el portal debe forzar el cambio de clave antes
-  // de permitir el acceso al panel. Tras el cambio, el flag se apaga.
-  debeCambiarClave      Boolean  @default(false)
-  claveTempToken        String?  // token de sesión temporal que autoriza únicamente el cambio de clave (no navegación)
-  claveTempExpira       DateTime?
   // Tasa personalizada (si el cliente tiene una tasa especial acordada)
   tieneTasaPersonalizada Boolean @default(false)
   tasaPersonalizada      Float?  // % mensual fija aplicada sobre capital inicial
@@ -158,19 +127,11 @@ model Cliente {
   instruccionCuentaId   String?  // ID de cuenta temporal sobreescrita por el gestor
   instruccionCuentaNota String?  // explicación del cambio (ej: "Pago puntual a CTA-3 por cierre mes")
   instruccionCuentaExpira DateTime?
-  // === Preferencia de notificación de pagos ===
-  // Define cómo el cliente desea recibir recordatorios automáticos de cuotas próximas a vencer.
-  // - WHATSAPP: solo WhatsApp al teléfono registrado
-  // - EMAIL:    solo correo electrónico
-  // - AMBOS:    WhatsApp + correo electrónico
-  // - NINGUNO:  el cliente optó por no recibir recordatorios
-  preferenciaNotificacion String? @default("WHATSAPP")
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
   prestamos       Prestamo[]
   campañasVistas  CampañaVista[]
-  campañasAsignadas CampañaCliente[]
   firmas          FirmaElectronica[]
   tokensFirma     TokenFirma[] @relation("ClienteTokenFirma")
   documentosGestor DocumentoGestor[] @relation("DocumentosCliente")
@@ -179,9 +140,6 @@ model Cliente {
   conversacionesChat ConversacionChat[]
   otpsChat        OtpChat[]
   otpRegistros    OtpRegistro[] @relation("ClienteOtpRegistro")
-  // === Pasaporte de Confianza ===
-  compromisosPago     CompromisoPago[] @relation("ClienteCompromisos")
-  pasaporteAuditoria  PasaporteAuditoria[] @relation("ClientePasaporteAuditoria")
 }
 
 // -----------------------------------------------------
@@ -259,11 +217,6 @@ model Prestamo {
   totalPagar          Float
   tasaAplicada        Float
 
-  // Modalidad de amortización (controla si se muestra la tasa en WhatsApp)
-  // FRANCES = sistema francés (cuota fija con interés sobre capital inicial)
-  // OTRO    = otra modalidad (no se muestra la tasa en plantillas WhatsApp de aprobación)
-  modalidadAmortizacion String @default("FRANCES")
-
   // Mora configurable
   tasaMoraPersonalizada Float?  // si el admin la modifica para este préstamo
   moraCompuestaDiaria Boolean @default(true)  // mora compuesta diaria
@@ -285,15 +238,6 @@ model Prestamo {
   fechaAprobacion     DateTime?
   fechaDesembolso     DateTime?
   fechaVencimiento    DateTime?
-  // === fechaInicioAmortizacion (2026-08-21) ===
-  // Fecha base para la tabla de amortización. Normalmente = fechaDesembolso.
-  // Pero si el admin definió fechaPrimerCuota, esta fecha se calcula como
-  // fechaPrimerCuota - 1 periodo (MENSUAL=1 mes, QUINCENAL=15 días, etc.)
-  // para que la cuota #1 venza EXACTAMENTE en fechaPrimerCuota.
-  // Sin este campo, los endpoints de pagos recalculaban la tabla desde
-  // fechaDesembolso, causando que las fechas de vencimiento de las cuotas
-  // no coincidieran con fechaPrimerCuota.
-  fechaInicioAmortizacion DateTime?
   estado              String   @default("SOLICITUD")
   // SOLICITUD | PENDIENTE_ACEPTACION | ACTIVO | EN_MORA | JURIDICO | CANCELADO | RECHAZADO
 
@@ -332,10 +276,9 @@ model Prestamo {
   montoMora           Float    @default(0)
   diasMora            Int      @default(0)
 
-  // Fondo de garantía (tasa configurable por gestor al crear el préstamo)
+  // Fondo de garantía (5% primer préstamo)
   fondoGarantiaCargado Boolean @default(false)
   fondoGarantiaMonto  Float    @default(0)
-  fondoGarantiaTasa   Float    @default(0)  // Tasa aplicada (ej: 0.05 = 5%). 0 si no se cargó.
 
   // === Periodo de corte + días causados antes del corte ===
   // Permite registrar créditos solicitados ANTES de la fecha de corte.
@@ -348,170 +291,34 @@ model Prestamo {
   fechaPrimerCorte    DateTime? // fecha del primer corte (inicio real de pagos)
 
   // === Flexibilidad Financiera (beneficio opcional) ===
-  // Se ofrece cuando el número de cuotas >= 4. DOS tarifas:
-  //   - BASICA:  $15.000 COP — permite usar el beneficio 1 sola vez durante la vigencia
-  //   - PREMIUM: $34.900 COP — permite usar el beneficio 2 veces durante la vigencia
+  // Se ofrece cuando el número de cuotas >= 4. Costo adicional fijo de $10.000 COP.
   // Permite al cliente:
   //   1) Trasladar UNA cuota al final del crédito
   //   2) Solicitar cambio de fecha de pago (genera documento "Otro Sí")
   //
   // - flexibilidadFinanciera: si el beneficio quedó adquirido en la solicitud
-  // - flexibilidadCosto: monto COP cobrado (15000 o 34900)
-  // - flexibilidadModalidad: "BASICA" | "PREMIUM"
-  // - flexibilidadUsosDisponibles: cuántos usos le quedan al cliente (1 o 2 al inicio)
-  // - flexibilidadUsosEjercidos: cuántos usos ha consumido
+  // - flexibilidadCosto: monto COP cobrado (por defecto 10000)
   // - flexibilidadActivada: si el cliente ya exercised el derecho (pagó el costo)
   //   Solo cuando esto es true se pueden generar Otros Síes.
-  // - flexibilidadCobroAplicado: si el cobro ya fue incluido en la primera cuota
-  flexibilidadFinanciera     Boolean   @default(false)
-  flexibilidadCosto          Float     @default(0)
-  flexibilidadModalidad      String?   // BASICA | PREMIUM
-  flexibilidadUsosDisponibles Int      @default(0)
-  flexibilidadUsosEjercidos  Int       @default(0)
-  flexibilidadActivada       Boolean   @default(false)
+  flexibilidadFinanciera  Boolean @default(false)
+  flexibilidadCosto       Float   @default(0)
+  flexibilidadActivada    Boolean @default(false)
   flexibilidadFechaActivacion DateTime?
-  flexibilidadCobroAplicado  Boolean   @default(false)
-  // === Bitácora de usos de Flexibilidad Financiera (Tarea Q) ===
-  // JSON array con el historial de usos. Cada entrada:
-  //   { fechaUso, cuotaTrasladada, vencimientoOriginal, vencimientoNuevo,
-  //     interesesCausados, modalidadUso, pagoId, usuarioNombre }
-  // Sirve para auditoría y para mostrar el detalle en el estado de cuenta.
-  flexibilidadMovimientos    String?   // JSON serializado
-
-  // === Cobro de Pagaré + Carta de Instrucciones ===
-  // Cargo fijo editable (por defecto $19.900 COP) que se cobra UNA sola vez
-  // al cliente cuando el préstamo incluye generar pagare + carta de instrucciones.
-  // Se explica en el estado de cuenta como concepto "Pagaré + Carta de Instrucciones".
-  cobroPagareCarta    Boolean @default(false)
-  valorPagareCarta    Float   @default(19900)  // editable por gestor
-
-  // === Tarifa de Uso de Plataforma (Tarea U) ===
-  // Cargo fijo editable (por defecto $4.900 COP) que se cobra UNA sola vez
-  // al cliente por el uso de la plataforma tecnológica asociada al crédito.
-  // Se refleja en el estado de cuenta como concepto "Tarifa de Uso de Plataforma".
-  // El ingreso se registra automáticamente en la caja CAJA-USO-PLATAFORMA
-  // cuando se aplica el cobro (al activarse el préstamo o al pagarse la 1ra cuota).
-  cobroTarifaPlataforma Boolean @default(false)
-  valorTarifaPlataforma Float   @default(4900)  // editable por gestor
-  tarifaPlataformaCargada Boolean @default(false)  // true cuando ya se registró el ingreso en caja
-
-  // === RENOVACIÓN DIFERIDA (Tarea T) ===
-  // Cuando un préstamo se crea como renovación de otro, NO se cancela el crédito
-  // anterior inmediatamente. Se guarda la referencia aquí y se cancela recién
-  // cuando el cliente acepta los T&C del nuevo préstamo (firmar TyC).
-  // - renovacionPendienteTyc: true mientras el crédito anterior sigue activo
-  //   esperando que el cliente acepte los T&C del nuevo.
-  // - renovacionPrestamoAnteriorId: ID del crédito anterior que será cancelado
-  //   al aceptarse los T&C.
-  // - renovacionFechaCancelacionAnterior: timestamp en que se canceló el
-  //   anterior (auditoría / depuración).
-  renovacionPendienteTyc           Boolean    @default(false)
-  renovacionPrestamoAnteriorId     String?
-  renovacionFechaCancelacionAnterior DateTime?
-
-  // === RENOVACIÓN ANTICIPADA (beneficio opcional del simulador del portal) ===
-  // El cliente puede activar este beneficio en el simulador del portal del
-  // cliente por un cobro único de $9.900 COP. Le da derecho a:
-  //   - Reserva anticipada de su cupo para el siguiente ciclo de crédito
-  //   - Prioridad en el procesamiento de su próxima solicitud
-  //   - Tasa preferencial mantenida (sin re-evaluación)
-  //   - Aceleración del proceso de desembolso
-  // El cobro se hace UNA sola vez al inicio del crédito (al activarse tras
-  // la aceptación de T&C) y se registra como INGRESO automático en la caja
-  // CAJA-RENOVACIONES.
-  renovacionAnticipada             Boolean    @default(false)
-  renovacionAnticipadaCosto        Float      @default(0)
-
-  // === MODALIDAD: INTERES_FIJO_SIN_CAPITAL ===
-  // Caso especial: el cliente paga SOLO intereses fijos mensuales mientras
-  // mantiene la deuda de capital. El capital se paga aparte en abonos
-  // extraordinarios acordados con el gestor.
-  //
-  // Ejemplo típico: deuda de $6.000.000, el cliente paga $370.000 mensuales
-  // que son 100% interés. Mientras tenga deuda de capital (por cualquier valor),
-  // paga esa cuota fija de intereses. El capital se abona aparte mediante
-  // pagos extraordinarios que reducen el saldo real pero NO cambian la cuota
-  // mensual (sigue siendo $370.000 hasta que se pague todo el capital).
-  //
-  // - interesFijoMensual: valor fijo COP que el cliente paga cada mes (ej: 370000)
-  // - capitalPagadoExtra: acumulado de capital pagado en abonos extraordinarios
-  // - interesPagadoAcumulado: acumulado de intereses pagados (las cuotas mensuales)
-  // - proximaCuotaInteresFecha: fecha del próximo vencimiento de la cuota de interés
-  interesFijoMensual              Float      @default(0)
-  capitalPagadoExtra               Float      @default(0)
-  interesPagadoAcumulado           Float      @default(0)
-  proximaCuotaInteresFecha         DateTime?
 
   notas               String?
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
-
-  // === Línea de Tiempo 360° ===
-  // fechaCancelacion: timestamp real en que el préstamo pasó a CANCELADO.
-  // Antes se usaba updatedAt como aproximación, lo cual era poco confiable porque
-  // cualquier modificación posterior (notas, etc.) movía updatedAt hacia adelante.
-  // Para créditos cancelados antes de la creación de este campo, el backfill lo
-  // deriva de: AuditLog.detalles.estado=CANCELADO, RenovacionPrestamo.fechaCancelacionAnterior,
-  // o como último recurso el propio updatedAt.
-  fechaCancelacion    DateTime?
 
   pagos               Pago[]
   pagosProgramados    PagoProgramado[]
   refinanciaciones    Refinanciacion[]
   casoJuridico        CasoJuridico?
   notificaciones      NotificacionLog[]
-  documentos          DocumentoGestor[] @relation("DocumentosPrestamo")
+  documentos      DocumentoGestor[] @relation("DocumentosPrestamo")
   firmas              FirmaElectronica[]
   tokensFirma         TokenFirma[] @relation("PrestamoTokenFirma")
   movimientosCaja     MovimientoCaja[]
   otrosSi             OtroSiCambioFecha[]
-  // === Pasaporte de Confianza ===
-  compromisosPago     CompromisoPago[]
-  pasaporteAuditoria  PasaporteAuditoria[]
-
-  @@index([fechaCancelacion])
-  @@index([estado, fechaDesembolso])
-}
-
-// -----------------------------------------------------
-// 🕰️ FOTOGRAFÍA HISTÓRICA — Snapshot inmutable de cartera
-// -----------------------------------------------------
-// Generado por la Línea de Tiempo 360° cuando el usuario pulsa "Guardar Fotografía".
-// Captura el estado reconstruido de la cartera en una fecha determinada.
-// Es INMUTABLE: nunca se modifica una vez creado.
-// -----------------------------------------------------
-model FotografiaCartera {
-  id                  String   @id @default(cuid())
-  uuid                String   @unique @default(cuid())
-  fechaCorte          DateTime                  // fecha histórica reconstruida
-  fechaGeneracion     DateTime @default(now())  // cuándo se generó el snapshot
-  usuarioId           String?
-  usuarioNombre       String?
-  nombre              String                    // etiqueta amigable
-  descripcion         String?
-
-  // Métricas clave (inmutables)
-  totalPrestamos      Int      @default(0)
-  creditosActivos     Int      @default(0)
-  creditosDentroPlazo Int      @default(0)
-  creditosPlazoCumplido Int    @default(0)
-  creditosExcedidos   Int      @default(0)
-  creditosCancelados  Int      @default(0)
-  creditosEnMora      Int      @default(0)
-  creditosJuridico    Int      @default(0)
-  carteraPendiente    Float    @default(0)
-  carteraActiva       Float    @default(0)
-  carteraMora         Float    @default(0)
-  capitalPrestado     Float    @default(0)
-  dineroRecuperado    Float    @default(0)
-
-  // Detalle completo en JSON (lista de créditos con estado/saldo en la fecha)
-  detalleJSON         String?
-
-  createdAt           DateTime @default(now())
-
-  @@index([fechaCorte])
-  @@index([createdAt])
 }
 
 // -----------------------------------------------------
@@ -600,24 +407,6 @@ model Pago {
   cuotaAplazadaDe Int?     // si este pago aplazó una cuota, indica cuál (snapshot)
   fechaOriginalVencimiento DateTime? // vencimiento original antes del aplazamiento
 
-  // === Uso de Flexibilidad Financiera (v4.0 — Tarea Q) ===
-  // Cuando el cliente ejerce el beneficio de Flexibilidad Financiera
-  // (que pagó al inicio del crédito: 15.000 = 1 uso o 34.900 = 2 usos),
-  // la cuota pendiente actual se TRASLADA al final del crédito junto
-  // con los intereses ya causados, evitando generación de mora.
-  // Este registro NO es un pago en dinero (montoTotal=0), es un asiento
-  // contable que documenta el uso del beneficio.
-  // Diferencia con "Solo Intereses":
-  //   - Solo Intereses: cliente paga los intereses, capital se difiere 1 periodo
-  //   - Flexibilidad Financiera: NO hay pago, la cuota completa se va al final
-  esFlexibilidadFinanciera Boolean @default(false)
-  cuotaMovidaAlFinal      Boolean @default(false)  // true si este "pago" trasladó una cuota al final
-  cuotaTrasladadaNumero   Int?     // número de la cuota que se trasladó
-  fechaVencimientoOriginalTraslado DateTime? // vencimiento original antes del traslado
-  fechaVencimientoNuevoTraslado    DateTime? // nuevo vencimiento al final del crédito
-  interesesCausadosAlTraslado      Float    @default(0) // intereses moratorios ya causados al momento del traslado
-  flexibilidadModalidadUso String? // BASICA | PREMIUM (snapshot de la modalidad del préstamo al momento del uso)
-
   // === Anulación (soft-delete v4.0) ===
   // El hard-delete quedó deprecado. Anular marca estado='ANULADO' y conserva el registro.
   motivoAnulacion String?
@@ -643,21 +432,11 @@ model Pago {
   reciboHash      String?  // SHA-256 del contenido del recibo (verificación pública)
   reciboFechaEmision DateTime?
 
-  // === Recordatorio automático de pago (v4.4) ===
-  // Fecha del último recordatorio automático enviado al cliente por el cron diario.
-  // Se marca para evitar enviar múltiples recordatorios por la misma cuota.
-  // El cron consulta los Pago con fechaVencimiento entre hoy y mañana, y envía
-  // el recordatorio solo si recordatorioEnviadoEn es null o es de un día anterior.
-  recordatorioEnviadoEn DateTime?
-  recordatorioMedios    String?  // "WHATSAPP", "EMAIL", "AMBOS" — qué medios se usaron
-
   createdAt       DateTime @default(now())
 
   @@index([estado, fechaPago])
   @@index([prestamoId, numeroCuota])
   @@index([esSoloIntereses])
-  @@index([esFlexibilidadFinanciera])
-  @@index([fechaVencimiento, estado])
 }
 
 // -----------------------------------------------------
@@ -837,7 +616,7 @@ model AlertaLegal {
 // -----------------------------------------------------
 model CajaMenor {
   id              String   @id @default(cuid())
-  codigo          String   @unique  // CAJA-MORA | CAJA-GARANTIA | CAJA-FLEXIBILIDAD | CAJA-INGRESOS-CAUSADOS | CAJA-PAGARE-CARTA | CAJA-USO-PLATAFORMA
+  codigo          String   @unique  // CAJA-MORA | CAJA-GARANTIA
   nombre          String
   descripcion     String?
   saldoActual     Float    @default(0)
@@ -896,10 +675,8 @@ model FirmaElectronica {
 
   // === Verificación de identidad con fotos ===
   fotoDocumento   String?  // base64 foto del documento de identidad (frente)
-  fotoDocumentoReverso String? // base64 foto del reverso de la cédula
   fotoSelfie      String?  // base64 foto selfie sosteniendo la cédula
-  fotoDocumentoHash String? // hash SHA-256 de la foto del documento (frente)
-  fotoDocumentoReversoHash String? // hash SHA-256 del reverso
+  fotoDocumentoHash String? // hash SHA-256 de la foto del documento
   fotoSelfieHash  String?  // hash SHA-256 del selfie
   ipFirma         String?  // IP desde donde se firmó
   userAgent       String?  // navegador/dispositivo usado
@@ -959,10 +736,6 @@ model NotificacionLog {
   // PENDIENTE | ENVIADO | FALLIDO | PENDIENTE_MANUAL
   error           String?
   linkWaMe        String?  // enlace wa.me para envío manual
-  // v4.12 (QA M09 TC-NOT-003): wamid devuelto por WhatsApp Cloud API de Meta
-  wamid           String?  // WhatsApp Message ID (cuando se envía vía Cloud API)
-  // v4.12 (QA M09 TC-NOT-014): canal usado para el envío
-  canal           String?  // WHATSAPP | EMAIL | WA_ME_LINK
   fechaEnvio      DateTime @default(now())
 }
 
@@ -980,36 +753,10 @@ model Campaña {
   fechaFin        DateTime?
   activa          Boolean  @default(true)
   destinatarios   String   @default("TODOS") // TODOS | CATEGORIA-1 | CATEGORIA-2...
-  // === Selección manual de clientes (2026-08-20) ===
-  // Si destinatarios="SELECCIONADOS", la campaña solo se muestra a los
-  // clientes que estén en la tabla intermedia CampañaCliente.
-  // Si destinatarios="TODOS", se muestra a todos los clientes (ignora la tabla).
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
   vistas          CampañaVista[]
-  clientesSeleccionados CampañaCliente[]
-}
-
-// === Tabla intermedia: Campaña ↔ Cliente (2026-08-20) ===
-// Permite seleccionar manualmente a qué clientes se les activa una campaña.
-// Solo aplica cuando Campaña.destinatarios = "SELECCIONADOS".
-// Si destinatarios = "TODOS", todos los clientes ven la campaña (ignora esta tabla).
-model CampañaCliente {
-  id          String   @id @default(cuid())
-  campañaId   String
-  clienteId   String
-  fechaAsignacion DateTime @default(now())
-  // === Notificación al cliente ===
-  // marca si el cliente ya vio la campaña en el portal (para no volver a notificar).
-  vistaEnPortal   Boolean  @default(false)
-  fechaVistaPortal DateTime?
-
-  campaña     Campaña  @relation(fields: [campañaId], references: [id], onDelete: Cascade)
-  cliente     Cliente  @relation(fields: [clienteId], references: [id], onDelete: Cascade)
-
-  @@unique([campañaId, clienteId])  // evita duplicados
-  @@index([clienteId])  // optimiza la consulta "campañas de este cliente"
 }
 
 model CampañaVista {
@@ -1345,21 +1092,6 @@ model SolicitudWeb {
   navegador        String?
   canalOrigen      String   @default("PORTAL_CLIENTE")
   estado           String   @default("PENDIENTE")
-  // === Flujo de firma del lado del cliente ===
-  // PENDIENTE:    solicitud creada, esperando revisión del administrador
-  // EN_FIRMA_CLIENTE: el admin aprobó/creó préstamo, el cliente debe cargar fotos + firma + OTP
-  // FIRMA_COMPLETADA: el cliente terminó el flujo de firma, préstamo quedó ACTIVO
-  estadoFlujoFirma String  @default("PENDIENTE")
-  // === Flexibilidad financiera elegida por el cliente en la simulación ===
-  flexibilidadFinanciera Boolean @default(false)
-  flexibilidadModalidad  String? // BASICA | PREMIUM
-  flexibilidadCosto      Float   @default(0)
-  // === Renovación Anticipada elegida por el cliente en la simulación ===
-  // Beneficio opcional con cobro único de $9.900 COP. Se persiste aquí
-  // para que el administrador pueda ver la elección del cliente al revisar
-  // la solicitud y se preserve al convertir en préstamo.
-  renovacionAnticipada   Boolean @default(false)
-  renovacionAnticipadaCosto Float @default(0)
   observaciones    String?
   revisadoPor      String?
   fechaRevision    DateTime?
@@ -1866,16 +1598,9 @@ model SolicitudNuevoCliente {
   // Datos financieros
   ocupacion         String?
   ingresoMensual    Float?
-  // Crédito solicitado — campos eliminados del formulario (lo maneja el portal del cliente)
-  // Se mantienen en DB por compatibilidad histórica pero son opcionales y se cargan en null
-  valorSolicitado   Float?
+  valorSolicitado   Float
   plazoDeseado      Int?     // meses
   destinoCredito    String?  // para qué necesita el crédito
-  
-  // Datos bancarios (obligatorios para disbursar préstamos)
-  banco             String?
-  tipoCuenta        String?  // AHORROS | CORRIENTE
-  numeroCuenta      String?
   
   // Referido
   referidoPorNombre String?
@@ -1899,13 +1624,8 @@ model SolicitudNuevoCliente {
   fotoSelfieNombre       String?
 
   // Estado
-  estado            String   @default("PENDIENTE") // PENDIENTE | REVISADA | APROBADA | RECHAZADA | CONVERTIDA | DEVUELTA
+  estado            String   @default("PENDIENTE") // PENDIENTE | REVISADA | APROBADA | RECHAZADA | CONVERTIDA
   observaciones     String?
-  // === Motivo de devolución (cuando el gestor devuelve la solicitud al cliente
-  // para que corrija fotos, datos, etc.) ===
-  motivoDevolucion  String?
-  fechaDevolucion   DateTime?
-  vecesDevuelta     Int      @default(0)
   revisadoPorId     String?
   revisadoPorNombre String?
   fechaRevision     DateTime?
@@ -2188,517 +1908,4 @@ model AlertaFinanciera {
 
   @@index([ambito, atendida])
   @@index([createdAt])
-}
-
-// =====================================================
-// HUB IA — Asistente IA Operativo (v1.0)
-// Modelos para el Hub de Inteligencia Artificial:
-//   - HubIAConfig: configuración de proveedores (API keys cifradas)
-//   - HubIAConversation: sesiones de chat del admin
-//   - HubIAMensaje: mensajes (user/assistant/tool) con tokens y costo
-//   - HubIAAccion: acciones ejecutadas por la IA (auditoría detallada)
-//   - HubIAUso: tracking de consumo por proveedor/modelo/usuario
-// =====================================================
-
-model HubIAConfig {
-  id              String   @id @default(cuid())
-  clave           String   @unique
-  valor           String   // API keys se almacenan cifradas con encryptSensitive()
-  descripcion     String?
-  updatedAt       DateTime @updatedAt
-  updatedBy       String?
-}
-
-model HubIAConversation {
-  id              String   @id @default(cuid())
-  usuarioId       String?
-  usuarioNombre   String
-  titulo          String   @default("Nueva conversación")
-  provider        String?  // zai | openai | auto
-  modelo          String?
-  modo            String   @default("consultivo") // consulta | planificacion | supervisado | ejecucion | automatico
-  pausada         Boolean  @default(false)
-  contexto        String?  // JSON con estado/resumen
-  mensajeCount    Int      @default(0)
-  totalTokens     Int      @default(0)
-  totalCosto      Float    @default(0)
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-  mensajes        HubIAMensaje[]
-
-  @@index([usuarioId])
-  @@index([createdAt])
-}
-
-model HubIAMensaje {
-  id              String   @id @default(cuid())
-  conversationId  String
-  role            String   // user | assistant | tool | system
-  contenido       String
-  provider        String?  // zai | openai | fallback
-  modelo          String?
-  toolName        String?  // si role=tool, nombre de la herramienta
-  toolCallId      String?
-  toolArgs        String?  // JSON de args
-  toolResult      String?  // JSON de resultado
-  tokensInput     Int      @default(0)
-  tokensOutput    Int      @default(0)
-  costo           Float    @default(0)
-  latencyMs       Int      @default(0)
-  aprobado        Boolean? // null si no requiere aprobación, true/false si sí
-  aprobadoPor     String?
-  aprobadoAt      DateTime?
-  createdAt       DateTime @default(now())
-  conversation    HubIAConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
-
-  @@index([conversationId])
-  @@index([createdAt])
-}
-
-model HubIAAccion {
-  id              String   @id @default(cuid())
-  conversationId  String?
-  usuarioId       String?
-  usuarioNombre   String
-  provider        String?
-  modelo          String?
-  toolName        String
-  modulo          String   // clientes | prestamos | pagos | configuracion | sistema
-  entidadId       String?
-  entidadNombre   String?
-  args            String?  // JSON
-  resultado       String?  // JSON
-  estado          String   // propuesta | aprobada | ejecutada | fallida | bloqueada
-  riesgo          String   @default("bajo") // bajo | medio | alto | critico
-  ipOrigen        String?
-  userAgent       String?
-  errorMessage    String?
-  createdAt       DateTime @default(now())
-
-  @@index([conversationId])
-  @@index([usuarioId])
-  @@index([toolName])
-  @@index([estado])
-  @@index([createdAt])
-}
-
-model HubIAUso {
-  id              String   @id @default(cuid())
-  usuarioId       String?
-  usuarioNombre   String
-  conversationId  String?
-  provider        String   // zai | openai
-  modelo          String
-  tokensInput     Int
-  tokensOutput    Int
-  costo           Float
-  exito           Boolean  @default(true)
-  errorMessage    String?
-  createdAt       DateTime @default(now())
-
-  @@index([usuarioId])
-  @@index([provider, createdAt])
-  @@index([createdAt])
-}
-
-// =====================================================
-// MemoriaBot — Memoria persistente de conversaciones por bot + usuario
-// Permite que cada bot recuerde el contexto, hechos clave y preferencias
-// del usuario a lo largo de múltiples sesiones.
-// =====================================================
-model MemoriaBot {
-  id              String   @id @default(cuid())
-  botTipo         String   // CHAT_CLIENTES | ADMIN_SISTEMA | JURIDICO | PAGOS | etc.
-  usuarioId       String?  // ID del usuario/cliente/abogado (null si es anónimo)
-  usuarioNombre   String?  // nombre legible del usuario
-  conversacionId  String?  // ID de la conversación (ConversacionChat.id / HubIAConversation.id)
-  // === Tipo de memoria ===
-  tipoMemoria     String   // CONTEXTO | HECHO | PREFERENCIA | RESUMEN
-  //  CONTEXTO     = últimos N mensajes del diálogo (rol + texto)
-  //  HECHO        = dato específico que el bot debe recordar (ej: "cliente tiene 2 préstamos")
-  //  PREFERENCIA  = configuración del usuario (ej: "prefiere ser llamado por nombre")
-  //  RESUMEN      = síntesis periódica de la conversación (cuando se excede el límite)
-  categoria       String?  // ej: "SALDOS", "PAGOS", "MORA", "DATOS_PERSONALES"
-  contenido       String   // texto de la memoria
-  // === Metadatos ===
-  peso            Float    @default(1.0)  // peso de relevancia (decae con el tiempo)
-  vecesRecordada  Int      @default(0)    // cuántas veces se ha usado esta memoria
-  ultimaRecuperada DateTime?
-  expiresAt       DateTime? // null = no expira; fecha = memoria temporal
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-
-  @@index([botTipo, usuarioId])
-  @@index([botTipo, conversacionId])
-  @@index([tipoMemoria])
-  @@index([createdAt])
-}
-
-// =====================================================
-// AprendizajeBot — Aprendizajes persistentes generados por uso real
-// Cuando el bot detecta que una nueva pregunta no está en el dataset,
-// la registra aquí para que el equipo la revise y apruebe.
-// =====================================================
-model AprendizajeBot {
-  id              String   @id @default(cuid())
-  botTipo         String   // CHAT_CLIENTES | JURIDICO | PAGOS | etc.
-  pregunta        String   // pregunta original del usuario
-  respuestaDada   String?  // respuesta que el bot dio (puede ser "no encontrada")
-  respuestaSugerida String? // respuesta propuesta para futuras consultas
-  categoria       String?  // categoría tentativa
-  frecuencia      Int      @default(1)  // cuántas veces se ha visto esta pregunta
-  fuente          String   @default("USUARIO")  // USUARIO | ADMIN | SISTEMA | ENTRENAMIENTO
-  estado          String   @default("PENDIENTE")  // PENDIENTE | APROBADO | RECHAZADO | INTEGRADO
-  aprobadoPor     String?
-  aprobadoAt      DateTime?
-  observaciones   String?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-
-  @@index([botTipo, estado])
-  @@index([botTipo, categoria])
-  @@index([estado])
-  @@index([createdAt])
-}
-
-// =====================================================
-// PLANTILLAS — Mensajes editables para Email y WhatsApp
-// =====================================================
-// Plantillas centralizadas de todos los mensajes que el sistema
-// envía a los clientes (correo electrónico y WhatsApp).
-//
-// El administrador puede editar, crear, activar/desactivar y
-// eliminar plantillas desde el módulo Administración → Plantillas.
-//
-// Las plantillas con `sistema=true` son plantillas base que no
-// pueden eliminarse (solo editarse), para garantizar que el
-// sistema siempre tenga un mensaje por defecto para cada evento.
-//
-// Variables: se usan marcadores {{variable}} que son reemplazados
-// al momento de enviar. La lista de variables disponibles está en
-// el campo `variables` (JSON array de strings).
-// =====================================================
-model Plantilla {
-  id              String   @id @default(cuid())
-  // Código único de la plantilla (ej: SOLICITUD_PRESTAMO, RECORDATORIO_PAGO)
-  codigo          String   @unique
-  // Nombre legible para mostrar en la UI
-  nombre          String
-  // Tipo de canal: EMAIL | WHATSAPP
-  tipo            String
-  // Categoría agrupadora (ej: PRÉSTAMOS, PAGOS, FIRMA, SEGURIDAD, GENERAL)
-  categoria       String   @default("GENERAL")
-  // Descripción helper para el admin
-  descripcion     String?
-  // Asunto del correo (solo para EMAIL, null para WHATSAPP)
-  asunto          String?
-  // Contenido en texto plano (con marcadores {{variable}})
-  contenido       String
-  // Contenido HTML opcional (solo para EMAIL)
-  contenidoHtml   String?
-  // Lista de variables disponibles (JSON array de strings, ej: ["clienteNombre","codigo","monto"])
-  variables       String   @default("[]")
-  // ¿Es plantilla del sistema? (no se puede eliminar, solo editar)
-  sistema         Boolean  @default(false)
-  // ¿Está activa? Si false, no se usa al enviar (se cae al fallback)
-  activa          Boolean  @default(true)
-  // Evento que dispara esta plantilla (ej: prestamo.solicitud, pago.recordatorio, firma.solicitada)
-  evento          String?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-
-  @@index([tipo, activa])
-  @@index([categoria])
-  @@index([evento])
-}
-
-// =====================================================
-// 🏆 PASAPORTE DE CONFIANZA — Modelos para la experiencia
-// premium del portal del cliente que convierte el comportamiento
-// de pago en una trayectoria visible, dinámica y motivadora.
-//
-// Concepto: "CADA PAGO CONSTRUYE TU SIGUIENTE OPORTUNIDAD."
-//
-// NO es un score crediticio. Es una trayectoria dentro de la entidad.
-// =====================================================
-
-// -----------------------------------------------------
-// CompromisoPago — Compromisos que el cliente registra
-// cuando tiene una novedad de pago (fecha excedida, pago
-// parcial, etc.). El cliente indica la razón, una fecha
-// propuesta y un valor comprometido.
-// El sistema verifica si el pago se cumple en la fecha.
-// -----------------------------------------------------
-model CompromisoPago {
-  id                  String   @id @default(cuid())
-  clienteId           String
-  cliente             Cliente  @relation("ClienteCompromisos", fields: [clienteId], references: [id])
-  prestamoId          String
-  prestamo            Prestamo @relation(fields: [prestamoId], references: [id])
-  pagoId              String?  // referencia al Pago específico (si aplica)
-  numeroCuota         Int?     // número de cuota asociada
-
-  // Razón del incumplimiento (opciones configurables + opción "otra")
-  razon               String   // SIN_DISPONIBILIDAD | INCIDENTE_TEMPORAL | ESPERANDO_INGRESO | PROBLEMA_MEDIO_PAGO | SITUACION_PERSONAL | OTRO
-  razonOtroTexto      String?  // texto libre cuando razon=OTRO
-  observacionCliente  String?  // observación adicional del cliente
-
-  // Compromiso
-  fechaComprometida   DateTime  // fecha propuesta por el cliente
-  valorComprometido   Float     // monto que el cliente se compromete a pagar
-  moneda              String   @default("COP")
-
-  // Estado del compromiso
-  estado              String   @default("REGISTRADO")
-  // REGISTRADO | PROXIMO | CUMPLIDO | INCUMPLIDO | CANCELADO
-  fechaCumplimiento   DateTime?  // cuando el sistema detecta el pago y marca CUMPLIDO
-  pagoCumplimientoId  String?    // ID del Pago que cumplió el compromiso
-  diasRetrasoCumplimiento Int?   // días de retraso vs la fecha comprometida (si se cumplió tarde)
-
-  // Si el cliente incumple y registra una nueva situación
-  actualizaciones     String?  // JSON array con historial de actualizaciones [{fecha, razon, valor, observacion}]
-  ultimaActualizacion DateTime?
-
-  // Auditoría
-  ipOrigen            String?
-  userAgent           String?
-  registradoEn        DateTime @default(now())
-  createdAt           DateTime @default(now())
-  updatedAt           DateTime @updatedAt
-
-  @@index([clienteId, estado])
-  @@index([prestamoId])
-  @@index([estado, fechaComprometida])
-}
-
-// -----------------------------------------------------
-// PasaporteConfig — Reglas configurables por el administrador
-// para el cálculo del nivel de trayectoria y la elegibilidad
-// de renovación. Se almacena como una sola fila (clave='PASAPORTE_CONFIG_GLOBAL').
-// -----------------------------------------------------
-model PasaporteConfig {
-  id                  String   @id @default(cuid())
-  clave               String   @unique  // "PASAPORTE_CONFIG_GLOBAL"
-  activo              Boolean  @default(true)
-
-  // === Umbrales de niveles (porcentaje de cumplimiento histórico) ===
-  // Ordenados de menor a mayor: EN_CONSTRUCCION < CONFIABLE < DESTACADO < PREFERENTE
-  nivelEnConstruccionMax Float  @default(60.0)  // 0% - 60% → EN_CONSTRUCCION
-  nivelConfiableMax      Float  @default(75.0)  // 60% - 75% → CONFIABLE
-  nivelDestacadoMax      Float  @default(90.0)  // 75% - 90% → DESTACADO
-  // > 90% → PREFERENTE
-
-  // === Criterios de elegibilidad para renovación ===
-  // El cliente puede explorar renovación si cumple TODOS estos criterios:
-  renovacionCumplimientoMinimo  Float   @default(75.0)  // % mínimo de cumplimiento histórico
-  renovacionCreditosMinimos     Int     @default(1)     // créditos completados mínimos
-  renovacionCompromisoCumplimiento Float @default(70.0) // % mínimo de cumplimiento de compromisos
-  renovacionProximidadFinalMeses Int    @default(2)     // meses máximos para considerar "próximo a finalizar"
-
-  // === Configuración de novedades ===
-  novedadDiasAntesVencimiento   Int     @default(3)   // días antes del vencimiento para alertar "próximo"
-  novedadDiasDespuesExcedido    Int     @default(1)   // días después del vencimiento para alertar "excedido"
-
-  // === Mensajes personalizables ===
-  mensajeEnConstruccion  String?  // mensaje para nivel EN_CONSTRUCCION
-  mensajeConfiable       String?
-  mensajeDestacado       String?
-  mensajePreferente      String?
-
-  // Metadata
-  actualizadoPor         String?
-  createdAt              DateTime @default(now())
-  updatedAt              DateTime @updatedAt
-}
-
-// -----------------------------------------------------
-// PasaporteAuditoria — Registro inmutable de acciones
-// importantes del Pasaporte de Confianza.
-// Quién / cuándo / qué crédito / qué acción / valor / estado.
-// -----------------------------------------------------
-model PasaporteAuditoria {
-  id                  String   @id @default(cuid())
-  clienteId           String
-  cliente             Cliente  @relation("ClientePasaporteAuditoria", fields: [clienteId], references: [id])
-  prestamoId          String?
-  prestamo            Prestamo? @relation(fields: [prestamoId], references: [id])
-  compromisoId        String?  // referencia al CompromisoPago si aplica
-  tipoAccion          String   // CONSULTA_PASAPORTE | COMPROMISO_REGISTRADO | COMPROMISO_ACTUALIZADO | COMPROMISO_CUMPLIDO | COMPROMISO_INCUMPLIDO | SIMULACION_RENOVACION | NOVEDAD_DETECTADA | NOVEDAD_INFORMADA
-  descripcion         String
-  valor               Float?
-  fechaComprometida   DateTime?
-  estado              String?
-  // Metadata
-  ipOrigen            String?
-  userAgent           String?
-  fecha               DateTime @default(now())
-
-  @@index([clienteId, fecha])
-  @@index([tipoAccion])
-  @@index([prestamoId])
-}
-
-// =====================================================
-// ====== PORTAL DEL CONTADOR ======
-// Módulo contable independiente: empresas, terceros, PUC,
-// comprobantes, asientos, períodos y declaraciones.
-// Multi-empresa estricta (todas las queries filtran por empresaId).
-// =====================================================
-
-model ContEmpresa {
-  id              String   @id @default(cuid())
-  razonSocial     String
-  nit             String   @unique
-  dv              String?
-  tipoEmpresa     String   // SOCIEDAD_LIMITADA | SA | SAS | PERSONA_NATURAL | etc
-  responsabilidades String? // JSON array
-  regimen         String?  // COMUN | SIMPLIFICADO | GRAN_CONTRIBUYENTE
-  ciiu            String?
-  actividades     String?  // JSON array
-  municipio       String?
-  departamento    String?
-  representanteLegal String?
-  contadorNombre  String?
-  revisorFiscal   String?
-  marcoContable   String?  // NIIF_PYMES | NIIF_COMPLETO | etc
-  configuracionTributaria String? // JSON
-  activa          Boolean  @default(true)
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-
-  terceros        ContTercero[]
-  cuentas         ContCuentaPUC[]
-  comprobantes    ContComprobante[]
-  periodos        ContPeriodo[]
-  declaraciones   ContDeclaracion[]
-}
-
-model ContTercero {
-  id              String   @id @default(cuid())
-  empresaId       String
-  empresa         ContEmpresa @relation(fields: [empresaId], references: [id])
-  tipoDocumento   String   // CC | NIT | CE | PA
-  numeroDocumento String
-  tipoTercero     String   // CLIENTE | PROVEEDOR | EMPLEADO | SOCIO | ACCIONISTA | BANCO | ENTIDAD_PUBLICA
-  nombres         String?
-  apellidos       String?
-  razonSocial     String?
-  direccion       String?
-  telefono        String?
-  email           String?
-  municipio       String?
-  departamento    String?
-  activo          Boolean  @default(true)
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-
-  @@unique([empresaId, tipoDocumento, numeroDocumento])
-  @@index([empresaId, tipoTercero])
-}
-
-model ContCuentaPUC {
-  id              String   @id @default(cuid())
-  empresaId       String
-  empresa         ContEmpresa @relation(fields: [empresaId], references: [id])
-  codigo          String   // ej: 1105, 2205, 4135
-  nombre          String
-  naturaleza      String   // DEBITO | CREDITO
-  tipo            String   // CLASE | GRUPO | CUENTA | SUBCUENTA | AUXILIAR
-  cuentaPadreId   String?
-  cuentaPadre     ContCuentaPUC? @relation("CuentaPUCArbol", fields: [cuentaPadreId], references: [id])
-  subcuentas      ContCuentaPUC[] @relation("CuentaPUCArbol")
-  asientos        ContAsiento[]
-  terceroRequerido Boolean @default(false)
-  centroCostoRequerido Boolean @default(false)
-  tratamientoTributario String?
-  estadoFinanciero String? // BALANCE | RESULTADOS | ORDEN
-  estado          String   @default("ACTIVA") // ACTIVA | INACTIVA
-  saldo           Float    @default(0)
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-
-  @@unique([empresaId, codigo])
-  @@index([empresaId, cuentaPadreId])
-}
-
-model ContPeriodo {
-  id              String   @id @default(cuid())
-  empresaId       String
-  empresa         ContEmpresa @relation(fields: [empresaId], references: [id])
-  anio            Int
-  mes             Int      // 1-12 (0 = anual)
-  estado          String   @default("ABIERTO") // ABIERTO | EN_CIERRE | CERRADO | REABIERTO
-  fechaCierre     DateTime?
-  cerradoPor      String?
-  motivoReapertura String?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-
-  comprobantes    ContComprobante[]
-
-  @@unique([empresaId, anio, mes])
-}
-
-model ContComprobante {
-  id              String   @id @default(cuid())
-  empresaId       String
-  empresa         ContEmpresa @relation(fields: [empresaId], references: [id])
-  periodoId       String
-  periodo         ContPeriodo @relation(fields: [periodoId], references: [id])
-  numero          String   // ej: CBTE-2026-001
-  tipo            String   // INGRESO | EGRESO | DIARIO | AJUSTE | RECLASIFICACION | REVERSO | CIERRE
-  fechaDocumento  DateTime
-  fechaContable   DateTime
-  concepto        String
-  descripcion     String?
-  totalDebitos    Float    @default(0)
-  totalCreditos   Float    @default(0)
-  estado          String   @default("BORRADOR") // BORRADOR | APROBADO | ANULADO
-  creadoPorId     String?
-  creadoPorNombre String?
-  aprobadoPorId   String?
-  aprobadoPorNombre String?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-
-  asientos        ContAsiento[]
-
-  @@unique([empresaId, numero])
-  @@index([empresaId, periodoId, estado])
-}
-
-model ContAsiento {
-  id              String   @id @default(cuid())
-  comprobanteId   String
-  comprobante     ContComprobante @relation(fields: [comprobanteId], references: [id])
-  cuentaId        String
-  cuenta          ContCuentaPUC @relation(fields: [cuentaId], references: [id])
-  terceroId       String?
-  centroCosto     String?
-  debito          Float    @default(0)
-  credito         Float    @default(0)
-  descripcion     String?
-  createdAt       DateTime @default(now())
-
-  @@index([comprobanteId, cuentaId])
-}
-
-model ContDeclaracion {
-  id              String   @id @default(cuid())
-  empresaId       String
-  empresa         ContEmpresa @relation(fields: [empresaId], references: [id])
-  tipo            String   // RENTA | IVA | RETENCION | ICA | EXOGENA
-  periodoFiscal   String   // ej: "2026", "2026-01", "2026-Q1"
-  anio            Int
-  estado          String   @default("BORRADOR") // BORRADOR | EN_REVISION | APROBADA | PRESENTADA | ARCHIVADA
-  valorAPagar     Float    @default(0)
-  valorPagado     Float    @default(0)
-  fechaVencimiento DateTime?
-  fechaPresentacion DateTime?
-  presentadaPor   String?
-  observaciones   String?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-
-  @@index([empresaId, tipo, anio])
 }

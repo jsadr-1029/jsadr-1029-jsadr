@@ -124,11 +124,6 @@ export async function GET(
         fechaRevision: true,
         fechaConversion: true,
         prestamoCreadoId: true,
-        // === Campos nuevos: flujo de firma + flexibilidad ===
-        estadoFlujoFirma: true,
-        flexibilidadFinanciera: true,
-        flexibilidadModalidad: true,
-        flexibilidadCosto: true,
       },
     })
 

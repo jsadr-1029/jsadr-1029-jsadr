@@ -119,7 +119,7 @@ export function CajasView({ onChanged }: { onChanged: () => void }) {
     <div className="space-y-6">
       <PageHeader
         title="Cajas Menores"
-        subtitle="Contabilidad de Caja de Mora, Fondo de Garantía, Flexibilidad Financiera, Ingresos Causados, Pagaré + Carta y Uso Plataforma"
+        subtitle="Contabilidad de Caja de Mora y Fondo de Garantía"
         icon={<Wallet className="w-5 h-5" />}
       />
 
@@ -314,7 +314,7 @@ export function CajasView({ onChanged }: { onChanged: () => void }) {
                 id="referencia"
                 value={referencia}
                 onChange={(e) => setReferencia(e.target.value)}
-                placeholder="Código de solicitud, factura, etc."
+                placeholder="Código de préstamo, factura, etc."
               />
             </div>
             <DialogFooter>

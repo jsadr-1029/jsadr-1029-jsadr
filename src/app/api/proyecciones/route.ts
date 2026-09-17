@@ -2,7 +2,6 @@ import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { calcularPrestamo } from '@/lib/finanzas'
 import { sanitizeError } from '@/lib/error-handler'
-import { excluirPruebaPrestamo } from '@/lib/cliente-prueba'
 
 export async function GET() {
   try {
@@ -15,11 +14,11 @@ export async function GET() {
     // - Proyección mensual 12 meses (capital + interés)
     // - Desglose por categoría
     // - Desglose por cliente (top 15)
-    // - Desglose por solicitud (top 20)
+    // - Desglose por préstamo (top 20)
     // =====================================================
 
     const prestamosActivos = await db.prestamo.findMany({
-      where: { estado: { in: ['ACTIVO', 'EN_MORA'] }, ...excluirPruebaPrestamo() },
+      where: { estado: { in: ['ACTIVO', 'EN_MORA'] } },
       include: {
         cliente: { include: { categoria: true } },
         categoria: true,
@@ -207,7 +206,7 @@ export async function GET() {
       .sort((a, b) => b.capitalActivo - a.capitalActivo)
       .slice(0, 15)
 
-    // === 5. Desglose por solicitud (top 20) ===
+    // === 5. Desglose por préstamo (top 20) ===
     const porPrestamo = prestamosActivos
       .map((p) => ({
         codigo: p.codigo,

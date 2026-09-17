@@ -47,19 +47,17 @@ import {
   QrCode,
   Upload,
   Trash2,
-  FileText,
 } from 'lucide-react'
 import { BotIcons } from '@/components/views/BotIcons'
 import { ReportesUnificadoView } from '@/components/views/ReportesUnificadoView'
 import { ExportarView } from '@/components/views/ExportarView'
 import { ContabilidadUnificadaView } from '@/components/views/ContabilidadUnificadaView'
-import { PlantillasPanel } from '@/components/views/PlantillasPanel'
 
 export function AdminView({ onChanged }: { onChanged: () => void }) {
   const [tab, setTab] = useState('reportes')
   const { toast } = useToast()
 
-  // Función que abre un solicitud despachando un CustomEvent global.
+  // Función que abre un préstamo despachando un CustomEvent global.
   // El componente page.tsx (o cualquier listener) puede capturar este evento
   // para mostrar el modal de detalle.
   const abrirPrestamo = (id: string) => {
@@ -83,7 +81,7 @@ export function AdminView({ onChanged }: { onChanged: () => void }) {
 
       <Tabs value={tab} onValueChange={setTab}>
         {/* FIX MOBILE (2026-08-05): TabsList horizontal con scroll en móvil, grid en desktop */}
-        <TabsList className="flex overflow-x-auto whitespace-nowrap md:grid md:grid-cols-7 w-full no-scrollbar">
+        <TabsList className="flex overflow-x-auto whitespace-nowrap md:grid md:grid-cols-6 w-full no-scrollbar">
           <TabsTrigger value="reportes">
             <BarChart3 className="w-4 h-4 mr-1.5" />
             <span className="hidden sm:inline">Reportes</span>
@@ -103,10 +101,6 @@ export function AdminView({ onChanged }: { onChanged: () => void }) {
           <TabsTrigger value="contabilidad">
             <Calculator className="w-4 h-4 mr-1.5" />
             <span className="hidden sm:inline">Contabilidad y Plan</span>
-          </TabsTrigger>
-          <TabsTrigger value="plantillas">
-            <FileText className="w-4 h-4 mr-1.5" />
-            <span className="hidden sm:inline">Plantillas</span>
           </TabsTrigger>
           <TabsTrigger value="exportar">
             <Download className="w-4 h-4 mr-1.5" />
@@ -128,9 +122,6 @@ export function AdminView({ onChanged }: { onChanged: () => void }) {
         </TabsContent>
         <TabsContent value="contabilidad">
           <ContabilidadUnificadaView />
-        </TabsContent>
-        <TabsContent value="plantillas">
-          <PlantillasPanel />
         </TabsContent>
         <TabsContent value="exportar">
           <ExportarView />
@@ -218,9 +209,9 @@ function CuentasPanel({ onChanged }: { onChanged: () => void }) {
       return
     }
 
-    // Validar tamaño (máximo 10MB)
-    if (file.size > 10 * 1024 * 1024) {
-      toast({ title: 'Error', description: 'La imagen es demasiado grande (máximo 10MB)', variant: 'destructive' })
+    // Validar tamaño (máximo 5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      toast({ title: 'Error', description: 'La imagen es demasiado grande (máximo 5MB)', variant: 'destructive' })
       return
     }
 
@@ -721,7 +712,7 @@ function CategoriasPanel({ onChanged }: { onChanged: () => void }) {
                   <TableCell className="font-mono text-xs">{c.codigo}</TableCell>
                   <TableCell className="text-sm font-medium">{c.nombre}</TableCell>
                   <TableCell className="text-xs">{formatearMoneda(c.montoMinimo)}</TableCell>
-                  <TableCell className="text-xs">{c.montoMaximo > 0 ? formatearMoneda(c.montoMaximo) : 'Sin límite'}</TableCell>
+                  <TableCell className="text-xs">{formatearMoneda(c.montoMaximo)}</TableCell>
                   <TableCell>
                     <Badge variant="outline" className="text-blue-700">{c.tasaInteresAnual}%</Badge>
                   </TableCell>
@@ -906,10 +897,10 @@ function ControlPanel() {
               <strong>DIAS_JURIDICO:</strong> Días de mora para iniciar automáticamente el cobro jurídico (default: 60).
             </li>
             <li>
-              <strong>TASA_MORA_DEFAULT:</strong> Tasa moratoria anual por defecto para nuevos solicitudes.
+              <strong>TASA_MORA_DEFAULT:</strong> Tasa moratoria anual por defecto para nuevos préstamos.
             </li>
             <li>
-              <strong>FONDO_GARANTIA_PCT:</strong> Porcentaje del primer solicitud que se carga al Fondo de Garantía (default: 5%).
+              <strong>FONDO_GARANTIA_PCT:</strong> Porcentaje del primer préstamo que se carga al Fondo de Garantía (default: 5%).
             </li>
             <li>
               <strong>MORA_COMPUESTA:</strong> Activa el cálculo de mora compuesta diaria (recomendado: true).

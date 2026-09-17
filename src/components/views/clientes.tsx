@@ -154,7 +154,7 @@ export function ClientesView({ navigate }: { navigate: (v: any) => void }) {
                       {c.saldoPendiente > 0 ? (
                         <div>
                           <p className="font-semibold text-slate-900">{formatCOP(c.saldoPendiente)}</p>
-                          <p className="text-xs text-slate-500">{c.prestamosActivos} solicitud(s)</p>
+                          <p className="text-xs text-slate-500">{c.prestamosActivos} préstamo(s)</p>
                         </div>
                       ) : (
                         <span className="text-xs text-slate-400">Sin saldo</span>
@@ -321,19 +321,16 @@ function NuevoClienteModal({ open, onClose, onCreated }: { open: boolean; onClos
                 <SelectValue placeholder="Seleccione una categoría..." />
               </SelectTrigger>
               <SelectContent>
-                {categorias.map((c) => {
-                  const maxStr = c.montoMaximo > 0 ? formatCOP(c.montoMaximo) : 'Sin límite'
-                  return (
+                {categorias.map((c) => (
                   <SelectItem key={c.id} value={c.id}>
                     <div className="flex flex-col">
                       <span className="font-medium">{c.nombre} ({c.codigo})</span>
                       <span className="text-xs text-slate-500">
-                        {formatCOP(c.montoMinimo)} – {maxStr} · {c.tasaInteresAnual}% anual
+                        {formatCOP(c.montoMinimo)} – {formatCOP(c.montoMaximo)} · {c.tasaInteresAnual}% anual
                       </span>
                     </div>
                   </SelectItem>
-                  )
-                })}
+                ))}
               </SelectContent>
             </Select>
           </div>
@@ -352,7 +349,7 @@ function NuevoClienteModal({ open, onClose, onCreated }: { open: boolean; onClos
                 </div>
                 <div>
                   <p className="text-slate-500">Monto máximo</p>
-                  <p className="font-semibold text-slate-900">{categoriaSeleccionada.montoMaximo > 0 ? formatCOP(categoriaSeleccionada.montoMaximo) : 'Sin límite'}</p>
+                  <p className="font-semibold text-slate-900">{formatCOP(categoriaSeleccionada.montoMaximo)}</p>
                 </div>
                 <div>
                   <p className="text-slate-500">Tasa anual</p>

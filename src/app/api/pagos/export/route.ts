@@ -114,7 +114,7 @@ export async function GET(req: NextRequest) {
     const headers = [
       { key: 'codigo', label: 'Código' },
       { key: 'fecha', label: 'Fecha pago' },
-      { key: 'prestamo', label: 'Solicitud' },
+      { key: 'prestamo', label: 'Préstamo' },
       { key: 'cliente', label: 'Cliente' },
       { key: 'cedula', label: 'Cédula' },
       { key: 'telefono', label: 'Teléfono' },

@@ -6,7 +6,7 @@
 // Buzón de solicitudes web provenientes del portal del cliente.
 // Muestra KPIs, buscador, filtros por estado y tabla con
 // acciones: ver detalle, cambiar estado, observaciones,
-// rechazar y convertir en solicitud de solicitud.
+// rechazar y convertir en solicitud de préstamo.
 // =====================================================
 
 import { useEffect, useState, useMemo, useCallback } from 'react'
@@ -60,8 +60,6 @@ import {
   LayoutGrid,
   List,
   ThumbsUp,
-  Sparkles,
-  Repeat,
 } from 'lucide-react'
 
 // === Tipos ===
@@ -95,14 +93,6 @@ interface SolicitudWeb {
   prestamoCreadoId: string | null
   fechaConversion: string | null
   historialEstados: string | null
-  // === Campos nuevos: flujo de firma + flexibilidad ===
-  estadoFlujoFirma?: string
-  flexibilidadFinanciera?: boolean
-  flexibilidadModalidad?: string | null
-  flexibilidadCosto?: number
-  // === Renovación Anticipada (cobro único $9.900) ===
-  renovacionAnticipada?: boolean
-  renovacionAnticipadaCosto?: number
 }
 
 interface SolicitudDetalle extends SolicitudWeb {
@@ -178,7 +168,7 @@ export function BuzonSolicitudesView({ onConvertir }: BuzonSolicitudesViewProps)
 
   // Nuevos estados para mejoras
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
-  const [vista, setVista] = useState<'tabla' | 'cards'>('cards')
+  const [vista, setVista] = useState<'tabla' | 'cards'>('tabla')
   const [bulkAction, setBulkAction] = useState<string>('')
 
   // === Cargar solicitudes ===
@@ -873,12 +863,12 @@ export function BuzonSolicitudesView({ onConvertir }: BuzonSolicitudesViewProps)
                           <Button
                             size="sm"
                             onClick={() => convertirSolicitud(s)}
-                            title="Crear solicitud de solicitud"
+                            title="Crear solicitud de préstamo"
                             disabled={s.estado === 'CONVERTIDA' || s.estado === 'RECHAZADA'}
                             className="bg-gradient-to-r from-violet-600 to-fuchsia-600 hover:from-violet-500 hover:to-fuchsia-500 text-white border-0"
                           >
                             <Plus className="w-4 h-4 mr-1" />
-                            Solicitud
+                            Préstamo
                           </Button>
                         </div>
                       </TableCell>
@@ -975,32 +965,12 @@ export function BuzonSolicitudesView({ onConvertir }: BuzonSolicitudesViewProps)
                       <Button
                         size="sm"
                         variant="outline"
-                        onClick={() => verDetalle(s)}
-                        className="h-7 text-xs"
-                      >
-                        <Eye className="w-3 h-3 mr-1" />
-                        Ver
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
                         onClick={() => contactarWhatsApp(s)}
                         className="h-7 text-xs"
                       >
                         <MessageCircle className="w-3 h-3 mr-1 text-emerald-400" />
                         WhatsApp
                       </Button>
-                      {s.clienteEmail && (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => contactarEmail(s)}
-                          className="h-7 text-xs"
-                        >
-                          <Mail className="w-3 h-3 mr-1 text-sky-400" />
-                          Email
-                        </Button>
-                      )}
                       <Button
                         size="sm"
                         variant="outline"
@@ -1013,40 +983,12 @@ export function BuzonSolicitudesView({ onConvertir }: BuzonSolicitudesViewProps)
                       </Button>
                       <Button
                         size="sm"
-                        variant="outline"
-                        onClick={() => abrirModalEstado(s)}
-                        className="h-7 text-xs"
-                      >
-                        <RefreshCw className="w-3 h-3 mr-1" />
-                        Estado
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => abrirModalObs(s)}
-                        className="h-7 text-xs"
-                      >
-                        <FileText className="w-3 h-3 mr-1" />
-                        Obs.
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => abrirModalRechazar(s)}
-                        disabled={s.estado === 'RECHAZADA' || s.estado === 'CONVERTIDA'}
-                        className="h-7 text-xs text-red-400 border-red-500/30 hover:bg-red-500/10"
-                      >
-                        <XCircle className="w-3 h-3 mr-1" />
-                        Rechazar
-                      </Button>
-                      <Button
-                        size="sm"
                         onClick={() => convertirSolicitud(s)}
                         disabled={s.estado === 'CONVERTIDA' || s.estado === 'RECHAZADA'}
                         className="h-7 text-xs bg-gradient-to-r from-violet-600 to-fuchsia-600 hover:from-violet-500 hover:to-fuchsia-500 text-white border-0"
                       >
                         <Plus className="w-3 h-3 mr-1" />
-                        Solicitud
+                        Préstamo
                       </Button>
                     </div>
                   </CardContent>
@@ -1238,52 +1180,6 @@ export function BuzonSolicitudesView({ onConvertir }: BuzonSolicitudesViewProps)
                   )}
                 </div>
 
-                {/* Beneficios adicionales seleccionados por el cliente */}
-                {(detalle.flexibilidadFinanciera || detalle.renovacionAnticipada) && (
-                  <div className="p-4 rounded-lg bg-amber-500/5 border border-amber-500/20">
-                    <h4 className="text-sm font-semibold mb-3 flex items-center gap-2">
-                      <Sparkles className="w-4 h-4 text-amber-400" />
-                      Beneficios adicionales seleccionados por el cliente
-                    </h4>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                      {detalle.flexibilidadFinanciera && (
-                        <div className="p-3 rounded-md bg-emerald-500/10 border border-emerald-500/30">
-                          <p className="text-xs font-semibold text-emerald-300 flex items-center gap-1.5 mb-1">
-                            <Sparkles className="w-3.5 h-3.5" />
-                            Flexibilidad Financiera
-                          </p>
-                          <p className="text-[11px] text-muted-foreground">
-                            Modalidad: <strong className="text-foreground">{detalle.flexibilidadModalidad || 'BASICA'}</strong>
-                          </p>
-                          <p className="text-[11px] text-muted-foreground">
-                            Costo: <strong className="text-foreground">{formatearMoneda(detalle.flexibilidadCosto || 0)}</strong>
-                          </p>
-                          <p className="text-[10px] text-muted-foreground/80 mt-1">
-                            {(detalle.flexibilidadModalidad === 'PREMIUM' ? '2 usos' : '1 uso')} en la vigencia · se cobra al inicio
-                          </p>
-                        </div>
-                      )}
-                      {detalle.renovacionAnticipada && (
-                        <div className="p-3 rounded-md bg-amber-500/10 border border-amber-500/30">
-                          <p className="text-xs font-semibold text-amber-300 flex items-center gap-1.5 mb-1">
-                            <Repeat className="w-3.5 h-3.5" />
-                            Renovación Anticipada
-                          </p>
-                          <p className="text-[11px] text-muted-foreground">
-                            Costo: <strong className="text-foreground">{formatearMoneda(detalle.renovacionAnticipadaCosto || 0)}</strong>
-                          </p>
-                          <p className="text-[10px] text-muted-foreground/80 mt-1">
-                            Reserva de cupo · prioridad · tasa preferencial · desembolso acelerado
-                          </p>
-                          <p className="text-[10px] text-amber-200/80 mt-1 font-semibold">
-                            ⚠️ Marca la solicitud con prioridad para el asesor
-                          </p>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                )}
-
                 {/* Tabla de Amortización */}
                 {detalle.tablaAmortizacionParseada &&
                   Array.isArray(detalle.tablaAmortizacionParseada) &&
@@ -1456,7 +1352,7 @@ export function BuzonSolicitudesView({ onConvertir }: BuzonSolicitudesViewProps)
                           onClick={() => convertirSolicitud(detalle)}
                           className="bg-gradient-to-r from-violet-600 to-fuchsia-600 hover:from-violet-500 hover:to-fuchsia-500 text-white border-0"
                         >
-                          <Plus className="w-4 h-4 mr-1" /> Crear Solicitud
+                          <Plus className="w-4 h-4 mr-1" /> Crear Préstamo
                         </Button>
                       </>
                     )}

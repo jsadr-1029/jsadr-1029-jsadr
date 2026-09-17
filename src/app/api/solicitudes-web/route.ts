@@ -149,36 +149,7 @@ export async function POST(req: NextRequest) {
       frecuencia,
       primerPagoFecha,
       codigoConfirmacion,
-      flexibilidadFinanciera,
-      flexibilidadModalidad,
-      flexibilidadCosto,
-      renovacionAnticipada,
-      renovacionAnticipadaCosto,
     } = body || {}
-
-    // === Persistir Flexibilidad Financiera (2 tarifas) ===
-    const flexElegida = !!flexibilidadFinanciera
-    const modalidadElegida = (flexibilidadModalidad || 'BASICA').toUpperCase() === 'PREMIUM' ? 'PREMIUM' : 'BASICA'
-    const flexCostoFinal = flexElegida
-      ? (Number(flexibilidadCosto) > 0
-          ? Number(flexibilidadCosto)
-          : (modalidadElegida === 'PREMIUM' ? 34900 : 15000))
-      : 0
-
-    // === Persistir Renovación Anticipada (cobro único $9.900) ===
-    // Beneficio opcional que el cliente puede activar en el simulador del portal.
-    // Le da derecho a reserva anticipada de cupo, prioridad en procesamiento,
-    // tasa preferencial mantenida y desembolso acelerado.
-    // El cobro se hace UNA sola vez al inicio del crédito (al activarse tras
-    // la aceptación de T&C) y se registra como INGRESO automático en la caja
-    // CAJA-RENOVACIONES.
-    const RENOVACION_ANTICIPADA_COSTO_DEFAULT = 9900
-    const renovElegida = !!renovacionAnticipada
-    const renovCostoFinal = renovElegida
-      ? (Number(renovacionAnticipadaCosto) > 0
-          ? Number(renovacionAnticipadaCosto)
-          : RENOVACION_ANTICIPADA_COSTO_DEFAULT)
-      : 0
 
     // Validar campos requeridos
     if (!clienteId || !token || !valorSolicitado || !numeroCuotas || !frecuencia) {
@@ -193,9 +164,20 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    // === FIX (2026-08-29): Clave Dinámica eliminada ===
-    // Ya no se requiere codigoConfirmacion para enviar la solicitud.
-    // El cliente simula, confirma y envía directamente.
+    // === Validar codigoConfirmacion (Clave Dinámica verificada) ===
+    // El cliente debe haber solicitado y validado una clave dinámica
+    // en el simulador antes de poder enviar la solicitud.
+    if (!codigoConfirmacion) {
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            'Debes validar tu Clave Dinámica en el simulador antes de enviar la solicitud.',
+          code: 'MISSING_CODIGO_CONFIRMACION',
+        },
+        { status: 400 }
+      )
+    }
 
     if (!FRECUENCIAS_VALIDAS.includes(frecuencia as Frecuencia)) {
       return NextResponse.json(
@@ -284,13 +266,81 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    // === FIX (2026-08-29): Verificación de Clave Dinámica eliminada ===
-    // Ya no se verifica codigoConfirmacion contra OtpRegistro.
-    // La solicitud se crea directamente tras la confirmación del cliente.
-
+    // === Verificar codigoConfirmacion (Clave Dinámica) ===
+    // Busca el OtpRegistro de tipo SOLICITUD_SIMULADOR que tenga
+    // sessionIdGenerado = hash(codigoConfirmacion) y que esté verificado,
+    // no usado, no expirado, y que pertenezca al cliente.
     const clientInfoPre = getPortalClientInfo(req)
+    const codigoConfirmacionHash = crypto
+      .createHash('sha256')
+      .update(String(codigoConfirmacion))
+      .digest('hex')
 
-    // === Determinar tasa y calcular solicitud ===
+    const otpReg = await db.otpRegistro.findFirst({
+      where: {
+        clienteId: cliente.id,
+        tipo: 'SOLICITUD_SIMULADOR',
+        verificado: true,
+        usado: true,
+        bloqueado: false,
+        expiraEn: { gt: new Date() },
+      },
+      orderBy: { createdAt: 'desc' },
+    })
+
+    const codigoConfirmacionValido =
+      !!otpReg &&
+      !!otpReg.sessionIdGenerado &&
+      safeCompare(otpReg.sessionIdGenerado, codigoConfirmacionHash)
+
+    if (!codigoConfirmacionValido) {
+      try {
+        await db.auditLog.create({
+          data: {
+            usuarioId: null,
+            usuarioNombre: `Portal: ${cliente.nombre}`,
+            accion: 'CREATE',
+            modulo: 'solicitudes-web',
+            entidadId: cliente.id,
+            entidadNombre: cliente.nombre,
+            detalles: JSON.stringify({
+              error: 'codigoConfirmacion inválido o expirado',
+              clienteId,
+            }),
+            ipOrigen: clientInfoPre.ip,
+            userAgent: clientInfoPre.userAgent,
+            exito: false,
+            errorMessage: 'Clave dinámica inválida o expirada',
+          },
+        })
+      } catch (e) {
+        console.error('[solicitudes-web POST] Audit log error:', e)
+      }
+
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            'Clave Dinámica inválida o expirada. Solicita y valida una nueva clave en el simulador.',
+          code: 'INVALID_CODIGO_CONFIRMACION',
+        },
+        { status: 401 }
+      )
+    }
+
+    // === Invalidar el codigoConfirmacion (un solo uso) ===
+    // Al marcar usado=false y verificado=false, no podrá reutilizarse.
+    await db.otpRegistro.update({
+      where: { id: otpReg!.id },
+      data: {
+        usado: false,
+        verificado: false,
+        bloqueado: true,
+        fechaBloqueo: new Date(),
+      },
+    })
+
+    // === Determinar tasa y calcular préstamo ===
     let resultado: ResultadoCalculo
     let tasaUtilizada: number
     let tasaOrigen: string
@@ -363,14 +413,6 @@ export async function POST(req: NextRequest) {
         navegador: clientInfo.userAgent,
         canalOrigen: 'PORTAL_CLIENTE',
         estado: 'PENDIENTE',
-        estadoFlujoFirma: 'PENDIENTE',
-        // === Flexibilidad Financiera (2 tarifas) persistida en la solicitud ===
-        flexibilidadFinanciera: flexElegida,
-        flexibilidadModalidad: flexElegida ? modalidadElegida : null,
-        flexibilidadCosto: flexCostoFinal,
-        // === Renovación Anticipada (cobro único $9.900) persistida en la solicitud ===
-        renovacionAnticipada: renovElegida,
-        renovacionAnticipadaCosto: renovCostoFinal,
         historialEstados,
       },
     })
@@ -395,10 +437,6 @@ export async function POST(req: NextRequest) {
             tasaOrigen,
             cuotaEstimada: resultado.montoCuota,
             totalPagar: resultado.totalPagar,
-            flexibilidadFinanciera: flexElegida,
-            flexibilidadCosto: flexCostoFinal,
-            renovacionAnticipada: renovElegida,
-            renovacionAnticipadaCosto: renovCostoFinal,
             ipOrigen: clientInfo.ip,
           }),
           ipOrigen: clientInfo.ip,
@@ -417,7 +455,7 @@ export async function POST(req: NextRequest) {
         tablaAmortizacionParseada: resultado.tablaAmortizacion,
       },
       message: 'Solicitud creada exitosamente',
-    }, { status: 201 })
+    })
   } catch (error) {
     logError('/api/solicitudes-web POST', error)
     return errorResponse('/api/solicitudes-web POST', error)
@@ -491,14 +529,6 @@ export async function PATCH(req: NextRequest) {
           )
         }
         dataUpdate.estado = estado
-        // === Sincronizar estadoFlujoFirma con el estado de la solicitud ===
-        // Cuando el admin aprueba la solicitud (APROBADA) o la convierte, el cliente
-        // debe ver el flujo de firma (cargue de fotos + firma manuscrita + OTP) en el portal.
-        if (estado === 'APROBADA' || estado === 'CONVERTIDA') {
-          dataUpdate.estadoFlujoFirma = 'EN_FIRMA_CLIENTE'
-        } else if (estado === 'RECHAZADA') {
-          dataUpdate.estadoFlujoFirma = 'PENDIENTE'
-        }
         historial.push({
           estado,
           fecha: now.toISOString(),
@@ -563,14 +593,11 @@ export async function PATCH(req: NextRequest) {
         dataUpdate.estado = 'CONVERTIDA'
         dataUpdate.prestamoCreadoId = prestamoCreadoId
         dataUpdate.fechaConversion = now
-        // === Activar flujo de firma del lado del cliente ===
-        // El cliente verá en el portal el flujo: cargue de fotos + firma manuscrita + OTP
-        dataUpdate.estadoFlujoFirma = 'EN_FIRMA_CLIENTE'
         historial.push({
           estado: 'CONVERTIDA',
           fecha: now.toISOString(),
           usuario: revisadoPor || auth.nombre,
-          observacion: `Convertida en solicitud ${prestamoCreadoId}. Flujo de firma activado para el cliente.`,
+          observacion: `Convertida en préstamo ${prestamoCreadoId}`,
         })
         break
       }

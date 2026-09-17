@@ -1,7 +1,6 @@
 'use client'
 
 import * as React from 'react'
-import { useState, useMemo } from 'react'
 import {
   Table,
   TableHeader,
@@ -14,7 +13,6 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { cn } from '@/lib/utils'
-import { ArrowUpIcon, ArrowDownIcon, ChevronsUpDownIcon } from 'lucide-react'
 
 export interface ResponsiveTableColumn<T> {
   key: string
@@ -26,10 +24,6 @@ export interface ResponsiveTableColumn<T> {
   mobileBadge?: boolean
   /** En móvil: si es true, NO se muestra en la tarjeta (campos redundantes) */
   mobileHide?: boolean
-  /** v4.15 (QA M12 TC-UI-011): si es true, la columna es sortable por header click */
-  sortable?: boolean
-  /** v4.15: función de extracción del valor para ordenar (default: render como string) */
-  sortValue?: (row: T) => string | number
   /** Clases adicionales para la celda */
   className?: string
 }
@@ -70,35 +64,6 @@ export function ResponsiveTable<T>({
   const detailColumns = columns.filter(
     (c) => !c.mobileHide && !c.mobileTitle && !c.mobileBadge
   )
-
-  // v4.15 (QA M12 TC-UI-011): Estado de ordenamiento de columnas
-  const [sortField, setSortField] = useState<string | null>(null)
-  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc')
-
-  const toggleSort = (colKey: string) => {
-    if (sortField === colKey) {
-      setSortDirection((d) => (d === 'asc' ? 'desc' : 'asc'))
-    } else {
-      setSortField(colKey)
-      setSortDirection('asc')
-    }
-  }
-
-  // Aplicar sort a los datos (copia, no muta el array original)
-  const sortedData = useMemo(() => {
-    if (!sortField) return data
-    const col = columns.find((c) => c.key === sortField)
-    if (!col?.sortValue) return data
-    const arr = [...data]
-    arr.sort((a, b) => {
-      const va = col.sortValue!(a)
-      const vb = col.sortValue!(b)
-      if (va === vb) return 0
-      const cmp = va < vb ? -1 : 1
-      return sortDirection === 'asc' ? cmp : -cmp
-    })
-    return arr
-  }, [data, sortField, sortDirection, columns])
 
   // ------------------------------------------------------------------
   // Estado: cargando
@@ -178,40 +143,15 @@ export function ResponsiveTable<T>({
         <Table>
           <TableHeader>
             <TableRow>
-              {columns.map((col) => {
-                const isSortable = !!col.sortable
-                const isSorted = sortField === col.key
-                return (
-                  <TableHead
-                    key={col.key}
-                    className={cn(
-                      col.className,
-                      isSortable && 'cursor-pointer select-none hover:bg-accent/50 transition-colors'
-                    )}
-                    onClick={isSortable ? () => toggleSort(col.key) : undefined}
-                    aria-sort={isSorted ? (sortDirection === 'asc' ? 'ascending' : 'descending') : isSortable ? 'none' : undefined}
-                  >
-                    <span className="inline-flex items-center gap-1">
-                      {col.header}
-                      {isSortable && (
-                        <span className="inline-flex" aria-hidden="true">
-                          {isSorted ? (
-                            sortDirection === 'asc'
-                              ? <ArrowUpIcon className="w-3.5 h-3.5" />
-                              : <ArrowDownIcon className="w-3.5 h-3.5" />
-                          ) : (
-                            <ChevronsUpDownIcon className="w-3.5 h-3.5 opacity-40" />
-                          )}
-                        </span>
-                      )}
-                    </span>
-                  </TableHead>
-                )
-              })}
+              {columns.map((col) => (
+                <TableHead key={col.key} className={col.className}>
+                  {col.header}
+                </TableHead>
+              ))}
             </TableRow>
           </TableHeader>
           <TableBody>
-            {sortedData.map((row) => {
+            {data.map((row) => {
               const key = rowKey(row)
               return (
                 <TableRow
@@ -233,7 +173,7 @@ export function ResponsiveTable<T>({
 
       {/* ============ Móvil: tarjetas apiladas ============ */}
       <div className="md:hidden space-y-2">
-        {sortedData.map((row) => {
+        {data.map((row) => {
           const key = rowKey(row)
           const clickable = Boolean(onRowClick)
 

@@ -126,13 +126,13 @@ export async function GET(req: NextRequest) {
     // tipo=carta genera la carta de instrucciones
     // tipo=combinado genera un único PDF con pagaré + carta (cada uno con su propia sección de firma)
     if (tipo === 'pagare-blanco') {
-      html = await generarPagareBlancoHTML(prestamo, firmaElectronica, firmaCodeudor, req)
+      html = await generarPagareBlancoHTML(prestamo, firmaElectronica, firmaCodeudor)
     } else if (tipo === 'pagare-diligenciado' || tipo === 'pagare') {
-      html = await generarPagareDiligenciadoHTML(prestamo, calculo, firmaElectronica, firmaCodeudor, req)
+      html = await generarPagareDiligenciadoHTML(prestamo, calculo, firmaElectronica, firmaCodeudor)
     } else if (tipo === 'combinado') {
-      html = await generarDocumentoCombinadoHTML(prestamo, calculo, firmaElectronica, firmaCodeudor, req)
+      html = await generarDocumentoCombinadoHTML(prestamo, calculo, firmaElectronica, firmaCodeudor)
     } else {
-      html = await generarCartaInstruccionesHTML(prestamo, firmaElectronica, firmaCodeudor, req)
+      html = await generarCartaInstruccionesHTML(prestamo, firmaElectronica, firmaCodeudor)
     }
 
     // === Registrar en Bitácora del Préstamo ===
@@ -383,23 +383,8 @@ function generarSelloDigital(prestamo: any, tipoDoc: string, codigoVerificacion:
 }
 
 // Generar QR code como base64
-async function generarQRCode(codigoVerificacion: string, _req?: NextRequest): Promise<string> {
-  // ============================================================
-  // URL CANÓNICA de verificación — SIEMPRE usa el dominio de producción
-  // configurado en NEXT_PUBLIC_APP_URL (https://jsadr.com.co).
-  // ------------------------------------------------------------
-  // ANTES se usaba `req.url` para inferir el host, pero cuando el sistema
-  // se ejecuta dentro de un sandbox/preview (ej. preview-chat-*.space-z.ai),
-  // el QR quedaba apuntando a ese host temporal que luego se desactiva,
-  // produciendo al escanear el error:
-  //   {"error":"sandbox is inactive"}
-  // Por eso ahora SIEMPRE se usa NEXT_PUBLIC_APP_URL, con fallbacks robustos.
-  // ============================================================
-  const baseUrl =
-    process.env.NEXT_PUBLIC_APP_URL ||
-    process.env.NEXT_PUBLIC_BASE_URL ||
-    'https://jsadr.com.co'
-  const urlVerificacion = `${baseUrl}/api/documentos/verificar?codigo=${codigoVerificacion}`
+async function generarQRCode(codigoVerificacion: string): Promise<string> {
+  const urlVerificacion = `${process.env.NEXT_PUBLIC_BASE_URL || 'https://preview-chat-c04df402-049e-4406-b5d2-c8e07f801c50.space-z.ai'}/api/documentos/verificar?codigo=${codigoVerificacion}`
   try {
     const qrDataUrl = await QRCode.toDataURL(urlVerificacion, {
       width: 150,
@@ -511,88 +496,11 @@ const CSS_BASE = `
   .doc-separator { text-align:center; padding:8px; background:#1e3a5f; color:#fff; font-size:11px; letter-spacing:2px; margin:0 0 16px 0; border-radius:4px; }
   .print-btn { display: block; margin: 20px auto; padding: 10px 30px; background: #1e3a5f; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; }
   @media print { .no-print { display: none; } }
-
-  /* === Membrete del Acreedor === */
-  /* Aparece al inicio de cada documento (pagaré, carta, combinado) con los
-     datos de contacto del acreedor. En impresión se repite mediante
-     position: running() + @page { @top-center } en el futuro; por ahora
-     se imprime una sola vez al inicio de cada documento. */
-  .membrete-acreedor {
-    border: 2px solid #1e3a5f;
-    border-radius: 6px;
-    padding: 12px 18px;
-    margin: 0 0 22px 0;
-    background: linear-gradient(135deg, #f7f9fc 0%, #eef2f8 100%);
-    text-align: center;
-    font-size: 12px;
-    color: #1a1a1a;
-    page-break-inside: avoid;
-  }
-  .membrete-acreedor .ma-nombre {
-    font-size: 15px;
-    font-weight: bold;
-    letter-spacing: 1.2px;
-    color: #1e3a5f;
-    text-transform: uppercase;
-    margin: 0 0 4px 0;
-  }
-  .membrete-acreedor .ma-doc {
-    font-size: 11.5px;
-    color: #333;
-    margin: 0 0 8px 0;
-  }
-  .membrete-acreedor .ma-linea {
-    font-size: 11px;
-    color: #444;
-    margin: 2px 0;
-    line-height: 1.5;
-  }
-  .membrete-acreedor .ma-linea strong {
-    color: #1e3a5f;
-    font-weight: bold;
-    margin-right: 4px;
-  }
 `
 
 // Alias para mantener compatibilidad con código existente
 const CSS_PAGARE = CSS_BASE
 const CSS_CARTA = CSS_BASE
-
-// =====================================================
-// DATOS DEL ACREEDOR — Johan Sebastian Alvarez Del Rio
-// =====================================================
-// Estos datos son los que aparecen en el membrete del pagaré y la carta de
-// instrucciones, tomados del documento de referencia "formato solo para
-// pagare.docx" (header + footer). El correo se actualizó a jsa@jsadr.com.co
-// según indicación del usuario (dominio corporativo).
-// =====================================================
-const DATOS_ACREEDOR = {
-  nombre: 'JOHAN SEBASTIAN ALVAREZ DEL RIO',
-  cedula: '1.214.731.649',
-  direccion: 'CALLE 92 44A 34 / ARANJUEZ',
-  ciudad: 'MEDELLÍN · ANTIOQUIA',
-  telefonos: '3103674546 - 3235949510',
-  correo: 'jsa@jsadr.com.co',
-}
-
-// =====================================================
-// MEMBRETE DEL ACREEDOR — bloque HTML reutilizable
-// =====================================================
-// Renderiza el encabezado con los datos de contacto del acreedor al inicio
-// de cada documento (pagaré en blanco, pagaré diligenciado, carta de
-// instrucciones y combinado). Esto le da formalidad jurídica al documento
-// y permite localizar al acreedor para notificaciones y cobro.
-// =====================================================
-function generarMembreteAcreedor(): string {
-  return `
-<div class="membrete-acreedor">
-  <div class="ma-nombre">${DATOS_ACREEDOR.nombre}</div>
-  <div class="ma-doc">C.C. ${DATOS_ACREEDOR.cedula}</div>
-  <div class="ma-linea"><strong>DIRECCIÓN:</strong> ${DATOS_ACREEDOR.direccion} · ${DATOS_ACREEDOR.ciudad}</div>
-  <div class="ma-linea"><strong>TELÉFONO:</strong> ${DATOS_ACREEDOR.telefonos}</div>
-  <div class="ma-linea"><strong>CORREO:</strong> ${DATOS_ACREEDOR.correo}</div>
-</div>`
-}
 
 // =====================================================
 // TEXTO LEGAL — CLÁUSULA ACELERATORIA (compartido por pagaré y combinado)
@@ -672,21 +580,14 @@ function generarBloqueDatosFirma(rol: 'deudor' | 'codeudor', datos: { nombre: st
 // El pagaré en blanco deja los campos vacíos para diligenciamiento manual posterior.
 // El texto legal ES EXACTAMENTE el del documento de referencia (PAGARÉ 2026.docx).
 // =====================================================
-async function generarPagareBlancoHTML(prestamo: any, firmaElectronica?: any, firmaCodeudor?: any, req?: NextRequest): Promise<string> {
+async function generarPagareBlancoHTML(prestamo: any, firmaElectronica?: any, firmaCodeudor?: any): Promise<string> {
   const seccionFirma = generarSeccionFirmaElectronica(firmaElectronica, prestamo)
   const seccionFirmaCodeudor = generarSeccionFirmaElectronica(firmaCodeudor, prestamo, true)
   const codigoVerificacion = generarCodigoVerificacion(prestamo, 'pagare-blanco')
   const selloDigital = generarSelloDigital(prestamo, 'pagare-blanco', codigoVerificacion)
-  const qrCode = await generarQRCode(codigoVerificacion, req)
+  const qrCode = await generarQRCode(codigoVerificacion)
   const seccionVerificacion = generarSeccionVerificacion(codigoVerificacion, selloDigital, qrCode, 'pagare-blanco')
-  // === FIX (2026-08-20): Usar la fecha del préstamo (fecha de firma electrónica real) ===
-  // Antes se usaba `new Date()` que tomaba la fecha actual del servidor, causando
-  // discrepancia entre la fecha del pagaré/carta y la fecha de la firma electrónica.
-  // Ahora se usa prestamo.fechaDesembolso (fecha real de la firma) o en su defecto
-  // prestamo.fechaSolicitud (fecha de creación del préstamo).
-  // Si el préstamo tiene firmaElectronica con fechaFirmaCompleta, usar esa (la más precisa).
-  const fechaFirmaElectronica = firmaElectronica?.fechaFirmaCompleta || firmaElectronica?.createdAt
-  const fecha = new Date(fechaFirmaElectronica || prestamo.fechaDesembolso || prestamo.fechaSolicitud || new Date())
+  const fecha = new Date()
   const dia = fecha.getDate()
   const mes = fecha.toLocaleString('es-CO', { month: 'long' })
   const anio = fecha.getFullYear()
@@ -713,8 +614,6 @@ async function generarPagareBlancoHTML(prestamo: any, firmaElectronica?: any, fi
 </head>
 <body>
 
-${generarMembreteAcreedor()}
-
 <div class="titulo">PAGARÉ No.</div>
 <p class="center">${blankNumPagare}</p>
 
@@ -724,7 +623,7 @@ ${generarMembreteAcreedor()}
 <p>Domicilio: <span class="campo-larga">${blankDomicilio}</span></p>
 <p>identificado(s) como aparece(mos) al pie de mi(nuestras) firma(s), actuando en mi (nuestro) propio nombre, o en la condición indicada al píe de mi(nuestras) firma(s), declaro(amos):</p>
 
-<p><strong>PRIMERO:</strong> Que me(nos) obligo(amos) a pagar solidaria, indivisible, irrevocable e incondicionalmente a la orden de <strong>JOHAN SEBASTIAN ALVAREZ DEL RIO</strong>, mayor de edad, identificado con cédula de ciudadanía No. <strong>1.214.731.649</strong>, con domicilio en la CALLE 92 44A 34, barrio Aranjuez, Medellín (Antioquia), en adelante EL ACREEDOR, o a quien represente sus derechos, el día ( ${blankDia} ) del mes de ${blankMes} del año ${blankAnio} , en sus oficinas del país o en los puntos de pago autorizados expresamente para el efecto, las siguientes sumas de dinero:</p>
+<p><strong>PRIMERO:</strong> Que me(nos) obligo(amos) a pagar solidaria, indivisible, irrevocable e incondicionalmente a la orden de <strong>Johan Sebastian Alvarez Del Rio</strong>. en adelante EL ACREEDOR, o a quien represente sus derechos, el día ( ${blankDia} ) del mes de ${blankMes} del año ${blankAnio} , en sus oficinas del país o en los puntos de pago autorizados expresamente para el efecto, las siguientes sumas de dinero:</p>
 
 <p><strong>POR CAPITAL:</strong></p>
 <p>${blankCapitalLine}</p>
@@ -750,7 +649,7 @@ ${TEXTO_CLAUSULA_ACELERATORIA}
 
 <p>El suscriptor declara haber suministrado voluntariamente al acreedor copia de su documento de identidad, la cual hace parte de los soportes de identificación de la presente obligación.</p>
 
-<p>Para constancia se firma en un (1) original, con destino a <strong>JOHAN SEBASTIAN ALVAREZ DEL RIO</strong>, C.C. 1.214.731.649, quien presta el dinero a los ( ${dia} ) días del mes de ${mes} del año ${anio}.</p>
+<p>Para constancia se firma en un (1) original, con destino a <strong>Johan Sebastian Alvarez Del Rio</strong> quien presta el dinero a los ( ${dia} ) días del mes de ${mes} del año ${anio}.</p>
 </div>
 
 ${generarBloqueDatosFirma('deudor', { nombre: '', cedula: '', direccion: '', telefono: '', correo: '' }, firmaElectronica)}
@@ -777,20 +676,14 @@ ${seccionVerificacion}
 // Los datos que SÍ se auto-llenan son: nombres, cédulas, dirección, teléfono y correo
 // del deudor y del codeudor (si aplica), tomados de los registros del sistema.
 // =====================================================
-async function generarPagareDiligenciadoHTML(prestamo: any, calculo: any, firmaElectronica?: any, firmaCodeudor?: any, req?: NextRequest): Promise<string> {
+async function generarPagareDiligenciadoHTML(prestamo: any, calculo: any, firmaElectronica?: any, firmaCodeudor?: any): Promise<string> {
   const seccionFirma = generarSeccionFirmaElectronica(firmaElectronica, prestamo)
   const seccionFirmaCodeudor = generarSeccionFirmaElectronica(firmaCodeudor, prestamo, true)
   const codigoVerificacion = generarCodigoVerificacion(prestamo, 'pagare-diligenciado')
   const selloDigital = generarSelloDigital(prestamo, 'pagare-diligenciado', codigoVerificacion)
-  const qrCode = await generarQRCode(codigoVerificacion, req)
+  const qrCode = await generarQRCode(codigoVerificacion)
   const seccionVerificacion = generarSeccionVerificacion(codigoVerificacion, selloDigital, qrCode, 'pagare-diligenciado')
-  // === FIX (2026-08-20): Usar la fecha de la firma electrónica real ===
-  // Antes se usaba `new Date(prestamo.fechaDesembolso || prestamo.fechaSolicitud)` que
-  // tomaba la fecha de desembolso del préstamo, pero esa fecha puede haber sido
-  // actualizada posteriormente (ej: al activar el préstamo). La fecha correcta es
-  // la fecha de la firma electrónica (cuando el cliente realmente firmó).
-  const fechaFirmaElectronicaPagare = firmaElectronica?.fechaFirmaCompleta || firmaElectronica?.createdAt
-  const fecha = new Date(fechaFirmaElectronicaPagare || prestamo.fechaDesembolso || prestamo.fechaSolicitud || new Date())
+  const fecha = new Date(prestamo.fechaDesembolso || prestamo.fechaSolicitud)
   const dia = fecha.getDate()
   const mes = fecha.toLocaleString('es-CO', { month: 'long' })
   const anio = fecha.getFullYear()
@@ -810,8 +703,6 @@ async function generarPagareDiligenciadoHTML(prestamo: any, calculo: any, firmaE
   const blankPesos = '__________________________________________________'
 
   const contenido = `
-${generarMembreteAcreedor()}
-
 <div class="titulo">PAGARÉ No. ${prestamo.codigo}</div>
 
 <div class="cuerpo">
@@ -820,7 +711,7 @@ ${generarMembreteAcreedor()}
 <p>Domicilio: <span class="campo-larga">${domicilioDeudor}</span></p>
 <p>identificado(s) como aparece(mos) al pie de mi(nuestras) firma(s), actuando en mi (nuestro) propio nombre, o en la condición indicada al píe de mi(nuestras) firma(s), declaro(amos):</p>
 
-<p><strong>PRIMERO:</strong> Que me(nos) obligo(amos) a pagar solidaria, indivisible, irrevocable e incondicionalmente a la orden de <strong>JOHAN SEBASTIAN ALVAREZ DEL RIO</strong>, mayor de edad, identificado con cédula de ciudadanía No. <strong>1.214.731.649</strong>, con domicilio en la CALLE 92 44A 34, barrio Aranjuez, Medellín (Antioquia), en adelante EL ACREEDOR, o a quien represente sus derechos, el día ( <span class="campo-corta">${dia}</span> ) del mes de <span class="campo">${mes}</span> del año <span class="campo-corta">${anio}</span> , en sus oficinas del país o en los puntos de pago autorizados expresamente para el efecto, las siguientes sumas de dinero:</p>
+<p><strong>PRIMERO:</strong> Que me(nos) obligo(amos) a pagar solidaria, indivisible, irrevocable e incondicionalmente a la orden de <strong>Johan Sebastian Alvarez Del Rio</strong>. en adelante EL ACREEDOR, o a quien represente sus derechos, el día ( <span class="campo-corta">${dia}</span> ) del mes de <span class="campo">${mes}</span> del año <span class="campo-corta">${anio}</span> , en sus oficinas del país o en los puntos de pago autorizados expresamente para el efecto, las siguientes sumas de dinero:</p>
 
 <p><strong>POR CAPITAL:</strong></p>
 <p><span class="campo-larga" style="min-width:520px;">${blankLineLarga}</span></p>
@@ -846,7 +737,7 @@ ${TEXTO_CLAUSULA_ACELERATORIA}
 
 <p>El suscriptor declara haber suministrado voluntariamente al acreedor copia de su documento de identidad, la cual hace parte de los soportes de identificación de la presente obligación.</p>
 
-<p>Para constancia se firma en un (1) original, con destino a <strong>JOHAN SEBASTIAN ALVAREZ DEL RIO</strong>, C.C. 1.214.731.649, quien presta el dinero a los ( <span class="campo-corta">${dia}</span> ) días del mes de <span class="campo">${mes}</span> del año <span class="campo-corta">${anio}</span>.</p>
+<p>Para constancia se firma en un (1) original, con destino a <strong>Johan Sebastian Alvarez Del Rio</strong> quien presta el dinero a los ( <span class="campo-corta">${dia}</span> ) días del mes de <span class="campo">${mes}</span> del año <span class="campo-corta">${anio}</span>.</p>
 </div>
 
 ${generarBloqueDatosFirma('deudor', {
@@ -893,21 +784,15 @@ ${contenido}
 // Texto legal idéntico al documento de referencia. Datos del deudor y codeudor
 // (nombre, cédula, dirección, teléfono, correo) auto-llenados del sistema.
 // =====================================================
-async function generarCartaInstruccionesHTML(prestamo: any, firmaElectronica?: any, firmaCodeudor?: any, req?: NextRequest): Promise<string> {
+async function generarCartaInstruccionesHTML(prestamo: any, firmaElectronica?: any, firmaCodeudor?: any): Promise<string> {
   const seccionFirma = generarSeccionFirmaElectronica(firmaElectronica, prestamo)
   const seccionFirmaCodeudor = generarSeccionFirmaElectronica(firmaCodeudor, prestamo, true)
   const codigoVerificacion = generarCodigoVerificacion(prestamo, 'carta')
   const selloDigital = generarSelloDigital(prestamo, 'carta', codigoVerificacion)
-  const qrCode = await generarQRCode(codigoVerificacion, req)
+  const qrCode = await generarQRCode(codigoVerificacion)
   const seccionVerificacion = generarSeccionVerificacion(codigoVerificacion, selloDigital, qrCode, 'carta')
   const cliente = prestamo.cliente
-  // === FIX (2026-08-20): Usar la fecha de la firma electrónica real ===
-  // Antes se usaba `new Date()` que tomaba la fecha actual del servidor, causando
-  // discrepancia con la fecha de la firma electrónica. Ahora se usa la fecha de
-  // la firma electrónica (cuando el cliente realmente firmó), o en su defecto
-  // la fecha de desembolso/solicitud del préstamo.
-  const fechaFirmaElectronicaCarta = firmaElectronica?.fechaFirmaCompleta || firmaElectronica?.createdAt
-  const fecha = new Date(fechaFirmaElectronicaCarta || prestamo.fechaDesembolso || prestamo.fechaSolicitud || new Date())
+  const fecha = new Date()
   const dia = fecha.getDate()
   const mes = fecha.toLocaleString('es-CO', { month: 'long' })
   const anio = fecha.getFullYear()
@@ -920,8 +805,6 @@ async function generarCartaInstruccionesHTML(prestamo: any, firmaElectronica?: a
   ].filter(Boolean).join(' · ') || '________________________________'
 
   const contenido = `
-${generarMembreteAcreedor()}
-
 <div class="titulo">CARTA DE INSTRUCCIONES</div>
 
 <p>Señores</p>
@@ -934,7 +817,7 @@ ${generarMembreteAcreedor()}
 <p><span class="campo-larga"><strong>${cliente.nombre}</strong></span> mayor(es) de edad, con domicilio en el Municipio de Medellín Antioquia Domicilio <span class="campo-larga">${domicilioDeudor}</span></p>
 <p>identificado(s) como aparece(mos) al pie mi(nuestras) firma(s), actuando en mi(nuestro) propio nombre, o en la condición indicada al píe de mi(nuestras) firma(s), declaro(amos):</p>
 
-<p>Que de conformidad con lo dispuesto en el artículo 622 del Código de Comercio, por medio del presente documento autorizo(amos) irrevocablemente y de manera permanente a <strong>JOHAN SEBASTIAN ALVAREZ DEL RIO</strong>, C.C. 1.214.731.649, en adelante el ACREEDOR o a quien represente sus derechos, para llenar sin previo aviso los espacios en blanco y demás aspectos generales y particulares del pagaré indicado en la referencia, el cual he(mos) otorgado a su orden con espacios en blanco y del que hago(hacemos) entrega con efectos negociables, teniendo en cuenta las siguientes instrucciones:</p>
+<p>Que de conformidad con lo dispuesto en el artículo 622 del Código de Comercio, por medio del presente documento autorizo(amos) irrevocablemente y de manera permanente al quien presta el dinero en adelante el ACREEDOR o a quien represente sus derechos, para llenar sin previo aviso los espacios en blanco y demás aspectos generales y particulares del pagaré indicado en la referencia, el cual he(mos) otorgado a su orden con espacios en blanco y del que hago(hacemos) entrega con efectos negociables, teniendo en cuenta las siguientes instrucciones:</p>
 
 <p><strong>1.</strong> El pagaré podrá ser llenado cuando exista incumplimiento o mora en el pago de cualquier obligación a mí (nuestro) cargo, individual o conjuntamente, en los casos estipulados en la ley, en el pagaré mismo y demás documentos suscritos por mi (nosotros). Podrá también ser endosado, previo a su diligenciamiento, en razón de ser negociado cualquier derecho de crédito a mi (nuestro) cargo, individual, conjunta y solidariamente.</p>
 
@@ -1022,15 +905,15 @@ ${contenido}
 // "las firmas, fotos, códigos otp deben aparecer en ambas secciones para garantizar
 // que se cumplió con la entrega de los dos documentos pero estarían en uno solo".
 // =====================================================
-async function generarDocumentoCombinadoHTML(prestamo: any, calculo: any, firmaElectronica?: any, firmaCodeudor?: any, req?: NextRequest): Promise<string> {
+async function generarDocumentoCombinadoHTML(prestamo: any, calculo: any, firmaElectronica?: any, firmaCodeudor?: any): Promise<string> {
   const codigoPagare = generarCodigoVerificacion(prestamo, 'pagare-diligenciado')
   const selloPagare = generarSelloDigital(prestamo, 'pagare-diligenciado', codigoPagare)
-  const qrPagare = await generarQRCode(codigoPagare, req)
+  const qrPagare = await generarQRCode(codigoPagare)
   const verifPagare = generarSeccionVerificacion(codigoPagare, selloPagare, qrPagare, 'pagare-diligenciado')
 
   const codigoCarta = generarCodigoVerificacion(prestamo, 'carta')
   const selloCarta = generarSelloDigital(prestamo, 'carta', codigoCarta)
-  const qrCarta = await generarQRCode(codigoCarta, req)
+  const qrCarta = await generarQRCode(codigoCarta)
   const verifCarta = generarSeccionVerificacion(codigoCarta, selloCarta, qrCarta, 'carta')
 
   // Cada documento tiene su propia sección de firma (independiente, aunque sean los mismos datos)
@@ -1042,23 +925,15 @@ async function generarDocumentoCombinadoHTML(prestamo: any, calculo: any, firmaE
   // IMPORTANTE: No se calculan ni se muestran tasas, saldos ni valores monetarios del préstamo.
   // Esos campos quedan en blanco (líneas) para diligenciamiento MANUAL del acreedor, conforme
   // al modelo de pagaré en blanco + carta de instrucciones del abogado.
-  // === FIX (2026-08-20): Usar la fecha de la firma electrónica real ===
-  // Antes se usaba `new Date(prestamo.fechaDesembolso || prestamo.fechaSolicitud)` para el pagaré
-  // y `new Date()` para la carta de instrucciones (línea "Para constancia se firma a los...").
-  // Eso causaba discrepancia: el pagaré usaba la fecha de desembolso, pero la carta usaba la
-  // fecha actual del servidor. Ahora ambas usan la fecha de la firma electrónica (la fecha real
-  // en que el cliente firmó), que es la fuente de verdad.
-  const fechaFirmaElectronicaCombinada = firmaElectronica?.fechaFirmaCompleta || firmaElectronica?.createdAt
-  const fecha = new Date(fechaFirmaElectronicaCombinada || prestamo.fechaDesembolso || prestamo.fechaSolicitud || new Date())
+  const fecha = new Date(prestamo.fechaDesembolso || prestamo.fechaSolicitud)
   const dia = fecha.getDate()
   const mes = fecha.toLocaleString('es-CO', { month: 'long' })
   const anio = fecha.getFullYear()
   const cliente = prestamo.cliente
-  // diaHoy/mesHoy/anioHoy se usan en la carta de instrucciones "Para constancia se firma a los..."
-  // Deben usar la misma fecha que el pagaré (fecha de firma electrónica) para que coincidan.
-  const diaHoy = dia
-  const mesHoy = mes
-  const anioHoy = anio
+  const hoy = new Date()
+  const diaHoy = hoy.getDate()
+  const mesHoy = hoy.toLocaleString('es-CO', { month: 'long' })
+  const anioHoy = hoy.getFullYear()
 
   const domicilioDeudor = [
     cliente.direccion,
@@ -1094,8 +969,6 @@ async function generarDocumentoCombinadoHTML(prestamo: any, calculo: any, firmaE
 <!-- ===================================================== -->
 <div class="doc-separator">DOCUMENTO 1 DE 2 · PAGARÉ</div>
 
-${generarMembreteAcreedor()}
-
 <div class="titulo">PAGARÉ No. ${prestamo.codigo}</div>
 
 <div class="cuerpo">
@@ -1104,7 +977,7 @@ ${generarMembreteAcreedor()}
 <p>Domicilio: <span class="campo-larga">${domicilioDeudor}</span></p>
 <p>identificado(s) como aparece(mos) al pie de mi(nuestras) firma(s), actuando en mi (nuestro) propio nombre, o en la condición indicada al píe de mi(nuestras) firma(s), declaro(amos):</p>
 
-<p><strong>PRIMERO:</strong> Que me(nos) obligo(amos) a pagar solidaria, indivisible, irrevocable e incondicionalmente a la orden de <strong>JOHAN SEBASTIAN ALVAREZ DEL RIO</strong>, mayor de edad, identificado con cédula de ciudadanía No. <strong>1.214.731.649</strong>, con domicilio en la CALLE 92 44A 34, barrio Aranjuez, Medellín (Antioquia), en adelante EL ACREEDOR, o a quien represente sus derechos, el día ( <span class="campo-corta">${dia}</span> ) del mes de <span class="campo">${mes}</span> del año <span class="campo-corta">${anio}</span> , en sus oficinas del país o en los puntos de pago autorizados expresamente para el efecto, las siguientes sumas de dinero:</p>
+<p><strong>PRIMERO:</strong> Que me(nos) obligo(amos) a pagar solidaria, indivisible, irrevocable e incondicionalmente a la orden de <strong>Johan Sebastian Alvarez Del Rio</strong>. en adelante EL ACREEDOR, o a quien represente sus derechos, el día ( <span class="campo-corta">${dia}</span> ) del mes de <span class="campo">${mes}</span> del año <span class="campo-corta">${anio}</span> , en sus oficinas del país o en los puntos de pago autorizados expresamente para el efecto, las siguientes sumas de dinero:</p>
 
 <p><strong>POR CAPITAL:</strong></p>
 <p><span class="campo-larga" style="min-width:520px;">${blankLineLarga}</span></p>
@@ -1130,7 +1003,7 @@ ${TEXTO_CLAUSULA_ACELERATORIA}
 
 <p>El suscriptor declara haber suministrado voluntariamente al acreedor copia de su documento de identidad, la cual hace parte de los soportes de identificación de la presente obligación.</p>
 
-<p>Para constancia se firma en un (1) original, con destino a <strong>JOHAN SEBASTIAN ALVAREZ DEL RIO</strong>, C.C. 1.214.731.649, quien presta el dinero a los ( <span class="campo-corta">${dia}</span> ) días del mes de <span class="campo">${mes}</span> del año <span class="campo-corta">${anio}</span>.</p>
+<p>Para constancia se firma en un (1) original, con destino a <strong>Johan Sebastian Alvarez Del Rio</strong> quien presta el dinero a los ( <span class="campo-corta">${dia}</span> ) días del mes de <span class="campo">${mes}</span> del año <span class="campo-corta">${anio}</span>.</p>
 </div>
 
 ${generarBloqueDatosFirma('deudor', datosDeudor, firmaElectronica)}
@@ -1150,8 +1023,6 @@ ${verifPagare}
 <!-- ===================================================== -->
 <div class="doc-separator">DOCUMENTO 2 DE 2 · CARTA DE INSTRUCCIONES</div>
 
-${generarMembreteAcreedor()}
-
 <div class="titulo">CARTA DE INSTRUCCIONES</div>
 
 <p>Señores</p>
@@ -1164,7 +1035,7 @@ ${generarMembreteAcreedor()}
 <p><span class="campo-larga"><strong>${cliente.nombre}</strong></span> mayor(es) de edad, con domicilio en el Municipio de Medellín Antioquia Domicilio <span class="campo-larga">${domicilioDeudor}</span></p>
 <p>identificado(s) como aparece(mos) al pie mi(nuestras) firma(s), actuando en mi(nuestro) propio nombre, o en la condición indicada al píe de mi(nuestras) firma(s), declaro(amos):</p>
 
-<p>Que de conformidad con lo dispuesto en el artículo 622 del Código de Comercio, por medio del presente documento autorizo(amos) irrevocablemente y de manera permanente a <strong>JOHAN SEBASTIAN ALVAREZ DEL RIO</strong>, C.C. 1.214.731.649, en adelante el ACREEDOR o a quien represente sus derechos, para llenar sin previo aviso los espacios en blanco y demás aspectos generales y particulares del pagaré indicado en la referencia, el cual he(mos) otorgado a su orden con espacios en blanco y del que hago(hacemos) entrega con efectos negociables, teniendo en cuenta las siguientes instrucciones:</p>
+<p>Que de conformidad con lo dispuesto en el artículo 622 del Código de Comercio, por medio del presente documento autorizo(amos) irrevocablemente y de manera permanente al quien presta el dinero en adelante el ACREEDOR o a quien represente sus derechos, para llenar sin previo aviso los espacios en blanco y demás aspectos generales y particulares del pagaré indicado en la referencia, el cual he(mos) otorgado a su orden con espacios en blanco y del que hago(hacemos) entrega con efectos negociables, teniendo en cuenta las siguientes instrucciones:</p>
 
 <p><strong>1.</strong> El pagaré podrá ser llenado cuando exista incumplimiento o mora en el pago de cualquier obligación a mí (nuestro) cargo, individual o conjuntamente, en los casos estipulados en la ley, en el pagaré mismo y demás documentos suscritos por mi (nosotros). Podrá también ser endosado, previo a su diligenciamiento, en razón de ser negociado cualquier derecho de crédito a mi (nuestro) cargo, individual, conjunta y solidariamente.</p>
 
@@ -1239,7 +1110,7 @@ function generarSeccionFirmaElectronica(firma: any, prestamo: any, esCodeudor: b
   }
 
   const fechaFirma = firma.fechaFirmaCompleta || firma.createdAt
-  const fechaFirmaStr = new Date(fechaFirma).toLocaleString('es-CO', { timeZone: 'America/Bogota', dateStyle: 'long', timeStyle: 'short' })
+  const fechaFirmaStr = new Date(fechaFirma).toLocaleString('es-CO', { dateStyle: 'long', timeStyle: 'short' })
   const canalOTP = firma.otpCanal === 'WHATSAPP' ? 'WhatsApp' :
                    firma.otpCanal === 'EMAIL' ? 'Correo Electrónico' :
                    firma.otpCanal === 'AMBOS' ? 'WhatsApp y Correo Electrónico' : 'No especificado'
@@ -1273,7 +1144,7 @@ function generarSeccionFirmaElectronica(firma: any, prestamo: any, esCodeudor: b
   const hashDocumentoCorto = firma.fotoDocumentoHash?.substring(0, 16) || 'N/A'
   const hashSelfieCorto = firma.fotoSelfieHash?.substring(0, 16) || 'N/A'
   const hashFirmaCorto = firma.imagenFirma
-    ? crypto.createHash('sha256').update(firma.imagenFirma).digest('hex').substring(0, 16)
+    ? require('crypto').createHash('sha256').update(firma.imagenFirma).digest('hex').substring(0, 16)
     : 'N/A'
 
   const contextoStr = documentoContexto ? ` · ${documentoContexto}` : ''
@@ -1323,89 +1194,10 @@ function generarSeccionFirmaElectronica(firma: any, prestamo: any, esCodeudor: b
       </tr>
     </table>
     <div style="text-align:center; margin-top:12px;">
-      <!-- FIX 2026-08-12: el <a href> no envía el header Authorization,
-           por lo que el endpoint /api/firma/certificado (protegido por JWT)
-           devolvía 401 al hacer clic. Lo reemplazamos por un <button> con
-           un script inline que usa fetch autenticado (con el token JWT del
-           localStorage de la app, al que la pestaña tiene acceso porque
-           el documento se abrió como blob URL del mismo origin) y abre el
-           HTML resultante en una nueva pestaña. -->
-      <button type="button" onclick="abrirCertificadoFirma('${firma.id}')"
-         style="display:inline-block; padding:8px 20px; background:#1e3a5f; color:white; text-decoration:none; border-radius:4px; font-size:11px; cursor:pointer; border:none;">
+      <a href="/api/firma/certificado?firmaId=${firma.id}" target="_blank"
+         style="display:inline-block; padding:8px 20px; background:#1e3a5f; color:white; text-decoration:none; border-radius:4px; font-size:11px;">
         📋 Ver Certificado de Firma Electrónica Completo
-      </button>
+      </a>
     </div>
-  </div>
-  ${generarScriptAbrirCertificadoFirma()}`
-}
-
-// Script inline (se inyecta una sola vez por documento gracias al guard
-// `window.__certificadoFirmaScriptLoaded`) que define la función global
-// `abrirCertificadoFirma(firmaId)` usada por los botones del documento
-// imprimible para abrir el certificado de firma con auth JWT.
-//
-// FIX 2026-08-13: el documento imprimible se abre como `blob:https://jsadr.com.co/...`
-// (vía URL.createObjectURL en abrirHtmlImprimible). En el contexto de un blob URL,
-// las URLs relativas como `/api/firma/certificado?firmaId=...` NO se resuelven
-// contra el dominio del creador, sino contra la URL del blob (que no tiene path
-// válido) → el fetch falla con "Failed to parse URL from /api/firma/certificado...".
-// Solución: construir la URL absoluta usando `window.location.origin`, que en
-// blob URLs preserva el origin del creador (https://jsadr.com.co).
-function generarScriptAbrirCertificadoFirma(): string {
-  return `
-<script>
-(function(){
-  if (window.__certificadoFirmaScriptLoaded) return;
-  window.__certificadoFirmaScriptLoaded = true;
-  window.abrirCertificadoFirma = async function(firmaId) {
-    if (!firmaId) { alert('ID de firma no especificado'); return; }
-    try {
-      var token = null;
-      try { token = localStorage.getItem('access_token'); } catch(e) {}
-      var headers = {};
-      if (token && token.indexOf('portal_cliente_') !== 0) {
-        headers['Authorization'] = 'Bearer ' + token;
-      }
-      // Construir URL absoluta: en contexto blob URL, window.location.origin
-      // preserva el origin del creador (https://jsadr.com.co). En contexto
-      // normal, también funciona correctamente.
-      var origin = window.location.origin || '';
-      if (!origin || origin.indexOf('http') !== 0) {
-        // Fallback: usar el dominio canónico de producción
-        origin = 'https://jsadr.com.co';
-      }
-      var url = origin + '/api/firma/certificado?firmaId=' + encodeURIComponent(firmaId);
-      var res = await fetch(url, {
-        method: 'GET',
-        credentials: 'same-origin',
-        headers: headers
-      });
-      if (res.status === 401) {
-        alert('Tu sesión ha expirado. Cierra sesión e ingresa nuevamente para ver el certificado.');
-        return;
-      }
-      if (!res.ok) {
-        var msg = 'HTTP ' + res.status;
-        try { var j = await res.json(); msg = j.error || msg; } catch(e) {}
-        alert('No se pudo abrir el certificado.\\n\\n' + msg);
-        return;
-      }
-      var blob = await res.blob();
-      var blobUrl = URL.createObjectURL(blob);
-      var win = window.open(blobUrl, '_blank');
-      if (!win) {
-        var a = document.createElement('a');
-        a.href = blobUrl;
-        a.download = 'Certificado_Firma_Electronica_' + firmaId.substring(0,8) + '.html';
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-      }
-      setTimeout(function(){ URL.revokeObjectURL(blobUrl); }, 5 * 60 * 1000);
-    } catch (err) {
-      alert('Error al abrir el certificado: ' + (err && err.message ? err.message : err));
-    }
-  };
-})();
-</script>`
+  </div>`
 }

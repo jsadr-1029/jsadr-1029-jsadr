@@ -2,17 +2,14 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import {
   calcularPrestamo,
-  calcularPrestamoTasaFijaMensual,
-  corregirFechasPorCorte,
   calcularMoraCompuesta,
   calcularDiasMora, getTasaMoraAnual,
-  calcularCargosInicialesPendientes,
 } from '@/lib/finanzas'
 import { sanitizeError } from '@/lib/error-handler'
 import { rateLimit, getClientInfo } from '@/lib/security'
 import { requireRole as requireRoleAuth } from '@/lib/auth-guard'
 
-// GET - buscar solicitudes activos con cuotas pendientes y sugerir cuenta de recaudo
+// GET - buscar préstamos activos con cuotas pendientes y sugerir cuenta de recaudo
 // Incluye desglose completo: cuota base + mora diaria + pendiente anterior - pagado
 export async function GET(req: NextRequest) {
   try {
@@ -31,7 +28,7 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url)
     const q = searchParams.get('q') || ''
 
-    // Buscar solicitudes activos o en mora, con cliente y categoría
+    // Buscar préstamos activos o en mora, con cliente y categoría
     const where: any = {
       estado: { in: ['ACTIVO', 'EN_MORA'] },
     }
@@ -63,7 +60,7 @@ export async function GET(req: NextRequest) {
       take: 50,
     })
 
-    // Para cada solicitud, calcular cuota pendiente, mora en tiempo real y desglose
+    // Para cada préstamo, calcular cuota pendiente, mora en tiempo real y desglose
     const resultados = prestamos.map((p) => {
       // Calcular cuántas cuotas están completamente pagadas
       const cuotasPagadasSet = new Set(
@@ -74,80 +71,14 @@ export async function GET(req: NextRequest) {
       const proximaCuota = cuotasPagadasCompletamente + 1
 
       // Calcular fecha de vencimiento de la próxima cuota
-      // === FIX (2026-08-20): Usar la función de cálculo correcta según la modalidad ===
-      // Antes siempre se usaba calcularPrestamo (Sistema Francés) sin importar la
-      // modalidad del solicitud. Eso causaba que para solicitudes TASA_FIJA, la cuota
-      // mostrada en "Aplicar Pago" tuviera un capital creciente e interés decreciente
-      // (Sistema Francés) en lugar de capital e interés constantes (Tasa Fija).
-      // El monto total NO coincidía con el estado de cuenta (que sí usaba la función
-      // correcta). Ahora ambas vistas usan la misma función según la modalidad.
-      //
-      // === FIX (2026-08-21): Usar fechaInicioAmortizacion si está disponible ===
-      // Si el admin definió fechaPrimerCuota al crear el solicitud, la fecha base
-      // para la amortización NO es fechaDesembolso sino fechaPrimerCuota - 1 periodo.
-      // Sin esto, las fechas de vencimiento de las cuotas no coincidirían con
-      // fechaPrimerCuota (el sistema contaría desde fechaDesembolso).
-      const fechaBaseAmortizacion = p.fechaInicioAmortizacion || p.fechaDesembolso || p.fechaSolicitud
-      let calculo: any
-      if (p.modalidadAmortizacion === 'TASA_FIJA') {
-        calculo = calcularPrestamoTasaFijaMensual({
-          montoPrincipal: p.montoPrincipal,
-          tasaMensualFija: p.tasaInteresMensual || p.tasaInteresAnual / 12,
-          numeroCuotas: p.numeroCuotas,
-          frecuencia: p.frecuencia as any,
-          fechaDesembolso: fechaBaseAmortizacion,
-        })
-        // === FIX: Respetar el montoCuota guardado en BD si difiere del calculado ===
-        // El montoCuota en BD puede incluir ajustes manuales del admin (ej: +$5.000
-        // por cargo adicional). Si usamos el montoCuota recalculado ($75.000) en
-        // lugar del guardado ($80.000), el cliente vería valores distintos a los
-        // que realmente debe pagar.
-        //
-        // IMPORTANTE: valorDiasCausados NO se suma a ninguna cuota individual.
-        // Es un cargo único que se documenta en notas pero las cuotas quedan
-        // todas iguales al montoCuota guardado en BD.
-        if (p.montoCuota && p.montoCuota !== calculo.montoCuota) {
-          calculo.tablaAmortizacion = calculo.tablaAmortizacion.map((c: any) => ({
-            ...c,
-            montoCuota: p.montoCuota,  // Todas las cuotas al valor guardado
-          }))
-          calculo.montoCuota = p.montoCuota
-        }
-      } else if (p.modalidadAmortizacion === 'INTERES_FIJO_SIN_CAPITAL') {
-        const fechaBase = fechaBaseAmortizacion
-        const fechaVenc = new Date(fechaBase)
-        fechaVenc.setMonth(fechaVenc.getMonth() + proximaCuota)
-        calculo = {
-          numeroCuotas: 0,
-          montoCuota: p.interesFijoMensual || 0,
-          totalInteres: 0,
-          totalPagar: p.montoPrincipal,
-          tasaAplicada: 0,
-          tablaAmortizacion: [{
-            numero: proximaCuota,
-            fechaVencimiento: fechaVenc,
-            montoCuota: p.interesFijoMensual || 0,
-            capital: 0,
-            interes: p.interesFijoMensual || 0,
-            saldoCapital: p.montoPrincipal - (p.capitalPagadoExtra || 0),
-            acumuladoInteres: 0,
-            acumuladoCapital: 0,
-          }],
-          fechaVencimiento: fechaVenc,
-          fondoGarantia: 0,
-        }
-      } else {
-        calculo = calcularPrestamo({
-          montoPrincipal: p.montoPrincipal,
-          tasaInteresAnual: p.tasaInteresAnual,
-          tasaMoraAnual: getTasaMoraAnual(p),
-          plazoMeses: p.plazoMeses,
-          frecuencia: p.frecuencia as any,
-          fechaDesembolso: fechaBaseAmortizacion,
-        })
-      }
-      // === Corregir fechas por calendario si hay periodoCorte (ej: '16-01') ===
-      calculo.tablaAmortizacion = corregirFechasPorCorte(calculo.tablaAmortizacion, p.periodoCorte)
+      const calculo = calcularPrestamo({
+        montoPrincipal: p.montoPrincipal,
+        tasaInteresAnual: p.tasaInteresAnual,
+        tasaMoraAnual: getTasaMoraAnual(p),
+        plazoMeses: p.plazoMeses,
+        frecuencia: p.frecuencia as any,
+        fechaDesembolso: p.fechaDesembolso || p.fechaSolicitud,
+      })
 
       const cuotaPendiente = calculo.tablaAmortizacion.find((c) => c.numero === proximaCuota)
       const fechaVencimiento = cuotaPendiente?.fechaVencimiento
@@ -184,42 +115,14 @@ export async function GET(req: NextRequest) {
       const moraPendiente = Math.max(0, moraActual - moraPagadaCuota)
       const cuotaBase = cuotaPendiente?.montoCuota || p.montoCuota
       const totalCuotaConMora = cuotaBase + moraPendiente
-
-      // === FIX Task 12: Cargos iniciales en cuota 1 ===
-      // Si la próxima cuota es la #1 y hay cargos iniciales pendientes (pagaré,
-      // tarifa plataforma, flexibilidad financiera, fondo garantía), se suman
-      // al total a pagar para que el cliente los pague junto con la cuota 1.
-      //
-      // Política: el texto del estado de cuenta dice "Este cargo se aplica una
-      // sola vez al inicio del crédito y está incluido en la primera cuota."
-      // Por eso solo se suman cuando proximaCuota === 1.
-      const cargosInicialesInfo = proximaCuota === 1
-        ? calcularCargosInicialesPendientes(p)
-        : { cargos: [], totalPendiente: 0, totalConfigurado: 0, totalYaCobrado: 0 }
-      // Si la cuota 1 ya fue aplicada (legacy), los cargos del pagaré y del
-      // fondo de garantía (que no tienen flag propio de "aplicado") se consideran cobrados.
-      const cuota1Aplicada = p.pagos.some(pg => pg.numeroCuota === 1 && pg.estado === 'APLICADO')
-      const cargosInicialesInfoAjustada = {
-        ...cargosInicialesInfo,
-        cargos: cargosInicialesInfo.cargos.map(c => {
-          if (c.concepto === 'PAGARE_CARTA' && cuota1Aplicada) return { ...c, yaCobrado: true }
-          if (c.concepto === 'FONDO_GARANTIA' && cuota1Aplicada) return { ...c, yaCobrado: true }
-          return c
-        }),
-      }
-      const cargosInicialesPendientesMonto = proximaCuota === 1
-        ? cargosInicialesInfoAjustada.cargos.filter(c => !c.yaCobrado).reduce((s, c) => s + c.monto, 0)
-        : 0
-      const totalCuotaConCargos = totalCuotaConMora + cargosInicialesPendientesMonto
-
-      const montoPendiente = Math.max(0, totalCuotaConCargos - totalPagadoCuota)
+      const montoPendiente = Math.max(0, totalCuotaConMora - totalPagadoCuota)
       const montoTotalPendiente = montoPendiente
 
       // === Resolución de cuenta de recaudo con prioridad correcta ===
       // 1. Instrucción temporal activa del cliente
       // 2. Cuenta asignada directamente al cliente (cliente.cuentaRecaudoId)
       // 3. Cuenta de la categoría del cliente (cliente.categoria.cuentaRecaudo)
-      // 4. Cuenta de la categoría del solicitud (p.categoria.cuentaRecaudo)
+      // 4. Cuenta de la categoría del préstamo (p.categoria.cuentaRecaudo)
       const instruccionActiva = p.cliente.instruccionCuentaId &&
         (!p.cliente.instruccionCuentaExpira || new Date(p.cliente.instruccionCuentaExpira) > new Date())
       const cuentaRecaudo = instruccionActiva
@@ -234,18 +137,6 @@ export async function GET(req: NextRequest) {
         : p.categoria?.cuentaRecaudo
         ? 'CATEGORIA_PRESTAMO'
         : 'SIN_CUENTA'
-
-      // === FIX (2026-09-04): sincronizar saldoTotal con estado de cuenta ===
-      // El estado de cuenta usa una heurística para determinar si saldoTotal ya incluye
-      // los cargos iniciales o no. Si no los incluye (préstamos legacy), los suma.
-      // Aplicar Pago antes mostraba saldoTotal sin la misma corrección, causando
-      // discrepancia entre el estado de cuenta y el modal de pago.
-      const saldoSinCargos = p.montoPrincipal + p.totalInteres - p.montoPagado
-      const saldoConCargosEsperado = saldoSinCargos + cargosInicialesPendientesMonto
-      const saldoYaIncluyeCargos = p.saldoTotal >= saldoConCargosEsperado - 1
-      const saldoTotalSincronizado = saldoYaIncluyeCargos
-        ? p.saldoTotal
-        : p.saldoTotal + cargosInicialesPendientesMonto
 
       return {
         id: p.id,
@@ -287,14 +178,7 @@ export async function GET(req: NextRequest) {
         totalCuotaConMora,
         montoPendiente,
         montoTotalPendiente,
-        // === FIX: saldoTotal sincronizado con estado de cuenta ===
-        saldoTotal: saldoTotalSincronizado,
-        // === FIX: totalPagar sincronizado con estado de cuenta ===
-        totalPagar: saldoYaIncluyeCargos ? p.totalPagar : p.totalPagar + cargosInicialesPendientesMonto,
-        // === flag para que el frontend sepa si el saldo ya incluye cargos ===
-        saldoYaIncluyeCargos,
-        // === cargos iniciales pendientes (para mostrar en frontend) ===
-        cargosInicialesPendientesMonto,
+        saldoTotal: p.saldoTotal,
         estado: p.estado,
         cuentaRecaudo: cuentaRecaudo
           ? {
@@ -312,44 +196,6 @@ export async function GET(req: NextRequest) {
         instruccionCuentaNota: instruccionActiva ? p.cliente.instruccionCuentaNota : null,
         instruccionCuentaExpira: instruccionActiva ? p.cliente.instruccionCuentaExpira : null,
         frecuencia: p.frecuencia,
-        // === Modalidad INTERES_FIJO_SIN_CAPITAL ===
-        // Datos específicos para mostrar la opción de abono al capital en la UI.
-        modalidadAmortizacion: p.modalidadAmortizacion || 'FRANCES',
-        interesFijoMensual: p.interesFijoMensual || 0,
-        capitalPagadoExtra: p.capitalPagadoExtra || 0,
-        saldoReal: p.modalidadAmortizacion === 'INTERES_FIJO_SIN_CAPITAL'
-          ? p.montoPrincipal - (p.capitalPagadoExtra || 0)
-          : p.saldoTotal,
-        proximaCuotaInteresFecha: p.proximaCuotaInteresFecha || null,
-        // === Tarea Q: Flexibilidad Financiera — info para habilitar el botón de uso ===
-        flexibilidadFinanciera: p.flexibilidadFinanciera,
-        flexibilidadActivada: p.flexibilidadActivada,
-        flexibilidadModalidad: p.flexibilidadModalidad,
-        flexibilidadUsosDisponibles: p.flexibilidadUsosDisponibles,
-        flexibilidadUsosEjercidos: p.flexibilidadUsosEjercidos,
-        flexibilidadCosto: p.flexibilidadCosto,
-        // ¿El solicitud califica para usar flexibilidad en esta cuota?
-        // Reglas: >=4 cuotas, 1ra cuota pagada, próxima cuota >= 2 (no desde prima), usos disponibles
-        flexibilidadElegible:
-          p.flexibilidadActivada === true &&
-          p.flexibilidadUsosDisponibles > 0 &&
-          p.numeroCuotas >= 4 &&
-          cuotasPagadasCompletamente >= 1 &&
-          proximaCuota >= 2,
-        flexibilidadRazonInelegible: !(p.flexibilidadActivada === true)
-          ? 'El beneficio no está activado para este crédito'
-          : p.flexibilidadUsosDisponibles <= 0
-          ? 'Ya no quedan usos disponibles (se consumieron todos)'
-          : p.numeroCuotas < 4
-          ? `El crédito tiene ${p.numeroCuotas} cuotas; flexibilidad requiere mínimo 4`
-          : cuotasPagadasCompletamente < 1
-          ? 'La primera cuota (prima) debe estar paga para usar el beneficio'
-          : proximaCuota < 2
-          ? 'No se puede usar flexibilidad desde la prima (primera cuota)'
-          : null,
-        // === FIX Task 12: información de cargos iniciales en cuota 1 ===
-        cargosInicialesPendientes: cargosInicialesInfoAjustada.cargos.filter(c => !c.yaCobrado),
-        totalCuotaConCargos,  // con cargos (lo que el cliente debe pagar)
       }
     })
 

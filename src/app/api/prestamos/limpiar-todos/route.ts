@@ -7,7 +7,7 @@ import { writeFileSync, mkdirSync } from 'fs'
 import { join } from 'path'
 
 // =====================================================
-// POST - Borrar TODOS los solicitudes y datos relacionados.
+// POST - Borrar TODOS los préstamos y datos relacionados.
 //
 // ENDPOINT DESTRUCTIVO — Blindaje:
 //   1. requireRole ADMIN
@@ -27,20 +27,15 @@ export async function POST(req: NextRequest) {
     const body = await req.json()
     const { password, motivo } = body
 
-    // Validar password de autorización (desde env var, con fallback por defecto)
-    // El fallback mantiene el endpoint funcional incluso si el .env no tiene
-    // la variable definida (útil para entornos donde no se puede configurar
-    // fácilmente, como Vercel sin dashboard access).
-    const FALLBACK_PASSWORD = 'Limpiar'
-    const PASSWORD_AUTORIZACION = process.env.LIMPIAR_PRESTAMOS_PASSWORD?.trim() || FALLBACK_PASSWORD
-    if (!process.env.LIMPIAR_PRESTAMOS_PASSWORD) {
-      console.warn('[limpiar-todos] LIMPIAR_PRESTAMOS_PASSWORD no definida en .env — usando fallback por defecto. Se recomienda configurarla en producción.')
+    // Validar password de autorización (desde env var)
+    const PASSWORD_AUTORIZACION = process.env.LIMPIAR_PRESTAMOS_PASSWORD
+    if (!PASSWORD_AUTORIZACION) {
+      return NextResponse.json(
+        { success: false, error: 'No se ha configurado LIMPIAR_PRESTAMOS_PASSWORD en .env. Configúralo antes de usar este endpoint.' },
+        { status: 500 }
+      )
     }
-
-    // Comparación case-insensitive para mayor tolerancia (el usuario puede
-    // escribir "limpiar", "Limpiar" o "LIMPIAR").
-    if (!password || typeof password !== 'string' ||
-        password.trim().toLowerCase() !== PASSWORD_AUTORIZACION.trim().toLowerCase()) {
+    if (password !== PASSWORD_AUTORIZACION) {
       return NextResponse.json(
         { success: false, error: 'Contraseña de autorización incorrecta' },
         { status: 403 }
@@ -116,11 +111,11 @@ export async function POST(req: NextRequest) {
       db.notificacionLog.deleteMany(),
       // 9. Pagos
       db.pago.deleteMany(),
-      // 10. Bitácora de solicitudes
+      // 10. Bitácora de préstamos
       db.bitacoraPrestamo.deleteMany(),
-      // 11. Movimientos de caja asociados a solicitudes
+      // 11. Movimientos de caja asociados a préstamos
       db.movimientoCaja.deleteMany({ where: { prestamoId: { not: null } } }),
-      // 12. Solicitudes
+      // 12. Préstamos
       db.prestamo.deleteMany(),
     ])
 
@@ -130,7 +125,7 @@ export async function POST(req: NextRequest) {
       usuarioNombre: auth.username,
       accion: 'LIMPIAR_TODOS_PRESTAMOS',
       modulo: 'prestamos',
-      entidadNombre: 'TODOS LOS SOLICITUDES',
+      entidadNombre: 'TODOS LOS PRÉSTAMOS',
       detalles: JSON.stringify({
         motivo: motivo || 'No especificado',
         backupFile,
@@ -149,7 +144,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      mensaje: 'Todos los solicitudes y datos relacionados han sido borrados. Se generó backup previo.',
+      mensaje: 'Todos los préstamos y datos relacionados han sido borrados. Se generó backup previo.',
       backupFile,
       datosBorrados: {
         prestamos: prestamos.length,

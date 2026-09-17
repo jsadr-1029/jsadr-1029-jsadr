@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { generarCodigoOtp, registrarOtp, obtenerIp, obtenerUserAgent, validarEmailEntregable } from '@/lib/otp'
+import { generarCodigoOtp, registrarOtp, obtenerIp, obtenerUserAgent } from '@/lib/otp'
 import { enviarEmail } from '@/lib/email'
 
 // POST /api/portal/solicitar-otp
-// Solicita OTP para firma de un solicitud desde el portal del cliente.
+// Solicita OTP para firma de un préstamo desde el portal del cliente.
 //
 // Fixes aplicados:
 //  - db.firma → db.firmaElectronica
@@ -17,7 +17,7 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
     // FIXED v5.0: el OTP del portal SIEMPRE se envía por correo electrónico.
-    // La modalidad (WhatsApp/Email/Ambos) SOLO aplica a OTPs de solicitudes.
+    // La modalidad (WhatsApp/Email/Ambos) SOLO aplica a OTPs de préstamos.
     // El parámetro `canal` del body se ignora para forzar canal=EMAIL.
     const canal = 'EMAIL'
     const { firmaId } = body
@@ -34,7 +34,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Firma no encontrada' }, { status: 404 })
     }
     if (!firma.prestamo || !firma.prestamo.cliente) {
-      return NextResponse.json({ error: 'Solicitud/cliente asociado a la firma no encontrado' }, { status: 404 })
+      return NextResponse.json({ error: 'Préstamo/cliente asociado a la firma no encontrado' }, { status: 404 })
     }
 
     // Verificar intentos previos
@@ -42,13 +42,13 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Máximo de intentos alcanzado' }, { status: 429 })
     }
 
-    // === v4.8 (QA M05 TC-MAIL-004): validar email ANTES de generar el OTP ===
-    // Antes: el OTP se generaba y luego se validaba el email. Si el cliente no
-    // tenía email, el OTP se había generado en memoria (desperdicio + riesgo de
-    // logs). Ahora: validar email primero, luego generar OTP.
+    // Generar OTP nuevo (numérico 6 dígitos)
+    const otp = generarCodigoOtp('numeric', 6)
     const cliente = firma.prestamo.cliente
     const telefono = cliente.telefono || ''
     const email = cliente.email || ''
+    const ip = obtenerIp(req)
+    const ua = obtenerUserAgent(req)
 
     // FIXED v5.0: canal siempre EMAIL
     const canalEf: 'EMAIL' = 'EMAIL'
@@ -58,36 +58,10 @@ export async function POST(req: NextRequest) {
         {
           error:
             'Tu cuenta no tiene un correo electrónico registrado. Contacta al administrador para actualizar tu correo antes de continuar.',
-          codigo: 'CLIENTE_SIN_EMAIL',
         },
         { status: 400 }
       )
     }
-
-    // Validar que el email sea entregable (no @test.com, @example.com, etc.)
-    // Estos dominios no tienen servidor MX y siempre soft-bouncean con
-    // "connection timeout", dando la impresión falsa de que el sistema
-    // de correo está roto.
-    const validacionEmail = validarEmailEntregable(email)
-    if (!validacionEmail.esValido) {
-      return NextResponse.json(
-        {
-          error:
-            'El correo electrónico registrado en tu cuenta ("' +
-            email +
-            '") pertenece a un dominio de prueba que no puede recibir correos. ' +
-            'Contacta al administrador para actualizar tu correo a una dirección real.',
-          codigo: 'EMAIL_NO_ENTREGABLE',
-          motivo: validacionEmail.motivo,
-        },
-        { status: 400 }
-      )
-    }
-
-    // Generar OTP nuevo (numérico 6 dígitos) — solo después de validar email
-    const otp = generarCodigoOtp('numeric', 6)
-    const ip = obtenerIp(req)
-    const ua = obtenerUserAgent(req)
 
     // Registrar en OtpRegistro (trazabilidad centralizada)
     const otpRegistro = await registrarOtp({
@@ -99,7 +73,7 @@ export async function POST(req: NextRequest) {
       destinatario: canalEf === 'EMAIL' ? email : telefono,
       tipo: 'FIRMA_PORTAL',
       entidadRefId: firma.id,
-      descripcion: `OTP firma TyC solicitud ${firma.prestamo.codigo}`,
+      descripcion: `OTP firma TyC préstamo ${firma.prestamo.codigo}`,
       maxIntentos: firma.maxIntentos,
       expiraEnMinutos: 5,
       ipSolicitud: ip,
@@ -150,7 +124,7 @@ Si no solicitaste este código, ignora este correo.
   <p style="color: #6b7280; font-size: 13px;">Este código expira en <strong>5 minutos</strong>. No lo compartas con nadie.</p>
   <p style="color: #6b7280; font-size: 13px;">Si no solicitaste este código, ignora este correo.</p>
   <hr style="border: 0; border-top: 1px solid #e5e7eb; margin: 24px 0;">
-  <p style="color: #9ca3af; font-size: 12px;">Jo*** Se*** Al*** D** R** v5.0 — Sistema de solicitudes</p>
+  <p style="color: #9ca3af; font-size: 12px;">Jo*** Se*** Al*** D** R** v5.0 — Sistema de préstamos</p>
 </div>`,
     })
     envioEmail = resultado.success
@@ -164,7 +138,7 @@ Si no solicitaste este código, ignora este correo.
         prestamoId: firma.prestamoId,
         clienteTelefono: telefono,
         tipo: 'OTP',
-        mensaje: `OTP solicitado vía EMAIL para firma de solicitud ${firma.prestamo.codigo}`,
+        mensaje: `OTP solicitado vía EMAIL para firma de préstamo ${firma.prestamo.codigo}`,
         estado: envioEmail ? 'ENVIADO' : 'FALLIDO',
         fechaEnvio: new Date(),
       },

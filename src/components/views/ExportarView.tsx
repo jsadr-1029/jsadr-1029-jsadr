@@ -1,11 +1,8 @@
 'use client'
 
-import { useState } from 'react'
 import { PageHeader } from '@/components/ui-basics'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { useToast } from '@/hooks/use-toast'
-import { descargarArchivo } from '@/lib/auth-docs'
 import {
   Database,
   FileJson,
@@ -20,39 +17,23 @@ import {
 } from 'lucide-react'
 
 export function ExportarView() {
-  const [exportando, setExportando] = useState(false)
-  const { toast } = useToast()
-
-  const descargar = async (formato: 'json' | 'csv') => {
-    // IMPORTANTE: usar descargarArchivo (fetch + Blob) en lugar de
-    // window.open, porque window.open NO puede añadir el header
-    // Authorization: Bearer y en producción el endpoint devuelve
-    // 401 "No autorizado. Token requerido."
-    setExportando(true)
-    const ok = await descargarArchivo(`/api/export?formato=${formato}`)
-    setExportando(false)
-    if (!ok) {
-      toast({
-        title: 'No se pudo exportar',
-        description: 'Verifica tu sesión e intenta nuevamente.',
-        variant: 'destructive',
-      })
-    }
+  const descargar = (formato: 'json' | 'csv') => {
+    window.open(`/api/export?formato=${formato}`, '_blank')
   }
 
   const tarjetas = [
     {
       titulo: 'Exportación JSON Completa',
       descripcion:
-        'Descarga toda la base de datos en formato JSON estructurado. Incluye: clientes, solicitudes, pagos, casos jurídicos, cronología, documentos, alertas, notificaciones, OTP de Firma Electrónica, hashes de PIN del portal y accesos del portal con sus relaciones.',
+        'Descarga toda la base de datos en formato JSON estructurado. Incluye: clientes, préstamos, pagos, casos jurídicos, cronología, documentos, alertas, notificaciones, OTP de Firma Electrónica, hashes de PIN del portal y accesos del portal con sus relaciones.',
       icon: FileJson,
       color: 'bg-violet-500/15 text-violet-300',
       accion: () => descargar('json'),
       boton: 'Descargar JSON',
       incluye: [
         'Datos de clientes (nombre, cédula, contacto, salario)',
-        'Solicitudes con todas las variables bancarias',
-        'Tabla de amortización completa por solicitud',
+        'Préstamos con todas las variables bancarias',
+        'Tabla de amortización completa por préstamo',
         'Historial de pagos detallado',
         'Casos jurídicos con cronología y alertas',
         'Log de notificaciones WhatsApp enviadas',
@@ -73,7 +54,7 @@ export function ExportarView() {
       boton: 'Descargar CSV',
       incluye: [
         'Clientes con todos sus campos',
-        'Solicitudes con saldos y estado',
+        'Préstamos con saldos y estado',
         'Pagos con método y referencia',
         'Casos jurídicos con abogado y estado',
         'Notificaciones enviadas',
@@ -115,10 +96,10 @@ export function ExportarView() {
     {
       titulo: 'Tokens de Sesión',
       descripcion:
-        'Tokens de sesión del portal (8h de expiración) y tokens públicos de firma (acceso sin login desde enlace seguro). Permite trazabilidad de acciones realizadas.',
+        'Tokens de sesión del portal (2h de expiración) y tokens públicos de firma (acceso sin login desde enlace seguro). Permite trazabilidad de acciones realizadas.',
       icon: Fingerprint,
       color: 'bg-violet-500/15 text-violet-300 border-violet-400/30',
-      detalle: 'Session 8h · Token firma 7d',
+      detalle: 'Session 2h · Token firma 7d',
     },
   ]
 
@@ -155,7 +136,7 @@ export function ExportarView() {
             <p className="font-semibold mb-1">Backup completo de información</p>
             <p className="text-muted-foreground">
               La exportación incluye todas las variables registradas en el sistema:
-              datos de clientes, solicitudes con su cálculo financiero completo, historial de pagos,
+              datos de clientes, préstamos con su cálculo financiero completo, historial de pagos,
               casos jurídicos con su seguimiento cronológico, alertas, documentos, notificaciones
               WhatsApp enviadas, firmas electrónicas con OTP, accesos al portal y tokens de sesión.
               El archivo se descarga con la fecha de exportación en el nombre.
@@ -225,9 +206,9 @@ export function ExportarView() {
                     ))}
                   </ul>
                 </div>
-                <Button onClick={t.accion} disabled={exportando} className="w-full">
+                <Button onClick={t.accion} className="w-full">
                   <Download className="w-4 h-4 mr-2" />
-                  {exportando ? 'Exportando…' : t.boton}
+                  {t.boton}
                 </Button>
               </CardContent>
             </Card>
@@ -249,7 +230,7 @@ export function ExportarView() {
               </p>
             </div>
             <div className="p-3 bg-muted/30 rounded-md border border-white/10">
-              <p className="font-semibold">Solicitudes</p>
+              <p className="font-semibold">Préstamos</p>
               <p className="text-xs text-muted-foreground mt-1">
                 Variables bancarias: monto principal, tasa anual fija, tasa moratoria, plazo,
                 frecuencia, número de cuotas, cuota fija calculada, total interés, total a pagar,
