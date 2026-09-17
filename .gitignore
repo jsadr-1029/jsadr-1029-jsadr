@@ -35,6 +35,13 @@ yarn-error.log*
 .env.local
 .env.production
 .env.*.local
+.env.*.bak
+.env.*.bak.*
+.env.bak*
+.env.pre-*
+.env.sqlite*
+.env.broken*
+.env.local-broken*
 # .env.example SÍ se commitea
 !.env.example
 
