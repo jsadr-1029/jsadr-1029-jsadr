@@ -106,6 +106,7 @@ model Cliente {
   claveTempToken        String?
   claveTempExpira       DateTime?
   optOutNotificaciones  Boolean @default(false)
+  preferenciaNotificacion String? @default("WHATSAPP") // WHATSAPP | EMAIL | AMBOS
   // v4.14: marca de cliente de prueba
   esPrueba              Boolean @default(false)
   fechaMarcadoPrueba    DateTime?
