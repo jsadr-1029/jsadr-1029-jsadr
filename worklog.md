@@ -2422,3 +2422,72 @@ Stage Summary:
 - 4 cuotas quincenales a $80.000 cada una
 - Cronograma: 20/09 → 05/10 → 20/10 → 05/11
 - Total a pagar: $340.000 (incluye $20.000 por cambio de fecha)
+
+---
+Task ID: 16-portal-neobanco-glass
+Agent: Super Z (main)
+Task: Implementar el "Diseño 1 — Neobanco Glass" (estilo Revolut/N26/Cash App) como nuevo portal del cliente preview. 9 vistas, mobile-first, dark/light, WCAG AA, conectado a APIs existentes.
+
+Work Log:
+- Explorada la estructura actual: PortalClienteModal (3056 líneas) + PortalClienteView legacy (756 líneas). APIs disponibles: /api/portal/mi-estado, /api/portal/[cedula], /api/portal/simular, /api/portal/otros-si-pendientes, /api/solicitudes-web, /api/portal/marcar-campana-vista.
+- Decisión clave: NO tocar el portal existente. Crear nueva ruta /portal-neobanco que conviva en paralelo para que el usuario revise sin riesgo.
+- Diseño implementado:
+  * Design tokens CSS dedicados (--nb-*) en globals.css (3 secciones: tokens base, tema light, tema dark)
+  * Glassmorphism real: backdrop-blur + saturate(160%) + tinte gradient
+  * Aurora background: 3 capas radial-gradient sobre gradient lineal
+  * Paleta light: #f4f6fb → #dde3f0 (fondo), índigo #5b5bf7 (primario), violeta #8b5bf7 (acento)
+  * Paleta dark: #060812 → #0e1224 (fondo), #7c7cff (primario), #a78bff (acento)
+  * Tipografía Geist Sans + tabular nums para cifras COP
+  * Radios: 12/16/24/32px, mobile-first max-w 440px
+- Primitivos UI (ui.tsx, 636 líneas):
+  * GlassCard (3 variantes: default, soft, elevated) con radius variable
+  * GlassButton (5 variantes: primary gradient, secondary glass, ghost, danger, success)
+  * GlassInput con label/hint/error/iconos/prefix/suffix
+  * SegmentedControl para tabs pill
+  * Chip semántico (neutral/brand/success/warning/danger/info) × soft/solid
+  * ProgressRing accesible (aria, %, tone)
+  * MiniBarChart para series temporales
+  * ListRow con leading/title/subtitle/trailing
+  * Sheet bottom-sheet modal (mobile-first, hasta 85vh)
+  * NbToastProvider con toasts inline animados (push/cerrar auto)
+  * Skeleton shimmer, EmptyState, SectionHeader
+- Hook useNeobancoPortal (333 líneas):
+  * useNeobancoPortal(): token+cedula desde localStorage, fetch /api/portal/mi-estado (cliente+resumen+prestamos+proximosVencimientos+cuentaRecaudo), fetch /api/portal/[cedula] (campañas), fetch /api/portal/otros-si-pendientes
+  * useNbTheme(): dark/light con persistencia localStorage, sync con prefers-color-scheme, toggle()
+  * Formateadores: formatCOP (Intl es-CO COP), formatFechaCorta, formatFechaHora, formatFechaRelativa, diasEntre, estadoPrestamoTono, estadoPrestamoLabel
+- 9 vistas implementadas (cada una archivo propio en glass/views/):
+  1. HubView (337 líneas): hero card con saldo + ProgressRing avance + 4 accesos rápidos + próxima cuota destacada + 2 créditos activos + 2 stats (pagado/total)
+  2. CreditosView (326 líneas): SegmentedControl filtros (activos/históricos/todos) + lista con código/estado/saldo/cuota/cuotas pagadas + barra progreso + Sheet detalle con stats, cargos flexibilidad, botones estado cuenta y paz y salvo
+  3. ProximosPagosView (303 líneas): separa en mora vs próximos, alerta mora con CTA asesor, lista cards con color por urgencia, cuenta recaudo con CopyRow para copiar datos, Sheet detalle con instrucciones de pago
+  4. SimuladorView (532 líneas): sliders monto (100K-5M) + plazo (1-24) + frecuencia mensual/quincenal/semanal + selector flexibilidad 3 opciones (ninguna/básica $15K/premium $34.9K) con elegibilidad >=4 cuotas + resultado elevado con cuota fija grande + primera cuota con cargos + total a pagar + cronograma Sheet desglosado por cuota, tarifa plataforma $4.900 obligatoria incluida
+  5. SolicitudesView (338 líneas): lista solicitudes con estado (PENDIENTE/EN_REVISION/APROBADA/RECHAZADA/COMPLETADA) + Sheet nueva solicitud (monto/plazo/frecuencia/flexibilidad/notas) + POST a /api/solicitudes-web
+  6. ChatView (225 líneas): header asesor online, burbujas iMessage (cliente gradient / asesor glass), indicador typing animado, 4 mensajes rápidos, input con adjuntar + enviar, POST a /api/centro-comunicaciones/mensaje-portal
+  7. HistorialView (209 líneas): SegmentedControl año, stats total/promedio, MiniBarChart 6 meses con mes actual destacado, lista pagos aplicados (max 50) con método/fecha/cuota
+  8. AvisosView (196 líneas): genera avisos dinámicamente desde proximosVencimientos + otrosSi pendientes: tipos pago/mora/otro_si/mensaje/sistema, con CTA "Firmar ahora" para Otros Sí
+  9. CampanasView (233 líneas): campaña destacada (primera) con aura gradient + chips exclusivo/destacado, lista resto con icono por tipo, Sheet detalle con vigencia y CTA WhatsApp
+- PortalNeobancoGlass.tsx (435 líneas): shell principal
+  * NbToastProvider envolvente
+  * Header sticky con logo JSADR + toggle tema (sun/moon) + avisos con badge + avatar cliente
+  * Bottom tab bar fija (5 tabs: Inicio/Créditos/Pagos/Simular/Más) con glass + sombra, indicador activo, badges mora/avisos
+  * Sheet "Más": 5 vistas secundarias (Solicitudes/Chat/Historial/Avisos/Campañas)
+  * Sheet Perfil: avatar + datos cliente + stats + cerrar sesión
+  * Estado de error: tarjeta glass con reintento + cerrar sesión
+  * Estado sin sesión: tarjeta glass con CTA al login
+  * Routing interno entre 9 vistas
+- Ruta /portal-neobanco/page.tsx: dynamic import con ssr:false, loading screen con gradient
+- Fix adicional: eliminado src/middleware.ts (deprecado en Next 16, ya reemplazado por src/proxy.ts). Sin este fix el dev server y el build fallan con "Both middleware file and proxy file detected".
+- TypeScript: PASS (0 errores en archivos nuevos)
+- ESLint: PASS (0 warnings en archivos nuevos)
+- Dev server local probado: GET /portal-neobanco → HTTP 200 OK
+
+Stage Summary:
+- ✅ Diseño 1 "Neobanco Glass" implementado como ruta preview /portal-neobanco
+- ✅ Convive con el portal existente (sin romper nada)
+- ✅ 9 vistas, mobile-first, dark/light, WCAG AA, fintech feel
+- ✅ APIs existentes reutilizadas (no se crearon nuevas)
+- ⚠️ Commit hecho localmente (a9bc555 + b156118) pero push bloqueado por GitHub Secret Scanning: el archivo scripts/fix-smtp-535.js (commit e422b59 previo) contiene Sendinblue SMTP key expuesta.
+  → Opción A: el usuario desbloquea via https://github.com/jsadr-1029/jsadr-1029-jsadr/security/secret-scanning/unblock-secret/3JSVV7j40zOY649c8GLmP7Vx0lP
+  → Opción B: filtrar el archivo del historial con git filter-repo (más invasivo)
+- 📌 Para preview LOCAL ahora: dev server corriendo en http://localhost:3000/portal-neobanco (login cliente requerido)
+- 📌 Para preview en Vercel: primero resolver el bloqueo del push (ver opciones arriba), luego esperar ~2 min a que Vercel despliegue.
+
