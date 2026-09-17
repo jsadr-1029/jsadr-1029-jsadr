@@ -482,6 +482,19 @@ model Pago {
   reciboHash      String?  // SHA-256 del contenido del recibo (verificación pública)
   reciboFechaEmision DateTime?
 
+  // === Recordatorios (v4.12) ===
+  recordatorioEnviadoEn DateTime?
+  recordatorioMedios String?
+
+  // === Flexibilidad Financiera (v4.0 — Tarea Q) ===
+  cuotaMovidaAlFinal       Boolean @default(false)
+  cuotaTrasladadaNumero    Int?
+  esFlexibilidadFinanciera Boolean @default(false)
+  fechaVencimientoNuevoTraslado DateTime?
+  fechaVencimientoOriginalTraslado DateTime?
+  flexibilidadModalidadUso String?
+  interesesCausadosAlTraslado Float?
+
   createdAt       DateTime @default(now())
 
   @@index([estado, fechaPago])
