@@ -965,3 +965,272 @@ html {
   isolation: isolate;
   contain: layout style paint;
 }
+
+/* =====================================================
+   PORTAL NEOBANCO GLASS — Design System (2026-09-17)
+   Diseño minimalista estilo Revolut/N26/Cash App.
+   Mobile-first. Soporta dark/light via [data-neobanco-theme].
+   ===================================================== */
+
+[data-neobanco-theme] {
+  /* === Tokens base: tipografía y radio === */
+  --nb-radius-sm: 12px;
+  --nb-radius-md: 16px;
+  --nb-radius-lg: 24px;
+  --nb-radius-xl: 32px;
+  --nb-font: var(--font-geist-sans), 'Inter', system-ui, -apple-system,
+    'Segoe UI', Roboto, sans-serif;
+
+  /* Transiciones estandarizadas para micro-interacciones */
+  --nb-transition: 220ms cubic-bezier(0.2, 0.6, 0.2, 1);
+
+  /* Layout */
+  --nb-max-w: 440px;
+  --nb-header-h: 56px;
+  --nb-tabbar-h: 72px;
+}
+
+/* === TEMA CLARO ===
+   Fondo gradiente blanco-perla con un toque frío.
+   Primario índigo eléctrico, acentos violeta. */
+[data-neobanco-theme="light"] {
+  --nb-bg-1: #f4f6fb;
+  --nb-bg-2: #e9edf6;
+  --nb-bg-3: #dde3f0;
+  --nb-fg: #0b1220;
+  --nb-fg-muted: #5b6478;
+  --nb-fg-subtle: #8b94a8;
+  --nb-divider: rgba(15, 23, 42, 0.06);
+  --nb-border: rgba(15, 23, 42, 0.08);
+  --nb-border-strong: rgba(15, 23, 42, 0.14);
+
+  /* Glass surfaces */
+  --nb-surface: rgba(255, 255, 255, 0.72);
+  --nb-surface-2: rgba(255, 255, 255, 0.55);
+  --nb-surface-blur: 22px;
+  --nb-surface-shadow: 0 1px 0 rgba(255, 255, 255, 0.7) inset,
+    0 1px 2px rgba(15, 23, 42, 0.04), 0 8px 24px -8px rgba(15, 23, 42, 0.12);
+  --nb-card-tint: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.5) 0%,
+    rgba(255, 255, 255, 0.2) 100%
+  );
+
+  /* Brand */
+  --nb-primary: #5b5bf7;
+  --nb-primary-strong: #4646e8;
+  --nb-primary-soft: rgba(91, 91, 247, 0.12);
+  --nb-gradient-brand: linear-gradient(135deg, #5b5bf7 0%, #8b5bf7 100%);
+  --nb-gradient-aurora: radial-gradient(
+      120% 80% at 20% 10%,
+      rgba(91, 91, 247, 0.18) 0%,
+      transparent 60%
+    ),
+    radial-gradient(100% 60% at 80% 0%, rgba(139, 91, 247, 0.14) 0%, transparent 70%),
+    linear-gradient(180deg, var(--nb-bg-1) 0%, var(--nb-bg-2) 50%, var(--nb-bg-3) 100%);
+
+  /* Semánticos */
+  --nb-success: #059669;
+  --nb-success-soft: rgba(5, 150, 105, 0.12);
+  --nb-warning: #d97706;
+  --nb-warning-soft: rgba(217, 119, 6, 0.12);
+  --nb-danger: #e11d48;
+  --nb-danger-soft: rgba(225, 29, 72, 0.1);
+  --nb-info: #2563eb;
+  --nb-info-soft: rgba(37, 99, 235, 0.1);
+
+  /* Tabular nums para cifras monetarias */
+  --nb-num-fmt: 'tnum' 1;
+}
+
+/* === TEMA OSCURO ===
+   Fondo gradiente slate-negro con sutiles auras violeta.
+   Primario más brillante para mantener contraste. */
+[data-neobanco-theme="dark"] {
+  --nb-bg-1: #060812;
+  --nb-bg-2: #0a0d1d;
+  --nb-bg-3: #0e1224;
+  --nb-fg: #f5f7fb;
+  --nb-fg-muted: #9aa3b8;
+  --nb-fg-subtle: #6b7388;
+  --nb-divider: rgba(255, 255, 255, 0.06);
+  --nb-border: rgba(255, 255, 255, 0.08);
+  --nb-border-strong: rgba(255, 255, 255, 0.16);
+
+  --nb-surface: rgba(255, 255, 255, 0.04);
+  --nb-surface-2: rgba(255, 255, 255, 0.025);
+  --nb-surface-blur: 24px;
+  --nb-surface-shadow: 0 1px 0 rgba(255, 255, 255, 0.05) inset,
+    0 1px 2px rgba(0, 0, 0, 0.2), 0 12px 32px -10px rgba(0, 0, 0, 0.55);
+  --nb-card-tint: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.06) 0%,
+    rgba(255, 255, 255, 0.02) 100%
+  );
+
+  --nb-primary: #7c7cff;
+  --nb-primary-strong: #9090ff;
+  --nb-primary-soft: rgba(124, 124, 255, 0.16);
+  --nb-gradient-brand: linear-gradient(135deg, #7c7cff 0%, #a78bff 100%);
+  --nb-gradient-aurora: radial-gradient(
+      120% 80% at 20% 10%,
+      rgba(124, 124, 255, 0.22) 0%,
+      transparent 60%
+    ),
+    radial-gradient(100% 60% at 80% 0%, rgba(167, 139, 255, 0.18) 0%, transparent 70%),
+    linear-gradient(180deg, var(--nb-bg-1) 0%, var(--nb-bg-2) 50%, var(--nb-bg-3) 100%);
+
+  --nb-success: #34d399;
+  --nb-success-soft: rgba(52, 211, 153, 0.14);
+  --nb-warning: #fbbf24;
+  --nb-warning-soft: rgba(251, 191, 36, 0.14);
+  --nb-danger: #fb7185;
+  --nb-danger-soft: rgba(251, 113, 133, 0.14);
+  --nb-info: #60a5fa;
+  --nb-info-soft: rgba(96, 165, 250, 0.14);
+
+  --nb-num-fmt: 'tnum' 1;
+}
+
+/* === Reset específico del portal ===
+   El portal vive en su propio root y no hereda .dark
+   del shell principal de la app. */
+[data-neobanco-theme] * {
+  box-sizing: border-box;
+}
+
+[data-neobanco-theme] body,
+[data-neobanco-theme] button,
+[data-neobanco-theme] input,
+[data-neobanco-theme] select,
+[data-neobanco-theme] textarea {
+  font-family: var(--nb-font);
+}
+
+/* === Utilitarias glass === */
+.nb-glass {
+  background: var(--nb-surface);
+  backdrop-filter: blur(var(--nb-surface-blur)) saturate(160%);
+  -webkit-backdrop-filter: blur(var(--nb-surface-blur)) saturate(160%);
+  border: 1px solid var(--nb-border);
+  box-shadow: var(--nb-surface-shadow);
+  position: relative;
+  overflow: hidden;
+}
+
+.nb-glass::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: var(--nb-card-tint);
+  pointer-events: none;
+  border-radius: inherit;
+}
+
+.nb-glass-2 {
+  background: var(--nb-surface-2);
+  backdrop-filter: blur(12px) saturate(140%);
+  -webkit-backdrop-filter: blur(12px) saturate(140%);
+  border: 1px solid var(--nb-border);
+}
+
+.nb-gradient-text {
+  background: var(--nb-gradient-brand);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.nb-tabular {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: var(--nb-num-fmt);
+}
+
+/* Animaciones */
+@keyframes nb-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes nb-slide-up {
+  from {
+    opacity: 0;
+    transform: translateY(24px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes nb-pulse-soft {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.6;
+  }
+}
+
+@keyframes nb-shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+.nb-anim-fade {
+  animation: nb-fade-in var(--nb-transition) both;
+}
+
+.nb-anim-slide {
+  animation: nb-slide-up 320ms cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+
+.nb-skeleton {
+  background: linear-gradient(
+    90deg,
+    var(--nb-surface-2) 0%,
+    var(--nb-surface) 50%,
+    var(--nb-surface-2) 100%
+  );
+  background-size: 200% 100%;
+  animation: nb-shimmer 1.6s infinite;
+}
+
+/* Scrollbar discreta (desktop preview) */
+[data-neobanco-theme] ::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+[data-neobanco-theme] ::-webkit-scrollbar-thumb {
+  background: var(--nb-border-strong);
+  border-radius: 4px;
+}
+[data-neobanco-theme] ::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* Foco accesible WCAG AA */
+[data-neobanco-theme] :focus-visible {
+  outline: 2px solid var(--nb-primary);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* Botones con feedback táctil */
+.nb-press {
+  transition: transform var(--nb-transition), background var(--nb-transition),
+    border-color var(--nb-transition), color var(--nb-transition);
+}
+.nb-press:active {
+  transform: scale(0.97);
+}
