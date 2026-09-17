@@ -80,3 +80,4 @@ if (globalForPrisma.__schemaTag !== SCHEMA_TAG || !globalForPrisma.prisma) {
 }
 
 export const db = globalForPrisma.prisma
+// Force rebuild Thu Sep 17 03:45:43 UTC 2026
