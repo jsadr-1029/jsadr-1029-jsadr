@@ -105,6 +105,12 @@ model Cliente {
   debeCambiarClave      Boolean @default(false)
   claveTempToken        String?
   claveTempExpira       DateTime?
+  optOutNotificaciones  Boolean @default(false)
+  // v4.14: marca de cliente de prueba
+  esPrueba              Boolean @default(false)
+  fechaMarcadoPrueba    DateTime?
+  marcadoPruebaPorId    String?
+  motivoPrueba          String?
   // Tasa personalizada (si el cliente tiene una tasa especial acordada)
   tieneTasaPersonalizada Boolean @default(false)
   tasaPersonalizada      Float?  // % mensual fija aplicada sobre capital inicial
