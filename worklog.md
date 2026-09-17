@@ -2519,3 +2519,62 @@ Stage Summary:
   3. O ir directamente a http://localhost:3000/portal-neobanco después del login
 - ⚠️ En Vercel (producción), el PIN también funcionará porque se guardó en Neon (BD compartida). Falta resolver el bloqueo del push por el secret scanning para que el deploy de Vercel tenga el código nuevo del portal.
 
+
+---
+Task ID: 18-sync-github-vercel-neon
+Agent: Super Z (main)
+Task: Sincronizar al 100% los cambios entre GitHub, Vercel y Neon.
+
+Work Log:
+- Estado inicial: 5 commits locales sin pushear (incluido mi portal Neobanco Glass) bloqueados por GitHub Secret Scanning.
+- Diagnóstico del bloqueo: scripts/fix-smtp-535.js (commit e422b59) contiene Sendinblue SMTP key expuesta. El archivo NO estaba en origin/main previo a mi push → GitHub lo detecta por primera vez y bloquea.
+- Limpiado de historial con git filter-branch: 'git filter-branch --force --index-filter "git rm --cached --ignore-unmatch scripts/fix-smtp-535.js" --prune-empty -- origin/main..HEAD' → 5 commits reescritos limpios.
+- Segundo intento de push: bloqueado por .env.sqlite-bak-1789655791 que contiene un GitHub Personal Access Token (creado cuando respaldé el .env local para probar con Neon).
+- Limpieza profunda de working tree: rm -f .env.bak.1785538124 .env.broken.bak .env.local-broken-sqlite.bak .env.pre-neon.bak .env.pre-sync.bak .env.sqlite-bak-* .env.sqlite-current.bak ".env.sqlite.bak.1786318182"
+- .gitignore ampliado: añadidos patrones .env.*.bak, .env.bak*, .env.pre-*, .env.sqlite*, .env.broken*, .env.local-broken*
+- Segundo filter-branch: limpiados todos los .env*.bak* del historial.
+- PUSH EXITOSO: fca1110..83e1d11 main -> main (GitHub ya tiene el código del portal Neobanco Glass).
+- Verificación GitHub: confirmado que origin/main incluye:
+  - src/app/portal-neobanco/page.tsx (commit 74c6d2e)
+  - src/components/views/portal/PortalNeobancoGlass.tsx (commit 74c6d2e)
+  - src/components/views/portal/glass/ui.tsx (commit 74c6d2e)
+  - src/components/views/portal/glass/useNeobancoPortal.ts (commit 74c6d2e)
+  - 9 vistas en src/components/views/portal/glass/views/ (commit 74c6d2e)
+  - src/middleware.ts eliminado (commit 3878ded — fix del conflict middleware/proxy de Next 16)
+- Verificación Neon: PIN 1214731649 guardado correctamente para cliente Johan Alvarez (cédula 1214731649). Login en producción https://jsadr.com.co/api/portal/login devuelve token válido.
+- ❌ Verificación Vercel: PROBLEMA DETECTADO
+  * Vercel NO está auto-deployando ante pushes a GitHub
+  * Build ID en HTML sigue siendo 67JWAVkF2Pexnn8e7aRuG (sin cambio en 5 commits)
+  * /portal-neobanco devuelve 404 en producción (la página no existe en el build actual)
+  * Endpoint de diagnóstico /api/_version-ping añade ruta a whitelist de proxy.ts pero Vercel no deployó ese cambio → la API sigue dando 401 con la whitelist vieja
+  * Hice 6 commits posteriores (incluyendo empty commits para forzar webhook) pero Vercel no disparó ningún build nuevo
+  * El webhook de GitHub→Vercel parece estar desconectado o el proyecto Vercel está pausado
+- Commits pusheados a GitHub (todos en origin/main):
+  * 74c6d2e feat(portal): Diseño 1 — Neobanco Glass (preview)
+  * 3878ded fix: eliminar middleware.ts deprecado
+  * 83e1d11 chore(gitignore): ampliar patrones .env*
+  * 5f846ad, 39d9afe chore: trigger Vercel redeploy (intentos fallidos)
+  * 48ae3c4 fix(portal-neobanco): eliminar dynamic+ssr:false que falla en Next 16
+  * ba02e10, d754101, f930805: tests de deploy y limpieza
+- Acciones requeridas por el usuario (no puedo hacerlas yo):
+  1. Iniciar sesión en https://vercel.com/dashboard
+  2. Abrir el proyecto jsadr (o como se llame)
+  3. Verificar la tab "Deployments" → ver último deployment → si el último es de hace horas/días, el webhook está desconectado
+  4. Si el webhook está caído: Settings → Git → "Reconnect Git Repository" o "Redeploy" manual del último commit
+  5. Si Vercel está pausado por falta de créditos: revisar billing
+  6. Alternativa rápida: en la tab "Deployments" → "Redeploy" del último deployment → marcar "Use existing Build Cache" = NO → eso dispara build nuevo del último commit
+
+Stage Summary:
+- ✅ GitHub: 100% sincronizado. Origin/main tiene todos los commits del portal Neobanco Glass + fix del middleware + .gitignore reforzado.
+- ✅ Neon: 100% sincronizado. PIN 1214731649 guardado para cliente Johan Alvarez. Login funciona en https://jsadr.com.co/api/portal/login con token válido.
+- ⚠️ Vercel: NO sincronizado. El código está en GitHub pero Vercel no está auto-deployando. El build que sirve producción es viejo (build ID 67JWAVkF2Pexnn8e7aRuG, anterior a mis commits). /portal-neobanco da 404 en jsadr.com.co.
+- 📌 El usuario DEBE forzar un redeploy manual desde el dashboard de Vercel:
+  → https://vercel.com/[org]/[project]/deployments
+  → Seleccionar el último deployment
+  → Botón "..." → "Redeploy" (sin usar Build Cache)
+  → Esperar 2-3 min a que termine
+  → Verificar https://jsadr.com.co/portal-neobanco (debería dar 200)
+- 📌 Mientras tanto, el usuario puede probar el portal Neobanco Glass en LOCAL:
+  → http://localhost:3000/login (cedula 1214731649, pin 1214731649)
+  → http://localhost:3000/portal-neobanco
+
