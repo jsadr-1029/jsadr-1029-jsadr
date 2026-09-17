@@ -18,7 +18,7 @@ export async function GET(req: NextRequest) {
 
     const notificaciones = await db.notificacionLog.findMany({
       where,
-      include: { prestamo: { include: { cliente: { select: { id: true, nombre: true, cedula: true, telefono: true, email: true, activo: true, esPrueba: true, optOutNotificaciones: true, preferenciaNotificacion: true, tieneTasaPersonalizada: true, tasaPersonalizada: true, categoriaId: true } } } } },
+      include: { prestamo: { include: { cliente: { select: { id: true, nombre: true, cedula: true, telefono: true, email: true, activo: true } } } } },
       orderBy: { fechaEnvio: 'desc' },
       take: 100,
     })
@@ -48,7 +48,7 @@ export async function POST(req: NextRequest) {
     // Obtener préstamos activos
     const prestamosActivos = await db.prestamo.findMany({
       where: { estado: { in: ['ACTIVO', 'EN_MORA'] } },
-      include: { cliente: { select: { id: true, nombre: true, cedula: true, telefono: true, email: true, activo: true, esPrueba: true, optOutNotificaciones: true, preferenciaNotificacion: true, tieneTasaPersonalizada: true, tasaPersonalizada: true, categoriaId: true } }, pagos: true },
+      include: { cliente: { select: { id: true, nombre: true, cedula: true, telefono: true, email: true, activo: true } }, pagos: true },
     })
 
     for (const prestamo of prestamosActivos) {
