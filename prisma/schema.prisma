@@ -48,6 +48,9 @@ model Usuario {
   mfaSecret        String?  // TOTP secret (base32)
   sessionToken     String?  // JWT refresh token hash
   mustChangePassword Boolean @default(false)
+  // === Recuperación de clave (magic link) ===
+  claveResetToken  String?
+  claveResetExpira DateTime?
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
@@ -99,6 +102,9 @@ model Cliente {
   claveBloqueadoHasta   DateTime?
   claveResetToken       String?  // token temporal para resetear desde un enlace
   claveResetExpira      DateTime?
+  debeCambiarClave      Boolean @default(false)
+  claveTempToken        String?
+  claveTempExpira       DateTime?
   // Tasa personalizada (si el cliente tiene una tasa especial acordada)
   tieneTasaPersonalizada Boolean @default(false)
   tasaPersonalizada      Float?  // % mensual fija aplicada sobre capital inicial
