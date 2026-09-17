@@ -48,7 +48,7 @@ export async function GET(
     const otroSi = await db.otroSiCambioFecha.findUnique({
       where: { id: otroSiId },
       include: {
-        prestamo: { include: { cliente: true } },
+        prestamo: { include: { cliente: { select: { id: true, nombre: true, cedula: true, telefono: true, email: true, activo: true } } } },
         firma: true,
       },
     })

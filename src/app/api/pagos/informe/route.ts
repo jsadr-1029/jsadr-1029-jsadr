@@ -91,11 +91,11 @@ export async function GET(req: NextRequest) {
     ] = await Promise.all([
       db.pago.findMany({
         where: { estado: 'APLICADO', fechaPago: { gte: hoy, lte: finHoy } },
-        include: { prestamo: { include: { cliente: true } } },
+        include: { prestamo: { include: { cliente: { select: { id: true, nombre: true, cedula: true, telefono: true, email: true, activo: true } } } } },
       }),
       db.pago.findMany({
         where: { estado: 'APLICADO', fechaPago: { gte: ayer, lte: finAyer } },
-        include: { prestamo: { include: { cliente: true } } },
+        include: { prestamo: { include: { cliente: { select: { id: true, nombre: true, cedula: true, telefono: true, email: true, activo: true } } } } },
       }),
       db.pago.findMany({
         where: { estado: 'APLICADO', fechaPago: { gte: inicioMesActual, lte: finMesActual } },
@@ -106,7 +106,7 @@ export async function GET(req: NextRequest) {
       // === Pagos del periodo seleccionado (semana/quincena/mes/año) ===
       db.pago.findMany({
         where: { estado: 'APLICADO', fechaPago: { gte: inicioPeriodo, lte: finPeriodo } },
-        include: { prestamo: { include: { cliente: true } } },
+        include: { prestamo: { include: { cliente: { select: { id: true, nombre: true, cedula: true, telefono: true, email: true, activo: true } } } } },
       }),
       db.prestamo.count({ where: { estado: 'ACTIVO' } }),
       db.prestamo.count({ where: { estado: 'EN_MORA' } }),

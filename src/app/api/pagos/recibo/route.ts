@@ -86,7 +86,7 @@ export async function GET(req: NextRequest) {
       const pago = await db.pago.findFirst({
         where: { reciboHash: verificar },
         include: {
-          prestamo: { include: { cliente: true, pagos: true } },
+          prestamo: { include: { cliente: { select: { id: true, nombre: true, cedula: true, telefono: true, email: true, activo: true } }, pagos: true } },
           cuentaRecaudo: true,
         },
       })
@@ -131,7 +131,7 @@ export async function GET(req: NextRequest) {
     const pago = await db.pago.findUnique({
       where: { id: pagoId },
       include: {
-        prestamo: { include: { cliente: true, pagos: true, categoria: { include: { cuentaRecaudo: true } } } },
+        prestamo: { include: { cliente: { select: { id: true, nombre: true, cedula: true, telefono: true, email: true, activo: true } }, pagos: true, categoria: { include: { cuentaRecaudo: true } } } },
         cuentaRecaudo: true,
       },
     })
@@ -183,7 +183,7 @@ export async function POST(req: NextRequest) {
     const pago = await db.pago.findUnique({
       where: { id: pagoId },
       include: {
-        prestamo: { include: { cliente: true, pagos: true, categoria: { include: { cuentaRecaudo: true } } } },
+        prestamo: { include: { cliente: { select: { id: true, nombre: true, cedula: true, telefono: true, email: true, activo: true } }, pagos: true, categoria: { include: { cuentaRecaudo: true } } } },
         cuentaRecaudo: true,
       },
     })

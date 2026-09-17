@@ -277,7 +277,7 @@ Este Otro Sí constituye un acuerdo de partes entre la entidad financiera y el c
 
       const compromiso = await db.compromisoPago.findUnique({
         where: { id: compromisoId },
-        include: { cliente: true },
+        include: { cliente: { select: { id: true, nombre: true, cedula: true, telefono: true, email: true, activo: true } } },
       })
 
       if (!compromiso) {

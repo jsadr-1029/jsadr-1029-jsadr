@@ -413,7 +413,7 @@ export async function POST(req: NextRequest) {
       try {
         const morosos = await db.prestamo.findMany({
           where: { estado: 'EN_MORA' },
-          include: { cliente: true },
+          include: { cliente: { select: { id: true, nombre: true, cedula: true, telefono: true, email: true, activo: true } } },
         })
         tipo = 'REPORTE'
         if (morosos.length === 0) {
@@ -751,7 +751,7 @@ export async function POST(req: NextRequest) {
       try {
         const morosos = await db.prestamo.findMany({
           where: { estado: 'EN_MORA' },
-          include: { cliente: true },
+          include: { cliente: { select: { id: true, nombre: true, cedula: true, telefono: true, email: true, activo: true } } },
         })
         tipo = 'REPORTE'
         if (morosos.length === 0) {

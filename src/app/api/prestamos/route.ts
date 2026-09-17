@@ -501,14 +501,14 @@ export async function POST(req: NextRequest) {
           flexibilidadFechaActivacion: null,
           notas: notas || null,
         },
-        include: { cliente: true },
+        include: { cliente: { select: { id: true, nombre: true, cedula: true, telefono: true, email: true, activo: true } } },
       })
 
       // === Si es renovación, finalizar el préstamo anterior y registrar en bitácora ===
       if (esRenovacion && prestamoARenovarId) {
         const prestamoAnterior = await tx.prestamo.findUnique({
           where: { id: prestamoARenovarId },
-          include: { cliente: true },
+          include: { cliente: { select: { id: true, nombre: true, cedula: true, telefono: true, email: true, activo: true } } },
         })
 
         if (prestamoAnterior) {

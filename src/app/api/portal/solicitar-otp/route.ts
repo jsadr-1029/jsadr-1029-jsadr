@@ -28,7 +28,7 @@ export async function POST(req: NextRequest) {
 
     const firma = await db.firmaElectronica.findUnique({
       where: { id: firmaId },
-      include: { prestamo: { include: { cliente: true } } },
+      include: { prestamo: { include: { cliente: { select: { id: true, nombre: true, cedula: true, telefono: true, email: true, activo: true } } } } },
     })
     if (!firma) {
       return NextResponse.json({ error: 'Firma no encontrada' }, { status: 404 })

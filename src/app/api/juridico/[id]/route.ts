@@ -12,7 +12,7 @@ export async function GET(
     const caso = await db.casoJuridico.findUnique({
       where: { id },
       include: {
-        prestamo: { include: { cliente: true, pagos: true } },
+        prestamo: { include: { cliente: { select: { id: true, nombre: true, cedula: true, telefono: true, email: true, activo: true } }, pagos: true } },
         cronologias: { orderBy: { fecha: 'desc' } },
         documentos: { orderBy: { fechaSubida: 'desc' } },
         alertas: { orderBy: { fechaAlerta: 'asc' } },
@@ -79,7 +79,7 @@ export async function PATCH(
     const caso = await db.casoJuridico.update({
       where: { id },
       data: datosActualizacion,
-      include: { prestamo: { include: { cliente: true } } },
+      include: { prestamo: { include: { cliente: { select: { id: true, nombre: true, cedula: true, telefono: true, email: true, activo: true } } } } },
     })
 
     // Si se cierra el caso, actualizar préstamo

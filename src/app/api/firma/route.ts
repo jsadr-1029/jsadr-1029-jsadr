@@ -47,7 +47,7 @@ async function iniciarFirma(body: any, req: NextRequest) {
   if (prestamoId) {
     prestamo = await db.prestamo.findUnique({
       where: { id: prestamoId },
-      include: { cliente: true },
+      include: { cliente: { select: { id: true, nombre: true, cedula: true, telefono: true, email: true, activo: true } } },
     })
     if (!prestamo) {
       return NextResponse.json({ success: false, error: 'Préstamo no encontrado' }, { status: 404 })
@@ -286,7 +286,7 @@ async function enviarOTP(body: any) {
 
   const firma = await db.firmaElectronica.findUnique({
     where: { id: firmaId },
-    include: { cliente: true, prestamo: true },
+    include: { cliente: { select: { id: true, nombre: true, cedula: true, telefono: true, email: true, activo: true } }, prestamo: true },
   })
   if (!firma) {
     return NextResponse.json({ success: false, error: 'Firma no encontrada' }, { status: 404 })

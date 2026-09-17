@@ -56,7 +56,7 @@ export async function GET(req: NextRequest) {
     const pagos = await db.pago.findMany({
       where,
       include: {
-        prestamo: { include: { cliente: true } },
+        prestamo: { include: { cliente: { select: { id: true, nombre: true, cedula: true, telefono: true, email: true, activo: true, esPrueba: true, optOutNotificaciones: true, preferenciaNotificacion: true, tieneTasaPersonalizada: true, tasaPersonalizada: true, categoriaId: true } } } },
         cuentaRecaudo: true,
       },
       orderBy: { fechaPago: 'desc' },
@@ -101,7 +101,7 @@ async function generarLinkPago(body: any, user: any) {
 
   const prestamo = await db.prestamo.findUnique({
     where: { id: prestamoId },
-    include: { cliente: true, pagos: true },
+    include: { cliente: { select: { id: true, nombre: true, cedula: true, telefono: true, email: true, activo: true, esPrueba: true, optOutNotificaciones: true, preferenciaNotificacion: true, tieneTasaPersonalizada: true, tasaPersonalizada: true, categoriaId: true } }, pagos: true },
   })
   if (!prestamo) {
     return NextResponse.json({ success: false, error: 'Préstamo no encontrado' }, { status: 404 })

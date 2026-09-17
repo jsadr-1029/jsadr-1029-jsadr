@@ -65,7 +65,7 @@ async function previsualizar(movimientos: MovimientoBanco[]) {
         ],
         estado: 'PENDIENTE',
       },
-      include: { prestamo: { include: { cliente: true } } },
+      include: { prestamo: { include: { cliente: { select: { id: true, nombre: true, cedula: true, telefono: true, email: true, activo: true } } } } },
     })
     if (pago) {
       const montoMatch = Math.abs(pago.montoTotal - m.monto) < 1 // tolerancia 1 COP
@@ -119,7 +119,7 @@ async function aplicar(movimientos: MovimientoBanco[], seleccionados: string[] |
         OR: [{ referencia: m.referencia }, { codigo: m.referencia }],
         estado: 'PENDIENTE',
       },
-      include: { prestamo: { include: { cliente: true } } },
+      include: { prestamo: { include: { cliente: { select: { id: true, nombre: true, cedula: true, telefono: true, email: true, activo: true } } } } },
     })
     if (!pago) {
       errores.push({ movimiento: m, error: 'Pago no encontrado o ya aplicado' })

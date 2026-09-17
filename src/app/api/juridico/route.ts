@@ -16,7 +16,7 @@ export async function GET(req: NextRequest) {
     const casos = await db.casoJuridico.findMany({
       where: estado && estado !== 'all' ? { estado } : {},
       include: {
-        prestamo: { include: { cliente: true } },
+        prestamo: { include: { cliente: { select: { id: true, nombre: true, cedula: true, telefono: true, email: true, activo: true } } } },
         cronologias: { orderBy: { fecha: 'desc' }, take: 5 },
         documentos: { orderBy: { fechaSubida: 'desc' } },
         alertas: { orderBy: { fechaAlerta: 'asc' } },
@@ -62,7 +62,7 @@ export async function POST(req: NextRequest) {
 
     const prestamo = await db.prestamo.findUnique({
       where: { id: prestamoId },
-      include: { cliente: true, casoJuridico: true },
+      include: { cliente: { select: { id: true, nombre: true, cedula: true, telefono: true, email: true, activo: true } }, casoJuridico: true },
     })
 
     if (!prestamo) {
@@ -92,7 +92,7 @@ export async function POST(req: NextRequest) {
         descripcion: descripcion || null,
       },
       include: {
-        prestamo: { include: { cliente: true } },
+        prestamo: { include: { cliente: { select: { id: true, nombre: true, cedula: true, telefono: true, email: true, activo: true } } } },
       },
     })
 

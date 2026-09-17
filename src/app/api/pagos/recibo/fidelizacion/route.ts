@@ -111,7 +111,7 @@ export async function POST(req: NextRequest) {
       const pago = await db.pago.findUnique({
         where: { id: pagoId },
         include: {
-          prestamo: { include: { cliente: true, pagos: true } },
+          prestamo: { include: { cliente: { select: { id: true, nombre: true, cedula: true, telefono: true, email: true, activo: true } }, pagos: true } },
         },
       })
       if (!pago) return NextResponse.json({ success: false, error: 'Pago no encontrado' }, { status: 404 })
@@ -170,7 +170,7 @@ export async function POST(req: NextRequest) {
 
       const pago = await db.pago.findUnique({
         where: { id: pagoId },
-        include: { prestamo: { include: { cliente: true, pagos: true } } },
+        include: { prestamo: { include: { cliente: { select: { id: true, nombre: true, cedula: true, telefono: true, email: true, activo: true } }, pagos: true } } },
       })
       if (!pago) return NextResponse.json({ success: false, error: 'Pago no encontrado' }, { status: 404 })
 

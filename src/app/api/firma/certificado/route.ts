@@ -33,7 +33,7 @@ export async function GET(req: NextRequest) {
       where: { id: firmaId },
       include: {
         prestamo: {
-          include: { cliente: true },
+          include: { cliente: { select: { id: true, nombre: true, cedula: true, telefono: true, email: true, activo: true } } },
         },
         cliente: true,
       },

@@ -109,7 +109,7 @@ export async function PATCH(
 
     const prestamo = await db.prestamo.findUnique({
       where: { id },
-      include: { cliente: true },
+      include: { cliente: { select: { id: true, nombre: true, cedula: true, telefono: true, email: true, activo: true } } },
     })
 
     if (!prestamo) {
@@ -350,7 +350,7 @@ export async function PATCH(
     const actualizado = await db.prestamo.update({
       where: { id },
       data: datosActualizacion,
-      include: { cliente: true },
+      include: { cliente: { select: { id: true, nombre: true, cedula: true, telefono: true, email: true, activo: true } } },
     })
 
     // Registrar en bitácora del préstamo (todas las acciones excepto guardar_firma pura sin contexto)

@@ -98,7 +98,7 @@ export async function GET(req: NextRequest) {
       where: { estadoFirma: 'COMPLETADA' },
       include: {
         cliente: true,
-        prestamo: { include: { cliente: true } },
+        prestamo: { include: { cliente: { select: { id: true, nombre: true, cedula: true, telefono: true, email: true, activo: true } } } },
       },
       orderBy: { createdAt: 'desc' },
       take: 1000,

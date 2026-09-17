@@ -85,7 +85,7 @@ export async function GET(req: NextRequest) {
     const pagos = await db.pago.findMany({
       where,
       include: {
-        prestamo: { include: { cliente: true } },
+        prestamo: { include: { cliente: { select: { id: true, nombre: true, cedula: true, telefono: true, email: true, activo: true } } } },
         cuentaRecaudo: true,
       },
       orderBy: { fechaPago: 'desc' },

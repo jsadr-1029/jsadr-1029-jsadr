@@ -57,7 +57,7 @@ async function enviarWhatsAppMasivo(body: any, user: any) {
 
   const prestamos = await db.prestamo.findMany({
     where: { id: { in: prestamoIds } },
-    include: { cliente: true },
+    include: { cliente: { select: { id: true, nombre: true, cedula: true, telefono: true, email: true, activo: true } } },
   })
 
   const registros: RegistroEnvio[] = []
@@ -116,7 +116,7 @@ async function enviarRecordatorios(body: any, user: any) {
 
   const prestamos = await db.prestamo.findMany({
     where: { estado: { in: ['ACTIVO', 'EN_MORA'] } },
-    include: { cliente: true, pagos: { where: { estado: { in: ['APLICADO', 'PAGO_PARCIAL'] } } } },
+    include: { cliente: { select: { id: true, nombre: true, cedula: true, telefono: true, email: true, activo: true } }, pagos: { where: { estado: { in: ['APLICADO', 'PAGO_PARCIAL'] } } } },
   })
 
   const registros: RegistroEnvio[] = []
@@ -159,7 +159,7 @@ async function enviarRecordatorios(body: any, user: any) {
 async function enviarAvisosMora(body: any, user: any) {
   const prestamos = await db.prestamo.findMany({
     where: { estado: 'EN_MORA' },
-    include: { cliente: true, pagos: { where: { estado: { in: ['APLICADO', 'PAGO_PARCIAL'] } } } },
+    include: { cliente: { select: { id: true, nombre: true, cedula: true, telefono: true, email: true, activo: true } }, pagos: { where: { estado: { in: ['APLICADO', 'PAGO_PARCIAL'] } } } },
   })
 
   const registros: RegistroEnvio[] = []

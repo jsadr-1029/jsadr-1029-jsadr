@@ -91,7 +91,7 @@ export async function POST(
     // Buscar préstamo original
     const prestamoOriginal = await db.prestamo.findUnique({
       where: { id },
-      include: { cliente: true, categoria: true },
+      include: { cliente: { select: { id: true, nombre: true, cedula: true, telefono: true, email: true, activo: true } }, categoria: true },
     })
 
     if (!prestamoOriginal) {
@@ -213,7 +213,7 @@ export async function POST(
           codeudorTelefono: prestamoOriginal.codeudorTelefono,
           codeudorCedula: prestamoOriginal.codeudorCedula,
         },
-        include: { cliente: true },
+        include: { cliente: { select: { id: true, nombre: true, cedula: true, telefono: true, email: true, activo: true } } },
       })
 
       // 3. Cerrar préstamo original si se solicitó

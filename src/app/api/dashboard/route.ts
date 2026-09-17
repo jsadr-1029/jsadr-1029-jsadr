@@ -32,7 +32,7 @@ export async function GET() {
       db.pago.findMany({ where: { fechaPago: { gte: hoy, lte: finHoy }, estado: 'APLICADO' } }),
       db.prestamo.findMany({
         where: { estado: 'ACTIVO' },
-        include: { cliente: true, pagos: true },
+        include: { cliente: { select: { id: true, nombre: true, cedula: true, telefono: true, email: true, activo: true, esPrueba: true, optOutNotificaciones: true, preferenciaNotificacion: true, tieneTasaPersonalizada: true, tasaPersonalizada: true, categoriaId: true } }, pagos: true },
       }),
       db.casoJuridico.findMany({ where: { estado: { not: 'CERRADO' } } }),
       db.cajaMenor.findMany({
@@ -88,7 +88,7 @@ export async function GET() {
 
     const casosJuridicosDetalle = await db.casoJuridico.findMany({
       where: { estado: { not: 'CERRADO' } },
-      include: { prestamo: { include: { cliente: true } } },
+      include: { prestamo: { include: { cliente: { select: { id: true, nombre: true, cedula: true, telefono: true, email: true, activo: true, esPrueba: true, optOutNotificaciones: true, preferenciaNotificacion: true, tieneTasaPersonalizada: true, tasaPersonalizada: true, categoriaId: true } } } } },
       take: 5,
       orderBy: { createdAt: 'desc' },
     })

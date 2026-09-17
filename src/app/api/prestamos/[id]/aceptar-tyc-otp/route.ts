@@ -46,7 +46,7 @@ export async function POST(
 async function enviarOTP(prestamoId: string, body: any) {
   const { canal } = body
   const canalFinal = canal || 'AMBOS'
-  const prestamo = await db.prestamo.findUnique({ where: { id: prestamoId }, include: { cliente: true } })
+  const prestamo = await db.prestamo.findUnique({ where: { id: prestamoId }, include: { cliente: { select: { id: true, nombre: true, cedula: true, telefono: true, email: true, activo: true } } } })
   if (!prestamo) return NextResponse.json({ success: false, error: 'Préstamo no encontrado' }, { status: 404 })
   if (prestamo.estado !== 'PENDIENTE_ACEPTACION') return NextResponse.json({ success: false, error: 'El préstamo no está pendiente de aceptación' }, { status: 400 })
   if (!prestamo.cliente) return NextResponse.json({ success: false, error: 'Cliente no encontrado' }, { status: 404 })
@@ -225,7 +225,7 @@ async function confirmarConFoto(prestamoId: string, body: any) {
       estadoFirma: { in: ['OTP_ENVIADO', 'FOTOS_SUBIDAS'] },
     },
     orderBy: { createdAt: 'desc' },
-    include: { prestamo: { include: { cliente: true } } },
+    include: { prestamo: { include: { cliente: { select: { id: true, nombre: true, cedula: true, telefono: true, email: true, activo: true } } } } },
   })
   if (!firma) {
     return NextResponse.json(
@@ -327,7 +327,7 @@ Ambas fotos fueron guardadas en DocumentoGestor y se incluyen como respaldo de f
       fechaVencimiento: calculo.fechaVencimiento,
       firmaId: firma.id,
     },
-    include: { cliente: true },
+    include: { cliente: { select: { id: true, nombre: true, cedula: true, telefono: true, email: true, activo: true } } },
   })
 
   // === Notificar al cliente por correo (canal obligatorio) ===

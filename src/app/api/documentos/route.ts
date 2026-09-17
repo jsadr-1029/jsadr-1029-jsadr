@@ -261,7 +261,7 @@ export async function POST(req: NextRequest) {
     if (prestamoId) {
       prestamo = await db.prestamo.findUnique({
         where: { id: prestamoId },
-        include: { cliente: true },
+        include: { cliente: { select: { id: true, nombre: true, cedula: true, telefono: true, email: true, activo: true } } },
       })
       if (!prestamo) {
         return NextResponse.json(

@@ -32,7 +32,7 @@ export async function POST(
 
     const prestamo = await db.prestamo.findUnique({
       where: { id },
-      include: { cliente: true },
+      include: { cliente: { select: { id: true, nombre: true, cedula: true, telefono: true, email: true, activo: true } } },
     })
 
     if (!prestamo) {

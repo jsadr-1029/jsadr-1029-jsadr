@@ -43,7 +43,7 @@ export async function POST(req: NextRequest) {
     // Buscar el préstamo
     const prestamo = await db.prestamo.findUnique({
       where: { id: prestamoId },
-      include: { cliente: true, pagos: true },
+      include: { cliente: { select: { id: true, nombre: true, cedula: true, telefono: true, email: true, activo: true } }, pagos: true },
     })
 
     if (!prestamo) {

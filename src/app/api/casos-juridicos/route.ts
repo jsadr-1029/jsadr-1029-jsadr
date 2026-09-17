@@ -4,7 +4,7 @@ import { db } from '@/lib/db'
 export async function GET() {
   const casos = await db.casoJuridico.findMany({
     include: {
-      prestamo: { include: { cliente: true } },
+      prestamo: { include: { cliente: { select: { id: true, nombre: true, cedula: true, telefono: true, email: true, activo: true } } } },
       cronologias: { orderBy: { fecha: 'desc' } },
     },
     orderBy: { fechaApertura: 'desc' },

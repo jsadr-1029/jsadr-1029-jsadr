@@ -76,7 +76,7 @@ export async function GET(req: NextRequest) {
       }),
       db.prestamo.findMany({
         where: { estado: 'ACTIVO' },
-        include: { cliente: true, pagos: true, categoria: true },
+        include: { cliente: { select: { id: true, nombre: true, cedula: true, telefono: true, email: true, activo: true } }, pagos: true, categoria: true },
       }),
       db.casoJuridico.findMany({ where: { estado: { not: 'CERRADO' } } }),
       db.cajaMenor.findMany({
@@ -99,7 +99,7 @@ export async function GET(req: NextRequest) {
       db.movimientoCaja.count(),
       db.casoJuridico.findMany({
         where: { estado: { not: 'CERRADO' } },
-        include: { prestamo: { include: { cliente: true } } },
+        include: { prestamo: { include: { cliente: { select: { id: true, nombre: true, cedula: true, telefono: true, email: true, activo: true } } } } },
         take: 5,
         orderBy: { createdAt: 'desc' },
       }),
@@ -234,7 +234,7 @@ export async function GET(req: NextRequest) {
     // === POR CLIENTE (TOP 15) ===
     const prestamosConCliente = await db.prestamo.findMany({
       where: { estado: { in: ['ACTIVO', 'EN_MORA'] } },
-      include: { cliente: true },
+      include: { cliente: { select: { id: true, nombre: true, cedula: true, telefono: true, email: true, activo: true } } },
     })
 
     const clienteMap = new Map<

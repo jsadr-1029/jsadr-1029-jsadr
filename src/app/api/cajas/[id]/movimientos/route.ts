@@ -14,7 +14,7 @@ export async function GET(
     db.movimientoCaja.count({ where: { cajaId: id } }),
     db.movimientoCaja.findMany({
       where: { cajaId: id },
-      include: { prestamo: { include: { cliente: true } } },
+      include: { prestamo: { include: { cliente: { select: { id: true, nombre: true, cedula: true, telefono: true, email: true, activo: true } } } } },
       orderBy: { fechaMovimiento: 'desc' },
       skip: (page - 1) * pageSize,
       take: pageSize,

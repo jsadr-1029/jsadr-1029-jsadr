@@ -34,7 +34,7 @@ export async function GET(req: NextRequest) {
     // Buscar el pago
     const pago = await db.pago.findFirst({
       where: pagoId ? { id: pagoId } : { linkPago: checkoutId || undefined },
-      include: { prestamo: { include: { cliente: true } } },
+      include: { prestamo: { include: { cliente: { select: { id: true, nombre: true, cedula: true, telefono: true, email: true, activo: true } } } } },
     })
 
     if (!pago) {

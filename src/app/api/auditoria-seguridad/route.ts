@@ -835,7 +835,7 @@ async function escanearSeguridad() {
   // === 27. /api/export expone datos sensibles sin select ===
   const exportRoutePath = path.join(cwd, 'src/app/api/export/route.ts')
   const exportContent = fs.existsSync(exportRoutePath) ? fs.readFileSync(exportRoutePath, 'utf-8') : ''
-  const exportIncludesCliente = exportContent.includes('include: { cliente: true }')
+  const exportIncludesCliente = exportContent.includes('include: { cliente: { select: { id: true, nombre: true, cedula: true, telefono: true, email: true, activo: true } } }')
   const exportHasSelect = exportContent.includes('select:')
   const exportHasLimit = exportContent.includes('take:') || exportContent.includes('limit:')
   const exportAllOk = !exportIncludesCliente || (exportHasSelect && exportHasLimit)
@@ -852,7 +852,7 @@ async function escanearSeguridad() {
     escenario: exportAllOk ? 'N/A' : 'GET /api/export → descarga todos los pinHash para ataque offline',
     recomendacion: exportAllOk
       ? 'Mantener. Auditar periódicamente los campos exportados.'
-      : 'Reemplazar "include: { cliente: true }" por "include: { cliente: { select: { id: true, nombre: true, cedula: true } } }". Agregar take: 1000.',
+      : 'Reemplazar "include: { cliente: { select: { id: true, nombre: true, cedula: true, telefono: true, email: true, activo: true } } }" por "include: { cliente: { select: { id: true, nombre: true, cedula: true } } }". Agregar take: 1000.',
     prioridad: exportAllOk ? 'Bajo - Mantener' : 'Alto - Inmediato'
   })
 

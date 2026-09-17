@@ -32,7 +32,7 @@ export async function DELETE(
 
     const pago = await db.pago.findUnique({
       where: { id },
-      include: { prestamo: { include: { cliente: true } } },
+      include: { prestamo: { include: { cliente: { select: { id: true, nombre: true, cedula: true, telefono: true, email: true, activo: true } } } } },
     })
     if (!pago) {
       return NextResponse.json({ success: false, error: 'Pago no encontrado' }, { status: 404 })
@@ -98,7 +98,7 @@ export async function GET(
     const pago = await db.pago.findUnique({
       where: { id },
       include: {
-        prestamo: { include: { cliente: true } },
+        prestamo: { include: { cliente: { select: { id: true, nombre: true, cedula: true, telefono: true, email: true, activo: true } } } },
         cuentaRecaudo: true,
         anuladoPor: { select: { id: true, nombre: true } },
         reversadoPor: { select: { id: true, nombre: true } },

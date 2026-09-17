@@ -23,7 +23,7 @@ export async function GET(req: NextRequest) {
 
     const refinanciaciones = await db.refinanciacion.findMany({
       where,
-      include: { prestamo: { include: { cliente: true } } },
+      include: { prestamo: { include: { cliente: { select: { id: true, nombre: true, cedula: true, telefono: true, email: true, activo: true } } } } },
       orderBy: { createdAt: 'desc' },
     })
     return NextResponse.json({ success: true, data: refinanciaciones })
@@ -51,7 +51,7 @@ export async function POST(req: NextRequest) {
 
     const prestamo = await db.prestamo.findUnique({
       where: { id: prestamoId },
-      include: { cliente: true, pagos: { where: { estado: { in: ['APLICADO', 'PAGO_PARCIAL'] } } } },
+      include: { cliente: { select: { id: true, nombre: true, cedula: true, telefono: true, email: true, activo: true } }, pagos: { where: { estado: { in: ['APLICADO', 'PAGO_PARCIAL'] } } } },
     })
     if (!prestamo) return NextResponse.json({ success: false, error: 'Préstamo no encontrado' }, { status: 404 })
 
@@ -101,7 +101,7 @@ export async function POST(req: NextRequest) {
         observaciones: observaciones || null,
         nuevaTablaAmortizacion: JSON.stringify(nuevoCalculo.tablaAmortizacion),
       },
-      include: { prestamo: { include: { cliente: true } } },
+      include: { prestamo: { include: { cliente: { select: { id: true, nombre: true, cedula: true, telefono: true, email: true, activo: true } } } } },
     })
 
     const clientInfo = getClientInfo(req)

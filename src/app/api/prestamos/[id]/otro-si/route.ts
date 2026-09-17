@@ -25,7 +25,7 @@ export async function GET(
     const { id: prestamoId } = await params
     const prestamo = await db.prestamo.findUnique({
       where: { id: prestamoId },
-      include: { cliente: true },
+      include: { cliente: { select: { id: true, nombre: true, cedula: true, telefono: true, email: true, activo: true } } },
     })
     if (!prestamo) {
       return NextResponse.json(
@@ -126,7 +126,7 @@ export async function POST(
     // === Cargar préstamo + cliente ===
     const prestamo = await db.prestamo.findUnique({
       where: { id: prestamoId },
-      include: { cliente: true },
+      include: { cliente: { select: { id: true, nombre: true, cedula: true, telefono: true, email: true, activo: true } } },
     })
     if (!prestamo) {
       return NextResponse.json(
@@ -408,7 +408,7 @@ export async function PATCH(
     if (accion === 'activar_flexibilidad') {
       const prestamo = await db.prestamo.findUnique({
         where: { id: prestamoId },
-        include: { cliente: true },
+        include: { cliente: { select: { id: true, nombre: true, cedula: true, telefono: true, email: true, activo: true } } },
       })
       if (!prestamo) {
         return NextResponse.json(
