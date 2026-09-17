@@ -317,6 +317,43 @@ model Prestamo {
   flexibilidadCosto       Float   @default(0)
   flexibilidadActivada    Boolean @default(false)
   flexibilidadFechaActivacion DateTime?
+  flexibilidadFinancieraData Boolean @default(false)
+  flexibilidadCobroAplicado Boolean @default(false)
+  flexibilidadModalidad   String?
+  flexibilidadUsosDisponibles Int  @default(0)
+  flexibilidadUsosEjercidos Int    @default(0)
+  flexibilidadMovimientos String?
+
+  // === Renovación anticipada ===
+  renovacionAnticipada    Boolean @default(false)
+  renovacionAnticipadaCosto Float @default(0)
+
+  // === Cargos iniciales (pagaré, tarifa plataforma, fondo garantía) ===
+  cobroPagareCarta        Boolean @default(false)
+  valorPagareCarta        Float   @default(0)
+  cobroTarifaPlataforma   Boolean @default(false)
+  tarifaPlataformaCargada Boolean @default(false)
+  valorTarifaPlataforma   Float   @default(0)
+  fondoGarantiaTasa       Float   @default(0)
+
+  // === Modalidad de amortización ===
+  modalidadAmortizacion   String  @default("FRANCES")
+  // FRANCES | TASA_FIJA | CUOTA_PERSONALIZADA | INTERES_FIJO_SIN_CAPITAL
+
+  // === Cancelación por renovación ===
+  fechaCancelacion        DateTime?
+  renovacionFechaCancelacionAnterior DateTime?
+  renovacionPendienteTyc  Boolean @default(false)
+  renovacionPrestamoAnteriorId String?
+
+  // === INTERES_FIJO_SIN_CAPITAL ===
+  interesFijoMensual     Float   @default(0)
+  capitalPagadoExtra     Float   @default(0)
+  interesPagadoAcumulado Float   @default(0)
+  proximaCuotaInteresFecha DateTime?
+
+  // === fechaInicioAmortizacion ===
+  fechaInicioAmortizacion DateTime?
 
   notas               String?
   createdAt           DateTime @default(now())
