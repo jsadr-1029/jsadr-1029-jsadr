@@ -40,7 +40,7 @@ export async function GET(req: NextRequest) {
         cedula,
         estado: 'DEVUELTA',
       },
-      orderBy: { fechaDevolucion: 'desc' },
+      orderBy: { updatedAt: 'desc' },
       select: {
         id: true,
         codigo: true,
@@ -64,7 +64,7 @@ export async function GET(req: NextRequest) {
         referidoPorTelefono: true,
         referidoPorParentesco: true,
         motivoDevolucion: true,
-        fechaDevolucion: true,
+        
         vecesDevuelta: true,
         createdAt: true,
         // NO se devuelven las fotos (pesan ~5MB c/u) — el cliente las debe volver a capturar
