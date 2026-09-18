@@ -68,10 +68,9 @@ export function InactivityAutoLogout({
       try {
         // Disparar revocación server-side en background (best-effort).
         // No usamos await porque queremos redirigir inmediatamente.
-        logout().catch(() => {})
-      } catch {
-        // Si logout() falla (ej: localStorage ya limpio), usar logoutLocal.
         logout()
+      } catch {
+        // Si logout() falla (ej: localStorage ya limpio), ya está hecho.
       }
     },
   })
