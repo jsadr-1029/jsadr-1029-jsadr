@@ -42,6 +42,7 @@
     "scripts/legacy",
     "scripts/import-backup.ts",
     "scripts/test-bot-nlu.ts",
+    "scripts/create-test-loan-and-send-otp.ts",
     "scripts/_*.ts",
     "scripts/_*.js",
     "skills"
