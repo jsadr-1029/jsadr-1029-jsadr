@@ -56,16 +56,11 @@ export async function GET(req: NextRequest) {
         direccion: true,
         ocupacion: true,
         ingresoMensual: true,
-        banco: true,
-        tipoCuenta: true,
-        numeroCuenta: true,
         referidoPorNombre: true,
         referidoPorApellido: true,
         referidoPorTelefono: true,
         referidoPorParentesco: true,
-        motivoDevolucion: true,
         
-        vecesDevuelta: true,
         createdAt: true,
         // NO se devuelven las fotos (pesan ~5MB c/u) — el cliente las debe volver a capturar
       },
