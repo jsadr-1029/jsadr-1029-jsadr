@@ -79,8 +79,8 @@ function isPublicEndpoint(pathname: string): boolean {
     pathname.startsWith('/api/chat/iniciar') || // inicio de chat con cédula+teléfono (sin token previo)
     pathname.startsWith('/api/chat/otp') || // solicitud/verificación OTP del chat
     pathname === '/api/simulador' || // simulador público
-    pathname === '/api/solicitudes-nuevos-clientes' // POST público
-    pathname.startsWith('/api/_version-ping') // ping público para verificar deploy: registro de nuevos clientes desde /register
+    pathname === '/api/solicitudes-nuevos-clientes' || // POST público: registro de nuevos clientes desde /register
+    pathname.startsWith('/api/_version-ping') // ping público para verificar deploy
   )
 }
 

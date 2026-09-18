@@ -442,3 +442,50 @@ export function calcularPrestamoTasaFijaMensual(parametros: ParametrosPrestamoTa
     fondoGarantia,
   }
 }
+
+// =====================================================
+// corregirFechasPorCorte — stub para /api/portal/[cedula]/regularizar
+// (la implementación real se perdió en algún commit; el endpoint la importa
+// pero no existía, lo que rompía el build de Vercel).
+// Si en el futuro se necesita la corrección real de fechas por corte,
+// implementar la lógica de re-alineación de cuotas aquí.
+// =====================================================
+export function corregirFechasPorCorte(
+  tablaAmortizacion: any[],
+  _periodoCorte?: string | null,
+): any[] {
+  if (!Array.isArray(tablaAmortizacion)) return tablaAmortizacion
+  return tablaAmortizacion
+}
+
+// =====================================================
+// calcularCargosInicialesPendientes — stub para /api/portal/[cedula]/regularizar
+// Devuelve los cargos iniciales pendientes (pagaré + carta, tarifa plataforma,
+// flexibilidad financiera, fondo garantía) que se cobran en la primera cuota.
+// =====================================================
+export function calcularCargosInicialesPendientes(prestamo: any): {
+  cargos: Array<{ concepto: string; monto: number; cobrado: boolean }>
+  totalPendiente: number
+  totalConfigurado: number
+  totalYaCobrado: number
+} {
+  if (!prestamo) {
+    return { cargos: [], totalPendiente: 0, totalConfigurado: 0, totalYaCobrado: 0 }
+  }
+  const cargos: Array<{ concepto: string; monto: number; cobrado: boolean }> = []
+  const pagarCarta = Number(prestamo.pagarCartaConfigurado ?? 0)
+  const tarifaPlataforma = Number(prestamo.tarifaPlataforma ?? 4900)
+  const flexibilidadFinanciera = Number(prestamo.flexibilidadFinancieraMonto ?? 0)
+  const fondoGarantia = Number(prestamo.fondoGarantia ?? 0)
+
+  if (pagarCarta > 0) cargos.push({ concepto: 'Pagaré + Carta', monto: pagarCarta, cobrado: !!prestamo.pagarCartaCobrado })
+  if (tarifaPlataforma > 0) cargos.push({ concepto: 'Tarifa Plataforma', monto: tarifaPlataforma, cobrado: !!prestamo.tarifaPlataformaCargada })
+  if (flexibilidadFinanciera > 0) cargos.push({ concepto: 'Flexibilidad Financiera', monto: flexibilidadFinanciera, cobrado: !!prestamo.flexibilidadCobroAplicado })
+  if (fondoGarantia > 0) cargos.push({ concepto: 'Fondo Garantía', monto: fondoGarantia, cobrado: !!prestamo.fondoGarantiaCobrado })
+
+  const totalConfigurado = cargos.reduce((s, c) => s + c.monto, 0)
+  const totalYaCobrado = cargos.filter((c) => c.cobrado).reduce((s, c) => s + c.monto, 0)
+  const totalPendiente = totalConfigurado - totalYaCobrado
+
+  return { cargos, totalPendiente, totalConfigurado, totalYaCobrado }
+}
