@@ -2578,3 +2578,46 @@ Stage Summary:
   → http://localhost:3000/login (cedula 1214731649, pin 1214731649)
   → http://localhost:3000/portal-neobanco
 
+
+---
+Task ID: 19-reorganizar-portal-neobanco-unico
+Agent: Super Z (main)
+Task: Eliminar portal del cliente viejo y dejar solo el Neobanco Glass como portal único del cliente. Mantener PIN 1214731649 para cliente 1214731649.
+
+Work Log:
+- Eliminados los archivos legacy:
+  * src/components/views/PortalClienteModal.tsx (3056 líneas)
+  * src/components/views/portal-cliente.tsx (756 líneas)
+- src/app/page.tsx reescrito:
+  * Eliminado import dynamic de PortalClienteModal
+  * Eliminados estados esPortalCliente, portalCedula, portalToken
+  * Eliminadas todas las guardas !esPortalCliente (ya no necesarias)
+  * Eliminada lógica de query params ?tyc=, ?pay=, ?portal=cliente
+  * Eliminado el modal <PortalClienteModal> al final
+  * Cuando rol=CLIENTE o esPortalCliente → router.replace('/portal-neobanco')
+- src/app/login/page.tsx modificado:
+  * 3 redirects de cliente cambiados de /?portal=cliente a /portal-neobanco
+  * Comentarios actualizados
+- src/app/globals.css: limpiado comentario residual sobre PortalClienteModal
+- TypeScript: PASS
+- ESLint: PASS
+- Commit: 2fd30e3 → push exitoso a origin/main
+
+- Verificación Neon: PIN 1214731649 sigue funcionando para Johan Alvarez. Login probado en producción https://jsadr.com.co/api/portal/login → token válido.
+
+- Intento de deploy con token Vercel ([REDACTED-VERCEL-TOKEN]):
+  * Token tiene 60 chars, prefix [REDACTED-VERCEL-TOKEN] correcto
+  * Vercel API responde: 404 "User not found" en /v2/user
+  * /v2/teams responde: 403 "Forbidden" - el token existe pero no tiene permisos
+  * El token se creó pero parece estar asociado a una cuenta sin acceso al proyecto
+
+Stage Summary:
+- ✅ GitHub: 100% sincronizado (commit 2fd30e3 en origin/main con portal viejo eliminado y redirecciones al nuevo).
+- ✅ Neon: 100% sincronizado (PIN 1214731649 funciona, login probado en producción).
+- ❌ Vercel: NO sincronizado. El token Vercel dado por el usuario no tiene acceso (404/403 en API). El webhook GitHub→Vercel sigue caído. /portal-neobanco da 404 en jsadr.com.co.
+- 📌 ACCIONES REQUERIDAS:
+  1. Crear nuevo token en https://vercel.com/account/tokens con scope "Full Account"
+  2. Si se generó dentro de un team, asegurar que el token tenga acceso a ese team
+  3. Pasar el nuevo token al asistente para que ejecute `vercel --prod`
+  4. Alternativa: en dashboard Vercel → Deployments → Redeploy último commit (sin Build Cache)
+

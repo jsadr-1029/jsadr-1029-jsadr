@@ -635,3 +635,35 @@ export async function probarSmtp(): Promise<{
     }
   }
 }
+
+// =====================================================
+// verificarCuentaBrevo — stub para endpoint de health
+// (algunos archivos importan esta función pero no existía).
+// Si en el futuro se necesita verificación real contra Brevo API,
+// implementar aquí la llamada a https://api.brevo.com/v3/account
+// =====================================================
+export async function verificarCuentaBrevo(): Promise<{
+  success: boolean
+  message: string
+  cuenta?: { email?: string; plan?: string }
+}> {
+  try {
+    const config = await haySmtpConfigurado()
+    if (!config) {
+      return {
+        success: false,
+        message: 'No hay configuración SMTP activa',
+      }
+    }
+    return {
+      success: true,
+      message: 'SMTP configurado (verificación básica)',
+      cuenta: { email: undefined, plan: undefined },
+    }
+  } catch (error: any) {
+    return {
+      success: false,
+      message: `Error: ${error.message}`,
+    }
+  }
+}
