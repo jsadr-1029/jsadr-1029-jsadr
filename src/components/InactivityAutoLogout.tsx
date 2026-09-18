@@ -34,7 +34,7 @@ import {
 } from '@/components/ui/alert-dialog'
 import { Button } from '@/components/ui/button'
 import { useInactivityAutoLogout } from '@/hooks/use-inactivity-auto-logout'
-import { logout, logoutLocal } from '@/lib/api-client'
+import { logout } from "@/lib/api-client"
 
 interface Props {
   /** Tiempo total de inactividad antes del logout (ms). Default 10 min. */
@@ -71,7 +71,7 @@ export function InactivityAutoLogout({
         logout().catch(() => {})
       } catch {
         // Si logout() falla (ej: localStorage ya limpio), usar logoutLocal.
-        logoutLocal()
+        logout()
       }
     },
   })
@@ -93,7 +93,7 @@ export function InactivityAutoLogout({
 
   const handleLogoutNow = () => {
     setShowDialog(false)
-    logoutLocal()
+    logout()
   }
 
   if (!enabled) return null
