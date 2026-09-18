@@ -5,14 +5,10 @@ import { sanitizeError } from '@/lib/error-handler'
 // =====================================================
 // POST /api/portal/marcar-campana-vista
 // Body: { cedula: string, campañaId: string }
-// Marca una campaña como vista por el cliente (para que el badge de
-// notificación desaparezca y no se vuelva a notificar).
+// Marca una campaña como vista por el cliente.
 //
-// Si la campaña es destinatarios='SELECCIONADOS', actualiza
-// CampañaCliente.vistaEnPortal=true.
-// Si la campaña es destinatarios='TODOS', crea un registro en
-// CampañaVista (tabla existente) para que el conteo de "no vistas"
-// la excluya.
+// Simplificado: solo usa CampañaVista (modelo que SÍ existe en schema).
+// La rama con CampañaCliente fue removida porque ese modelo no existe.
 // =====================================================
 export async function POST(req: NextRequest) {
   try {
@@ -38,24 +34,14 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, error: 'Campaña no encontrada' }, { status: 404 })
     }
 
-    // === Marcar como vista según destinatarios ===
-    if (campaña.destinatarios === 'SELECCIONADOS') {
-      // Actualizar CampañaCliente.vistaEnPortal=true
-      await db.campañaCliente.updateMany({
-        where: { campañaId, clienteId: cliente.id },
-        data: { vistaEnPortal: true, fechaVistaPortal: new Date() },
+    // Crear registro en CampañaVista si no existe (idempotente)
+    const existente = await db.campañaVista.findFirst({
+      where: { campañaId, clienteId: cliente.id }
+    })
+    if (!existente) {
+      await db.campañaVista.create({
+        data: { campañaId, clienteId: cliente.id }
       })
-    } else {
-      // Para destinatarios='TODOS' u otros, crear registro en CampañaVista
-      // (si no existe ya — idempotente).
-      const existente = await db.campañaVista.findFirst({
-        where: { campañaId, clienteId: cliente.id }
-      })
-      if (!existente) {
-        await db.campañaVista.create({
-          data: { campañaId, clienteId: cliente.id }
-        })
-      }
     }
 
     return NextResponse.json({ success: true, mensaje: 'Campaña marcada como vista' })
