@@ -59,6 +59,21 @@ export interface DatosOtroSi {
 
   // Fecha en la que se genera el Otro Sí
   fechaGeneracion: Date
+
+  // Datos opcionales de firma electrónica (cuando el Otro Sí ya está firmado)
+  firma?: {
+    nombreFirmante: string
+    cedulaFirmante: string
+    ip: string
+    userAgent: string
+    otpHash: string
+    fotoDocumentoFrontal?: string
+    fotoDocumentoPosterior?: string
+    selfie?: string
+    firmaManuscrita?: string
+    fechaFirma: Date
+  }
+  linkConstancia?: string
 }
 
 /**
