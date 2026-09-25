@@ -233,6 +233,7 @@ function PortalShell() {
             <CreditosView
               estado={estado}
               cargando={cargando}
+              token={token}
               onAbrirEstadoCuenta={(pid) => window.open(`/api/estado-cuenta?prestamo=${pid}&token=${token}`, '_blank')}
             />
           )}

@@ -36,11 +36,13 @@ type SimResult = {
   totalInteres: number
   cronograma: Array<{
     numero: number
-    fecha: string
+    fechaVencimiento?: string
+    fecha?: string
     capital: number
     interes: number
-    total: number
-    saldo: number
+    montoTotal?: number
+    total?: number
+    saldoCapital?: number
   }>
 }
 
@@ -356,34 +358,80 @@ export function SimuladorView({ token, onCrearSolicitud }: SimuladorViewProps) {
           <div className="flex flex-col gap-2 pb-4">
             {resultado.cronograma.map((c, i) => {
               const isFirst = i === 0
-              const totalCuota = Number(c.total) + (isFirst ? TARIFA_PLATAFORMA + flexCosto : 0)
+              // El backend devuelve fechaVencimiento (Date ISO) y montoTotal
+              // (algunos responses antiguos usaban fecha/total — ser compatible con ambos)
+              const fechaISO: string = (c as any).fechaVencimiento ?? (c as any).fecha ?? ''
+              const capital = Number((c as any).capital ?? 0)
+              const interes = Number((c as any).interes ?? 0)
+              const totalBase = Number((c as any).montoTotal ?? (c as any).total ?? 0)
+              const totalCuota = totalBase + (isFirst ? TARIFA_PLATAFORMA + flexCosto : 0)
+              const saldoCapital = Number((c as any).saldoCapital ?? 0)
+              let fechaStr = '—'
+              try {
+                if (fechaISO) {
+                  fechaStr = new Date(fechaISO).toLocaleDateString('es-CO', {
+                    weekday: 'short',
+                    day: '2-digit',
+                    month: 'short',
+                    year: 'numeric',
+                  })
+                }
+              } catch {}
+
               return (
                 <div
                   key={c.numero}
-                  className="flex items-center gap-3 p-3 rounded-2xl bg-[var(--nb-surface-2)] border border-[var(--nb-border)]"
+                  className={`p-3 rounded-2xl border transition-colors ${
+                    isFirst
+                      ? 'bg-[var(--nb-primary-soft)] border-[var(--nb-primary)]/30'
+                      : 'bg-[var(--nb-surface-2)] border-[var(--nb-border)]'
+                  }`}
                 >
-                  <div className="w-9 h-9 rounded-xl bg-[var(--nb-primary-soft)] text-[var(--nb-primary)] flex items-center justify-center text-[12px] font-bold">
-                    {c.numero}
+                  <div className="flex items-center gap-3 mb-2">
+                    <div className="w-9 h-9 rounded-xl bg-[var(--nb-gradient-brand)] text-white flex items-center justify-center text-[12px] font-bold shrink-0">
+                      {c.numero}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[12px] font-semibold text-[var(--nb-fg)] capitalize">
+                        {fechaStr}
+                      </p>
+                      {isFirst && (TARIFA_PLATAFORMA + flexCosto) > 0 && (
+                        <p className="text-[10px] text-[var(--nb-warning)] font-semibold mt-0.5">
+                          Incluye {formatCOP(TARIFA_PLATAFORMA + flexCosto)} en cargos iniciales
+                        </p>
+                      )}
+                    </div>
+                    <div className="text-right shrink-0">
+                      <p className="text-[15px] font-extrabold text-[var(--nb-fg)] nb-tabular">
+                        {formatCOP(totalCuota)}
+                      </p>
+                    </div>
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-[12px] font-semibold text-[var(--nb-fg)]">
-                      {new Date(c.fecha).toLocaleDateString('es-CO', {
-                        day: '2-digit',
-                        month: 'short',
-                        year: 'numeric',
-                      })}
-                    </p>
-                    <p className="text-[11px] text-[var(--nb-fg-subtle)] mt-0.5 nb-tabular">
-                      Capital {formatCOP(c.capital)} · Interés {formatCOP(c.interes)}
-                    </p>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-[13px] font-bold text-[var(--nb-fg)] nb-tabular">
-                      {formatCOP(totalCuota)}
-                    </p>
-                    {isFirst && (TARIFA_PLATAFORMA + flexCosto) > 0 && (
-                      <p className="text-[10px] text-[var(--nb-warning)] font-semibold">incluye cargos</p>
-                    )}
+                  <div className="grid grid-cols-3 gap-1 pt-2 border-t border-[var(--nb-divider)]">
+                    <div>
+                      <p className="text-[9px] uppercase tracking-wide text-[var(--nb-fg-subtle)] font-semibold">
+                        Capital
+                      </p>
+                      <p className="text-[11px] font-bold text-[var(--nb-fg)] nb-tabular">
+                        {formatCOP(capital)}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-[9px] uppercase tracking-wide text-[var(--nb-fg-subtle)] font-semibold">
+                        Interés
+                      </p>
+                      <p className="text-[11px] font-bold text-[var(--nb-warning)] nb-tabular">
+                        {formatCOP(interes)}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-[9px] uppercase tracking-wide text-[var(--nb-fg-subtle)] font-semibold">
+                        Saldo
+                      </p>
+                      <p className="text-[11px] font-bold text-[var(--nb-fg-muted)] nb-tabular">
+                        {formatCOP(saldoCapital)}
+                      </p>
+                    </div>
                   </div>
                 </div>
               )

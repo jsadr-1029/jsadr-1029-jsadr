@@ -24,19 +24,22 @@ import {
   type NbEstado,
   type NbPrestamo,
 } from '../useNeobancoPortal'
-import { Landmark, ChevronRight, FileText, Download, Calendar, TrendingUp } from 'lucide-react'
+import { RenovacionSheet } from './RenovacionSheet'
+import { Landmark, ChevronRight, FileText, Download, Calendar, TrendingUp, RefreshCw } from 'lucide-react'
 
 type CreditosViewProps = {
   estado: NbEstado | null
   cargando: boolean
   onAbrirEstadoCuenta: (prestamoId: string) => void
+  token?: string | null
 }
 
 type Filtro = 'activos' | 'cancelados' | 'todos'
 
-export function CreditosView({ estado, cargando, onAbrirEstadoCuenta }: CreditosViewProps) {
+export function CreditosView({ estado, cargando, onAbrirEstadoCuenta, token }: CreditosViewProps) {
   const [filtro, setFiltro] = React.useState<Filtro>('activos')
   const [seleccionado, setSeleccionado] = React.useState<NbPrestamo | null>(null)
+  const [renovar, setRenovar] = React.useState<NbPrestamo | null>(null)
 
   const prestamos = estado?.prestamos ?? []
   const filtrados = React.useMemo(() => {
@@ -159,6 +162,20 @@ export function CreditosView({ estado, cargando, onAbrirEstadoCuenta }: Creditos
                       {Math.round(pct)}%
                     </span>
                   </div>
+
+                  {/* Botón Solicitar renovación — solo para préstamos ACTIVO o EN_MORA */}
+                  {(p.estado === 'ACTIVO' || p.estado === 'EN_MORA') && token && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        setRenovar(p)
+                      }}
+                      className="nb-press w-full mt-2 flex items-center justify-center gap-2 py-2.5 rounded-xl bg-[var(--nb-primary-soft)] border border-[var(--nb-primary)]/20 text-[var(--nb-primary)] hover:border-[var(--nb-primary)]/40 transition-colors text-[12px] font-bold"
+                    >
+                      <RefreshCw size={13} />
+                      Solicitar renovación
+                    </button>
+                  )}
                 </div>
               </GlassCard>
             )
@@ -179,9 +196,25 @@ export function CreditosView({ estado, cargando, onAbrirEstadoCuenta }: Creditos
               if (seleccionado) onAbrirEstadoCuenta(seleccionado.id)
               setSeleccionado(null)
             }}
+            onRenovar={
+              seleccionado.estado === 'ACTIVO' || seleccionado.estado === 'EN_MORA'
+                ? () => {
+                    setRenovar(seleccionado)
+                    setSeleccionado(null)
+                  }
+                : undefined
+            }
           />
         )}
       </Sheet>
+
+      {/* Sheet renovación */}
+      <RenovacionSheet
+        open={!!renovar}
+        onClose={() => setRenovar(null)}
+        prestamo={renovar}
+        token={token || null}
+      />
     </div>
   )
 }
@@ -189,9 +222,11 @@ export function CreditosView({ estado, cargando, onAbrirEstadoCuenta }: Creditos
 function DetalleCredito({
   prestamo,
   onAbrirEstado,
+  onRenovar,
 }: {
   prestamo: NbPrestamo
   onAbrirEstado: () => void
+  onRenovar?: () => void
 }) {
   const total = Number(prestamo.montoPrincipal) + Number(prestamo.totalInteres)
   const pct = total > 0 ? (Number(prestamo.montoPagado) / total) * 100 : 0
@@ -262,9 +297,20 @@ function DetalleCredito({
         >
           Ver estado de cuenta
         </GlassButton>
+        {(prestamo.estado === 'ACTIVO' || prestamo.estado === 'EN_MORA') && onRenovar && (
+          <GlassButton
+            fullWidth
+            variant="secondary"
+            size="md"
+            iconLeft={<RefreshCw size={14} />}
+            onClick={onRenovar}
+          >
+            Solicitar renovación
+          </GlassButton>
+        )}
         <GlassButton
           fullWidth
-          variant="secondary"
+          variant="ghost"
           size="md"
           iconLeft={<Download size={14} />}
           onClick={() => window.open(`/api/paz-y-salvo?prestamo=${prestamo.id}`, '_blank')}
