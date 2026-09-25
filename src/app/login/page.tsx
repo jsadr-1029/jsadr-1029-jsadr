@@ -60,6 +60,10 @@ export default function LoginPage() {
   const [shake, setShake] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
 
+  // Detectar en tiempo real si el identificador es una cédula (solo dígitos, 6-12)
+  // Para mostrar/ocultar el campo de contraseña dinámicamente.
+  const esCedula = /^\d{6,12}$/.test(identificador.trim())
+
   // Estado de recuperación de clave por correo
   const [showRecuperar, setShowRecuperar] = useState(false)
   const [recuperarIdentificador, setRecuperarIdentificador] = useState('')
@@ -113,38 +117,46 @@ export default function LoginPage() {
   // El backend detecta automáticamente el tipo de usuario
   // (admin/gestor/consultor/abogado/cliente) y devuelve
   // el token + rol + ruta de redirección.
+  //
+  // NOTA (2026-09-18): Si el identificador es una cédula (solo dígitos),
+  // el login del cliente ya NO requiere contraseña. El cliente se autentica
+  // con solo su cédula. La seguridad se garantiza mediante el proceso de
+  // REGISTRO (que sigue exigiendo fotos de cédula + selfie + verificación).
   // =====================================================
   const submitUnificado = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!identificador.trim() || !password) {
-      setError('Ingresa tu identificador y tu contraseña')
+    const idTrim = identificador.trim()
+
+    // Detectar si parece cédula (solo dígitos, 6-12 caracteres)
+    const esCedula = /^\d{6,12}$/.test(idTrim)
+    // Detectar si parece email
+    const esEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(idTrim)
+
+    // Para cédulas (clientes), no se requiere contraseña.
+    // Para emails/usernames (usuarios internos), sí se requiere.
+    if (!esCedula && !password) {
+      setError('Ingresa tu contraseña')
+      triggerShake()
+      return
+    }
+    if (!idTrim) {
+      setError('Ingresa tu usuario, cédula o correo')
       triggerShake()
       return
     }
     setLoading(true)
     setError('')
     try {
-      // Intentar primero login de usuario interno (admin/gestor/consultor/abogado)
-      // El backend /api/auth/login detecta el tipo automáticamente.
-      // Si falla con "usuario no encontrado", intentar login de cliente por cédula.
-      const idTrim = identificador.trim()
-
-      // Detectar si parece cédula (solo dígitos, 6-12 caracteres)
-      const esCedula = /^\d{6,12}$/.test(idTrim)
-      // Detectar si parece email
-      const esEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(idTrim)
-
       let loginExitoso = false
 
       if (esCedula) {
-        // Intentar login como cliente (cédula + PIN/clave)
+        // Login de cliente: solo cédula, sin PIN/contraseña
         try {
           const r = await fetch('/api/portal/login', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               cedula: idTrim,
-              pin: password,
             }),
           })
           const data = await r.json()
@@ -153,9 +165,6 @@ export default function LoginPage() {
               localStorage.setItem('portal_cliente_token', data.token)
               localStorage.setItem('portal_cliente_id', data.clienteId)
               localStorage.setItem('portal_cliente_nombre', data.nombre)
-              // FIX-LOGIN-LOOP: guardar también la cédula explícitamente,
-              // porque portal_cliente_id contiene el ID interno (no la cédula)
-              // y el portal necesita la cédula para llamar a /api/portal/[cedula].
               localStorage.setItem('portal_cliente_cedula', idTrim)
             } catch {}
             setTokens('portal_cliente_' + data.token, 'portal_cliente_' + data.token)
@@ -173,6 +182,10 @@ export default function LoginPage() {
               router.refresh()
             }, 1100)
             loginExitoso = true
+          } else if (data.codigo === 'NO_REGISTRADO') {
+            // Cliente no registrado — mostrar mensaje claro
+            setError(data.error || 'Tu cédula no está registrada. Si eres nuevo, regístrate primero.')
+            triggerShake()
           }
         } catch {}
 
@@ -445,8 +458,9 @@ export default function LoginPage() {
                 </div>
                 <h2 className="text-2xl font-bold text-white mb-1.5">Iniciar sesión</h2>
                 <p className="text-sm text-slate-400">
-                  Ingresa tu usuario, cédula o correo electrónico. El sistema
-                  reconocerá tu cuenta automáticamente.
+                  {esCedula
+                    ? 'Ingresa con tu cédula si eres cliente registrado.'
+                    : 'Ingresa tu usuario o correo. El sistema reconocerá tu cuenta automáticamente.'}
                 </p>
               </div>
 
@@ -461,7 +475,7 @@ export default function LoginPage() {
 
                 <div className="space-y-2">
                   <Label htmlFor="identificador" className="text-slate-200 text-sm font-medium">
-                    Usuario, cédula o correo
+                    {esCedula ? 'Cédula' : 'Usuario, cédula o correo'}
                   </Label>
                   <div className="relative group">
                     <User className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500 group-focus-within:text-indigo-400 transition-colors" />
@@ -469,46 +483,58 @@ export default function LoginPage() {
                       ref={inputRef}
                       id="identificador"
                       type="text"
+                      inputMode={esCedula ? 'numeric' : 'text'}
                       value={identificador}
                       onChange={(e) => setIdentificador(e.target.value)}
-                      placeholder="tu.usuario, 1234567890 o tu@correo.com"
+                      placeholder={esCedula ? '1234567890' : 'tu.usuario, 1234567890 o tu@correo.com'}
                       className="pl-10 pr-4 h-11 bg-slate-800/50 border-slate-700 text-white placeholder:text-slate-500 focus:border-indigo-500 focus:bg-slate-800/80 transition-all"
                       disabled={loading}
                       autoComplete="username"
                     />
                   </div>
+                  {esCedula && (
+                    <p className="text-xs text-emerald-300/80 flex items-center gap-1.5 mt-1.5">
+                      <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                        <polyline points="20 6 9 17 4 12" />
+                      </svg>
+                      Si eres cliente registrado, ingresa solo con tu cédula.
+                    </p>
+                  )}
                 </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="password" className="text-slate-200 text-sm font-medium">
-                    Contraseña
-                  </Label>
-                  <div className="relative group">
-                    <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500 group-focus-within:text-indigo-400 transition-colors" />
-                    <Input
-                      id="password"
-                      type={showPassword ? 'text' : 'password'}
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      placeholder="••••••••••"
-                      className="pl-10 pr-10 h-11 bg-slate-800/50 border-slate-700 text-white placeholder:text-slate-500 focus:border-indigo-500 focus:bg-slate-800/80 transition-all"
-                      disabled={loading}
-                      autoComplete="current-password"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowPassword(!showPassword)}
-                      className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 transition-colors"
-                      tabIndex={-1}
-                    >
-                      {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                    </button>
+                {/* Campo de contraseña: solo se muestra para usuarios internos (no cédulas) */}
+                {!esCedula && (
+                  <div className="space-y-2">
+                    <Label htmlFor="password" className="text-slate-200 text-sm font-medium">
+                      Contraseña
+                    </Label>
+                    <div className="relative group">
+                      <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500 group-focus-within:text-indigo-400 transition-colors" />
+                      <Input
+                        id="password"
+                        type={showPassword ? 'text' : 'password'}
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        placeholder="••••••••••"
+                        className="pl-10 pr-10 h-11 bg-slate-800/50 border-slate-700 text-white placeholder:text-slate-500 focus:border-indigo-500 focus:bg-slate-800/80 transition-all"
+                        disabled={loading}
+                        autoComplete="current-password"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword(!showPassword)}
+                        className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 transition-colors"
+                        tabIndex={-1}
+                      >
+                        {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      </button>
+                    </div>
                   </div>
-                </div>
+                )}
 
                 <Button
                   type="submit"
-                  disabled={loading || !identificador.trim() || !password}
+                  disabled={loading || !identificador.trim() || (!esCedula && !password)}
                   className="w-full h-11 bg-gradient-to-r from-indigo-500 via-purple-500 to-fuchsia-500 hover:from-indigo-600 hover:via-purple-600 hover:to-fuchsia-600 text-white font-semibold shadow-lg shadow-indigo-500/30 hover:shadow-indigo-500/50 transition-all group"
                 >
                   {loading ? (
@@ -518,7 +544,7 @@ export default function LoginPage() {
                     </>
                   ) : (
                     <>
-                      Iniciar sesión
+                      {esCedula ? 'Ingresar' : 'Iniciar sesión'}
                       <ArrowRight className="w-4 h-4 ml-2 group-hover:translate-x-0.5 transition-transform" />
                     </>
                   )}
