@@ -220,7 +220,7 @@ function calcularEscenario(
   const cuota1Aplicada = prestamo.pagos.some((pg: any) => pg.numeroCuota === 1 && pg.estado === 'APLICADO')
   const cargosIniciales = cargosInfo.cargos
     .filter(c => {
-      if (c.cobrado) return false
+      if (c.yaCobrado) return false
       if ((c.concepto === 'PAGARE_CARTA' || c.concepto === 'FONDO_GARANTIA') && cuota1Aplicada) return false
       return true
     })
@@ -331,7 +331,7 @@ export async function GET(
       const cuota1Aplicada = p.pagos.some((pg: any) => pg.numeroCuota === 1 && pg.estado === 'APLICADO')
       const cargosIniciales = cargosInfo.cargos
         .filter(c => {
-          if (c.cobrado) return false
+          if (c.yaCobrado) return false
           if ((c.concepto === 'PAGARE_CARTA' || c.concepto === 'FONDO_GARANTIA') && cuota1Aplicada) return false
           return true
         })
