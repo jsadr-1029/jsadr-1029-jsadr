@@ -2779,3 +2779,73 @@ Stage Summary:
 - ✅ Mensaje claro cuando cédula no registrada
 - 📌 Para probar: ir a https://jsadr.com.co/login, escribir solo la cédula (ej: 1214731649), click en 'Ingresar' → redirige a /portal-neobanco
 
+
+---
+Task ID: 23-cronograma-renovacion
+Agent: Super Z (main)
+Task: Reparar cronograma del simulador (mostrar fechas y valores por cuota) + agregar opción de renovación de préstamo en vista Créditos.
+
+Work Log:
+
+REPARACIÓN CRONOGRAMA DEL SIMULADOR:
+- Bug: SimuladorView usaba c.fecha y c.total (no existen en la API real)
+- Fix: usa c.fechaVencimiento y c.montoTotal (con fallback a c.fecha/c.total para compat)
+- Cronograma ahora muestra por cada cuota:
+  * Día de la semana + fecha completa (ej: 'lun, 25 sep 2026')
+  * Capital de la cuota
+  * Interés de la cuota (color warning)
+  * Saldo restante después del pago
+  * Total a pagar (con cargos en cuota 1)
+- Primera cuota destacada con bg primary-soft cuando incluye cargos
+
+NUEVA FUNCIÓN: RENOVACIÓN DE PRÉSTAMOS
+- API POST /api/portal/renovar/simular:
+  * Recibe { token, prestamoId, montoSolicitado, plazoMeses, frecuencia }
+  * Busca préstamo ACTIVO o EN_MORA del cliente
+  * Calcula saldo pendiente = suma de cuotas no pagadas + mora
+  * Calcula excedente = montoSolicitado - saldoTotalConMora
+  * Si excedente <= 0 → error MONTO_INSUFICIENTE con detalle
+  * Genera nuevo cronograma con misma tasa de categoría
+  * Devuelve: prestamoActual, nuevoPrestamo, excedente, explicacion, disclaimer
+
+- RenovacionSheet.tsx (nuevo):
+  * Banner explicativo con icono RefreshCw
+  * Resumen préstamo actual (saldo, cuotas pendientes, mora)
+  * Form: monto + plazo + frecuencia
+  * Simulación automática al cambiar parámetros (debounce 500ms)
+  * Tarjeta destacada con EXCEDENTE A RECIBIR (verde, grande)
+  * Explicación textual del proceso
+  * Resumen nuevo préstamo (cuota, cuotas, total)
+  * Primeras 3 cuotas del nuevo cronograma
+  * Disclaimer 'sujeto a estudio' con icono Info
+  * Botón 'Enviar solicitud de renovación' → POST /api/solicitudes-web
+
+- CreditosView.tsx:
+  * Botón 'Solicitar renovación' en cada card de préstamo ACTIVO/EN_MORA
+  * Botón 'Solicitar renovación' en sheet de detalle del préstamo
+  * Abre RenovacionSheet con simulación en tiempo real
+
+- PortalNeobancoGlass.tsx: pasa token prop a CreditosView
+
+- Deploy exitoso a Vercel (commit c9c2ea7 → aliased a jsadr.com.co)
+
+VERIFICACIONES EN PRODUCCIÓN:
+- Login Johan: token válido
+- /portal-neobanco: HTTP 200
+- POST /api/portal/renovar/simular con préstamo PREST-JA-1214731649-20260718-01:
+  * Saldo pendiente: $929.841 COP (6 cuotas)
+  * Monto solicitado: $2.000.000 COP
+  * Excedente a recibir: $1.070.158 COP
+  * Nuevo cronograma: 6 cuotas de $363.333 COP
+  * Fechas reales: 25 oct, 25 nov, 25 dic 2026...
+  * Disclaimer: "Sujeta a estudio y aprobación..."
+  ✅ Todo funciona correctamente
+
+Stage Summary:
+- ✅ GitHub: sincronizado (commit c9c2ea7 en origin/main)
+- ✅ Vercel: deploy exitoso aliased a jsadr.com.co
+- ✅ Neon: sin cambios en BD (usa datos existentes)
+- ✅ Cronograma del simulador: muestra fechas reales + valores por cuota
+- ✅ Renovación de préstamos: funcional con cálculo de excedente y disclaimer
+- 📌 Para probar: ir a https://jsadr.com.co/portal-neobanco → vista Créditos → botón "Solicitar renovación" en cualquier préstamo activo
+
