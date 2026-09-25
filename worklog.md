@@ -2721,3 +2721,61 @@ Stage Summary:
 - 📌 El admin puede ver las fotos desde el módulo de Clientes → detalle del cliente →
   Documentos Gestor, o desde el módulo Documentos de Préstamos.
 
+
+---
+Task ID: 22-login-solo-cedula
+Agent: Super Z (main)
+Task: Rediseñar el login del cliente para que pida solo la cédula (sin PIN/contraseña). Mantener el registro obligatorio con todos los datos actuales.
+
+Work Log:
+- Backend (/api/portal/login) reescrito:
+  * Acepta body { cedula } o { clienteId } (legacy)
+  * Ya NO exige PIN/contraseña
+  * Si cédula no existe en BD → 404 con codigo NO_REGISTRADO y mensaje 'Tu cédula no está registrada. Si eres nuevo, regístrate primero.'
+  * Si existe y está activa → genera token de sesión (2h) y devuelve success:true
+  * Registro en AccesoPortal con accion='LOGIN_CEDULA'
+  * Eliminada toda la lógica de: bcrypt compare de PIN, bloqueo temporal por intentos, creación automática de PIN en primer acceso
+
+- Frontend (/login/page.tsx) modificado:
+  * Detección en tiempo real: si identificador es solo dígitos (6-12 chars) = cédula
+  * Cuando es cédula:
+    - Oculta el campo de contraseña (condicional !esCedula &&)
+    - Cambia label a 'Cédula'
+    - Placeholder numérico: '1234567890'
+    - inputMode='numeric' para teclado numérico en móvil
+    - Muestra mensaje verde: 'Si eres cliente registrado, ingresa solo con tu cédula.'
+    - Botón cambia a 'Ingresar' (en vez de 'Iniciar sesión')
+  * Cuando NO es cédula (usuario o email):
+    - Mantiene campo de contraseña (para admin/gestor/consultor/abogado)
+    - Botón 'Iniciar sesión'
+  * Validación: si es cédula no exige password; si no es cédula sí exige password
+  * Mensaje de error claro cuando cédula no registrada
+
+- Registro (NO MODIFICADO):
+  * /register sigue exigiendo: datos personales, ubicación, ocupación, valor solicitado, fotos (cédula frente + reverso + selfie), aceptaciones legales (T&C, tratamiento datos, consulta centrales, reportar central), verificación OTP
+  * La seguridad del acceso se basa ahora en el proceso de REGISTRO (fotos verificables + OTP)
+
+- Builds intermedios fallidos resueltos:
+  * Reset --soft trajo de vuelta middleware.ts, scripts/fix-smtp-535.js, y 47 archivos .disabled renombrados a .ts
+  * Todos re-deshabilitados
+
+- Deploy final exitoso: commit 6b5fcc5 → aliased a jsadr.com.co
+
+Verificaciones en producción:
+- POST /api/portal/login { cedula: '1214731649' } → success:true, token, JOHAN ALVAREZ
+- POST /api/portal/login { cedula: '6220688' } → success:true, token, Yosneida Canelon
+- POST /api/portal/login { cedula: '43043108' } → success:true, token, Ana Maria Ocampo Alzate
+- POST /api/portal/login { cedula: '43205603' } → success:true, token, jackeline isaza
+- POST /api/portal/login { cedula: '71365715' } → success:true, token, Juan camilo González ocampo
+- POST /api/portal/login { cedula: '99999999' } → 404 NO_REGISTRADO con mensaje claro
+- GET /portal-neobanco → HTTP 200 (sigue funcionando)
+
+Stage Summary:
+- ✅ GitHub: 100% sincronizado (commit 6b5fcc5)
+- ✅ Neon: 100% sincronizado (BD sin cambios — los PINs siguen ahí pero ya no se validan)
+- ✅ Vercel: 100% sincronizado (deploy aliased a jsadr.com.co)
+- ✅ Login del cliente: solo cédula, sin contraseña
+- ✅ Registro: sigue exigiendo todos los datos y fotos
+- ✅ Mensaje claro cuando cédula no registrada
+- 📌 Para probar: ir a https://jsadr.com.co/login, escribir solo la cédula (ej: 1214731649), click en 'Ingresar' → redirige a /portal-neobanco
+
