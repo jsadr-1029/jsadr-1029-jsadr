@@ -78,13 +78,14 @@ export default function CorregirSolicitudPage() {
     SELFIE: { data: null, nombre: null },
   })
 
-  // Cargar info de la solicitud
+  // Cargar info de la solicitud (solo en cliente, después del montaje)
   React.useEffect(() => {
-    if (!params.token) return
+    const token = params?.token
+    if (!token) return
     let active = true
     ;(async () => {
       try {
-        const res = await fetch(`/api/solicitudes-nuevos-clientes/corregir/${params.token}`)
+        const res = await fetch(`/api/solicitudes-nuevos-clientes/corregir/${token}`)
         const data = await res.json()
         if (!active) return
         if (!res.ok || !data.success) {
@@ -94,7 +95,7 @@ export default function CorregirSolicitudPage() {
         }
         setSolicitud(data.data as SolicitudInfo)
       } catch (e: any) {
-        if (active) setError(e.message || 'Error de conexión')
+        if (active) setError(e?.message || 'Error de conexión')
       } finally {
         if (active) setCargando(false)
       }
@@ -102,7 +103,7 @@ export default function CorregirSolicitudPage() {
     return () => {
       active = false
     }
-  }, [params.token])
+  }, [params?.token])
 
   const handleFotoChange = (key: FotoKey, file: File) => {
     if (!file) return
@@ -133,7 +134,7 @@ export default function CorregirSolicitudPage() {
     : false
 
   const submit = async () => {
-    if (!params.token) return
+    if (!params?.token) return
     const algunaFoto = Object.values(fotos).some((f) => f.data)
     if (!algunaFoto) {
       toast.push('Debes cargar al menos una foto', 'danger')
