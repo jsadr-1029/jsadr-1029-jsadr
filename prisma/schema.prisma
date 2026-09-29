@@ -1687,13 +1687,32 @@ model SolicitudNuevoCliente {
   fotoSelfieNombre       String?
 
   // Estado
-  estado            String   @default("PENDIENTE") // PENDIENTE | REVISADA | APROBADA | RECHAZADA | CONVERTIDA
+  estado            String   @default("PENDIENTE") // PENDIENTE | REVISADA | APROBADA | RECHAZADA | CONVERTIDA | DEVUELTA
   observaciones     String?
   revisadoPorId     String?
   revisadoPorNombre String?
   fechaRevision     DateTime?
   clienteCreadoId   String?  // id del Cliente creado al convertir
   clienteCreadoCodigo String? // código generado
+
+  // === Devolución (cuando se pide al cliente corregir fotos/datos) ===
+  motivoDevolucion       String?   // texto explicando por qué se devuelve
+  detalleDevolucion      String?   // detalle adicional (qué foto específica, etc.)
+  fotosARecargar         String?   // JSON array de fotos a recargar: ["CEDULA_FRENTE","CEDULA_REVERSO","SELFIE"]
+  vecesDevuelta          Int       @default(0)
+  fechaDevolucion        DateTime?
+  devueltoPorId          String?
+  devueltoPorNombre      String?
+  tokenCorreccion        String?   @unique // token temporal para que el cliente corrija sin login
+  tokenCorreccionExpira  DateTime? // expiración del token (72h)
+  fechaCorreccion        DateTime? // cuando el cliente envió las correcciones
+  // Campos opcionales para correcciones individuales (cuando el cliente reenvía)
+  fotoCedulaFrenteCorregida       String?
+  fotoCedulaReversoCorregida      String?
+  fotoSelfieCorregida              String?
+  fotoCedulaFrenteCorregidaNombre String?
+  fotoCedulaReversoCorregidaNombre String?
+  fotoSelfieCorregidaNombre        String?
 
   // Trazabilidad
   ipOrigen          String?

@@ -105,9 +105,14 @@ export function SolicitudesPendientesPanel({
   const [abrirDetalle, setAbrirDetalle] = useState(false)
   const [abrirConvertir, setAbrirConvertir] = useState(false)
   const [abrirRechazar, setAbrirRechazar] = useState(false)
+  const [abrirDevolver, setAbrirDevolver] = useState(false)
   const [categoriaSel, setCategoriaSel] = useState<string>('')
   const [cuentaSel, setCuentaSel] = useState<string>('')
   const [observaciones, setObservaciones] = useState('')
+  // Campos específicos para devolución
+  const [motivoDevolucion, setMotivoDevolucion] = useState('')
+  const [detalleDevolucion, setDetalleDevolucion] = useState('')
+  const [fotosARecargar, setFotosARecargar] = useState<string[]>([])
   const [procesando, setProcesando] = useState(false)
   const [resultadoConversion, setResultadoConversion] = useState<{ clienteCreadoId: string; cedula: string; pin: string } | null>(null)
 
@@ -170,6 +175,62 @@ export function SolicitudesPendientesPanel({
           setAbrirRechazar(true)
         }
       })
+  }
+
+  function abrirDevolverModal(s: Solicitud) {
+    setDetalle(null)
+    fetch(`/api/solicitudes-nuevos-clientes/${s.id}`)
+      .then((r) => r.json())
+      .then((json) => {
+        if (json.success) {
+          setDetalle(json.data)
+          setMotivoDevolucion('')
+          setDetalleDevolucion('')
+          // Por defecto marcamos todas las fotos para recargar
+          setFotosARecargar(['CEDULA_FRENTE', 'CEDULA_REVERSO', 'SELFIE'])
+          setAbrirDevolver(true)
+        }
+      })
+  }
+
+  async function devolver() {
+    if (!detalle) return
+    if (!motivoDevolucion.trim()) {
+      toast({ title: 'Falta motivo', description: 'Indica el motivo de la devolución', variant: 'destructive' })
+      return
+    }
+    if (!detalle.email) {
+      toast({ title: 'Sin email', description: 'Esta solicitud no tiene email del cliente, no se puede notificar', variant: 'destructive' })
+      return
+    }
+    setProcesando(true)
+    try {
+      const res = await fetch(`/api/solicitudes-nuevos-clientes/${detalle.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          accion: 'devolver',
+          motivoDevolucion: motivoDevolucion.trim(),
+          detalleDevolucion: detalleDevolucion.trim() || undefined,
+          fotosARecargar,
+        }),
+      })
+      const json = await res.json()
+      if (!json.success) {
+        toast({ title: 'Error', description: json.error, variant: 'destructive' })
+        return
+      }
+      toast({
+        title: 'Solicitud devuelta',
+        description: `Se envió email a ${detalle.email} con el link de corrección`,
+      })
+      setAbrirDevolver(false)
+      cargar()
+    } catch (e: any) {
+      toast({ title: 'Error', description: e.message, variant: 'destructive' })
+    } finally {
+      setProcesando(false)
+    }
   }
 
   async function convertir() {
@@ -446,6 +507,16 @@ export function SolicitudesPendientesPanel({
                       variant="outline"
                       onClick={() => {
                         setAbrirDetalle(false)
+                        abrirDevolverModal(detalle)
+                      }}
+                      className="border-amber-500/40 text-amber-400 hover:bg-amber-500/10"
+                    >
+                      <RefreshCw className="h-4 w-4 mr-2" /> Devolver al cliente
+                    </Button>
+                    <Button
+                      variant="outline"
+                      onClick={() => {
+                        setAbrirDetalle(false)
                         abrirRechazarModal(detalle)
                       }}
                       className="border-red-500/40 text-red-400 hover:bg-red-500/10"
@@ -628,6 +699,106 @@ export function SolicitudesPendientesPanel({
             </DialogFooter>
           </DialogContent>
         </Dialog>
+
+        {/* === Modal DEVOLVER === */}
+        <Dialog open={abrirDevolver} onOpenChange={(v) => { if (!procesando) setAbrirDevolver(v) }}>
+          <DialogContent className="max-w-lg">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <RefreshCw className="h-5 w-5 text-amber-400" /> Devolver solicitud al cliente
+              </DialogTitle>
+              <DialogDescription>
+                {detalle?.nombre} {detalle?.apellido} · CC {detalle?.cedula} · {detalle?.email}
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4">
+              <Alert className="bg-amber-500/10 border-amber-500/30 text-amber-200">
+                <Mail className="h-4 w-4" />
+                <AlertDescription className="text-xs">
+                  Se enviará un email a <strong>{detalle?.email}</strong> con un enlace de corrección.
+                  El cliente podrá cargar de nuevo las fotos marcadas. La solicitud vuelve a estado PENDIENTE
+                  una vez el cliente envía las correcciones.
+                </AlertDescription>
+              </Alert>
+
+              <div>
+                <Label className="text-xs">Motivo de la devolución *</Label>
+                <Textarea
+                  value={motivoDevolucion}
+                  onChange={(e) => setMotivoDevolucion(e.target.value)}
+                  placeholder="Ej: Las fotos de la cédula están borrosas y no se pueden leer los datos."
+                  className="min-h-[80px]"
+                />
+              </div>
+
+              <div>
+                <Label className="text-xs">Detalle adicional (opcional)</Label>
+                <Textarea
+                  value={detalleDevolucion}
+                  onChange={(e) => setDetalleDevolucion(e.target.value)}
+                  placeholder="Ej: específicamente la foto del reverso donde está la firma."
+                  className="min-h-[60px]"
+                />
+              </div>
+
+              <div>
+                <Label className="text-xs mb-2 block">Documentos que el cliente debe recargar</Label>
+                <div className="space-y-2">
+                  {[
+                    { key: 'CEDULA_FRENTE', label: 'Cédula (foto frontal)' },
+                    { key: 'CEDULA_REVERSO', label: 'Cédula (foto reverso)' },
+                    { key: 'SELFIE', label: 'Selfie con cédula' },
+                  ].map((f) => {
+                    const checked = fotosARecargar.includes(f.key)
+                    return (
+                      <label
+                        key={f.key}
+                        className={`flex items-center gap-3 p-2.5 rounded-lg border cursor-pointer transition-colors ${
+                          checked
+                            ? 'bg-amber-500/10 border-amber-500/40'
+                            : 'bg-muted/30 border-border hover:bg-muted/50'
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setFotosARecargar((prev) => [...prev, f.key])
+                            } else {
+                              setFotosARecargar((prev) => prev.filter((k) => k !== f.key))
+                            }
+                          }}
+                          className="h-4 w-4"
+                        />
+                        <span className={`text-sm ${checked ? 'text-amber-200 font-medium' : 'text-muted-foreground'}`}>
+                          {f.label}
+                        </span>
+                      </label>
+                    )
+                  })}
+                </div>
+                <p className="text-[10px] text-muted-foreground mt-2">
+                  Si no marcas ninguno, el cliente verá un mensaje genérico pidiéndole revisar todos los documentos.
+                </p>
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setAbrirDevolver(false)} disabled={procesando}>Cancelar</Button>
+              <Button
+                onClick={devolver}
+                disabled={procesando || !motivoDevolucion.trim()}
+                className="bg-amber-600 hover:bg-amber-500 text-white"
+              >
+                {procesando ? (
+                  <><RefreshCw className="h-4 w-4 mr-2 animate-spin" /> Enviando email…</>
+                ) : (
+                  <><Mail className="h-4 w-4 mr-2" /> Devolver y notificar al cliente</>
+                )}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </CardContent>
     </Card>
   )
@@ -773,7 +944,6 @@ function FotoBox({ label, src, nombre }: { label: string; src: string | null; no
     <>
       <button type="button" onClick={() => setOpen(true)} className="block text-left">
         <div className="aspect-[4/3] rounded-lg overflow-hidden bg-slate-950 border hover:ring-2 hover:ring-indigo-500 transition-all">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={src} alt={label} className="w-full h-full object-cover" />
         </div>
         <div className="text-[10px] text-muted-foreground mt-1 flex items-center justify-between">
@@ -786,7 +956,6 @@ function FotoBox({ label, src, nombre }: { label: string; src: string | null; no
           <DialogHeader>
             <DialogTitle>{label}</DialogTitle>
           </DialogHeader>
-          {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={src} alt={label} className="w-full rounded-lg" />
         </DialogContent>
       </Dialog>
