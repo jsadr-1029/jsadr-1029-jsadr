@@ -2849,3 +2849,125 @@ Stage Summary:
 - ✅ Renovación de préstamos: funcional con cálculo de excedente y disclaimer
 - 📌 Para probar: ir a https://jsadr.com.co/portal-neobanco → vista Créditos → botón "Solicitar renovación" en cualquier préstamo activo
 
+
+---
+Task ID: 24-devolucion-solicitudes
+Agent: Super Z (main)
+Task: Permitir devolver solicitudes de nuevos clientes con motivo + email al cliente + página pública para corregir fotos. Aplicar a solicitud SNC-MUMRFYNR de Solanyi Cuartas.
+
+Work Log:
+
+SCHEMA PRISMA (migración aplicada a Neon):
+- Nuevos campos en SolicitudNuevoCliente:
+  * motivoDevolucion, detalleDevolucion
+  * fotosARecargar (JSON array de keys)
+  * vecesDevuelta (contador)
+  * fechaDevolucion, devueltoPorId, devueltoPorNombre
+  * tokenCorreccion (unique, 40 chars)
+  * tokenCorreccionExpira (72h)
+  * fechaCorreccion (cuando el cliente envía correcciones)
+  * fotoCedulaFrenteCorregida + Nombre
+  * fotoCedulaReversoCorregida + Nombre
+  * fotoSelfieCorregida + Nombre
+- Estado 'DEVUELTA' agregado al enum de estados
+
+BACKEND:
+1. PATCH /api/solicitudes-nuevos-clientes/[id] con accion='devolver':
+   - Recibe motivoDevolucion, detalleDevolucion, fotosARecargar[]
+   - Genera tokenCorreccion único (40 chars)
+   - Persiste todos los campos + incrementa vecesDevuelta
+   - Envía email HTML al cliente con:
+     * Logo JSADR
+     * Motivo de devolución destacado
+     * Lista de documentos a recargar
+     * Botón 'Corregir mi solicitud' → /corregir-solicitud/[token]
+     * Expiración 72h
+   - Registra AuditLog accion=SOLICITUD_DEVUELTA
+   - Si email falla, no rompe el flujo (token queda en BD)
+
+2. GET /api/solicitudes-nuevos-clientes/corregir/[token] (público):
+   - Devuelve info de solicitud devuelta + motivo + fotos a recargar
+   - Valida token válido, no expirado, estado=DEVUELTA
+   - No expone fotos base64
+
+3. POST /api/solicitudes-nuevos-clientes/corregir/[token] (público):
+   - Recibe fotos corregidas (data:image/...base64)
+   - Valida formato y tamaño (max 5MB)
+   - Sobrescribe fotos originales con corregidas
+   - Marca estado=PENDIENTE (vuelve a cola de revisión)
+   - Limpia token (no reutilizable)
+   - Envía email de confirmación al cliente
+
+PROXY.TS:
+- Agregada ruta pública /api/solicitudes-nuevos-clientes/corregir/
+
+FRONTEND ADMIN (SolicitudesPendientesPanel.tsx):
+- Nuevo botón 'Devolver al cliente' (color ámbar) en panel de detalle
+- Modal de devolución con:
+  * Alert explicativo (se enviará email al cliente)
+  * Campo motivo (obligatorio)
+  * Campo detalle (opcional)
+  * Checkboxes de documentos a recargar (CEDULA_FRENTE, REVERSO, SELFIE)
+  * Por defecto todas marcadas
+  * Botón 'Devolver y notificar al cliente'
+- Función abrirDevolverModal() y devolver()
+
+FRONTEND PÚBLICO (/corregir-solicitud/[token]/page.tsx):
+- Página standalone (sin layout del portal)
+- Mobile-first, dark theme
+- Estados: cargando / error / éxito / normal
+- Muestra:
+  * Header con logo JSADR + chip 'Solicitud devuelta'
+  * Banner 'Corrige tu solicitud' con nombre del cliente
+  * Motivo de devolución destacado (warning, ámbar)
+  * Resumen datos (código, cédula, veces devuelta, expira)
+  * Lista de documentos a recargar con:
+    - Icono y descripción de cada uno
+    - Input file (cámara/galería)
+    - Preview de la imagen cargada
+    - Botón quitar
+  * Botón 'Enviar correcciones'
+  * Tips de fotografía (iluminación, ángulo, etc.)
+- Validaciones: formato imagen, max 5MB, al menos 1 foto
+- Estados claros: token inválido / expirado / ya corregida
+- 100% estilos inline (sin dependencias de CSS variables del portal)
+
+APLICACIÓN A SNC-MUMRFYNR (Solanyi Cuartas):
+- Script scripts/_devolver-solicitud-snc.cjs:
+  * Marcó solicitud como DEVUELTA
+  * motivoDevolucion: 'Las fotos de la cédula están borrosas y no se pueden leer los datos. Por favor vuelve a tomar las fotos con mejor iluminación y enfocando bien.'
+  * detalleDevolucion: 'Específicamente la foto frontal y reverso de la cédula. La selfie también debe verse nítida.'
+  * fotosARecargar: ['CEDULA_FRENTE', 'CEDULA_REVERSO', 'SELFIE']
+  * Generó tokenCorreccion: 9c9101b9b6cb48a03bc7ebd089577b347197e75d
+  * Expira: 2026-10-02T16:06:21.807Z (72h)
+
+- Email: NO se envió automáticamente porque no hay conexión EMAIL_SMTP
+  activa en BD (ni BREVO_SMTP_KEY en .env). El gestor debe enviar el email
+  desde el panel admin:
+  1. Login en https://jsadr.com.co como ADMIN/GESTOR
+  2. Módulo Clientes → Solicitudes pendientes
+  3. Abrir solicitud SNC-MUMRFYNR
+  4. Click 'Devolver al cliente' (el modal aparece)
+  5. Confirmar — esto intenta enviar email y muestra el link
+
+- Link de corrección generado:
+  https://jsadr.com.co/corregir-solicitud/9c9101b9b6cb48a03bc7ebd089577b347197e75d
+
+VERIFICACIONES EN PRODUCCIÓN:
+- GET /corregir-solicitud/[token-invalido] → HTTP 200 (página renderiza con error)
+- GET /corregir-solicitud/[token-real] → HTTP 200 (página renderiza OK)
+- GET /api/solicitudes-nuevos-clientes/corregir/[token-real] → success:true con datos
+- GET /api/solicitudes-nuevos-clientes/corregir/[token-invalido] → 404 TOKEN_INVALIDO
+
+Stage Summary:
+- ✅ GitHub: sincronizado (commit 0e85940 en origin/main)
+- ✅ Vercel: deploy exitoso, aliased a jsadr.com.co
+- ✅ Neon: schema migrado, solicitud SNC-MUMRFYNR marcada como DEVUELTA con token
+- ✅ Página /corregir-solicitud/[token] funciona en producción
+- ✅ API /api/solicitudes-nuevos-clientes/corregir/[token] funciona
+- ✅ Modal 'Devolver al cliente' agregado en panel admin
+- 📌 Solanyi puede corregir sus fotos en:
+  https://jsadr.com.co/corregir-solicitud/9c9101b9b6cb48a03bc7ebd089577b347197e75d
+- 📌 Para que el email se envíe automáticamente, el admin debe configurar
+  una conexión EMAIL_SMTP en el módulo de Conexiones, o usar BREVO_SMTP_KEY
+
