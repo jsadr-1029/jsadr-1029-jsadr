@@ -118,8 +118,8 @@ export function HubView({ estado, cargando, avisosNoLeidos, onIrA }: HubViewProp
           {/* Accesos rápidos */}
           <div className="grid grid-cols-4 gap-2">
             {[
-              { v: 'simulador', label: 'Simular', icon: <Sparkles size={16} /> },
-              { v: 'solicitudes', label: 'Pedir', icon: <Plus size={16} /> },
+              { v: 'simulador', label: 'Pedir', icon: <Sparkles size={16} /> },
+              { v: 'solicitudes', label: 'Estado', icon: <Plus size={16} /> },
               { v: 'proximos-pagos', label: 'Pagar', icon: <CalendarClock size={16} /> },
               { v: 'historial', label: 'Historial', icon: <TrendingUp size={16} /> },
             ].map((q) => (
@@ -293,7 +293,7 @@ export function HubView({ estado, cargando, avisosNoLeidos, onIrA }: HubViewProp
                 iconLeft={<Plus size={14} />}
                 onClick={() => onIrA('simulador')}
               >
-                Simular primer crédito
+                Simular y pedir crédito
               </GlassButton>
             </div>
           </GlassCard>

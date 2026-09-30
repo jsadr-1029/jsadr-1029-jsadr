@@ -18,7 +18,7 @@ import {
 } from '../ui'
 import { formatCOP } from '../useNeobancoPortal'
 import { useNbToast } from '../ui'
-import { Sliders, Sparkles, Info, CalendarDays, TrendingUp, ChevronRight, ArrowRight } from 'lucide-react'
+import { Sliders, Sparkles, Info, CalendarDays, TrendingUp, ChevronRight, ArrowRight, CheckCircle2 } from 'lucide-react'
 
 type SimuladorViewProps = {
   token: string | null
@@ -62,6 +62,46 @@ export function SimuladorView({ token, onCrearSolicitud }: SimuladorViewProps) {
   const [resultado, setResultado] = React.useState<SimResult | null>(null)
   const [cargando, setCargando] = React.useState(false)
   const [verCronograma, setVerCronograma] = React.useState(false)
+  const [verConfirmacion, setVerConfirmacion] = React.useState(false)
+  const [enviandoSolicitud, setEnviandoSolicitud] = React.useState(false)
+  const [solicitudEnviada, setSolicitudEnviada] = React.useState(false)
+
+  // Enviar solicitud directamente (sin OTP, sin Clave Dinámica)
+  const enviarSolicitud = async () => {
+    if (!token) {
+      toast.push('Sesión no disponible. Inicia sesión de nuevo.', 'danger')
+      return
+    }
+    setEnviandoSolicitud(true)
+    try {
+      const cedula = typeof window !== 'undefined' ? localStorage.getItem('portal_cliente_cedula') : null
+      const res = await fetch('/api/solicitudes-web', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          cedula: cedula || undefined,
+          token,
+          montoSolicitado: monto,
+          plazoMeses: plazo,
+          frecuencia,
+          flexibilidadFinanciera: flexibilidad !== 'ninguna',
+          flexibilidadModalidad: flexibilidad === 'ninguna' ? undefined : flexibilidad.toUpperCase(),
+          notasCliente: `Solicitud creada desde simulador. Cuota estimada: ${formatCOP(resultado?.cuotaFija ?? 0)}. Total a pagar: ${formatCOP(totalConCargos)}.`,
+          origen: 'PORTAL_NEOBANCO_SIMULADOR',
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        throw new Error(data.error || 'No se pudo enviar la solicitud')
+      }
+      setSolicitudEnviada(true)
+      toast.push('¡Solicitud enviada con éxito!', 'success')
+    } catch (e: any) {
+      toast.push(e.message || 'Error al enviar solicitud', 'danger')
+    } finally {
+      setEnviandoSolicitud(false)
+    }
+  }
   const [error, setError] = React.useState<string | null>(null)
 
   const cuotasSimuladas = React.useMemo(() => {
@@ -134,10 +174,10 @@ export function SimuladorView({ token, onCrearSolicitud }: SimuladorViewProps) {
     <div className="flex flex-col gap-4 pb-6">
       <header className="px-1">
         <h1 className="text-[22px] font-bold text-[var(--nb-fg)] tracking-[-0.02em]">
-          Simulador
+          Pedir crédito
         </h1>
         <p className="text-[13px] text-[var(--nb-fg-muted)] mt-0.5">
-          Calcula tu cuota en tiempo real. Sin compromiso.
+          Simula tu cuota y envía la solicitud. Sin compromiso.
         </p>
       </header>
 
@@ -400,9 +440,9 @@ export function SimuladorView({ token, onCrearSolicitud }: SimuladorViewProps) {
                 variant="primary"
                 size="lg"
                 iconRight={<ArrowRight size={16} />}
-                onClick={onCrearSolicitud}
+                onClick={() => setVerConfirmacion(true)}
               >
-                Solicitar este crédito
+                Pedir este crédito
               </GlassButton>
               <button
                 onClick={() => setVerCronograma(true)}
@@ -500,6 +540,123 @@ export function SimuladorView({ token, onCrearSolicitud }: SimuladorViewProps) {
                 </div>
               )
             })}
+          </div>
+        )}
+      </Sheet>
+
+      {/* Sheet de confirmación — pedir crédito */}
+      <Sheet
+        open={verConfirmacion}
+        onClose={() => !enviandoSolicitud && !solicitudEnviada && setVerConfirmacion(false)}
+        title={solicitudEnviada ? '¡Solicitud enviada!' : 'Confirma tu solicitud'}
+      >
+        {solicitudEnviada ? (
+          <div className="flex flex-col items-center text-center py-6 pb-4">
+            <div className="w-16 h-16 rounded-2xl bg-[var(--nb-success-soft)] text-[var(--nb-success)] flex items-center justify-center mb-4">
+              <CheckCircle2 size={32} />
+            </div>
+            <h3 className="text-[18px] font-bold text-[var(--nb-fg)] mb-2">
+              ¡Tu solicitud fue enviada!
+            </h3>
+            <p className="text-[13px] text-[var(--nb-fg-muted)] leading-relaxed max-w-[300px] mb-5">
+              Nuestro equipo revisará tu solicitud y te contactará en menos de 24 horas.
+              Puedes seguir el estado desde la sección "Solicitudes".
+            </p>
+            <GlassButton
+              fullWidth
+              variant="primary"
+              size="lg"
+              onClick={() => {
+                setVerConfirmacion(false)
+                setSolicitudEnviada(false)
+                onCrearSolicitud()
+              }}
+            >
+              Ver mis solicitudes
+            </GlassButton>
+          </div>
+        ) : (
+          <div className="flex flex-col gap-4 pb-4">
+            {/* Resumen de lo que se va a pedir */}
+            <GlassCard radius="lg" variant="soft">
+              <div className="p-4 flex flex-col gap-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-[12px] font-semibold text-[var(--nb-fg-muted)]">
+                    Monto solicitado
+                  </span>
+                  <span className="text-[16px] font-bold text-[var(--nb-fg)] nb-tabular">
+                    {formatCOP(monto)}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-[12px] font-semibold text-[var(--nb-fg-muted)]">
+                    Plazo
+                  </span>
+                  <span className="text-[14px] font-bold text-[var(--nb-fg)] nb-tabular">
+                    {plazo} {frecuencia === 'MENSUAL' ? 'meses' : frecuencia === 'QUINCENAL' ? 'quincenas' : 'semanas'}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-[12px] font-semibold text-[var(--nb-fg-muted)]">
+                    Cuota {frecuencia.toLowerCase()}
+                  </span>
+                  <span className="text-[16px] font-bold text-[var(--nb-primary)] nb-tabular">
+                    {formatCOP(resultado?.cuotaFija ?? 0)}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-[12px] font-semibold text-[var(--nb-fg-muted)]">
+                    Total a pagar
+                  </span>
+                  <span className="text-[14px] font-bold text-[var(--nb-fg)] nb-tabular">
+                    {formatCOP(totalConCargos)}
+                  </span>
+                </div>
+                {flexibilidad !== 'ninguna' && (
+                  <div className="flex items-center justify-between">
+                    <span className="text-[12px] font-semibold text-[var(--nb-fg-muted)]">
+                      Flexibilidad
+                    </span>
+                    <Chip tone="brand" size="sm">
+                      {flexibilidad === 'premium' ? 'Premium' : 'Básica'}
+                    </Chip>
+                  </div>
+                )}
+              </div>
+            </GlassCard>
+
+            {/* Disclaimer */}
+            <div className="p-3 rounded-xl bg-[var(--nb-warning-soft)] border border-[var(--nb-warning)]/20 flex items-start gap-2">
+              <Info size={14} className="text-[var(--nb-warning)] shrink-0 mt-0.5" />
+              <p className="text-[11px] text-[var(--nb-fg-muted)] leading-relaxed">
+                Esta es una <strong>solicitud de crédito</strong>, no un desembolso inmediato.
+                Queda <strong>sujeta a estudio y aprobación</strong> por parte de nuestro equipo.
+                Te contactaremos en menos de 24 horas.
+              </p>
+            </div>
+
+            {/* Botones */}
+            <div className="flex flex-col gap-2">
+              <GlassButton
+                fullWidth
+                variant="primary"
+                size="lg"
+                loading={enviandoSolicitud}
+                iconRight={!enviandoSolicitud ? <ArrowRight size={16} /> : undefined}
+                onClick={enviarSolicitud}
+              >
+                {enviandoSolicitud ? 'Enviando...' : 'Sí, enviar solicitud'}
+              </GlassButton>
+              <GlassButton
+                fullWidth
+                variant="ghost"
+                size="md"
+                onClick={() => setVerConfirmacion(false)}
+                disabled={enviandoSolicitud}
+              >
+                Cancelar
+              </GlassButton>
+            </div>
           </div>
         )}
       </Sheet>

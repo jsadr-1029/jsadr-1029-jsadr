@@ -143,41 +143,38 @@ export async function POST(req: NextRequest) {
 
     const {
       clienteId,
+      cedula,
       token,
       valorSolicitado,
       numeroCuotas,
       frecuencia,
       primerPagoFecha,
       codigoConfirmacion,
+      montoSolicitado,
+      plazoMeses,
+      flexibilidadFinanciera,
+      flexibilidadModalidad,
+      notasCliente,
+      origen,
+      prestamoARenovarId,
     } = body || {}
 
-    // Validar campos requeridos
-    if (!clienteId || !token || !valorSolicitado || !numeroCuotas || !frecuencia) {
+    // Aceptar nombres legacy (montoSolicitado/plazoMeses) y nuevos (valorSolicitado/numeroCuotas)
+    const montoFinal = valorSolicitado || montoSolicitado
+    const cuotasFinal = numeroCuotas || plazoMeses
+
+    // Validar campos requeridos (sin codigoConfirmacion, sin clienteId obligatorio)
+    if (!token || !montoFinal || !cuotasFinal || !frecuencia) {
       return NextResponse.json(
         {
           success: false,
-          error:
-            'clienteId, token, valorSolicitado, numeroCuotas y frecuencia son obligatorios',
+          error: 'token, montoSolicitado, plazoMeses y frecuencia son obligatorios',
           code: 'MISSING_FIELDS',
         },
         { status: 400 }
       )
     }
-
-    // === Validar codigoConfirmacion (Clave Dinámica verificada) ===
-    // El cliente debe haber solicitado y validado una clave dinámica
-    // en el simulador antes de poder enviar la solicitud.
-    if (!codigoConfirmacion) {
-      return NextResponse.json(
-        {
-          success: false,
-          error:
-            'Debes validar tu Clave Dinámica en el simulador antes de enviar la solicitud.',
-          code: 'MISSING_CODIGO_CONFIRMACION',
-        },
-        { status: 400 }
-      )
-    }
+    // codigoConfirmacion (Clave Dinámica) ya NO es obligatorio (v2.0 — 2026-09-30)
 
     if (!FRECUENCIAS_VALIDAS.includes(frecuencia as Frecuencia)) {
       return NextResponse.json(
@@ -190,8 +187,8 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    const valorNum = parseFloat(valorSolicitado)
-    const cuotasNum = parseInt(numeroCuotas, 10)
+    const valorNum = parseFloat(montoFinal)
+    const cuotasNum = parseInt(cuotasFinal, 10)
 
     if (isNaN(valorNum) || valorNum <= 0) {
       return NextResponse.json(
@@ -206,10 +203,11 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    // === Buscar cliente ===
-    const cliente = await db.cliente.findUnique({
-      where: { id: clienteId },
-    })
+    // === Buscar cliente por token de sesión o por cédula ===
+    // El token es el tokenSesion guardado en BD al hacer login
+    const cliente = cedula
+      ? await db.cliente.findUnique({ where: { cedula: String(cedula).trim() } })
+      : await db.cliente.findFirst({ where: { tokenSesion: token } })
 
     if (!cliente) {
       return NextResponse.json(
@@ -266,79 +264,8 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    // === Verificar codigoConfirmacion (Clave Dinámica) ===
-    // Busca el OtpRegistro de tipo SOLICITUD_SIMULADOR que tenga
-    // sessionIdGenerado = hash(codigoConfirmacion) y que esté verificado,
-    // no usado, no expirado, y que pertenezca al cliente.
-    const clientInfoPre = getPortalClientInfo(req)
-    const codigoConfirmacionHash = crypto
-      .createHash('sha256')
-      .update(String(codigoConfirmacion))
-      .digest('hex')
-
-    const otpReg = await db.otpRegistro.findFirst({
-      where: {
-        clienteId: cliente.id,
-        tipo: 'SOLICITUD_SIMULADOR',
-        verificado: true,
-        usado: true,
-        bloqueado: false,
-        expiraEn: { gt: new Date() },
-      },
-      orderBy: { createdAt: 'desc' },
-    })
-
-    const codigoConfirmacionValido =
-      !!otpReg &&
-      !!otpReg.sessionIdGenerado &&
-      safeCompare(otpReg.sessionIdGenerado, codigoConfirmacionHash)
-
-    if (!codigoConfirmacionValido) {
-      try {
-        await db.auditLog.create({
-          data: {
-            usuarioId: null,
-            usuarioNombre: `Portal: ${cliente.nombre}`,
-            accion: 'CREATE',
-            modulo: 'solicitudes-web',
-            entidadId: cliente.id,
-            entidadNombre: cliente.nombre,
-            detalles: JSON.stringify({
-              error: 'codigoConfirmacion inválido o expirado',
-              clienteId,
-            }),
-            ipOrigen: clientInfoPre.ip,
-            userAgent: clientInfoPre.userAgent,
-            exito: false,
-            errorMessage: 'Clave dinámica inválida o expirada',
-          },
-        })
-      } catch (e) {
-        console.error('[solicitudes-web POST] Audit log error:', e)
-      }
-
-      return NextResponse.json(
-        {
-          success: false,
-          error:
-            'Clave Dinámica inválida o expirada. Solicita y valida una nueva clave en el simulador.',
-          code: 'INVALID_CODIGO_CONFIRMACION',
-        },
-        { status: 401 }
-      )
-    }
-
-    // === Invalidar el codigoConfirmacion (un solo uso) ===
-    // Al marcar usado=false y verificado=false, no podrá reutilizarse.
-    await db.otpRegistro.update({
-      where: { id: otpReg!.id },
-      data: {
-        usado: false,
-        verificado: false,
-        bloqueado: true,
-        fechaBloqueo: new Date(),
-      },
-    })
+    // === codigoConfirmacion (Clave Dinámica) ELIMINADO (v2.0 — 2026-09-30) ===
+    // Ya no se exige OTP. El cliente confirma su intención en el simulador.
 
     // === Determinar tasa y calcular préstamo ===
     let resultado: ResultadoCalculo

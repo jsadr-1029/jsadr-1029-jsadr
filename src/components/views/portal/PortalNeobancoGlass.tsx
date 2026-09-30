@@ -55,7 +55,7 @@ const TABS_PRIMARIOS: Array<{ key: Vista; label: string; icon: React.ReactNode; 
   { key: 'hub', label: 'Inicio', icon: <Home size={18} /> },
   { key: 'creditos', label: 'Créditos', icon: <Landmark size={18} /> },
   { key: 'proximos-pagos', label: 'Pagos', icon: <CalendarClock size={18} />, badgeKey: 'mora' },
-  { key: 'simulador', label: 'Simular', icon: <Calculator size={18} /> },
+  { key: 'simulador', label: 'Pedir', icon: <Calculator size={18} /> },
   { key: 'mas', label: 'Más', icon: <MoreHorizontal size={18} /> } as any,
 ]
 
