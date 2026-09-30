@@ -18,7 +18,7 @@ import {
 } from '../ui'
 import { formatCOP } from '../useNeobancoPortal'
 import { useNbToast } from '../ui'
-import { Sliders, Sparkles, Info, CalendarDays, TrendingUp, ChevronRight, ArrowRight, CheckCircle2 } from 'lucide-react'
+import { Sliders, Sparkles, Info, CalendarDays, TrendingUp, ChevronRight, ArrowRight, CheckCircle2, RefreshCw } from 'lucide-react'
 
 type SimuladorViewProps = {
   token: string | null
@@ -59,12 +59,15 @@ export function SimuladorView({ token, onCrearSolicitud }: SimuladorViewProps) {
   const [plazo, setPlazo] = React.useState(6)
   const [frecuencia, setFrecuencia] = React.useState<'MENSUAL' | 'QUINCENAL' | 'SEMANAL'>('MENSUAL')
   const [flexibilidad, setFlexibilidad] = React.useState<'ninguna' | 'basica' | 'premium'>('ninguna')
+  const [renovacionAnticipada, setRenovacionAnticipada] = React.useState(false)
   const [resultado, setResultado] = React.useState<SimResult | null>(null)
   const [cargando, setCargando] = React.useState(false)
   const [verCronograma, setVerCronograma] = React.useState(false)
   const [verConfirmacion, setVerConfirmacion] = React.useState(false)
   const [enviandoSolicitud, setEnviandoSolicitud] = React.useState(false)
   const [solicitudEnviada, setSolicitudEnviada] = React.useState(false)
+
+  const RENOVACION_COSTO = 9900
 
   // Enviar solicitud directamente (sin OTP, sin Clave Dinámica)
   const enviarSolicitud = async () => {
@@ -86,7 +89,8 @@ export function SimuladorView({ token, onCrearSolicitud }: SimuladorViewProps) {
           frecuencia,
           flexibilidadFinanciera: flexibilidad !== 'ninguna',
           flexibilidadModalidad: flexibilidad === 'ninguna' ? undefined : flexibilidad.toUpperCase(),
-          notasCliente: `Solicitud creada desde simulador. Cuota estimada: ${formatCOP(resultado?.cuotaFija ?? 0)}. Total a pagar: ${formatCOP(totalConCargos)}.`,
+          renovacionAnticipada,
+          notasCliente: `Solicitud creada desde simulador. Cuota estimada: ${formatCOP(resultado?.cuotaFija ?? 0)}. Total a pagar: ${formatCOP(totalConCargos)}. Renovación anticipada: ${renovacionAnticipada ? 'Sí' : 'No'}.`,
           origen: 'PORTAL_NEOBANCO_SIMULADOR',
         }),
       })
@@ -112,6 +116,7 @@ export function SimuladorView({ token, onCrearSolicitud }: SimuladorViewProps) {
 
   const flexElegible = cuotasSimuladas >= 4
   const flexCosto = flexibilidad === 'basica' ? 15000 : flexibilidad === 'premium' ? 34900 : 0
+  const renovacionCosto = renovacionAnticipada ? RENOVACION_COSTO : 0
 
   // === Disparar simulación al cambiar parámetros ===
   React.useEffect(() => {
@@ -164,10 +169,10 @@ export function SimuladorView({ token, onCrearSolicitud }: SimuladorViewProps) {
     }
   }, [monto, plazo, frecuencia, flexibilidad, token])
 
-  const totalConCargos = (resultado?.totalPagar ?? 0) + TARIFA_PLATAFORMA + flexCosto
+  const totalConCargos = (resultado?.totalPagar ?? 0) + TARIFA_PLATAFORMA + flexCosto + renovacionCosto
   const cuotaConCargoInicial =
     resultado && resultado.cronograma?.length > 0
-      ? Number(resultado.cronograma[0].total) + TARIFA_PLATAFORMA + flexCosto
+      ? Number(resultado.cronograma[0].total) + TARIFA_PLATAFORMA + flexCosto + renovacionCosto
       : 0
 
   return (
@@ -412,7 +417,7 @@ export function SimuladorView({ token, onCrearSolicitud }: SimuladorViewProps) {
                 <StatBox
                   label="Primera cuota"
                   value={formatCOP(cuotaConCargoInicial)}
-                  hint={`incluye ${formatCOP(TARIFA_PLATAFORMA + flexCosto)} en cargos`}
+                  hint={`incluye ${formatCOP(TARIFA_PLATAFORMA + flexCosto + renovacionCosto)} en cargos`}
                 />
                 <StatBox
                   label="Total a pagar"
@@ -430,10 +435,59 @@ export function SimuladorView({ token, onCrearSolicitud }: SimuladorViewProps) {
                     value={formatCOP(flexCosto)}
                   />
                 )}
+                {renovacionAnticipada && (
+                  <CargoRow
+                    label="Reserva renovación anticipada"
+                    value={formatCOP(RENOVACION_COSTO)}
+                  />
+                )}
                 <CargoRow label="Capital + intereses" value={formatCOP(resultado.totalPagar)} />
                 <div className="h-px bg-[var(--nb-divider)] my-1" />
                 <CargoRow label="Total" value={formatCOP(totalConCargos)} strong />
               </div>
+
+              {/* === Opción: Renovación Anticipada === */}
+              <button
+                type="button"
+                onClick={() => setRenovacionAnticipada(!renovacionAnticipada)}
+                className={`nb-press w-full p-4 rounded-2xl border-2 transition-all text-left ${
+                  renovacionAnticipada
+                    ? 'border-[var(--nb-primary)] bg-[var(--nb-primary-soft)]'
+                    : 'border-[var(--nb-border)] bg-[var(--nb-surface-2)] hover:border-[var(--nb-border-strong)]'
+                }`}
+              >
+                <div className="flex items-start gap-3">
+                  <div className={`w-10 h-10 rounded-2xl flex items-center justify-center shrink-0 transition-colors ${
+                    renovacionAnticipada
+                      ? 'bg-[var(--nb-gradient-brand)] text-white'
+                      : 'bg-[var(--nb-primary-soft)] text-[var(--nb-primary)]'
+                  }`}>
+                    <RefreshCw size={18} />
+                  </div>
+                  <div className="flex-1">
+                    <div className="flex items-center justify-between mb-1">
+                      <p className="text-[14px] font-bold text-[var(--nb-fg)]">
+                        Reserva de renovación anticipada
+                      </p>
+                      <Chip tone={renovacionAnticipada ? 'brand' : 'neutral'} size="sm">
+                        {renovacionAnticipada ? 'Activada' : '+ $9.900'}
+                      </Chip>
+                    </div>
+                    <p className="text-[11px] text-[var(--nb-fg-muted)] leading-relaxed">
+                      Reserva tu derecho a renovar este crédito antes de terminarlo.
+                      Pagas <strong>$9.900</strong> adicionales (en tu primera cuota) y
+                      puedes solicitar la renovación cuando quieras, sin necesidad de esperar
+                      a que se pague todo el préstamo.
+                    </p>
+                    {renovacionAnticipada && (
+                      <p className="text-[11px] text-[var(--nb-success)] mt-2 flex items-center gap-1">
+                        <CheckCircle2 size={11} />
+                        Reserva activada — puedes renovar en cualquier momento
+                      </p>
+                    )}
+                  </div>
+                </div>
+              </button>
 
               <GlassButton
                 fullWidth
@@ -619,6 +673,16 @@ export function SimuladorView({ token, onCrearSolicitud }: SimuladorViewProps) {
                     </span>
                     <Chip tone="brand" size="sm">
                       {flexibilidad === 'premium' ? 'Premium' : 'Básica'}
+                    </Chip>
+                  </div>
+                )}
+                {renovacionAnticipada && (
+                  <div className="flex items-center justify-between">
+                    <span className="text-[12px] font-semibold text-[var(--nb-fg-muted)]">
+                      Renovación anticipada
+                    </span>
+                    <Chip tone="success" size="sm">
+                      Reservada · $9.900
                     </Chip>
                   </div>
                 )}
