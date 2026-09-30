@@ -114,11 +114,13 @@ function PrestamosPanel({
   onChanged,
   simulacionInicial,
   onCambiarVista,
+  onSimulacionConsumida,
 }: {
   onAbrirPrestamo: (id: string) => void
   onChanged: () => void
   simulacionInicial: SimulacionParams | null
   onCambiarVista?: (vista: string) => void
+  onSimulacionConsumida?: () => void
 }) {
   const [prestamos, setPrestamos] = useState<Prestamo[]>([])
   const [clientes, setClientes] = useState<any[]>([])
@@ -593,7 +595,10 @@ function PrestamosPanel({
     if (simulacionInicial.tasaInteresAnual) setTasaInteresAnual(simulacionInicial.tasaInteresAnual)
     if (simulacionInicial.plazoMeses) setPlazoMeses(simulacionInicial.plazoMeses)
     if (simulacionInicial.frecuencia) setFrecuencia(simulacionInicial.frecuencia)
+    // Abrir el modal SIEMPRE, independientemente de si se seleccionó el cliente
     setModalAbierto(true)
+    // Limpiar simulacionInicial después de consumirlo para que pueda reutilizarse
+    onSimulacionConsumida?.()
   }, [simulacionInicial])
 
   // === AUTO-CÁLCULO DEL BLOQUE DE CORTE ===
@@ -3068,6 +3073,7 @@ export function PrestamosView({
             onChanged={onChanged}
             simulacionInicial={simulacionInicial}
             onCambiarVista={onCambiarVista}
+            onSimulacionConsumida={() => setSimulacionInicial(null)}
           />
         </TabsContent>
 
