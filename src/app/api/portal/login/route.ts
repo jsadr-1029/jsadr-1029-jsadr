@@ -1,47 +1,92 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { generateToken } from '@/lib/format'
-import { getClientInfo } from '@/lib/security'
+import { getClientInfo, generateAccessToken } from '@/lib/security'
 
 // =====================================================
 // POST /api/portal/login
 // Body:
 //   { cedula: string }        — login por cédula (único método)
-//   { clienteId: string }     — login por clienteId (legacy)
 //
-// Flujo (v2.0 — 2026-09-18):
-//   1. Buscar cliente por cédula (o clienteId si se proporciona).
-//   2. Si no existe → 404 (el cliente debe registrarse primero).
-//   3. Si existe y está activo → generar token de sesión (2h).
-//   4. Persistir tokenSesion en BD.
-//   5. Registrar acceso en AccesoPortal.
+// Flujo (v3.0 — 2026-09-30):
+//   1. Buscar PRIMERO en tabla Usuario (admin/gestor/consultor) por cédula.
+//   2. Si no encuentra, buscar en tabla Cliente por cédula.
+//   3. Si no existe en ninguna → 404 NO_REGISTRADO.
+//   4. Generar token de sesión.
+//   5. Si es Usuario → devolver tipo=USUARIO + accessToken + rol.
+//   6. Si es Cliente → devolver tipo=CLIENTE + token de portal.
 //
-// NOTA DE SEGURIDAD:
-//   El login solo con cédula es deliberado. La seguridad del acceso al portal
-//   del cliente se basa en el proceso de REGISTRO (que sigue exigiendo fotos
-//   de cédula + selfie + verificación OTP por WhatsApp/email). Una vez
-//   registrado, el cliente ingresa con solo su cédula. Esto es similar a
-//   cómo funcionan apps como Rappi/Uber en Colombia donde el login es por
-//   teléfono + OTP, pero aquí asumimos que la verificación ya ocurrió en
-//   el registro.
+// NOTA: Todos los usuarios (admin y clientes) ingresan SOLO con cédula.
 // =====================================================
 
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
-    const { cedula, clienteId } = body
+    const { cedula } = body
 
-    if (!cedula && !clienteId) {
+    if (!cedula) {
       return NextResponse.json(
         { success: false, error: 'Cédula es requerida', codigo: 'CEDULA_REQUERIDA' },
         { status: 400 }
       )
     }
 
-    // Buscar cliente por cédula (preferido) o clienteId (legacy)
-    const cliente = cedula
-      ? await db.cliente.findUnique({ where: { cedula: String(cedula).trim() } })
-      : await db.cliente.findUnique({ where: { id: clienteId } })
+    const cedulaLimpia = String(cedula).trim()
+    const clientInfo = getClientInfo(req)
+
+    // === 1. Buscar en tabla Usuario (admin/gestor/consultor) ===
+    const usuario = await db.usuario.findFirst({
+      where: {
+        OR: [
+          { cedula: cedulaLimpia },
+          { username: cedulaLimpia },
+        ],
+        activo: true,
+      },
+    })
+
+    if (usuario) {
+      // Es admin/gestor/consultor — login sin contraseña
+      const accessToken = generateAccessToken({
+        userId: usuario.id,
+        username: usuario.username,
+        rol: usuario.rol,
+      })
+
+      // Actualizar último acceso
+      await db.usuario.update({
+        where: { id: usuario.id },
+        data: {
+          ultimoAcceso: new Date(),
+        },
+      })
+
+      await db.accesoPortal.create({
+        data: {
+          clienteCedula: cedulaLimpia,
+          clienteNombre: usuario.nombre,
+          ipOrigen: clientInfo.ip,
+          userAgent: clientInfo.userAgent,
+          accion: 'LOGIN_CEDULA',
+          exito: true,
+          detalle: `Login admin/gestor: ${usuario.rol} (solo cédula, sin contraseña)`,
+        },
+      })
+
+      return NextResponse.json({
+        success: true,
+        tipo: 'USUARIO',
+        token: accessToken,
+        accessToken,
+        usuarioId: usuario.id,
+        clienteId: usuario.id, // para compatibilidad con el frontend
+        nombre: usuario.nombre,
+        rol: usuario.rol,
+      })
+    }
+
+    // === 2. Buscar en tabla Cliente ===
+    const cliente = await db.cliente.findUnique({ where: { cedula: cedulaLimpia } })
 
     if (!cliente) {
       return NextResponse.json(
@@ -61,9 +106,7 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    const clientInfo = getClientInfo(req)
-
-    // Generar token de sesión (2h)
+    // Generar token de sesión del portal (2h)
     const token = generateToken(32)
     const tokenExpira = new Date(Date.now() + 2 * 60 * 60 * 1000)
 
@@ -73,8 +116,6 @@ export async function POST(req: NextRequest) {
         tokenSesion: token,
         tokenExpira,
         ultimoAccesoPortal: new Date(),
-        pinIntentos: 0,
-        pinBloqueadoHasta: null,
       },
     })
 
@@ -93,6 +134,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({
       success: true,
+      tipo: 'CLIENTE',
       token,
       clienteId: cliente.id,
       nombre: cliente.nombre,

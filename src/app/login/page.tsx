@@ -113,34 +113,17 @@ export default function LoginPage() {
   }
 
   // =====================================================
-  // SUBMIT UNIFICADO — envía identificador + password
-  // El backend detecta automáticamente el tipo de usuario
-  // (admin/gestor/consultor/abogado/cliente) y devuelve
-  // el token + rol + ruta de redirección.
-  //
-  // NOTA (2026-09-18): Si el identificador es una cédula (solo dígitos),
-  // el login del cliente ya NO requiere contraseña. El cliente se autentica
-  // con solo su cédula. La seguridad se garantiza mediante el proceso de
-  // REGISTRO (que sigue exigiendo fotos de cédula + selfie + verificación).
+  // SUBMIT — login solo con cédula (sin contraseña)
+  // Todos los usuarios (clientes y admin) ingresan con cédula.
+  // El backend (/api/portal/login) detecta automáticamente si la cédula
+  // pertenece a un Cliente o a un Usuario (admin/gestor/consultor).
   // =====================================================
   const submitUnificado = async (e: React.FormEvent) => {
     e.preventDefault()
     const idTrim = identificador.trim()
 
-    // Detectar si parece cédula (solo dígitos, 6-12 caracteres)
-    const esCedula = /^\d{6,12}$/.test(idTrim)
-    // Detectar si parece email
-    const esEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(idTrim)
-
-    // Para cédulas (clientes), no se requiere contraseña.
-    // Para emails/usernames (usuarios internos), sí se requiere.
-    if (!esCedula && !password) {
-      setError('Ingresa tu contraseña')
-      triggerShake()
-      return
-    }
     if (!idTrim) {
-      setError('Ingresa tu usuario, cédula o correo')
+      setError('Ingresa tu cédula')
       triggerShake()
       return
     }
@@ -149,24 +132,44 @@ export default function LoginPage() {
     try {
       let loginExitoso = false
 
-      if (esCedula) {
-        // Login de cliente: solo cédula, sin PIN/contraseña
-        try {
-          const r = await fetch('/api/portal/login', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
+      // === LOGIN SOLO CON CÉDULA ===
+      // El backend /api/portal/login busca en la tabla Cliente.
+      // Si no encuentra, busca en la tabla Usuario (admin/gestor/consultor).
+      try {
+        const r = await fetch('/api/portal/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            cedula: idTrim,
+          }),
+        })
+        const data = await r.json()
+        if (r.ok && data.success) {
+          // Es un Cliente o un Usuario (admin/gestor)
+          try {
+            localStorage.setItem('portal_cliente_token', data.token)
+            localStorage.setItem('portal_cliente_id', data.clienteId)
+            localStorage.setItem('portal_cliente_nombre', data.nombre)
+            localStorage.setItem('portal_cliente_cedula', idTrim)
+          } catch {}
+
+          if (data.tipo === 'USUARIO') {
+            // Es admin/gestor/consultor — usar setTokens + setUserData normales
+            setTokens(data.accessToken || data.token, data.accessToken || data.token)
+            setUserData({
+              id: data.clienteId || data.usuarioId,
+              nombre: data.nombre,
+              username: idTrim,
               cedula: idTrim,
-            }),
-          })
-          const data = await r.json()
-          if (r.ok && data.success) {
-            try {
-              localStorage.setItem('portal_cliente_token', data.token)
-              localStorage.setItem('portal_cliente_id', data.clienteId)
-              localStorage.setItem('portal_cliente_nombre', data.nombre)
-              localStorage.setItem('portal_cliente_cedula', idTrim)
-            } catch {}
+              rol: data.rol || 'ADMIN',
+            })
+            setSuccess({ nombre: data.nombre })
+            setTimeout(() => {
+              router.replace('/')
+              router.refresh()
+            }, 1100)
+          } else {
+            // Es Cliente — redirigir al portal Neobanco Glass
             setTokens('portal_cliente_' + data.token, 'portal_cliente_' + data.token)
             setUserData({
               id: data.clienteId,
@@ -181,69 +184,16 @@ export default function LoginPage() {
               router.replace('/portal-neobanco')
               router.refresh()
             }, 1100)
-            loginExitoso = true
-          } else if (data.codigo === 'NO_REGISTRADO') {
-            // Cliente no registrado — mostrar mensaje claro
-            setError(data.error || 'Tu cédula no está registrada. Si eres nuevo, regístrate primero.')
-            triggerShake()
           }
-        } catch {}
-
-        if (!loginExitoso) {
-          // Intentar login como abogado (cédula + clave)
-          try {
-            const r = await fetch('/api/juridico/portal/auth', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ cedula: idTrim, clave: password }),
-            })
-            const data = await r.json()
-            if (r.ok && data.success) {
-              try {
-                localStorage.setItem('juridico_token', data.data.token)
-                localStorage.setItem('juridico_user', JSON.stringify(data.data.usuario))
-              } catch {}
-              setSuccess({ nombre: data.data.usuario?.nombre || 'Abogado' })
-              setTimeout(() => {
-                router.replace('/juridico')
-                router.refresh()
-              }, 1100)
-              loginExitoso = true
-            }
-          } catch {}
-        }
-      }
-
-      if (!loginExitoso) {
-        // Intentar login como usuario interno (admin/gestor/consultor/abogado con username o email)
-        const result = await login(idTrim, password)
-        if (result.success) {
-          const user = getUserData()
-          setSuccess({ nombre: user?.nombre || idTrim })
-          // Enrutamiento por rol y usuario:
-          //   ABOGADO               → /juridico (portal del abogado)
-          //   CLIENTE               → /portal-neobanco (nuevo portal Neobanco Glass)
-          //   P_jsadr (companion)   → /?view=portal-admin (portal del companion)
-          //   ADMIN/GESTOR/CONSULTOR → / (dashboard principal)
-          const rol = user?.rol
-          const username = (user?.username || '').toLowerCase()
-          let ruta = '/'
-          if (rol === 'ABOGADO') ruta = '/juridico'
-          else if (rol === 'CLIENTE' || user?.esPortalCliente) ruta = '/portal-neobanco'
-          else if (username === 'p_jsadr') ruta = '/?view=portal-admin'
-          setTimeout(() => {
-            router.replace(ruta)
-            router.refresh()
-          }, 1100)
           loginExitoso = true
-        } else if (result.requiresMFA) {
-          setError('Tu cuenta tiene MFA activo. Contacta al administrador.')
+        } else if (data.codigo === 'NO_REGISTRADO') {
+          setError(data.error || 'Tu cédula no está registrada. Si eres nuevo, regístrate primero.')
           triggerShake()
         }
-      }
+      } catch {}
 
       if (!loginExitoso) {
-        setError('Credenciales incorrectas. Verifica tu identificador y contraseña.')
+        setError('No se encontró ningún usuario con esa cédula.')
         triggerShake()
       }
     } catch (e: any) {
@@ -456,11 +406,9 @@ export default function LoginPage() {
                     Inicio de sesión
                   </span>
                 </div>
-                <h2 className="text-2xl font-bold text-white mb-1.5">Iniciar sesión</h2>
+                <h2 className="text-2xl font-bold text-white mb-1.5">Ingresar</h2>
                 <p className="text-sm text-slate-400">
-                  {esCedula
-                    ? 'Ingresa con tu cédula si eres cliente registrado.'
-                    : 'Ingresa tu usuario o correo. El sistema reconocerá tu cuenta automáticamente.'}
+                  Ingresa con tu cédula. Sin contraseña.
                 </p>
               </div>
 
@@ -475,76 +423,52 @@ export default function LoginPage() {
 
                 <div className="space-y-2">
                   <Label htmlFor="identificador" className="text-slate-200 text-sm font-medium">
-                    {esCedula ? 'Cédula' : 'Usuario, cédula o correo'}
+                    Cédula
                   </Label>
                   <div className="relative group">
                     <User className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500 group-focus-within:text-indigo-400 transition-colors" />
                     <Input
                       ref={inputRef}
                       id="identificador"
-                      type="text"
-                      inputMode={esCedula ? 'numeric' : 'text'}
+                      type="tel"
+                      inputMode="numeric"
+                      pattern="[0-9]*"
                       value={identificador}
-                      onChange={(e) => setIdentificador(e.target.value)}
-                      placeholder={esCedula ? '1234567890' : 'tu.usuario, 1234567890 o tu@correo.com'}
+                      onChange={(e) => {
+                        // Solo permitir dígitos
+                        const val = e.target.value.replace(/\D/g, '')
+                        setIdentificador(val)
+                      }}
+                      placeholder="Ingresa tu cédula"
                       className="pl-10 pr-4 h-11 bg-slate-800/50 border-slate-700 text-white placeholder:text-slate-500 focus:border-indigo-500 focus:bg-slate-800/80 transition-all"
                       disabled={loading}
                       autoComplete="username"
+                      maxLength={15}
                     />
                   </div>
-                  {esCedula && (
-                    <p className="text-xs text-emerald-300/80 flex items-center gap-1.5 mt-1.5">
-                      <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                        <polyline points="20 6 9 17 4 12" />
-                      </svg>
-                      Si eres cliente registrado, ingresa solo con tu cédula.
-                    </p>
-                  )}
+                  <p className="text-xs text-emerald-300/80 flex items-center gap-1.5 mt-1.5">
+                    <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                      <polyline points="20 6 9 17 4 12" />
+                    </svg>
+                    Ingresa solo con tu cédula. Sin contraseña.
+                  </p>
                 </div>
 
-                {/* Campo de contraseña: solo se muestra para usuarios internos (no cédulas) */}
-                {!esCedula && (
-                  <div className="space-y-2">
-                    <Label htmlFor="password" className="text-slate-200 text-sm font-medium">
-                      Contraseña
-                    </Label>
-                    <div className="relative group">
-                      <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500 group-focus-within:text-indigo-400 transition-colors" />
-                      <Input
-                        id="password"
-                        type={showPassword ? 'text' : 'password'}
-                        value={password}
-                        onChange={(e) => setPassword(e.target.value)}
-                        placeholder="••••••••••"
-                        className="pl-10 pr-10 h-11 bg-slate-800/50 border-slate-700 text-white placeholder:text-slate-500 focus:border-indigo-500 focus:bg-slate-800/80 transition-all"
-                        disabled={loading}
-                        autoComplete="current-password"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setShowPassword(!showPassword)}
-                        className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 transition-colors"
-                        tabIndex={-1}
-                      >
-                        {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                      </button>
-                    </div>
-                  </div>
-                )}
+                {/* Campo de contraseña eliminado — todos los usuarios ingresan solo con cédula */}
 
                 <Button
                   type="submit"
-                  disabled={loading || !identificador.trim() || (!esCedula && !password)}
+                  disabled={loading || !identificador.trim()}
                   className="w-full h-11 bg-gradient-to-r from-indigo-500 via-purple-500 to-fuchsia-500 hover:from-indigo-600 hover:via-purple-600 hover:to-fuchsia-600 text-white font-semibold shadow-lg shadow-indigo-500/30 hover:shadow-indigo-500/50 transition-all group"
                 >
                   {loading ? (
                     <>
                       <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                      Verificando credenciales...
+                      Verificando...
                     </>
                   ) : (
                     <>
-                      {esCedula ? 'Ingresar' : 'Iniciar sesión'}
+                      Ingresar
                       <ArrowRight className="w-4 h-4 ml-2 group-hover:translate-x-0.5 transition-transform" />
                     </>
                   )}
