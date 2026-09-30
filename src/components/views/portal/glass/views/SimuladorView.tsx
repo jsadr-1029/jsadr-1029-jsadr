@@ -144,7 +144,30 @@ export function SimuladorView({ token, onCrearSolicitud }: SimuladorViewProps) {
       {/* CONTROLES */}
       <GlassCard radius="lg">
         <div className="p-5 flex flex-col gap-5">
-          {/* Monto */}
+          {/* 1. FRECUENCIA DE PAGO (primero) */}
+          <div>
+            <label className="text-[12px] font-semibold uppercase tracking-wide text-[var(--nb-fg-muted)] mb-2 block">
+              ¿Con qué frecuencia quieres pagar?
+            </label>
+            <SegmentedControl
+              value={frecuencia}
+              onChange={(v) => setFrecuencia(v)}
+              options={[
+                { value: 'MENSUAL', label: 'Mensual' },
+                { value: 'QUINCENAL', label: 'Quincenal' },
+                { value: 'SEMANAL', label: 'Semanal' },
+              ]}
+              size="sm"
+              className="w-full"
+            />
+            <p className="text-[11px] text-[var(--nb-fg-subtle)] mt-2 leading-relaxed">
+              {frecuencia === 'MENSUAL' && 'Pagas una cuota cada mes, en la misma fecha del desembolso.'}
+              {frecuencia === 'QUINCENAL' && 'Pagas una cuota cada 15 días. Ideal si recibes ingresos quincenales.'}
+              {frecuencia === 'SEMANAL' && 'Pagas una cuota cada semana. Recomendado para comercios con flujo diario.'}
+            </p>
+          </div>
+
+          {/* 2. MONTO DEL CRÉDITO (después de frecuencia) */}
           <div>
             <div className="flex items-center justify-between mb-2">
               <label className="text-[12px] font-semibold uppercase tracking-wide text-[var(--nb-fg-muted)]">
@@ -175,7 +198,7 @@ export function SimuladorView({ token, onCrearSolicitud }: SimuladorViewProps) {
             </div>
           </div>
 
-          {/* Plazo */}
+          {/* 3. PLAZO */}
           <div>
             <div className="flex items-center justify-between mb-2">
               <label className="text-[12px] font-semibold uppercase tracking-wide text-[var(--nb-fg-muted)]">
@@ -206,25 +229,7 @@ export function SimuladorView({ token, onCrearSolicitud }: SimuladorViewProps) {
             </div>
           </div>
 
-          {/* Frecuencia */}
-          <div>
-            <label className="text-[12px] font-semibold uppercase tracking-wide text-[var(--nb-fg-muted)] mb-2 block">
-              Frecuencia de pago
-            </label>
-            <SegmentedControl
-              value={frecuencia}
-              onChange={(v) => setFrecuencia(v)}
-              options={[
-                { value: 'MENSUAL', label: 'Mensual' },
-                { value: 'QUINCENAL', label: 'Quincenal' },
-                { value: 'SEMANAL', label: 'Semanal' },
-              ]}
-              size="sm"
-              className="w-full"
-            />
-          </div>
-
-          {/* Flexibilidad financiera */}
+          {/* 4. FLEXIBILIDAD FINANCIERA con explicación completa */}
           <div>
             <div className="flex items-center justify-between mb-2">
               <label className="text-[12px] font-semibold uppercase tracking-wide text-[var(--nb-fg-muted)]">
@@ -236,6 +241,18 @@ export function SimuladorView({ token, onCrearSolicitud }: SimuladorViewProps) {
                 </Chip>
               )}
             </div>
+
+            {/* Explicación del servicio */}
+            <div className="mb-3 p-3 rounded-2xl bg-[var(--nb-primary-soft)] border border-[var(--nb-primary)]/15">
+              <p className="text-[11px] text-[var(--nb-fg)] leading-relaxed flex items-start gap-1.5">
+                <Sparkles size={12} className="text-[var(--nb-primary)] shrink-0 mt-0.5" />
+                <span>
+                  <strong>¿Qué es?</strong> Un beneficio opcional que te permite cambiar la fecha de pago de una cuota
+                  cuando tengas un imprevisto, sin que se te cobre mora ni te reporten a centrales de riesgo.
+                </span>
+              </p>
+            </div>
+
             <div className="grid grid-cols-3 gap-2">
               <FlexOption
                 active={flexibilidad === 'ninguna'}
@@ -260,12 +277,59 @@ export function SimuladorView({ token, onCrearSolicitud }: SimuladorViewProps) {
                 badge="2 usos"
               />
             </div>
-            <p className="text-[11px] text-[var(--nb-fg-subtle)] mt-2 leading-relaxed flex items-start gap-1.5">
-              <Info size={12} className="mt-0.5 shrink-0" />
-              <span>
-                Cambia la fecha de una cuota sin penalidad. Disponible solo para créditos con 4+ cuotas.
-              </span>
-            </p>
+
+            {/* Detalle de cada plan */}
+            <div className="mt-3 space-y-2">
+              {flexibilidad === 'ninguna' && (
+                <div className="p-3 rounded-xl bg-[var(--nb-surface-2)] border border-[var(--nb-border)]">
+                  <p className="text-[12px] font-bold text-[var(--nb-fg)] mb-1">Sin flexibilidad financiera</p>
+                  <p className="text-[11px] text-[var(--nb-fg-muted)] leading-relaxed">
+                    Pagas cada cuota en su fecha de vencimiento. Si te atrasas, se cobra mora diaria y podrías
+                    ser reportado a centrales de riesgo. No se puede cambiar la fecha de ninguna cuota.
+                  </p>
+                </div>
+              )}
+              {flexibilidad === 'basica' && (
+                <div className="p-3 rounded-xl bg-[var(--nb-success-soft)] border border-[var(--nb-success)]/20">
+                  <p className="text-[12px] font-bold text-[var(--nb-success)] mb-1">Plan Básica · $15.000</p>
+                  <p className="text-[11px] text-[var(--nb-fg)] leading-relaxed mb-2">
+                    Puedes cambiar la fecha de pago de <strong>1 cuota</strong> durante todo el crédito.
+                    El costo ($15.000) se suma a tu primera cuota.
+                  </p>
+                  <ul className="text-[11px] text-[var(--nb-fg-muted)] space-y-0.5 ml-3 list-disc">
+                    <li>1 uso disponible durante toda la vigencia del crédito</li>
+                    <li>Cambio de fecha sin cobro de mora</li>
+                    <li>No te reporta a centrales de riesgo</li>
+                    <li>La cuota se traslada al final del plazo</li>
+                  </ul>
+                </div>
+              )}
+              {flexibilidad === 'premium' && (
+                <div className="p-3 rounded-xl bg-[var(--nb-primary-soft)] border border-[var(--nb-primary)]/25">
+                  <p className="text-[12px] font-bold text-[var(--nb-primary)] mb-1">Plan Premium · $34.900</p>
+                  <p className="text-[11px] text-[var(--nb-fg)] leading-relaxed mb-2">
+                    Puedes cambiar la fecha de pago de <strong>2 cuotas</strong> durante todo el crédito.
+                    El costo ($34.900) se suma a tu primera cuota.
+                  </p>
+                  <ul className="text-[11px] text-[var(--nb-fg-muted)] space-y-0.5 ml-3 list-disc">
+                    <li>2 usos disponibles durante toda la vigencia del crédito</li>
+                    <li>Cambio de fecha sin cobro de mora</li>
+                    <li>No te reporta a centrales de riesgo</li>
+                    <li>Las cuotas se trasladan al final del plazo</li>
+                    <li>Se genera documento "Otro Sí" firmado electrónicamente</li>
+                  </ul>
+                </div>
+              )}
+              {!flexElegible && (
+                <p className="text-[11px] text-[var(--nb-warning)] flex items-center gap-1.5 mt-2">
+                  <Info size={12} className="shrink-0" />
+                  <span>
+                    La flexibilidad financiera solo está disponible para créditos con <strong>4 o más cuotas</strong>.
+                    Aumenta el plazo para habilitarla.
+                  </span>
+                </p>
+              )}
+            </div>
           </div>
         </div>
       </GlassCard>
