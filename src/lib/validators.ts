@@ -111,22 +111,39 @@ export type OtpVerifyInput = z.infer<typeof otpVerifySchema>
 // Los datos del cliente (nombre, cédula, teléfono, email) se obtienen del propio clienteId
 // autenticado mediante el token del portal, por lo que NO se exigen en el body.
 export const solicitudWebSchema = z.object({
-  clienteId: z.string().min(1, 'clienteId es obligatorio'),
+  // clienteId es opcional ahora — el backend busca por cedula + token
+  clienteId: z.string().min(1).optional(),
+  cedula: z.string().min(6).max(15).optional(),
   token: z.string().min(1, 'token de sesión es obligatorio'),
-  valorSolicitado: z.number().positive('valorSolicitado debe ser mayor a 0').max(1_000_000_000),
-  numeroCuotas: z.number().int().min(1, 'numeroCuotas debe ser mayor a 0').max(360),
+  // Aceptar tanto valorSolicitado como montoSolicitado (legacy)
+  valorSolicitado: z.number().positive('valorSolicitado debe ser mayor a 0').max(1_000_000_000).optional(),
+  montoSolicitado: z.number().positive('montoSolicitado debe ser mayor a 0').max(1_000_000_000).optional(),
+  // Aceptar tanto numeroCuotas como plazoMeses (legacy)
+  numeroCuotas: z.number().int().min(1).max(360).optional(),
+  plazoMeses: z.number().int().min(1).max(360).optional(),
   frecuencia: z.enum(['MENSUAL', 'QUINCENAL', 'SEMANAL', 'DIARIO'], {
     error: 'Frecuencia inválida. Valores permitidos: MENSUAL, QUINCENAL, SEMANAL, DIARIO',
   }),
   primerPagoFecha: z.string().optional(),
   // Campos opcionales para retrocompatibilidad con otros flujos que aún envíen el formato antiguo
   nombre: z.string().min(2).max(120).optional(),
-  cedula: z.string().regex(/^\d{6,12}$/).optional(),
   telefono: z.string().regex(/^\d{7,15}$/).optional(),
   email: z.email().or(z.literal('')).optional(),
   motivo: z.string().max(500).optional().default(''),
   aceptaTerminos: z.boolean().optional(),
-})
+  // Campos nuevos (v2.0 — 2026-09-30)
+  flexibilidadFinanciera: z.boolean().optional(),
+  flexibilidadModalidad: z.string().optional(),
+  notasCliente: z.string().max(1000).optional(),
+  origen: z.string().max(50).optional(),
+  prestamoARenovarId: z.string().optional(),
+}).refine(
+  (data) => data.valorSolicitado || data.montoSolicitado,
+  { message: 'valorSolicitado o montoSolicitado es obligatorio', path: ['valorSolicitado'] }
+).refine(
+  (data) => data.numeroCuotas || data.plazoMeses,
+  { message: 'numeroCuotas o plazoMeses es obligatorio', path: ['numeroCuotas'] }
+)
 export type SolicitudWebInput = z.infer<typeof solicitudWebSchema>
 
 // === 9. MENSAJE CHAT ===
