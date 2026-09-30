@@ -2971,3 +2971,61 @@ Stage Summary:
 - 📌 Para que el email se envíe automáticamente, el admin debe configurar
   una conexión EMAIL_SMTP en el módulo de Conexiones, o usar BREVO_SMTP_KEY
 
+
+---
+Task ID: 25-simulador-reorganizar-frecuencia-primero
+Agent: Super Z (main)
+Task: Reorganizar simulador del portal del cliente: primero frecuencia, después monto y plazo. Explicar Flexibilidad Financiera completa.
+
+Work Log:
+
+REORGANIZACIÓN DE CONTROLES (orden lógico):
+Antes:
+1. Monto del crédito (slider)
+2. Plazo (slider)
+3. Frecuencia de pago (segmented control)
+4. Flexibilidad financiera
+
+Ahora:
+1. **Frecuencia de pago** (segmented control con explicación contextual)
+   - 'Pagas una cuota cada mes, en la misma fecha del desembolso.'
+   - 'Pagas una cuota cada 15 días. Ideal si recibes ingresos quincenales.'
+   - 'Pagas una cuota cada semana. Recomendado para comercios con flujo diario.'
+2. Monto del crédito (slider)
+3. Plazo (slider)
+4. Flexibilidad financiera con explicación completa
+
+EXPLICACIÓN COMPLETA DE FLEXIBILIDAD FINANCIERA:
+- Banner introductorio con icono Sparkles:
+  '¿Qué es? Un beneficio opcional que te permite cambiar la fecha de pago de
+  una cuota cuando tengas un imprevisto, sin que se te cobre mora ni te
+  reporten a centrales de riesgo.'
+- 3 opciones seleccionables (Sin flexibilidad / Básica $15.000 / Premium $34.900)
+- Al seleccionar cada plan, muestra tarjeta con detalle completo:
+  * Sin flexibilidad: 'Pagas cada cuota en su fecha de vencimiento. Si te
+    atrasas, se cobra mora diaria y podrías ser reportado a centrales de
+    riesgo. No se puede cambiar la fecha de ninguna cuota.'
+  * Plan Básica $15.000: lista de beneficios:
+    - 1 uso disponible durante toda la vigencia del crédito
+    - Cambio de fecha sin cobro de mora
+    - No te reporta a centrales de riesgo
+    - La cuota se traslada al final del plazo
+  * Plan Premium $34.900: lista de beneficios:
+    - 2 usos disponibles durante toda la vigencia del crédito
+    - Cambio de fecha sin cobro de mora
+    - No te reporta a centrales de riesgo
+    - Las cuotas se trasladan al final del plazo
+    - Se genera documento 'Otro Sí' firmado electrónicamente
+- Mensaje 'Mín. 4 cuotas' cuando el plazo no califica, con explicación de
+  cómo habilitarla (aumentar el plazo)
+
+- Deploy exitoso: commit 7d7713e → aliased a jsadr.com.co
+- Verificación: API /api/portal/simular funciona con nueva configuración
+
+Stage Summary:
+- ✅ GitHub: commit 7d7713e en origin/main
+- ✅ Vercel: deploy exitoso aliased a jsadr.com.co
+- ✅ Neon: sin cambios (solo código)
+- ✅ Orden de controles: Frecuencia → Monto → Plazo → Flexibilidad
+- ✅ Flexibilidad Financiera: explicación completa de cada plan
+
