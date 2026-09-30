@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { calcularPrestamo, calcularDiasMora, getTasaMoraAnual, calcularMoraCompuesta, debeIrAJuridico } from '@/lib/finanzas'
 import { sanitizeError } from '@/lib/error-handler'
+import { excluirPruebaCliente, excluirPruebaPrestamo } from '@/lib/cliente-prueba'
 
 export async function GET() {
   try {
@@ -9,6 +10,11 @@ export async function GET() {
     hoy.setHours(0, 0, 0, 0)
     const finHoy = new Date()
     finHoy.setHours(23, 59, 59, 999)
+
+    // Filtro para excluir clientes de prueba (ej: Johan Alvarez CC 1214731649)
+    // que solo se usan para demostración. Sus préstamos y pagos no cuentan en el dashboard.
+    const filtroClienteNoPrueba = excluirPruebaCliente() // para db.cliente.count
+    const filtroPrestamoNoPrueba = excluirPruebaPrestamo() // para db.prestamo.* (envuelve en cliente: {...})
 
     const [
       totalClientes,
@@ -24,17 +30,17 @@ export async function GET() {
       cuentas,
       totalMovimientos,
     ] = await Promise.all([
-      db.cliente.count(),
-      db.prestamo.count(),
-      db.prestamo.findMany({ where: { estado: { in: ['ACTIVO', 'EN_MORA'] } } }),
-      db.prestamo.findMany({ where: { estado: 'EN_MORA' } }),
-      db.prestamo.count({ where: { estado: 'JURIDICO' } }),
-      db.pago.findMany({ where: { fechaPago: { gte: hoy, lte: finHoy }, estado: 'APLICADO' } }),
+      db.cliente.count({ where: filtroClienteNoPrueba }),
+      db.prestamo.count({ where: filtroPrestamoNoPrueba }),
+      db.prestamo.findMany({ where: { estado: { in: ['ACTIVO', 'EN_MORA'] }, ...filtroPrestamoNoPrueba } }),
+      db.prestamo.findMany({ where: { estado: 'EN_MORA', ...filtroPrestamoNoPrueba } }),
+      db.prestamo.count({ where: { estado: 'JURIDICO', ...filtroPrestamoNoPrueba } }),
+      db.pago.findMany({ where: { fechaPago: { gte: hoy, lte: finHoy }, estado: 'APLICADO', prestamo: filtroPrestamoNoPrueba } }),
       db.prestamo.findMany({
-        where: { estado: 'ACTIVO' },
+        where: { estado: 'ACTIVO', ...filtroPrestamoNoPrueba },
         include: { cliente: { select: { id: true, nombre: true, cedula: true, telefono: true, email: true, activo: true } }, pagos: true },
       }),
-      db.casoJuridico.findMany({ where: { estado: { not: 'CERRADO' } } }),
+      db.casoJuridico.findMany({ where: { estado: { not: 'CERRADO' }, prestamo: filtroPrestamoNoPrueba } }),
       db.cajaMenor.findMany({
         include: {
           movimientos: { orderBy: { fechaMovimiento: 'desc' }, take: 10 },
