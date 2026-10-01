@@ -300,7 +300,14 @@ export function diasEntre(iso?: string | null): number | null {
   if (!iso) return null
   const d = new Date(iso)
   const now = new Date()
-  return Math.floor((d.getTime() - now.getTime()) / (24 * 60 * 60 * 1000))
+  // Comparar solo fechas (sin horas) para que el día de vencimiento
+  // cuente como 0 (hoy) y no como mora.
+  // Mora solo si la fecha de vencimiento es ANTERIOR a hoy (día anterior o más).
+  const dFecha = new Date(d.getFullYear(), d.getMonth(), d.getDate())
+  const nowFecha = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  return Math.floor(
+    (dFecha.getTime() - nowFecha.getTime()) / (24 * 60 * 60 * 1000)
+  )
 }
 
 // Estado de préstamo → tono visual

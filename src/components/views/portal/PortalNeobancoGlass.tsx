@@ -435,5 +435,10 @@ function diasEntreLocal(iso?: string | null): number | null {
   if (!iso) return null
   const d = new Date(iso)
   const now = new Date()
-  return Math.floor((d.getTime() - now.getTime()) / (24 * 60 * 60 * 1000))
+  // Comparar solo fechas (sin horas) — el día de vencimiento cuenta como 0 (hoy)
+  const dFecha = new Date(d.getFullYear(), d.getMonth(), d.getDate())
+  const nowFecha = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  return Math.floor(
+    (dFecha.getTime() - nowFecha.getTime()) / (24 * 60 * 60 * 1000)
+  )
 }
