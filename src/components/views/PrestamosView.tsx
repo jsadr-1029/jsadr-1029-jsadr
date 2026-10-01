@@ -597,8 +597,12 @@ function PrestamosPanel({
     if (simulacionInicial.frecuencia) setFrecuencia(simulacionInicial.frecuencia)
     // Abrir el modal SIEMPRE, independientemente de si se seleccionó el cliente
     setModalAbierto(true)
-    // Limpiar simulacionInicial después de consumirlo para que pueda reutilizarse
-    onSimulacionConsumida?.()
+    // Limpiar simulacionInicial después de que React procese el estado
+    // Usar setTimeout para asegurar que setModalAbierto(true) se procese primero
+    const timeout = setTimeout(() => {
+      onSimulacionConsumida?.()
+    }, 100)
+    return () => clearTimeout(timeout)
   }, [simulacionInicial])
 
   // === AUTO-CÁLCULO DEL BLOQUE DE CORTE ===
