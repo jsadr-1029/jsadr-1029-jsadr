@@ -34,7 +34,7 @@ import {
 import { useToast } from '@/hooks/use-toast'
 import { formatearMoneda, formatearFecha, calcularPrestamo, calcularPrestamoTasaFijaMensual, Frecuencia } from '@/lib/finanzas'
 import { calcularBloqueCorte, calcularFechaPrimerCorte, calcularDiasCausadosAntes, calcularValorDiasCausados, PeriodoCorte } from '@/lib/corte-fechas'
-import { FileText, Plus, Search, Eye, Check, X, ArrowRight, RefreshCw, PenTool, Shield, Trash2, Calendar, Scissors, Sparkles } from 'lucide-react'
+import { FileText, Plus, Search, Eye, Check, X, ArrowRight, RefreshCw, PenTool, Shield, Trash2, Calendar, Scissors, Sparkles, Inbox, ChevronRight } from 'lucide-react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { ClientesView } from '@/components/views/ClientesView'
 import { CajasView } from '@/components/views/CajasView'
@@ -97,6 +97,7 @@ interface SolicitudWebMin {
   codigo: string
   clienteId: string
   clienteNombre: string
+  clienteCedula?: string
   valorSolicitado: number
   numeroCuotas: number
   frecuencia: string
@@ -129,6 +130,8 @@ function PrestamosPanel({
   const [busqueda, setBusqueda] = useState('')
   const [filtroEstado, setFiltroEstado] = useState<string>('all')
   const [modalAbierto, setModalAbierto] = useState(false)
+  const [importarBuzon, setImportarBuzon] = useState(false)
+  const [solicitudesBuzon, setSolicitudesBuzon] = useState<SolicitudWebMin[]>([])
   const { toast } = useToast()
 
   // Estado del formulario
@@ -351,6 +354,39 @@ function PrestamosPanel({
     } catch (e: any) {
       if (e?.name !== 'AbortError') console.error(e)
     }
+  }
+
+  // Cargar solicitudes web pendientes del buzón (para importar dentro del modal)
+  const cargarSolicitudesBuzon = async () => {
+    try {
+      const res = await fetch('/api/solicitudes-web?estado=PENDIENTE&limit=20')
+      const json = await res.json()
+      if (json.success && Array.isArray(json.data)) {
+        setSolicitudesBuzon(json.data)
+      } else if (Array.isArray(json)) {
+        setSolicitudesBuzon(json)
+      }
+    } catch (e: any) {
+      console.error('Error cargando solicitudes del buzón:', e)
+    }
+  }
+
+  // Aplicar solicitud del buzón al formulario actual
+  const aplicarSolicitudBuzon = (solicitud: SolicitudWebMin) => {
+    setModalidad('FRANCES')
+    if (solicitud.clienteId) {
+      seleccionarCliente(solicitud.clienteId)
+    }
+    if (solicitud.valorSolicitado) setMontoPrincipal(solicitud.valorSolicitado.toString())
+    if (solicitud.tasaUtilizada) setTasaInteresAnual(solicitud.tasaUtilizada.toString())
+    if (solicitud.numeroCuotas) setPlazoMeses(solicitud.numeroCuotas.toString())
+    if (solicitud.frecuencia) setFrecuencia(solicitud.frecuencia as Frecuencia)
+    setImportarBuzon(false)
+    toast({
+      title: 'Solicitud importada',
+      description: `Datos de ${solicitud.clienteNombre} cargados desde el buzón (${solicitud.codigo}).`,
+      duration: 5000,
+    })
   }
 
   // Cálculo según modalidad
@@ -584,6 +620,8 @@ function PrestamosPanel({
   // Aplicar parámetros de simulación inyectados (por ejemplo, al convertir
   // una solicitud web del buzón en préstamo). Se ejecuta cuando cambia
   // `simulacionInicial` y precarga el formulario abriendo el modal.
+  // También se ejecuta al montar el componente (en caso de que simulacionInicial
+  // ya tenga valor cuando el tab se activa).
   useEffect(() => {
     if (!simulacionInicial) return
     // Forzar modalidad FRANCÉS (la simulación web se calcula con tasa anual)
@@ -1444,6 +1482,57 @@ ${linkFirmaCodeudor}
           <DialogHeader>
             <DialogTitle>Nueva Solicitud de Préstamo</DialogTitle>
           </DialogHeader>
+
+          {/* === Botón: Importar solicitud del Buzón Web === */}
+          {!importarBuzon ? (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="mb-2"
+              onClick={() => {
+                setImportarBuzon(true)
+                cargarSolicitudesBuzon()
+              }}
+            >
+              <Inbox className="w-4 h-4 mr-2" />
+              Importar solicitud del Buzón Web
+            </Button>
+          ) : (
+            <div className="mb-4 p-3 rounded-lg border bg-slate-800/50 space-y-2">
+              <div className="flex items-center justify-between">
+                <p className="text-sm font-semibold text-slate-200">Solicitudes pendientes del Buzón</p>
+                <Button type="button" variant="ghost" size="sm" onClick={() => setImportarBuzon(false)}>
+                  Cerrar
+                </Button>
+              </div>
+              {solicitudesBuzon.length === 0 ? (
+                <p className="text-xs text-slate-400 py-2">No hay solicitudes pendientes.</p>
+              ) : (
+                <div className="max-h-60 overflow-y-auto space-y-1">
+                  {solicitudesBuzon.map((s) => (
+                    <button
+                      key={s.id}
+                      type="button"
+                      onClick={() => aplicarSolicitudBuzon(s)}
+                      className="w-full flex items-center justify-between p-2.5 rounded-lg bg-slate-900/50 hover:bg-slate-900/80 border border-slate-700 transition text-left"
+                    >
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-slate-200 truncate">
+                          {s.clienteNombre} · CC {s.clienteCedula}
+                        </p>
+                        <p className="text-xs text-slate-400">
+                          {s.codigo} · {formatearMoneda(s.valorSolicitado)} · {s.numeroCuotas} cuotas · {s.frecuencia}
+                        </p>
+                      </div>
+                      <ChevronRight className="w-4 h-4 text-slate-500 shrink-0 ml-2" />
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
           <form onSubmit={handleSubmit} className="space-y-4">
             {/* === Tipo de solicitud: Nuevo o Renovación === */}
             <div className="space-y-2">
@@ -3038,8 +3127,12 @@ export function PrestamosView({
       frecuencia: (solicitud.frecuencia as Frecuencia) || 'MENSUAL',
       origen: `Solicitud web ${solicitud.codigo}`,
     }
-    setSimulacionInicial(params)
+    // Cambiar al tab de solicitudes PRIMERO, luego setear simulacionInicial
+    // con un micro-delay para que PrestamosPanel se monte antes
     setTab('solicitudes')
+    setTimeout(() => {
+      setSimulacionInicial(params)
+    }, 50)
     toast({
       title: 'Solicitud cargada',
       description: `Se precargó el formulario con los datos de la solicitud ${solicitud.codigo}. Completa la información restante para crear el préstamo.`,
