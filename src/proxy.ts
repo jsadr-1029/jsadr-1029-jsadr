@@ -81,7 +81,9 @@ function isPublicEndpoint(pathname: string): boolean {
     pathname === '/api/simulador' || // simulador público
     pathname === '/api/solicitudes-nuevos-clientes' || // POST público: registro de nuevos clientes desde /register
     pathname.startsWith('/api/solicitudes-nuevos-clientes/corregir/') || // GET/POST público: corrección de solicitud devuelta (cliente sin login)
-    pathname === '/api/solicitudes-web' // POST público: cliente envía solicitud de crédito desde el portal (token va en body, no en header)
+    pathname === '/api/solicitudes-web' || // POST público: cliente envía solicitud de crédito desde el portal (token va en body, no en header)
+    pathname === '/api/firma' || // GET/POST público: firma electrónica del cliente (token va en query/body)
+    pathname.startsWith('/api/firma/certificado') // GET público: certificado de firma electrónica
   )
 }
 
