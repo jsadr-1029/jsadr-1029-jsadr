@@ -239,9 +239,12 @@ export async function proxy(req: NextRequest) {
   // (porque el frontend usa window.open() que no puede setear headers).
   // Estas rutas validan el token internamente contra cliente.tokenSesion.
   const isProductionEnv = process.env.NODE_ENV === 'production'
+  // Usar new URL() para parsear query params de forma confiable en el proxy
+  const fullUrl = new URL(req.url)
+  const queryToken = fullUrl.searchParams.get('token')
   const isDocEndpointWithToken =
     (pathname.startsWith('/api/estado-cuenta') || pathname.startsWith('/api/paz-y-salvo')) &&
-    !!req.nextUrl.searchParams.get('token')
+    !!queryToken
   if (isProductionEnv && isApiPath && !isPublicEndpoint(pathname) && !isDocEndpointWithToken) {
     const authHeader = req.headers.get('authorization')
     const portalToken = req.headers.get('x-portal-token')
