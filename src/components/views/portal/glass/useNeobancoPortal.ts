@@ -300,11 +300,14 @@ export function diasEntre(iso?: string | null): number | null {
   if (!iso) return null
   const d = new Date(iso)
   const now = new Date()
-  // Comparar solo fechas (sin horas) para que el día de vencimiento
-  // cuente como 0 (hoy) y no como mora.
+  // Comparar solo fechas (sin horas) en zona horaria de Colombia (UTC-5)
+  // para que el día de vencimiento cuente como 0 (hoy) y no como mora.
   // Mora solo si la fecha de vencimiento es ANTERIOR a hoy (día anterior o más).
-  const dFecha = new Date(d.getFullYear(), d.getMonth(), d.getDate())
-  const nowFecha = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  const COL_TZ_OFFSET = -5 * 60 // Colombia UTC-5 en minutos
+  const dCol = new Date(d.getTime() + COL_TZ_OFFSET * 60 * 1000)
+  const nowCol = new Date(now.getTime() + COL_TZ_OFFSET * 60 * 1000)
+  const dFecha = new Date(dCol.getFullYear(), dCol.getMonth(), dCol.getDate())
+  const nowFecha = new Date(nowCol.getFullYear(), nowCol.getMonth(), nowCol.getDate())
   return Math.floor(
     (dFecha.getTime() - nowFecha.getTime()) / (24 * 60 * 60 * 1000)
   )

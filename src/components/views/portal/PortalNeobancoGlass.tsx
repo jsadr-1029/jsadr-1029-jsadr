@@ -435,9 +435,12 @@ function diasEntreLocal(iso?: string | null): number | null {
   if (!iso) return null
   const d = new Date(iso)
   const now = new Date()
-  // Comparar solo fechas (sin horas) — el día de vencimiento cuenta como 0 (hoy)
-  const dFecha = new Date(d.getFullYear(), d.getMonth(), d.getDate())
-  const nowFecha = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  // Comparar solo fechas (sin horas) en zona horaria de Colombia (UTC-5)
+  const COL_TZ_OFFSET = -5 * 60
+  const dCol = new Date(d.getTime() + COL_TZ_OFFSET * 60 * 1000)
+  const nowCol = new Date(now.getTime() + COL_TZ_OFFSET * 60 * 1000)
+  const dFecha = new Date(dCol.getFullYear(), dCol.getMonth(), dCol.getDate())
+  const nowFecha = new Date(nowCol.getFullYear(), nowCol.getMonth(), nowCol.getDate())
   return Math.floor(
     (dFecha.getTime() - nowFecha.getTime()) / (24 * 60 * 60 * 1000)
   )
