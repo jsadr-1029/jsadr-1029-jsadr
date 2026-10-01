@@ -45,6 +45,7 @@ export async function GET(req: NextRequest) {
         categoria: {
           include: { cuentaRecaudo: true },
         },
+        cuentaRecaudo: true,
         prestamos: {
           include: {
             categoria: { include: { cuentaRecaudo: true } },
@@ -131,7 +132,9 @@ export async function GET(req: NextRequest) {
     )
 
     // === Cuenta de recaudo principal ===
-    const cuentaPrincipal = cliente.categoria?.cuentaRecaudo || null
+    // Cuenta de recaudo principal: primero la asignada directamente al cliente,
+    // luego la de la categoría del cliente
+    const cuentaPrincipal = cliente.cuentaRecaudo || cliente.categoria?.cuentaRecaudo || null
 
     // === Bitácora de acceso (auditoría) ===
     await db.accesoPortal.create({
