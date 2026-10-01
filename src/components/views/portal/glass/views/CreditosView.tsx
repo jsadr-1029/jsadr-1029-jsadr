@@ -259,7 +259,7 @@ function DetalleCredito({
       </div>
 
       <div className="grid grid-cols-2 gap-2.5">
-        <InfoRow icon={<Calendar size={14} />} label="Plazo" value={`${prestamo.plazoMeses} cuotas`} />
+        <InfoRow icon={<Calendar size={14} />} label="Plazo" value={`${prestamo.plazoMeses} ${prestamo.frecuencia === 'MENSUAL' ? 'meses' : 'cuotas'}`} />
         <InfoRow icon={<TrendingUp size={14} />} label="Frecuencia" value={prestamo.frecuencia || 'MENSUAL'} />
         <InfoRow icon={<FileText size={14} />} label="Cuotas pagadas" value={`${pagos.filter((p) => p.estado === 'PAGADO').length}/${prestamo.plazoMeses}`} />
         <InfoRow

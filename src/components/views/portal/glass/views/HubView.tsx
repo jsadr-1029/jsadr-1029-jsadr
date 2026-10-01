@@ -248,7 +248,7 @@ export function HubView({ estado, cargando, avisosNoLeidos, onIrA }: HubViewProp
                         </Chip>
                       </div>
                       <span className="text-[11px] text-[var(--nb-fg-subtle)]">
-                        {p.plazoMeses} cuotas
+                        {p.plazoMeses} {p.frecuencia === 'MENSUAL' ? 'meses' : 'cuotas'}
                       </span>
                     </div>
                     <div className="flex items-end justify-between">
