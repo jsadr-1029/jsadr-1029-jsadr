@@ -19,7 +19,7 @@ export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url)
     const cedula = searchParams.get('cedula')
-    const prestamoId = searchParams.get('prestamoId')
+    const prestamoId = searchParams.get('prestamoId') || searchParams.get('prestamo')
     const portalToken = searchParams.get('token')
 
     if (!cedula) {

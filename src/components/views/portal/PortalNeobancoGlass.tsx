@@ -234,7 +234,10 @@ function PortalShell() {
               estado={estado}
               cargando={cargando}
               token={token}
-              onAbrirEstadoCuenta={(pid) => window.open(`/api/estado-cuenta?prestamo=${pid}&token=${token}`, '_blank')}
+              onAbrirEstadoCuenta={(pid) => {
+                const cedula = typeof window !== 'undefined' ? localStorage.getItem('portal_cliente_cedula') : null
+                window.open(`/api/estado-cuenta?cedula=${cedula}&prestamoId=${pid}&token=${token}`, '_blank')
+              }}
             />
           )}
           {vista === 'proximos-pagos' && <ProximosPagosView estado={estado} cargando={cargando} />}
