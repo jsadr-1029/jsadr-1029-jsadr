@@ -11,6 +11,7 @@ import * as React from 'react'
 import { useRouter } from 'next/navigation'
 import { useNeobancoPortal, useNbTheme, type NbOtroSi } from './glass/useNeobancoPortal'
 import { NbToastProvider, GlassButton, GlassCard, Sheet, useNbToast } from './glass/ui'
+import { ActualizacionModal } from './glass/views/ActualizacionModal'
 
 import { HubView } from './glass/views/HubView'
 import { CreditosView } from './glass/views/CreditosView'
@@ -84,6 +85,18 @@ function PortalShell() {
   const [vista, setVista] = React.useState<Vista>('hub')
   const [verMas, setVerMas] = React.useState(false)
   const [verPerfil, setVerPerfil] = React.useState(false)
+
+  // === Modal de actualización obligatoria (octubre 2026) ===
+  const [mostrarActualizacion, setMostrarActualizacion] = React.useState(false)
+
+  React.useEffect(() => {
+    try {
+      const flag = localStorage.getItem('requiere_actualizacion')
+      if (flag === 'true') {
+        setMostrarActualizacion(true)
+      }
+    } catch {}
+  }, [])
 
   // Contar avisos no leídos
   const avisosNoLeidos = React.useMemo(() => {
@@ -381,6 +394,17 @@ function PortalShell() {
           )}
         </Sheet>
       </div>
+
+      {/* === Modal de actualización obligatoria (octubre 2026) === */}
+      <ActualizacionModal
+        open={mostrarActualizacion}
+        token={token}
+        onComplete={() => {
+          setMostrarActualizacion(false)
+          try { localStorage.removeItem('requiere_actualizacion') } catch {}
+          recargar()
+        }}
+      />
     </div>
   )
 }

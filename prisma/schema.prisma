@@ -125,6 +125,14 @@ model Cliente {
   totpEnabled      Boolean   @default(false)
   totpCreatedAt    DateTime?
   totpLastUsed     DateTime?
+  // === Actualización obligatoria de datos (octubre 2026) ===
+  // Cuando el cliente inicia sesión, si datosActualizadosOct2026 = false,
+  // se le muestra un modal obligatorio pidiendo actualizar:
+  // - Teléfono, email, ciudad, municipio, dirección
+  // - Foto cédula frente, foto cédula reverso, selfie con cédula
+  // Una vez completo, se marca true y no se vuelve a pedir.
+  datosActualizadosOct2026 Boolean @default(false)
+  fechaActualizacionDatos  DateTime?
   // Referido por (otro cliente)
   referidoPorId   String?
   referidoPor     Cliente?  @relation("ClienteReferido", fields: [referidoPorId], references: [id])

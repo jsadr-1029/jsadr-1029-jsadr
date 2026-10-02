@@ -179,6 +179,12 @@ export default function LoginPage() {
               rol: 'CLIENTE',
               esPortalCliente: true,
             })
+            // Guardar flag de actualización requerida
+            if (data.requiereActualizacion) {
+              try { localStorage.setItem('requiere_actualizacion', 'true') } catch {}
+            } else {
+              try { localStorage.removeItem('requiere_actualizacion') } catch {}
+            }
             setSuccess({ nombre: data.nombre })
             setTimeout(() => {
               router.replace('/portal-neobanco')

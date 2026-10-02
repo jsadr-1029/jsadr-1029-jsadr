@@ -138,6 +138,7 @@ export async function POST(req: NextRequest) {
       token,
       clienteId: cliente.id,
       nombre: cliente.nombre,
+      requiereActualizacion: !cliente.datosActualizadosOct2026,
     })
   } catch (e) {
     return NextResponse.json(
