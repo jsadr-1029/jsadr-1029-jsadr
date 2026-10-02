@@ -25,7 +25,7 @@ import {
   type NbPrestamo,
 } from '../useNeobancoPortal'
 import { RenovacionSheet } from './RenovacionSheet'
-import { Landmark, ChevronRight, FileText, Download, Calendar, TrendingUp, RefreshCw } from 'lucide-react'
+import { Landmark, ChevronRight, FileText, Download, Calendar, TrendingUp, RefreshCw, PenTool } from 'lucide-react'
 
 type CreditosViewProps = {
   estado: NbEstado | null
@@ -40,6 +40,28 @@ export function CreditosView({ estado, cargando, onAbrirEstadoCuenta, token }: C
   const [filtro, setFiltro] = React.useState<Filtro>('activos')
   const [seleccionado, setSeleccionado] = React.useState<NbPrestamo | null>(null)
   const [renovar, setRenovar] = React.useState<NbPrestamo | null>(null)
+  const [iniciandoFirma, setIniciandoFirma] = React.useState<string | null>(null)
+
+  // Iniciar firma electrónica desde el portal
+  const iniciarFirma = async (prestamoId: string) => {
+    if (!token) return
+    setIniciandoFirma(prestamoId)
+    try {
+      const res = await fetch('/api/portal/iniciar-firma', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-portal-token': token },
+        body: JSON.stringify({ prestamoId }),
+      })
+      const data = await res.json()
+      if (data.success && data.data?.linkFirma) {
+        window.open(data.data.linkFirma, '_blank')
+      }
+    } catch {
+      /* no crítico */
+    } finally {
+      setIniciandoFirma(null)
+    }
+  }
 
   const prestamos = estado?.prestamos ?? []
   const filtrados = React.useMemo(() => {
@@ -176,6 +198,30 @@ export function CreditosView({ estado, cargando, onAbrirEstadoCuenta, token }: C
                       Solicitar renovación
                     </button>
                   )}
+
+                  {/* Botón Firmar electrónicamente — solo para préstamos PENDIENTE_ACEPTACION */}
+                  {p.estado === 'PENDIENTE_ACEPTACION' && token && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        iniciarFirma(p.id)
+                      }}
+                      disabled={iniciandoFirma === p.id}
+                      className="nb-press w-full mt-2 flex items-center justify-center gap-2 py-2.5 rounded-xl bg-[var(--nb-gradient-brand)] text-white transition-all text-[12px] font-bold disabled:opacity-50"
+                    >
+                      {iniciandoFirma === p.id ? (
+                        <>
+                          <span className="w-3 h-3 rounded-full border-2 border-white border-t-transparent animate-spin" />
+                          Preparando firma...
+                        </>
+                      ) : (
+                        <>
+                          <PenTool size={13} />
+                          Firmar electrónicamente
+                        </>
+                      )}
+                    </button>
+                  )}
                 </div>
               </GlassCard>
             )
@@ -204,6 +250,14 @@ export function CreditosView({ estado, cargando, onAbrirEstadoCuenta, token }: C
                   }
                 : undefined
             }
+            onFirmar={
+              seleccionado.estado === 'PENDIENTE_ACEPTACION' && token
+                ? () => {
+                    iniciarFirma(seleccionado.id)
+                    setSeleccionado(null)
+                  }
+                : undefined
+            }
           />
         )}
       </Sheet>
@@ -223,10 +277,12 @@ function DetalleCredito({
   prestamo,
   onAbrirEstado,
   onRenovar,
+  onFirmar,
 }: {
   prestamo: NbPrestamo
   onAbrirEstado: () => void
   onRenovar?: () => void
+  onFirmar?: () => void
 }) {
   const total = Number(prestamo.montoPrincipal) + Number(prestamo.totalInteres)
   const pct = total > 0 ? (Number(prestamo.montoPagado) / total) * 100 : 0
@@ -288,9 +344,20 @@ function DetalleCredito({
       )}
 
       <div className="flex flex-col gap-2">
+        {prestamo.estado === 'PENDIENTE_ACEPTACION' && onFirmar && (
+          <GlassButton
+            fullWidth
+            variant="primary"
+            size="lg"
+            iconLeft={<PenTool size={16} />}
+            onClick={onFirmar}
+          >
+            Firmar electrónicamente
+          </GlassButton>
+        )}
         <GlassButton
           fullWidth
-          variant="primary"
+          variant={prestamo.estado === 'PENDIENTE_ACEPTACION' ? 'secondary' : 'primary'}
           size="lg"
           iconLeft={<FileText size={16} />}
           onClick={onAbrirEstado}
