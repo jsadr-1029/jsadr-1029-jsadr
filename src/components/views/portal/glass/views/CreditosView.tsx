@@ -238,6 +238,7 @@ export function CreditosView({ estado, cargando, onAbrirEstadoCuenta, token }: C
         {seleccionado && (
           <DetalleCredito
             prestamo={seleccionado}
+            token={token}
             onAbrirEstado={() => {
               if (seleccionado) onAbrirEstadoCuenta(seleccionado.id)
               setSeleccionado(null)
@@ -278,11 +279,13 @@ function DetalleCredito({
   onAbrirEstado,
   onRenovar,
   onFirmar,
+  token,
 }: {
   prestamo: NbPrestamo
   onAbrirEstado: () => void
   onRenovar?: () => void
   onFirmar?: () => void
+  token?: string | null
 }) {
   const total = Number(prestamo.montoPrincipal) + Number(prestamo.totalInteres)
   const pct = total > 0 ? (Number(prestamo.montoPagado) / total) * 100 : 0
@@ -380,7 +383,10 @@ function DetalleCredito({
           variant="ghost"
           size="md"
           iconLeft={<Download size={14} />}
-          onClick={() => window.open(`/api/paz-y-salvo?prestamo=${prestamo.id}`, '_blank')}
+          onClick={() => {
+            const cedula = typeof window !== 'undefined' ? localStorage.getItem('portal_cliente_cedula') : null
+            window.open(`/api/paz-y-salvo?cedula=${cedula}&prestamo=${prestamo.id}&token=${token || ''}`, '_blank')
+          }}
         >
           Descargar paz y salvo (PDF)
         </GlassButton>

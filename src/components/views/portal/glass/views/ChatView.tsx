@@ -71,13 +71,13 @@ export function ChatView({ cliente, token, cedula }: ChatViewProps) {
     setInput('')
     setEnviando(true)
     try {
-      const res = await fetch('/api/centro-comunicaciones/mensaje-portal', {
+      const res = await fetch('/api/chat/mensajes', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-portal-token': token },
+        headers: { 'Content-Type': 'application/json', 'x-portal-token': token || '' },
         body: JSON.stringify({
-          cedula,
-          mensaje: texto.trim(),
-          clienteNombre: cliente?.nombre,
+          conversacionId: undefined, // el backend creará o encontrará la conversación
+          contenido: texto.trim(),
+          tipo: 'texto',
         }),
       })
       if (!res.ok) throw new Error('No se pudo enviar')

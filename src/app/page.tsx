@@ -153,12 +153,13 @@ export default function Home() {
   const abrirPrestamo = (id: string) => setPrestamoSeleccionado(id)
   const refresh = () => setRefreshKey((k) => k + 1)
 
-  // Convertir una solicitud web en préstamo (placeholder: navegar a préstamos)
-  const convertirSolicitudWeb = (_solicitud: any) => {
+  // Convertir una solicitud web en préstamo — navega a Préstamos y abre el modal
+  const convertirSolicitudWeb = (solicitud: any) => {
     setView('prestamos')
     toast({
       title: 'Solicitud cargada',
-      description: 'Completa los datos para crear el préstamo a partir de la solicitud web.',
+      description: `Se cargaron los datos de ${solicitud.clienteNombre || 'la solicitud'} ${solicitud.codigo || ''}. Ve a Préstamos → Buzón Web → botón "Préstamo" para completar la creación.`,
+      duration: 6000,
     })
   }
 

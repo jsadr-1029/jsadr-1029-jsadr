@@ -25,7 +25,9 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const token = req.headers.get('x-portal-token')
+    // Aceptar token tanto del header x-portal-token como de query string ?token=
+    // (window.open() no puede setear headers, así que el portal usa ?token=)
+    const token = req.headers.get('x-portal-token') || new URL(req.url).searchParams.get('token')
     if (!token) {
       return NextResponse.json(
         { success: false, error: 'Token de sesión requerido' },

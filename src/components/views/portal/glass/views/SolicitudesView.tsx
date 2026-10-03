@@ -53,12 +53,18 @@ export function SolicitudesView({ token, cedula, onSolicitudCreada }: Solicitude
     if (!token || !cedula) return
     setCargando(true)
     try {
-      const res = await fetch(`/api/solicitudes-web?cedula=${encodeURIComponent(cedula)}`, {
-        headers: token ? { 'x-portal-token': token } : {},
-      })
+      const res = await fetch(`/api/solicitudes-web/cliente/${encodeURIComponent(cedula)}?token=${encodeURIComponent(token)}`)
       const data = await res.json()
       if (Array.isArray(data?.data)) {
-        setSolicitudes(data.data)
+        // Mapear campos de BD a los del frontend
+        const mapped = data.data.map((s: any) => ({
+          ...s,
+          montoSolicitado: s.valorSolicitado ?? s.montoSolicitado ?? 0,
+          plazoMeses: s.numeroCuotas ?? s.plazoMeses ?? 0,
+          createdAt: s.fechaCreacion ?? s.createdAt ?? '',
+          notasCliente: s.observaciones ?? s.notasCliente ?? '',
+        }))
+        setSolicitudes(mapped)
       } else if (Array.isArray(data)) {
         setSolicitudes(data)
       }
@@ -91,6 +97,7 @@ export function SolicitudesView({ token, cedula, onSolicitudCreada }: Solicitude
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           cedula,
+          token,
           montoSolicitado: payload.monto,
           plazoMeses: payload.plazo,
           frecuencia: payload.frecuencia,
