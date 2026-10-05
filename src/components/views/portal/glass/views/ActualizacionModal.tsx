@@ -2,8 +2,8 @@
 
 // =====================================================
 // ActualizacionModal — Modal obligatorio de actualización
-// de datos (octubre 2026). Se muestra una sola vez por
-// cliente al iniciar sesión si datosActualizadosOct2026=false.
+// de datos (octubre 2026). Cámara funcional con soporte
+// para girar entre cámara frontal y trasera.
 // =====================================================
 
 import * as React from 'react'
@@ -29,15 +29,17 @@ export function ActualizacionModal({ open, token, onComplete }: ActualizacionMod
   const [fotoFrente, setFotoFrente] = React.useState<string | null>(null)
   const [fotoReverso, setFotoReverso] = React.useState<string | null>(null)
   const [fotoSelfie, setFotoSelfie] = React.useState<string | null>(null)
-  const [facingMode, setFacingMode] = React.useState<'user' | 'environment'>('environment')
+
+  // Cámara
   const videoRef = React.useRef<HTMLVideoElement>(null)
   const streamRef = React.useRef<MediaStream | null>(null)
   const [cameraTarget, setCameraTarget] = React.useState<'frente' | 'reverso' | 'selfie' | null>(null)
   const [cameraReady, setCameraReady] = React.useState(false)
+  const [useFrontCamera, setUseFrontCamera] = React.useState(false)
+  const [cameraError, setCameraError] = React.useState<string | null>(null)
 
   React.useEffect(() => {
-    if (!open) return
-    if (!token) return
+    if (!open || !token) return
     ;(async () => {
       try {
         const res = await fetch('/api/portal/mi-estado', {
@@ -53,63 +55,107 @@ export function ActualizacionModal({ open, token, onComplete }: ActualizacionMod
     })()
   }, [open, token])
 
+  // Limpiar cámara al desmontar
   React.useEffect(() => {
-    return () => stopCamera()
+    return () => {
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach((t) => t.stop())
+      }
+    }
   }, [])
 
   // Iniciar cámara cuando cameraTarget cambia
   React.useEffect(() => {
     if (!cameraTarget) {
       setCameraReady(false)
+      setCameraError(null)
       return
     }
-    let cancelled = false
-    const startCam = async () => {
+
+    let active = true
+
+    const startCamera = async () => {
+      // Detener stream anterior
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach((t) => t.stop())
+        streamRef.current = null
+      }
+      setCameraReady(false)
+      setCameraError(null)
+
+      // Determinar qué cámara usar
+      const front = cameraTarget === 'selfie' ? true : useFrontCamera
+
       try {
-        // Detener stream anterior si existe
-        if (streamRef.current) {
-          streamRef.current.getTracks().forEach((t) => t.stop())
-          streamRef.current = null
-        }
-        const useFront = cameraTarget === 'selfie' ? true : facingMode === 'user'
-        const stream = await navigator.mediaDevices.getUserMedia({
+        const constraints: MediaStreamConstraints = {
           video: {
-            facingMode: useFront ? 'user' : 'environment',
+            facingMode: front ? 'user' : { ideal: 'environment' },
             width: { ideal: 1280 },
             height: { ideal: 720 },
           },
           audio: false,
-        })
-        if (cancelled) {
+        }
+
+        const stream = await navigator.mediaDevices.getUserMedia(constraints)
+
+        if (!active) {
           stream.getTracks().forEach((t) => t.stop())
           return
         }
+
         streamRef.current = stream
-        // Esperar a que el video element exista
-        setTimeout(() => {
-          if (videoRef.current && streamRef.current) {
+
+        // Asignar el stream al video element
+        // Usar requestAnimationFrame para asegstrar que el DOM está listo
+        requestAnimationFrame(() => {
+          if (videoRef.current && streamRef.current && active) {
             videoRef.current.srcObject = streamRef.current
+            videoRef.current.muted = true
+            videoRef.current.setAttribute('playsinline', 'true')
+            videoRef.current.setAttribute('autoplay', 'true')
+
             videoRef.current.onloadedmetadata = () => {
-              videoRef.current?.play().then(() => {
-                setCameraReady(true)
-              }).catch(() => {
-                setCameraReady(true)
-              })
+              videoRef.current
+                ?.play()
+                .then(() => {
+                  if (active) setCameraReady(true)
+                })
+                .catch((err) => {
+                  // Si play() falla, intentar de nuevo
+                  console.error('Error playing video:', err)
+                  if (active) setCameraReady(true)
+                })
             }
           }
-        }, 100)
+        })
       } catch (e: any) {
-        if (!cancelled) {
-          setError('No se pudo acceder a la cámara. Verifica los permisos del navegador. Si estás en iOS, usa Safari.')
-          setCameraTarget(null)
+        if (!active) return
+        console.error('Camera error:', e)
+        let msg = 'No se pudo acceder a la cámara.'
+        if (e.name === 'NotAllowedError') {
+          msg = 'Permiso de cámara denegado. Ve a la configuración del navegador y permite el acceso a la cámara.'
+        } else if (e.name === 'NotFoundError') {
+          msg = 'No se encontró ninguna cámara en tu dispositivo.'
+        } else if (e.name === 'NotReadableError') {
+          msg = 'La cámara está siendo usada por otra aplicación. Cierra otras apps que usen cámara e intenta de nuevo.'
+        } else if (e.message) {
+          msg = `Error de cámara: ${e.message}`
         }
+        setCameraError(msg)
+        setCameraTarget(null)
       }
     }
-    startCam()
+
+    startCamera()
+
     return () => {
-      cancelled = true
+      active = false
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach((t) => t.stop())
+        streamRef.current = null
+      }
     }
-  }, [cameraTarget, facingMode])
+  }, [cameraTarget, useFrontCamera])
 
   const stopCamera = () => {
     if (streamRef.current) {
@@ -120,21 +166,29 @@ export function ActualizacionModal({ open, token, onComplete }: ActualizacionMod
     setCameraTarget(null)
   }
 
+  const toggleCamera = () => {
+    setUseFrontCamera((prev) => !prev)
+    // El useEffect se disparará automáticamente por el cambio de useFrontCamera
+  }
+
   const takePhoto = () => {
     if (!videoRef.current || !videoRef.current.videoWidth) {
-      setError('La cámara no está lista. Espera un momento.')
+      setCameraError('La cámara no está lista aún. Espera un momento.')
       return
     }
+
     const canvas = document.createElement('canvas')
     canvas.width = videoRef.current.videoWidth
     canvas.height = videoRef.current.videoHeight
     const ctx = canvas.getContext('2d')
     if (!ctx) return
 
-    if (cameraTarget === 'selfie') {
+    // Si es selfie con cámara frontal, espejar para que coincida con lo que ve el usuario
+    if (cameraTarget === 'selfie' && useFrontCamera) {
       ctx.translate(canvas.width, 0)
       ctx.scale(-1, 1)
     }
+
     ctx.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height)
     const dataUrl = canvas.toDataURL('image/jpeg', 0.85)
 
@@ -143,12 +197,6 @@ export function ActualizacionModal({ open, token, onComplete }: ActualizacionMod
     else if (cameraTarget === 'selfie') setFotoSelfie(dataUrl)
 
     stopCamera()
-  }
-
-  const toggleCamera = () => {
-    const newMode = facingMode === 'user' ? 'environment' : 'user'
-    setFacingMode(newMode)
-    // El useEffect se disparará automáticamente por el cambio de facingMode
   }
 
   const submit = async () => {
@@ -191,16 +239,12 @@ export function ActualizacionModal({ open, token, onComplete }: ActualizacionMod
 
   if (!open) return null
 
-  const s = styles
-
   return (
     <div style={s.overlay}>
       <div style={s.modal}>
         {/* Header */}
         <div style={s.header}>
-          <div style={s.headerIcon}>
-            <span style={{ fontSize: '18px' }}>🔄</span>
-          </div>
+          <div style={s.headerIcon}>🔄</div>
           <div>
             <h1 style={s.title}>
               {step === 'ok' ? '¡Datos actualizados!' : 'Actualización de datos'}
@@ -232,7 +276,6 @@ export function ActualizacionModal({ open, token, onComplete }: ActualizacionMod
               <Field label="Dirección">
                 <input type="text" value={direccion} onChange={(e) => setDireccion(e.target.value)} placeholder="Calle 100 #50-25" style={s.input} />
               </Field>
-
               <button
                 onClick={() => {
                   if (!telefono.trim() || !email.trim()) {
@@ -252,9 +295,9 @@ export function ActualizacionModal({ open, token, onComplete }: ActualizacionMod
 
           {step === 'fotos' && (
             <div style={s.column}>
-              {/* Camera preview */}
+              {/* === Cámara activa === */}
               {cameraTarget && (
-                <div style={s.cameraContainer}>
+                <div style={s.cameraBox}>
                   <video
                     ref={videoRef}
                     autoPlay
@@ -262,10 +305,10 @@ export function ActualizacionModal({ open, token, onComplete }: ActualizacionMod
                     muted
                     style={{
                       width: '100%',
-                      maxHeight: '300px',
+                      height: '280px',
                       objectFit: 'cover',
                       borderRadius: '12px',
-                      transform: cameraTarget === 'selfie' ? 'scaleX(-1)' : 'none',
+                      transform: cameraTarget === 'selfie' && useFrontCamera ? 'scaleX(-1)' : 'none',
                       display: cameraReady ? 'block' : 'none',
                     }}
                   />
@@ -275,32 +318,56 @@ export function ActualizacionModal({ open, token, onComplete }: ActualizacionMod
                       <p style={{ color: '#9aa3b8', fontSize: '13px', marginTop: '8px' }}>Iniciando cámara...</p>
                     </div>
                   )}
-                  <div style={s.cameraControls}>
-                    <button onClick={takePhoto} style={{ ...s.btnPrimary, padding: '8px 20px', fontSize: '13px' }} disabled={!cameraReady}>
-                      📸 Tomar foto
-                    </button>
-                    <button onClick={toggleCamera} style={{ ...s.btnGhost, padding: '8px 12px' }} title="Cambiar cámara">
-                      🔄
-                    </button>
-                    <button onClick={stopCamera} style={{ ...s.btnGhost, padding: '8px 12px' }} title="Cancelar">
-                      ✕
-                    </button>
-                  </div>
+                  {cameraReady && (
+                    <div style={s.cameraControls}>
+                      <button onClick={takePhoto} style={s.btnPrimarySm}>
+                        📸 Tomar foto
+                      </button>
+                      <button onClick={toggleCamera} style={s.btnGhostSm} title="Cambiar cámara">
+                        🔄 Girar
+                      </button>
+                      <button onClick={stopCamera} style={s.btnGhostSm} title="Cancelar">
+                        ✕
+                      </button>
+                    </div>
+                  )}
                 </div>
               )}
 
-              {/* Photo slots */}
+              {/* === Slots de fotos (cuando cámara no está activa) === */}
               {!cameraTarget && (
                 <>
-                  <PhotoSlot label="Cédula — foto frontal *" photo={fotoFrente} onTake={() => setCameraTarget('frente')} onClear={() => setFotoFrente(null)} />
-                  <PhotoSlot label="Cédula — foto reverso *" photo={fotoReverso} onTake={() => setCameraTarget('reverso')} onClear={() => setFotoReverso(null)} />
-                  <PhotoSlot label="Selfie sosteniendo la cédula *" photo={fotoSelfie} onTake={() => setCameraTarget('selfie')} onClear={() => setFotoSelfie(null)} />
+                  <PhotoSlot
+                    label="Cédula — foto frontal *"
+                    photo={fotoFrente}
+                    onTake={() => setCameraTarget('frente')}
+                    onClear={() => setFotoFrente(null)}
+                  />
+                  <PhotoSlot
+                    label="Cédula — foto reverso *"
+                    photo={fotoReverso}
+                    onTake={() => setCameraTarget('reverso')}
+                    onClear={() => setFotoReverso(null)}
+                  />
+                  <PhotoSlot
+                    label="Selfie sosteniendo la cédula *"
+                    photo={fotoSelfie}
+                    onTake={() => {
+                      setUseFrontCamera(true)
+                      setCameraTarget('selfie')
+                    }}
+                    onClear={() => setFotoSelfie(null)}
+                  />
 
                   <div style={{ display: 'flex', gap: '8px' }}>
                     <button onClick={() => setStep('datos')} style={{ ...s.btnGhost, flex: 1 }}>
                       ← Atrás
                     </button>
-                    <button onClick={submit} style={{ ...s.btnPrimary, flex: 2 }} disabled={!fotoFrente || !fotoReverso || !fotoSelfie}>
+                    <button
+                      onClick={submit}
+                      style={{ ...s.btnPrimary, flex: 2, opacity: !fotoFrente || !fotoReverso || !fotoSelfie ? 0.5 : 1 }}
+                      disabled={!fotoFrente || !fotoReverso || !fotoSelfie}
+                    >
                       Enviar actualización
                     </button>
                   </div>
@@ -308,8 +375,17 @@ export function ActualizacionModal({ open, token, onComplete }: ActualizacionMod
               )}
 
               {error && <p style={s.error}>{error}</p>}
+              {cameraError && (
+                <div style={s.cameraErrorBox}>
+                  <p style={{ color: '#fb7185', fontSize: '12px', margin: 0 }}>{cameraError}</p>
+                </div>
+              )}
 
-              <p style={s.hint}>💡 Usa el botón 🔄 para cambiar entre cámara frontal y trasera</p>
+              {!cameraTarget && (
+                <p style={s.hint}>
+                  💡 Al tomar una foto puedes usar el botón 🔄 Girar para cambiar entre cámara frontal y trasera
+                </p>
+              )}
             </div>
           )}
 
@@ -338,7 +414,8 @@ export function ActualizacionModal({ open, token, onComplete }: ActualizacionMod
   )
 }
 
-const styles = {
+// === Styles ===
+const s = {
   overlay: {
     position: 'fixed' as const,
     inset: 0,
@@ -347,7 +424,7 @@ const styles = {
     alignItems: 'center',
     justifyContent: 'center',
     padding: '16px',
-    background: 'rgba(0,0,0,0.8)',
+    background: 'rgba(0,0,0,0.85)',
   },
   modal: {
     background: 'linear-gradient(180deg, #0a0d1d, #0e1224)',
@@ -376,6 +453,7 @@ const styles = {
     alignItems: 'center',
     justifyContent: 'center',
     flexShrink: 0,
+    fontSize: '18px',
   },
   title: {
     fontSize: '18px',
@@ -418,9 +496,28 @@ const styles = {
     fontWeight: 700,
     cursor: 'pointer',
   },
+  btnPrimarySm: {
+    padding: '8px 20px',
+    borderRadius: '10px',
+    border: 'none',
+    background: 'linear-gradient(135deg, #5b5bf7, #8b5bf7)',
+    color: 'white',
+    fontSize: '13px',
+    fontWeight: 700,
+    cursor: 'pointer',
+  },
   btnGhost: {
     padding: '12px',
     borderRadius: '12px',
+    border: '1px solid rgba(255,255,255,0.1)',
+    background: 'rgba(255,255,255,0.04)',
+    color: '#9aa3b8',
+    fontSize: '13px',
+    cursor: 'pointer',
+  },
+  btnGhostSm: {
+    padding: '8px 12px',
+    borderRadius: '10px',
     border: '1px solid rgba(255,255,255,0.1)',
     background: 'rgba(255,255,255,0.04)',
     color: '#9aa3b8',
@@ -436,19 +533,20 @@ const styles = {
     fontSize: '11px',
     textAlign: 'center' as const,
   },
-  cameraContainer: {
+  cameraBox: {
     position: 'relative' as const,
     borderRadius: '12px',
     overflow: 'hidden',
     border: '1px solid rgba(255,255,255,0.1)',
+    background: '#000',
   },
   cameraLoading: {
     display: 'flex',
     flexDirection: 'column' as const,
     alignItems: 'center',
     justifyContent: 'center',
-    height: '200px',
-    background: 'rgba(0,0,0,0.3)',
+    height: '280px',
+    background: 'rgba(0,0,0,0.5)',
   },
   cameraControls: {
     position: 'absolute' as const,
@@ -457,6 +555,12 @@ const styles = {
     transform: 'translateX(-50%)',
     display: 'flex',
     gap: '8px',
+  },
+  cameraErrorBox: {
+    padding: '12px',
+    borderRadius: '10px',
+    background: 'rgba(251,113,133,0.1)',
+    border: '1px solid rgba(251,113,133,0.2)',
   },
   spinner: {
     width: '40px',
@@ -521,21 +625,24 @@ function PhotoSlot({ label, photo, onTake, onClear }: { label: string; photo: st
           </div>
         </div>
       ) : (
-        <button onClick={onTake} style={{
-          width: '100%',
-          padding: '24px 0',
-          borderRadius: '12px',
-          border: '2px dashed rgba(255,255,255,0.15)',
-          background: 'rgba(255,255,255,0.02)',
-          color: '#5b5bf7',
-          cursor: 'pointer',
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          gap: '6px',
-          fontSize: '13px',
-          fontWeight: 600,
-        }}>
+        <button
+          onClick={onTake}
+          style={{
+            width: '100%',
+            padding: '24px 0',
+            borderRadius: '12px',
+            border: '2px dashed rgba(255,255,255,0.15)',
+            background: 'rgba(255,255,255,0.02)',
+            color: '#5b5bf7',
+            cursor: 'pointer',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            gap: '6px',
+            fontSize: '13px',
+            fontWeight: 600,
+          }}
+        >
           <span style={{ fontSize: '24px' }}>📷</span>
           Tomar foto
         </button>
