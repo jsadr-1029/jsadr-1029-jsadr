@@ -2,8 +2,11 @@
 
 // =====================================================
 // ActualizacionModal — Modal obligatorio de actualización
-// de datos (octubre 2026). Cámara funcional con soporte
-// para girar entre cámara frontal y trasera.
+// de datos (octubre 2026).
+//
+// Usa <input type="file" accept="image/*" capture="environment">
+// que es el estándar HTML5 para captura de fotos desde el navegador.
+// Funciona en Android, iOS y desktop — sin necesidad de getUserMedia.
 // =====================================================
 
 import * as React from 'react'
@@ -13,6 +16,8 @@ type ActualizacionModalProps = {
   token: string | null
   onComplete: () => void
 }
+
+type PhotoKey = 'frente' | 'reverso' | 'selfie'
 
 export function ActualizacionModal({ open, token, onComplete }: ActualizacionModalProps) {
   const [step, setStep] = React.useState<'datos' | 'fotos' | 'enviando' | 'ok'>('datos')
@@ -26,17 +31,16 @@ export function ActualizacionModal({ open, token, onComplete }: ActualizacionMod
   const [direccion, setDireccion] = React.useState('')
 
   // Fotos
-  const [fotoFrente, setFotoFrente] = React.useState<string | null>(null)
-  const [fotoReverso, setFotoReverso] = React.useState<string | null>(null)
-  const [fotoSelfie, setFotoSelfie] = React.useState<string | null>(null)
+  const [fotos, setFotos] = React.useState<Record<PhotoKey, string | null>>({
+    frente: null,
+    reverso: null,
+    selfie: null,
+  })
 
-  // Cámara
-  const videoRef = React.useRef<HTMLVideoElement>(null)
-  const streamRef = React.useRef<MediaStream | null>(null)
-  const [cameraTarget, setCameraTarget] = React.useState<'frente' | 'reverso' | 'selfie' | null>(null)
-  const [cameraReady, setCameraReady] = React.useState(false)
-  const [useFrontCamera, setUseFrontCamera] = React.useState(false)
-  const [cameraError, setCameraError] = React.useState<string | null>(null)
+  // Hidden file inputs
+  const inputFrenteRef = React.useRef<HTMLInputElement>(null)
+  const inputReversoRef = React.useRef<HTMLInputElement>(null)
+  const inputSelfieRef = React.useRef<HTMLInputElement>(null)
 
   React.useEffect(() => {
     if (!open || !token) return
@@ -55,153 +59,34 @@ export function ActualizacionModal({ open, token, onComplete }: ActualizacionMod
     })()
   }, [open, token])
 
-  // Limpiar cámara al desmontar
-  React.useEffect(() => {
-    return () => {
-      if (streamRef.current) {
-        streamRef.current.getTracks().forEach((t) => t.stop())
-      }
-    }
-  }, [])
-
-  // Iniciar cámara cuando cameraTarget cambia
-  React.useEffect(() => {
-    if (!cameraTarget) {
-      setCameraReady(false)
-      setCameraError(null)
+  const handleFileSelect = (key: PhotoKey, file: File) => {
+    if (!file) return
+    if (!file.type.startsWith('image/')) {
+      setError('El archivo debe ser una imagen (JPEG, PNG)')
       return
     }
-
-    let active = true
-
-    const startCamera = async () => {
-      // Detener stream anterior
-      if (streamRef.current) {
-        streamRef.current.getTracks().forEach((t) => t.stop())
-        streamRef.current = null
-      }
-      setCameraReady(false)
-      setCameraError(null)
-
-      // Determinar qué cámara usar
-      const front = cameraTarget === 'selfie' ? true : useFrontCamera
-
-      try {
-        const constraints: MediaStreamConstraints = {
-          video: {
-            facingMode: front ? 'user' : { ideal: 'environment' },
-            width: { ideal: 1280 },
-            height: { ideal: 720 },
-          },
-          audio: false,
-        }
-
-        const stream = await navigator.mediaDevices.getUserMedia(constraints)
-
-        if (!active) {
-          stream.getTracks().forEach((t) => t.stop())
-          return
-        }
-
-        streamRef.current = stream
-
-        // Asignar el stream al video element
-        // Usar requestAnimationFrame para asegstrar que el DOM está listo
-        requestAnimationFrame(() => {
-          if (videoRef.current && streamRef.current && active) {
-            videoRef.current.srcObject = streamRef.current
-            videoRef.current.muted = true
-            videoRef.current.setAttribute('playsinline', 'true')
-            videoRef.current.setAttribute('autoplay', 'true')
-
-            videoRef.current.onloadedmetadata = () => {
-              videoRef.current
-                ?.play()
-                .then(() => {
-                  if (active) setCameraReady(true)
-                })
-                .catch((err) => {
-                  // Si play() falla, intentar de nuevo
-                  console.error('Error playing video:', err)
-                  if (active) setCameraReady(true)
-                })
-            }
-          }
-        })
-      } catch (e: any) {
-        if (!active) return
-        console.error('Camera error:', e)
-        let msg = 'No se pudo acceder a la cámara.'
-        if (e.name === 'NotAllowedError') {
-          msg = 'Permiso de cámara denegado. Ve a la configuración del navegador y permite el acceso a la cámara.'
-        } else if (e.name === 'NotFoundError') {
-          msg = 'No se encontró ninguna cámara en tu dispositivo.'
-        } else if (e.name === 'NotReadableError') {
-          msg = 'La cámara está siendo usada por otra aplicación. Cierra otras apps que usen cámara e intenta de nuevo.'
-        } else if (e.message) {
-          msg = `Error de cámara: ${e.message}`
-        }
-        setCameraError(msg)
-        setCameraTarget(null)
-      }
-    }
-
-    startCamera()
-
-    return () => {
-      active = false
-      if (streamRef.current) {
-        streamRef.current.getTracks().forEach((t) => t.stop())
-        streamRef.current = null
-      }
-    }
-  }, [cameraTarget, useFrontCamera])
-
-  const stopCamera = () => {
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach((t) => t.stop())
-      streamRef.current = null
-    }
-    setCameraReady(false)
-    setCameraTarget(null)
-  }
-
-  const toggleCamera = () => {
-    setUseFrontCamera((prev) => !prev)
-    // El useEffect se disparará automáticamente por el cambio de useFrontCamera
-  }
-
-  const takePhoto = () => {
-    if (!videoRef.current || !videoRef.current.videoWidth) {
-      setCameraError('La cámara no está lista aún. Espera un momento.')
+    if (file.size > 5 * 1024 * 1024) {
+      setError('La imagen no puede pesar más de 5MB')
       return
     }
-
-    const canvas = document.createElement('canvas')
-    canvas.width = videoRef.current.videoWidth
-    canvas.height = videoRef.current.videoHeight
-    const ctx = canvas.getContext('2d')
-    if (!ctx) return
-
-    // Si es selfie con cámara frontal, espejar para que coincida con lo que ve el usuario
-    if (cameraTarget === 'selfie' && useFrontCamera) {
-      ctx.translate(canvas.width, 0)
-      ctx.scale(-1, 1)
+    const reader = new FileReader()
+    reader.onload = () => {
+      const dataUrl = reader.result as string
+      setFotos((prev) => ({ ...prev, [key]: dataUrl }))
+      setError(null)
     }
+    reader.onerror = () => setError('Error al leer la imagen')
+    reader.readAsDataURL(file)
+  }
 
-    ctx.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height)
-    const dataUrl = canvas.toDataURL('image/jpeg', 0.85)
-
-    if (cameraTarget === 'frente') setFotoFrente(dataUrl)
-    else if (cameraTarget === 'reverso') setFotoReverso(dataUrl)
-    else if (cameraTarget === 'selfie') setFotoSelfie(dataUrl)
-
-    stopCamera()
+  const triggerInput = (key: PhotoKey) => {
+    const refs = { frente: inputFrenteRef, reverso: inputReversoRef, selfie: inputSelfieRef }
+    refs[key].current?.click()
   }
 
   const submit = async () => {
     if (!token) return
-    if (!fotoFrente || !fotoReverso || !fotoSelfie) {
+    if (!fotos.frente || !fotos.reverso || !fotos.selfie) {
       setError('Debes tomar las 3 fotos')
       return
     }
@@ -218,9 +103,9 @@ export function ActualizacionModal({ open, token, onComplete }: ActualizacionMod
           ciudad,
           municipio,
           direccion,
-          fotoCedulaFrente: fotoFrente,
-          fotoCedulaReverso: fotoReverso,
-          fotoSelfie: fotoSelfie,
+          fotoCedulaFrente: fotos.frente,
+          fotoCedulaReverso: fotos.reverso,
+          fotoSelfie: fotos.selfie,
         }),
       })
       const data = await res.json()
@@ -228,9 +113,7 @@ export function ActualizacionModal({ open, token, onComplete }: ActualizacionMod
         throw new Error(data.error || 'No se pudo actualizar')
       }
       setStep('ok')
-      setTimeout(() => {
-        onComplete()
-      }, 2000)
+      setTimeout(() => onComplete(), 2000)
     } catch (e: any) {
       setError(e.message || 'Error al actualizar')
       setStep('fotos')
@@ -239,8 +122,36 @@ export function ActualizacionModal({ open, token, onComplete }: ActualizacionMod
 
   if (!open) return null
 
+  const allPhotosTaken = fotos.frente && fotos.reverso && fotos.selfie
+
   return (
     <div style={s.overlay}>
+      {/* Hidden file inputs */}
+      <input
+        ref={inputFrenteRef}
+        type="file"
+        accept="image/*"
+        capture="environment"
+        style={{ display: 'none' }}
+        onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFileSelect('frente', f); e.target.value = '' }}
+      />
+      <input
+        ref={inputReversoRef}
+        type="file"
+        accept="image/*"
+        capture="environment"
+        style={{ display: 'none' }}
+        onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFileSelect('reverso', f); e.target.value = '' }}
+      />
+      <input
+        ref={inputSelfieRef}
+        type="file"
+        accept="image/*"
+        capture="user"
+        style={{ display: 'none' }}
+        onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFileSelect('selfie', f); e.target.value = '' }}
+      />
+
       <div style={s.modal}>
         {/* Header */}
         <div style={s.header}>
@@ -295,97 +206,44 @@ export function ActualizacionModal({ open, token, onComplete }: ActualizacionMod
 
           {step === 'fotos' && (
             <div style={s.column}>
-              {/* === Cámara activa === */}
-              {cameraTarget && (
-                <div style={s.cameraBox}>
-                  <video
-                    ref={videoRef}
-                    autoPlay
-                    playsInline
-                    muted
-                    style={{
-                      width: '100%',
-                      height: '280px',
-                      objectFit: 'cover',
-                      borderRadius: '12px',
-                      transform: cameraTarget === 'selfie' && useFrontCamera ? 'scaleX(-1)' : 'none',
-                      display: cameraReady ? 'block' : 'none',
-                    }}
-                  />
-                  {!cameraReady && (
-                    <div style={s.cameraLoading}>
-                      <div style={s.spinner} />
-                      <p style={{ color: '#9aa3b8', fontSize: '13px', marginTop: '8px' }}>Iniciando cámara...</p>
-                    </div>
-                  )}
-                  {cameraReady && (
-                    <div style={s.cameraControls}>
-                      <button onClick={takePhoto} style={s.btnPrimarySm}>
-                        📸 Tomar foto
-                      </button>
-                      <button onClick={toggleCamera} style={s.btnGhostSm} title="Cambiar cámara">
-                        🔄 Girar
-                      </button>
-                      <button onClick={stopCamera} style={s.btnGhostSm} title="Cancelar">
-                        ✕
-                      </button>
-                    </div>
-                  )}
-                </div>
-              )}
+              <PhotoSlot
+                label="Cédula — foto frontal *"
+                photo={fotos.frente}
+                onTake={() => triggerInput('frente')}
+                onClear={() => setFotos((p) => ({ ...p, frente: null }))}
+              />
+              <PhotoSlot
+                label="Cédula — foto reverso *"
+                photo={fotos.reverso}
+                onTake={() => triggerInput('reverso')}
+                onClear={() => setFotos((p) => ({ ...p, reverso: null }))}
+              />
+              <PhotoSlot
+                label="Selfie sosteniendo la cédula *"
+                photo={fotos.selfie}
+                onTake={() => triggerInput('selfie')}
+                onClear={() => setFotos((p) => ({ ...p, selfie: null }))}
+              />
 
-              {/* === Slots de fotos (cuando cámara no está activa) === */}
-              {!cameraTarget && (
-                <>
-                  <PhotoSlot
-                    label="Cédula — foto frontal *"
-                    photo={fotoFrente}
-                    onTake={() => setCameraTarget('frente')}
-                    onClear={() => setFotoFrente(null)}
-                  />
-                  <PhotoSlot
-                    label="Cédula — foto reverso *"
-                    photo={fotoReverso}
-                    onTake={() => setCameraTarget('reverso')}
-                    onClear={() => setFotoReverso(null)}
-                  />
-                  <PhotoSlot
-                    label="Selfie sosteniendo la cédula *"
-                    photo={fotoSelfie}
-                    onTake={() => {
-                      setUseFrontCamera(true)
-                      setCameraTarget('selfie')
-                    }}
-                    onClear={() => setFotoSelfie(null)}
-                  />
-
-                  <div style={{ display: 'flex', gap: '8px' }}>
-                    <button onClick={() => setStep('datos')} style={{ ...s.btnGhost, flex: 1 }}>
-                      ← Atrás
-                    </button>
-                    <button
-                      onClick={submit}
-                      style={{ ...s.btnPrimary, flex: 2, opacity: !fotoFrente || !fotoReverso || !fotoSelfie ? 0.5 : 1 }}
-                      disabled={!fotoFrente || !fotoReverso || !fotoSelfie}
-                    >
-                      Enviar actualización
-                    </button>
-                  </div>
-                </>
-              )}
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button onClick={() => setStep('datos')} style={{ ...s.btnGhost, flex: 1 }}>
+                  ← Atrás
+                </button>
+                <button
+                  onClick={submit}
+                  style={{ ...s.btnPrimary, flex: 2, opacity: allPhotosTaken ? 1 : 0.5 }}
+                  disabled={!allPhotosTaken}
+                >
+                  Enviar actualización
+                </button>
+              </div>
 
               {error && <p style={s.error}>{error}</p>}
-              {cameraError && (
-                <div style={s.cameraErrorBox}>
-                  <p style={{ color: '#fb7185', fontSize: '12px', margin: 0 }}>{cameraError}</p>
-                </div>
-              )}
 
-              {!cameraTarget && (
-                <p style={s.hint}>
-                  💡 Al tomar una foto puedes usar el botón 🔄 Girar para cambiar entre cámara frontal y trasera
-                </p>
-              )}
+              <p style={s.hint}>
+                💡 Al hacer clic en "Tomar foto" se abrirá la cámara de tu dispositivo.
+                Toma la foto y se guardará automáticamente.
+              </p>
             </div>
           )}
 
@@ -398,9 +256,7 @@ export function ActualizacionModal({ open, token, onComplete }: ActualizacionMod
 
           {step === 'ok' && (
             <div style={s.centerContent}>
-              <div style={{ width: '56px', height: '56px', borderRadius: '16px', background: 'rgba(52,211,153,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <span style={{ fontSize: '28px' }}>✅</span>
-              </div>
+              <div style={s.okIcon}>✅</div>
               <p style={{ color: '#9aa3b8', fontSize: '14px', textAlign: 'center' as const, marginTop: '12px', lineHeight: 1.6 }}>
                 Tus datos y fotos quedaron registrados.<br />Ya puedes usar el portal normalmente.
               </p>
@@ -455,26 +311,10 @@ const s = {
     flexShrink: 0,
     fontSize: '18px',
   },
-  title: {
-    fontSize: '18px',
-    fontWeight: 800,
-    margin: 0,
-    marginBottom: '4px',
-  },
-  subtitle: {
-    fontSize: '13px',
-    color: '#9aa3b8',
-    margin: 0,
-    lineHeight: 1.5,
-  },
-  content: {
-    padding: '20px 24px',
-  },
-  column: {
-    display: 'flex',
-    flexDirection: 'column' as const,
-    gap: '16px',
-  },
+  title: { fontSize: '18px', fontWeight: 800, margin: 0, marginBottom: '4px' },
+  subtitle: { fontSize: '13px', color: '#9aa3b8', margin: 0, lineHeight: 1.5 },
+  content: { padding: '20px 24px' },
+  column: { display: 'flex', flexDirection: 'column' as const, gap: '16px' },
   input: {
     width: '100%',
     padding: '10px 12px',
@@ -496,16 +336,6 @@ const s = {
     fontWeight: 700,
     cursor: 'pointer',
   },
-  btnPrimarySm: {
-    padding: '8px 20px',
-    borderRadius: '10px',
-    border: 'none',
-    background: 'linear-gradient(135deg, #5b5bf7, #8b5bf7)',
-    color: 'white',
-    fontSize: '13px',
-    fontWeight: 700,
-    cursor: 'pointer',
-  },
   btnGhost: {
     padding: '12px',
     borderRadius: '12px',
@@ -515,53 +345,8 @@ const s = {
     fontSize: '13px',
     cursor: 'pointer',
   },
-  btnGhostSm: {
-    padding: '8px 12px',
-    borderRadius: '10px',
-    border: '1px solid rgba(255,255,255,0.1)',
-    background: 'rgba(255,255,255,0.04)',
-    color: '#9aa3b8',
-    fontSize: '13px',
-    cursor: 'pointer',
-  },
-  error: {
-    color: '#fb7185',
-    fontSize: '12px',
-  },
-  hint: {
-    color: '#6b7388',
-    fontSize: '11px',
-    textAlign: 'center' as const,
-  },
-  cameraBox: {
-    position: 'relative' as const,
-    borderRadius: '12px',
-    overflow: 'hidden',
-    border: '1px solid rgba(255,255,255,0.1)',
-    background: '#000',
-  },
-  cameraLoading: {
-    display: 'flex',
-    flexDirection: 'column' as const,
-    alignItems: 'center',
-    justifyContent: 'center',
-    height: '280px',
-    background: 'rgba(0,0,0,0.5)',
-  },
-  cameraControls: {
-    position: 'absolute' as const,
-    bottom: '8px',
-    left: '50%',
-    transform: 'translateX(-50%)',
-    display: 'flex',
-    gap: '8px',
-  },
-  cameraErrorBox: {
-    padding: '12px',
-    borderRadius: '10px',
-    background: 'rgba(251,113,133,0.1)',
-    border: '1px solid rgba(251,113,133,0.2)',
-  },
+  error: { color: '#fb7185', fontSize: '12px' },
+  hint: { color: '#6b7388', fontSize: '11px', textAlign: 'center' as const },
   spinner: {
     width: '40px',
     height: '40px',
@@ -576,6 +361,16 @@ const s = {
     alignItems: 'center',
     gap: '12px',
     padding: '40px 0',
+  },
+  okIcon: {
+    width: '56px',
+    height: '56px',
+    borderRadius: '16px',
+    background: 'rgba(52,211,153,0.15)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    fontSize: '28px',
   },
 }
 
