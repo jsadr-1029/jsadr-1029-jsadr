@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useFetch, apiPost } from '@/hooks/use-fetch'
 import { Card, PageHeader, Badge, EmptyState, LoadingState } from '@/components/shared/ui'
+import { CardContent } from '@/components/ui/card'
 import {
   ShieldCheck,
   Lock,
@@ -31,6 +32,9 @@ import {
   Trash2,
   Send,
   Users,
+  Download,
+  Ban,
+  DatabaseBackup,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
@@ -664,13 +668,13 @@ export function SeguridadView() {
           ================================================= */}
       <ValidadorFirmaPanel />
 
-      {/* =================================================
-          SECCIÓN 4: Centro de Recuperación de Claves
-          ================================================= */}
-      <RecuperacionClavesPanel />
+      {/* SECCIÓN 4: Back Semanal */}
+      <BackSemanalPanel />
 
-      {/* =================================================
-          SECCIÓN 5: Historial de Ingresos al Portal del Cliente
+      {/* SECCIÓN 5: Bloqueo de usuarios */}
+      <BloqueoUsuariosPanel />
+
+      {/* SECCIÓN 6: Historial de Ingresos al Portal del Cliente
           Registra IP + tipo de dispositivo cada vez que un
           cliente ingresa al portal. Visible únicamente desde
           el módulo de Seguridad (orden obligatoria del usuario).
@@ -2204,5 +2208,173 @@ function KPIBox({
       </div>
       <div className="text-2xl font-bold">{value}</div>
     </div>
+  )
+}
+
+// =====================================================
+// BackSemanalPanel — Backup semanal automático
+// =====================================================
+function BackSemanalPanel() {
+  const [backups, setBackups] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+  const [creando, setCreando] = useState(false)
+
+  const cargar = async () => {
+    setLoading(true)
+    try {
+      const res = await fetch('/api/seguridad/backups')
+      const data = await res.json()
+      if (data.success) setBackups(data.data || [])
+    } catch {} finally { setLoading(false) }
+  }
+
+  useEffect(() => { cargar() }, [])
+
+  const crearBackup = async () => {
+    setCreando(true)
+    try {
+      const res = await fetch('/api/seguridad/backups', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tipo: 'MANUAL', descripcion: 'Backup manual' }),
+      })
+      const data = await res.json()
+      if (data.success) {
+        toast.success('Backup creado correctamente')
+        cargar()
+      } else {
+        toast.error(data.error || 'No se pudo crear el backup')
+      }
+    } catch (e: any) {
+      toast.error(e.message)
+    } finally { setCreando(false) }
+  }
+
+  return (
+    <Card>
+      <CardContent className="p-5">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-3">
+            <div className="h-10 w-10 rounded-xl bg-blue-500/20 flex items-center justify-center">
+              <DatabaseBackup className="w-5 h-5 text-blue-400" />
+            </div>
+            <div>
+              <h3 className="text-base font-semibold">Back Semanal</h3>
+              <p className="text-xs text-muted-foreground">Copia automática del sistema todos los domingos a las 2:00 AM</p>
+            </div>
+          </div>
+          <Button size="sm" onClick={crearBackup} disabled={creando}>
+            {creando ? <RefreshCw className="w-3.5 h-3.5 mr-1.5 animate-spin" /> : <Plus className="w-3.5 h-3.5 mr-1.5" />}
+            Crear backup ahora
+          </Button>
+        </div>
+        <div className="rounded-lg bg-blue-500/10 border border-blue-500/20 p-3 mb-4">
+          <div className="flex items-center gap-2 text-xs text-blue-300">
+            <Clock className="w-3.5 h-3.5" />
+            <span>Programado: todos los domingos a las 2:00 AM (automático)</span>
+          </div>
+        </div>
+        {loading ? (
+          <div className="flex items-center justify-center py-8"><RefreshCw className="w-5 h-5 animate-spin text-muted-foreground" /></div>
+        ) : backups.length === 0 ? (
+          <div className="text-center py-8 text-muted-foreground text-sm">No hay backups registrados. El primer backup automático se ejecutará el próximo domingo.</div>
+        ) : (
+          <div className="space-y-2">
+            {backups.map((b) => (
+              <div key={b.id} className="flex items-center justify-between p-3 rounded-lg bg-muted/30 border">
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-lg bg-blue-500/20 flex items-center justify-center"><DatabaseBackup className="w-4 h-4 text-blue-400" /></div>
+                  <div>
+                    <p className="text-sm font-medium">{b.tipo === 'MANUAL' ? 'Manual' : 'Automático'}</p>
+                    <p className="text-xs text-muted-foreground">{new Date(b.createdAt).toLocaleString('es-CO')}</p>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  )
+}
+
+// =====================================================
+// BloqueoUsuariosPanel — Bloquear acceso a usuarios no deseados
+// =====================================================
+function BloqueoUsuariosPanel() {
+  const [cedula, setCedula] = useState('')
+  const [motivo, setMotivo] = useState('')
+  const [bloqueados, setBloqueados] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+
+  const cargar = async () => {
+    setLoading(true)
+    try {
+      const res = await fetch('/api/seguridad/bloqueos')
+      const data = await res.json()
+      if (data.success) setBloqueados(data.data || [])
+    } catch {} finally { setLoading(false) }
+  }
+
+  useEffect(() => { cargar() }, [])
+
+  const bloquear = async () => {
+    if (!cedula.trim()) { toast.error('Ingresa la cédula a bloquear'); return }
+    try {
+      const res = await fetch('/api/seguridad/bloqueos', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ cedula: cedula.trim(), motivo: motivo.trim() || 'Bloqueo manual' }),
+      })
+      const data = await res.json()
+      if (data.success) {
+        toast.success(`Cédula ${cedula.trim()} bloqueada`)
+        setCedula(''); setMotivo(''); cargar()
+      } else { toast.error(data.error || 'No se pudo bloquear') }
+    } catch (e: any) { toast.error(e.message) }
+  }
+
+  const desbloquear = async (id: string) => {
+    try {
+      const res = await fetch(`/api/seguridad/bloqueos?id=${id}`, { method: 'DELETE' })
+      const data = await res.json()
+      if (data.success) { toast.success('Usuario desbloqueado'); cargar() }
+    } catch (e: any) { toast.error(e.message) }
+  }
+
+  return (
+    <Card>
+      <CardContent className="p-5">
+        <div className="flex items-center gap-3 mb-4">
+          <div className="h-10 w-10 rounded-xl bg-red-500/20 flex items-center justify-center"><Ban className="w-5 h-5 text-red-400" /></div>
+          <div>
+            <h3 className="text-base font-semibold">Bloqueo de Usuarios</h3>
+            <p className="text-xs text-muted-foreground">Bloquea el acceso al portal a cédulas no deseadas</p>
+          </div>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mb-4">
+          <Input placeholder="Cédula a bloquear" value={cedula} onChange={(e) => setCedula(e.target.value)} />
+          <Input placeholder="Motivo (opcional)" value={motivo} onChange={(e) => setMotivo(e.target.value)} />
+          <Button onClick={bloquear} variant="destructive"><Ban className="w-3.5 h-3.5 mr-1.5" />Bloquear</Button>
+        </div>
+        {loading ? (
+          <div className="flex items-center justify-center py-4"><RefreshCw className="w-4 h-4 animate-spin text-muted-foreground" /></div>
+        ) : bloqueados.length === 0 ? (
+          <p className="text-center text-sm text-muted-foreground py-4">No hay usuarios bloqueados.</p>
+        ) : (
+          <div className="space-y-2">
+            {bloqueados.map((b) => (
+              <div key={b.id} className="flex items-center justify-between p-3 rounded-lg bg-red-500/5 border border-red-500/20">
+                <div>
+                  <p className="text-sm font-medium">CC {b.cedula}</p>
+                  <p className="text-xs text-muted-foreground">{b.motivo} · {new Date(b.createdAt).toLocaleDateString('es-CO')}</p>
+                </div>
+                <Button size="sm" variant="outline" onClick={() => desbloquear(b.id)}>Desbloquear</Button>
+              </div>
+            ))}
+          </div>
+        )}
+      </CardContent>
+    </Card>
   )
 }

@@ -85,6 +85,17 @@ export async function POST(req: NextRequest) {
       })
     }
 
+    // === Verificar si la cédula está bloqueada ===
+    const bloqueo = await db.variableGlobal.findUnique({
+      where: { clave: `BLOQUEO_${cedulaLimpia}` },
+    })
+    if (bloqueo) {
+      return NextResponse.json(
+        { success: false, error: 'Tu acceso ha sido bloqueado. Contacta al asesor.', codigo: 'BLOQUEADO' },
+        { status: 403 }
+      )
+    }
+
     // === 2. Buscar en tabla Cliente ===
     const cliente = await db.cliente.findUnique({ where: { cedula: cedulaLimpia } })
 
