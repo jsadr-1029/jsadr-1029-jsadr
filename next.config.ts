@@ -24,7 +24,7 @@ const nextConfig: NextConfig = {
   // con su propio límite. Next.js default es 1MB pero no se aplica a routes.ts.
   experimental: {
     serverActions: {
-      bodySizeLimit: '4mb',
+      bodySizeLimit: '25mb',
     },
   },
   // FIX-NEXT16: la clave `eslint` fue eliminada del tipo NextConfig en Next.js 16

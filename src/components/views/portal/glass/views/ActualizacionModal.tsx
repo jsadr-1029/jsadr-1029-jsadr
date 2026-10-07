@@ -59,24 +59,59 @@ export function ActualizacionModal({ open, token, onComplete }: ActualizacionMod
     })()
   }, [open, token])
 
-  const handleFileSelect = (key: PhotoKey, file: File) => {
+  const compressImage = (file: File, maxSize: number = 1280, quality: number = 0.7): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader()
+      reader.onload = () => {
+        const img = new Image()
+        img.onload = () => {
+          let { width, height } = img
+          if (width > maxSize || height > maxSize) {
+            if (width > height) {
+              height = Math.round((height * maxSize) / width)
+              width = maxSize
+            } else {
+              width = Math.round((width * maxSize) / height)
+              height = maxSize
+            }
+          }
+          const canvas = document.createElement('canvas')
+          canvas.width = width
+          canvas.height = height
+          const ctx = canvas.getContext('2d')
+          if (!ctx) {
+            reject(new Error('No se pudo crear el contexto del canvas'))
+            return
+          }
+          ctx.drawImage(img, 0, 0, width, height)
+          const dataUrl = canvas.toDataURL('image/jpeg', quality)
+          resolve(dataUrl)
+        }
+        img.onerror = () => reject(new Error('No se pudo cargar la imagen'))
+        img.src = reader.result as string
+      }
+      reader.onerror = () => reject(new Error('No se pudo leer el archivo'))
+      reader.readAsDataURL(file)
+    })
+  }
+
+  const handleFileSelect = async (key: PhotoKey, file: File) => {
     if (!file) return
     if (!file.type.startsWith('image/')) {
       setError('El archivo debe ser una imagen (JPEG, PNG)')
       return
     }
-    if (file.size > 5 * 1024 * 1024) {
-      setError('La imagen no puede pesar más de 5MB')
+    if (file.size > 10 * 1024 * 1024) {
+      setError('La imagen no puede pesar más de 10MB')
       return
     }
-    const reader = new FileReader()
-    reader.onload = () => {
-      const dataUrl = reader.result as string
+    try {
+      const dataUrl = await compressImage(file, 1280, 0.7)
       setFotos((prev) => ({ ...prev, [key]: dataUrl }))
       setError(null)
+    } catch (e: any) {
+      setError(e.message || 'Error al procesar la imagen')
     }
-    reader.onerror = () => setError('Error al leer la imagen')
-    reader.readAsDataURL(file)
   }
 
   const triggerInput = (key: PhotoKey) => {
