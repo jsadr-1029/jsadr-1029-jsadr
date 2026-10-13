@@ -206,8 +206,8 @@ export async function POST(req: NextRequest) {
     // === Buscar cliente por token de sesión o por cédula ===
     // El token es el tokenSesion guardado en BD al hacer login
     const cliente = cedula
-      ? await db.cliente.findUnique({ where: { cedula: String(cedula).trim() } })
-      : await db.cliente.findFirst({ where: { tokenSesion: token } })
+      ? await db.cliente.findUnique({ where: { cedula: String(cedula).trim() }, include: { categoria: true } })
+      : await db.cliente.findFirst({ where: { tokenSesion: token }, include: { categoria: true } })
 
     if (!cliente) {
       return NextResponse.json(
@@ -268,8 +268,10 @@ export async function POST(req: NextRequest) {
     // Ya no se exige OTP. El cliente confirma su intención en el simulador.
 
     // === Determinar tasa y calcular préstamo ===
+    // REGLA: la tasa siempre es MENSUAL, independiente de la frecuencia.
+    // En BD se guarda tasaInteresAnual = tasaMensual * 12 para compatibilidad.
     let resultado: ResultadoCalculo
-    let tasaUtilizada: number
+    let tasaUtilizada: number // siempre mensual
     let tasaOrigen: string
 
     const fechaDesembolso = primerPagoFecha ? new Date(primerPagoFecha) : new Date()
@@ -277,7 +279,7 @@ export async function POST(req: NextRequest) {
 
     if (cliente.tieneTasaPersonalizada && cliente.tasaPersonalizada != null) {
       // Tasa personalizada mensual fija sobre capital inicial
-      tasaUtilizada = cliente.tasaPersonalizada
+      tasaUtilizada = cliente.tasaPersonalizada // mensual
       tasaOrigen = 'PERSONALIZADA'
       resultado = calcularPrestamoTasaFijaMensual({
         montoPrincipal: valorNum,
@@ -287,11 +289,20 @@ export async function POST(req: NextRequest) {
         fechaDesembolso,
       })
     } else {
-      // Tasa general de Configuracion
-      const tasaAnual = await obtenerTasaGeneralConfig()
+      // Tasa de la categoría del cliente (siempre mensual)
+      const cat = cliente.categoria
+      if (cat) {
+        // tasaInteresAnual en BD = tasaMensual * 12
+        // Convertir a mensual: tasaMensual = tasaInteresAnual / 12
+        tasaUtilizada = Number(cat.tasaInteresAnual) / 12 // mensual
+        tasaOrigen = 'CATEGORIA'
+      } else {
+        // Sin categoría: usar tasa general por defecto (mensual)
+        tasaUtilizada = 20 // 20% mensual
+        tasaOrigen = 'DEFAULT'
+      }
       const plazoMeses = plazoMesesDesdeCuotas(cuotasNum, frecuenciaTyped)
-      tasaUtilizada = tasaAnual
-      tasaOrigen = 'GENERAL'
+      const tasaAnual = tasaUtilizada * 12 // para la función calcularPrestamo
       resultado = calcularPrestamo({
         montoPrincipal: valorNum,
         tasaInteresAnual: tasaAnual,
