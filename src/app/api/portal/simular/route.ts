@@ -26,29 +26,41 @@ export async function POST(req: NextRequest) {
     const flexElegible = cuotasSimuladas >= 4
     const flexActivada = !!flexibilidadFinanciera && flexElegible
 
+    // === Buscar categoría del cliente autenticado ===
     let categoria: Awaited<ReturnType<typeof db.categoriaCliente.findUnique>> = null
     if (categoriaId) {
       categoria = await db.categoriaCliente.findUnique({ where: { id: categoriaId } })
     }
     if (!categoria) {
-      // Si no hay categoría, usar valores por defecto
+      // Buscar la categoría asignada al cliente
+      const clienteConCategoria = await db.cliente.findFirst({
+        where: { tokenSesion: token },
+        include: { categoria: true },
+      })
+      if (clienteConCategoria?.categoria) {
+        categoria = clienteConCategoria.categoria
+      }
+    }
+    if (!categoria) {
+      // Si no hay categoría, usar tasa mensual por defecto del 20%
+      const tasaMensualDefault = 20
       return NextResponse.json({
         simulacion: {
           monto: Number(monto),
-          tasaMensual: 20,
-          tasaAnual: 240,
+          tasaMensual: tasaMensualDefault,
+          tasaAnual: tasaMensualDefault * 12,
           plazoMeses: Number(plazoMeses) || 1,
           frecuencia: frecuencia || 'MENSUAL',
           ...calcularPrestamo({
             monto: Number(monto),
-            tasaMensual: 20,
+            tasaMensual: tasaMensualDefault,
             plazoMeses: Number(plazoMeses) || 1,
             frecuencia: frecuencia || 'MENSUAL',
           }),
         },
         cronograma: generarCronograma({
           monto: Number(monto),
-          tasaMensual: 20,
+          tasaMensual: tasaMensualDefault,
           plazoMeses: Number(plazoMeses) || 1,
           frecuencia: frecuencia || 'MENSUAL',
         }),
