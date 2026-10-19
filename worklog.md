@@ -3168,3 +3168,110 @@ Stage Summary:
 - 📌 Portal conductor: https://jsadr.com.co/portal-conductor-vehiculos → cédula 1020304050
 - 📌 Para OCR real de alta precisión, integrar Google Cloud Vision / AWS Textract / Azure Computer Vision
 - 📌 Para verificación bancaria automática, integrar PSE/Bancolombia API (NO simulada)
+
+---
+Task ID: 27-vehiculos-extension-proveedores-ficha-pdf
+Agent: Super Z (main)
+Task: Ampliar el modulo Gestion de Vehiculos con: (1) agenda/libreta de proveedores con direccion y telefonos, (2) repuestos y mantenimientos con fechas para control de antiguedad, (3) ficha tecnica completa de cada vehiculo con mantenimientos, controles, documentos, (4) PDF descargable con ficha + inventario + contrato + fotos. Sincronizar al 100% con GitHub, Vercel y Neon.
+
+Work Log:
+
+MODELOS PRISMA AGREGADOS (sin alterar existentes):
+- ProveedorVehiculo: agenda de proveedores (nombre, tipo TALLER/REPUESTERO/SEGURO/GASOLINERA/OTRO,
+  documento NIT/CC, contacto, telefono, telefono2, email, direccion, ciudad, barrio, notas, activo)
+- InventarioVehiculo: items de entrega del vehiculo (nombre, descripcion, cantidad, estado
+  NUEVO/BUENO/REGULAR/MALO, fotoUrl, fechas de ingreso/entrega/devolucion)
+- DocumentoVehiculo: documentos del vehiculo (tipo SOAT/TECNOMECANICA/TARJETA_PROPIEDAD/SEGURO/
+  CONTRATO/OTRO, numero, fechas emision/vencimiento, entidadEmisora, archivoUrl)
+- Vehiculo: agregadas relaciones inversas `inventario` y `documentos`
+- MantenimientoVehiculo, RepuestoInstalado, GastoVehiculo: agregado `proveedorRefId` que
+  vincula opcionalmente con un ProveedorVehiculo de la agenda (el campo `proveedor` String
+  original se conserva por compatibilidad)
+
+API ROUTES NUEVAS:
+- GET/POST /api/vehiculos/proveedores — CRUD agenda proveedores (con busqueda q= y filtro tipo=)
+- PUT/DELETE /api/vehiculos/proveedores/[id] — editar/desactivar
+- GET/POST /api/vehiculos/vehiculos/[id]/inventario — items de inventario
+- PUT/DELETE /api/vehiculos/vehiculos/[id]/inventario/[itemId] — editar/eliminar item
+- GET/POST /api/vehiculos/vehiculos/[id]/documentos — documentos del vehiculo
+- GET /api/vehiculos/vehiculos/[id]/ficha-tecnica — informacion consolidada (vehiculo +
+  documentos con estado dinamico + inventario + contratos + mantenimientos + repuestos
+  activos/retirados + alertas + KPIs ingresos/gastos/rentabilidad)
+- GET /api/vehiculos/vehiculos/[id]/pdf-entrega — genera PDF completo con PDFKit
+  Tipos: ?tipo=completo (default) | ficha | inventario
+  PDF incluye: datos del vehiculo + foto, inventario en tabla, documentos con fechas,
+  contrato vigente con datos del conductor, historial de mantenimientos con repuestos,
+  firmas de entrega y recepcion, footer con paginacion
+
+FRONTEND:
+- ProveedoresPanel.tsx: agenda completa con tarjetas por proveedor (telefono, email,
+  direccion, ciudad, _count de mantenimientos/gastos), filtros por tipo y busqueda,
+  modal CRUD con todos los campos. Icono BookUser.
+- FichaTecnicaVehiculo.tsx: modal grande (max-w-5xl) con 6 tabs:
+  * Resumen: KPIs (km, ingresos, gastos, rentabilidad) + foto + datos + alertas
+  * Inventario: lista de items con boton agregar/eliminar, estados con colores
+  * Documentos: tarjetas con estado VIGENTE/POR_VENCER/VENCIDO y dias para vencer
+  * Mantenimientos: historial con repuestos y proxima revision
+  * Repuestos: activos (vida util en curso) + retirados (vida util calculada)
+  * Contratos: historico + boton PDF entrega por contrato
+  Botones de descarga: 'Solo ficha' / 'Solo inventario' / 'PDF completo'
+- VehiculosPanel.tsx: agregado boton 'Ficha' por cada vehiculo que abre el modal
+- MantenimientosPanel.tsx: agregado selector de proveedor de la agenda + texto libre
+- VehiculosView.tsx: agregado tab 'Proveedores' (10 tabs total ahora)
+
+CARACTERISTICAS DESTACADAS:
+- Calculo automatico de estado de documentos: VIGENTE (>15 dias) | POR_VENCER (<15 dias) |
+  VENCIDO (<0 dias), con diasParaVencer mostrado en UI
+- Control de antiguedad de repuestos: calcula diasEnUso y kmRecorridos en runtime para
+  repuestos activos (instalados, no retirados)
+- Vinculacion opcional de proveedores: cada mantenimiento/repuesto/gasto puede vincularse
+  a un proveedor de la agenda (proveedorRefId) sin perder el campo texto libre (proveedor)
+- PDF de entrega profesional: incluye foto del vehiculo, inventario en tabla, documentos,
+  contrato vigente, mantenimientos historicos, firmas y footer con paginacion
+- Auditoria inmutable: cada operacion sobre proveedores/inventario/documentos queda
+  registrada en AuditoriaVehiculo
+
+VERIFICACION EN PRODUCCION:
+- POST /api/vehiculos/portal-conductor/login cedula=1020304050 → success:true con token
+- GET /api/vehiculos/proveedores sin JWT → HTTP 401 (correcto)
+- GET /api/vehiculos/vehiculos/[id]/ficha-tecnica sin JWT → HTTP 401 (correcto)
+- Deploy exitoso en jsadr-1029-jsadr (auto-deploy por GitHub integration)
+- Schema sincronizado con Neon (3 modelos nuevos + relaciones inversas)
+
+DATOS DE PRUEBA (scripts/_seed-vehiculos-extension.cjs):
+- 4 proveedores:
+  * Taller Auto-Plus Medellin (TALLER, NIT 901234567-8, Andres Martinez)
+  * Repuestos El motorista (REPUESTERO, NIT 800987654-3, Maria Lopez)
+  * Seguros Bolivar El Poblado (SEGURO, Carolina Restrepo)
+  * Estacion Terpel Las Palmas (GASOLINERA, Pedro Gomez)
+- 12 items de inventario para ABC123:
+  * Llave de contacto + llave de repuesto
+  * Control de alarma x2
+  * Gato hidraulico + llave de cruz
+  * Llanta de repuesto
+  * Triangulo de seguridad x2
+  * Botiquin + extintor
+  * Manual del propietario + carpeta de documentos
+  * Kit de herramientas (10 pzs)
+- 4 documentos: SOAT, tecnomecanica, tarjeta propiedad, seguro todo riesgo
+- 1 mantenimiento vinculado a Taller Auto-Plus
+- 1 gasto vinculado a Estacion Terpel (lavada $45.000)
+
+Stage Summary:
+- ✅ GitHub: commit ccbf456 en origin/main
+- ✅ Vercel: deploy exitoso (auto-deploy por push a main)
+- ✅ Neon: schema migrado (3 modelos nuevos: ProveedorVehiculo, InventarioVehiculo, DocumentoVehiculo)
+- ✅ Prisma client regenerado
+- ✅ ProveedoresPanel funcional: agenda con tarjetas, filtros y CRUD
+- ✅ FichaTecnicaVehiculo: modal con 6 tabs (resumen, inventario, documentos, mantenimientos,
+  repuestos, contratos) + botones de descarga PDF
+- ✅ PDF de entrega: genera documento completo con foto, inventario, documentos, contrato,
+  mantenimientos y firmas
+- ✅ Inventario editable desde la ficha tecnica
+- ✅ Mantenimientos vinculables a proveedores de la agenda
+- 📌 Acceso: https://jsadr.com.co → login con cedula 95102913940 → sidebar 'Gestion de
+  Vehiculos' → tab 'Vehiculos' → boton 'Ficha' en cualquier vehiculo
+- 📌 Vehiculo de prueba: ABC123 (Chevrolet Spark 2020) tiene 12 items de inventario, 4
+  documentos y mantenimiento vinculado a Taller Auto-Plus
+- 📌 Para descargar PDF: abrir ficha del vehiculo → boton 'PDF completo' (o 'Solo ficha'
+  o 'Solo inventario')
