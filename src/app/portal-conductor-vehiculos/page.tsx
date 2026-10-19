@@ -28,6 +28,12 @@ export default function PortalConductorVehiculosPage() {
   const [cuentasPago, setCuentasPago] = useState<any[]>([])
   const [codigosQR, setCodigosQR] = useState<any[]>([])
   const [recibos, setRecibos] = useState<any[]>([])
+  const [semanas, setSemanas] = useState<any[]>([])
+  const [recordatorio, setRecordatorio] = useState<string>('')
+  // Extensión 4: tipo de pago (DIA o SEMANA)
+  const [tipoPago, setTipoPago] = useState<'DIA' | 'SEMANA'>('DIA')
+  const [diaSeleccionado, setDiaSeleccionado] = useState<string>('') // obligacionId
+  const [semanaSeleccionada, setSemanaSeleccionada] = useState<number | null>(null)
 
   // Cargar token del localStorage
   useEffect(() => {
@@ -78,11 +84,12 @@ export default function PortalConductorVehiculosPage() {
     setLoadingData(true)
     try {
       const headers = { 'x-portal-token': token! }
-      const [resEstado, resCuentas, resQR, resRecibos] = await Promise.all([
+      const [resEstado, resCuentas, resQR, resRecibos, resSemanas] = await Promise.all([
         fetch('/api/vehiculos/portal-conductor/estado', { headers }),
         fetch('/api/vehiculos/portal-conductor/cuentas-pago', { headers }),
         fetch('/api/vehiculos/portal-conductor/codigos-qr', { headers }),
         fetch('/api/vehiculos/portal-conductor/recibos', { headers }),
+        fetch('/api/vehiculos/portal-conductor/semanas', { headers }),
       ])
       const r = await resEstado.json()
       if (r.success) {
@@ -99,6 +106,11 @@ export default function PortalConductorVehiculosPage() {
       if (rq.success) setCodigosQR(rq.data || [])
       const rr = await resRecibos.json()
       if (rr.success) setRecibos(rr.data || [])
+      const rs = await resSemanas.json()
+      if (rs.success) {
+        setSemanas(rs.data?.semanas || [])
+        setRecordatorio(rs.data?.recordatorio || '')
+      }
     } catch (e) {}
     setLoadingData(false)
   }
@@ -131,16 +143,43 @@ export default function PortalConductorVehiculosPage() {
       alert('Monto y fecha son obligatorios')
       return
     }
+    // Validar que haya un día seleccionado
+    if (tipoPago === 'DIA' && !diaSeleccionado) {
+      alert('Selecciona el día que vas a pagar')
+      return
+    }
+    if (tipoPago === 'SEMANA' && !semanaSeleccionada) {
+      alert('Selecciona la semana a pagar')
+      return
+    }
+    // Recoger los IDs de los días de la semana
+    let diasIncluidos: string[] = []
+    if (tipoPago === 'SEMANA') {
+      const sem = semanas.find(s => s.semana === semanaSeleccionada)
+      if (sem) {
+        diasIncluidos = sem.dias.map((d: any) => d.id)
+      }
+    }
     try {
+      const body = {
+        ...pagoForm,
+        tipoReporte: tipoPago,
+        obligacionId: tipoPago === 'DIA' ? diaSeleccionado : null,
+        diasIncluidos: tipoPago === 'SEMANA' ? diasIncluidos : null,
+        semanaNumero: tipoPago === 'SEMANA' ? semanaSeleccionada : null,
+      }
       const res = await fetch('/api/vehiculos/portal-conductor/pagos', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'x-portal-token': token! },
-        body: JSON.stringify(pagoForm),
+        body: JSON.stringify(body),
       })
       const r = await res.json()
       if (r.success) {
         setPagoResult(r)
         setPagoModal(false)
+        setDiaSeleccionado('')
+        setSemanaSeleccionada(null)
+        setTipoPago('DIA')
         cargarEstado()
       } else {
         alert(r.error || 'Error')
@@ -148,6 +187,22 @@ export default function PortalConductorVehiculosPage() {
     } catch (e: any) {
       alert(e.message)
     }
+  }
+
+  // Seleccionar día individual
+  const seleccionarDia = (obligId: string, monto: number) => {
+    setTipoPago('DIA')
+    setDiaSeleccionado(obligId)
+    setSemanaSeleccionada(null)
+    setPagoForm({ ...pagoForm, monto: monto.toString() })
+  }
+
+  // Seleccionar semana completa
+  const seleccionarSemana = (semanaNum: number, total: number) => {
+    setTipoPago('SEMANA')
+    setSemanaSeleccionada(semanaNum)
+    setDiaSeleccionado('')
+    setPagoForm({ ...pagoForm, monto: total.toString() })
   }
 
   // === LOGIN SCREEN ===
@@ -294,9 +349,117 @@ export default function PortalConductorVehiculosPage() {
           </CardContent></Card>
         </div>
 
+        {/* RECORDATORIO PAGO SÁBADO + MULTA $50.000 */}
+        {recordatorio && (
+          <div className="p-3 bg-amber-50 border-2 border-amber-300 rounded-lg text-sm text-amber-900 flex items-start gap-2">
+            <AlertTriangle className="w-4 h-4 mt-0.5 text-amber-600 flex-shrink-0" />
+            <div>
+              <div className="font-semibold">Recordatorio de pago semanal</div>
+              <div className="text-xs mt-0.5">{recordatorio}</div>
+            </div>
+          </div>
+        )}
+
+        {/* SEMANAS Y PAGO POR DÍA O SEMANA */}
+        {semanas.length > 0 && (
+          <Card className="border-blue-300">
+            <CardHeader className="pb-2"><CardTitle className="text-base flex items-center gap-2">
+              <Calendar className="w-4 h-4 text-blue-600" /> Mis semanas de pago
+            </CardTitle></CardHeader>
+            <CardContent className="space-y-3">
+              <p className="text-xs text-muted-foreground mb-2">
+                Puedes pagar <strong>un día específico</strong> o <strong>toda la semana</strong> (L-S).
+                Recuerda que los pagos deben reportarse <strong>todos los sábados</strong>. Si no pagas
+                antes del sábado, se cobrarán <strong>$50.000 de multa</strong>.
+              </p>
+              {semanas.map((sem: any) => {
+                const isSelected = semanaSeleccionada === sem.semana
+                return (
+                  <div
+                    key={sem.semana}
+                    className={`p-3 rounded border-2 transition-colors ${
+                      sem.estado === 'PAGADA' ? 'border-green-300 bg-green-50' :
+                      sem.estado === 'ATRASADA' ? 'border-red-400 bg-red-50' :
+                      sem.estado === 'PARCIAL' ? 'border-yellow-300 bg-yellow-50' :
+                      isSelected ? 'border-blue-500 bg-blue-50' :
+                      'border-gray-200'
+                    }`}
+                  >
+                    <div className="flex justify-between items-start mb-2">
+                      <div>
+                        <div className="font-bold">Semana {sem.semana}</div>
+                        <div className="text-xs text-muted-foreground">
+                          {sem.dias?.[0] && `Desde ${new Date(sem.dias[0].fechaVencimiento).toLocaleDateString('es-CO', { weekday: 'short', day: 'numeric', month: 'short' })}`}
+                          {sem.dias?.[5] && ` hasta ${new Date(sem.dias[5].fechaVencimiento).toLocaleDateString('es-CO', { weekday: 'short', day: 'numeric', month: 'short' })}`}
+                        </div>
+                      </div>
+                      <div className="flex flex-col items-end gap-1">
+                        <span className={`text-xs px-2 py-0.5 rounded font-medium ${
+                          sem.estado === 'PAGADA' ? 'bg-green-200 text-green-800' :
+                          sem.estado === 'ATRASADA' ? 'bg-red-200 text-red-800' :
+                          sem.estado === 'PARCIAL' ? 'bg-yellow-200 text-yellow-800' :
+                          'bg-blue-100 text-blue-800'
+                        }`}>{sem.estado}</span>
+                        <div className="text-lg font-bold">{formatCOP(sem.totalPendiente)}</div>
+                      </div>
+                    </div>
+
+                    {/* Mensaje de alerta de la semana */}
+                    <div className={`text-xs mt-1 p-2 rounded ${
+                      sem.estado === 'ATRASADA' ? 'bg-red-100 text-red-800' :
+                      sem.estado === 'PARCIAL' ? 'bg-yellow-100 text-yellow-800' :
+                      sem.estado === 'PAGADA' ? 'bg-green-100 text-green-800' :
+                      'bg-blue-50 text-blue-800'
+                    }`}>{sem.mensaje}</div>
+
+                    {/* Días de la semana */}
+                    <div className="grid grid-cols-6 gap-1 mt-2">
+                      {sem.dias.map((d: any) => {
+                        const isDiaSel = diaSeleccionado === d.id
+                        return (
+                          <button
+                            key={d.id}
+                            onClick={() => d.estado === 'PAGADA' ? null : seleccionarDia(d.id, d.montoPendiente)}
+                            disabled={d.estado === 'PAGADA'}
+                            className={`text-xs p-2 rounded border transition-all ${
+                              d.estado === 'PAGADA' ? 'bg-green-100 text-green-700 border-green-300 cursor-not-allowed' :
+                              isDiaSel ? 'bg-blue-600 text-white border-blue-700' :
+                              d.esHoy ? 'bg-blue-100 text-blue-800 border-blue-400 ring-1 ring-blue-300' :
+                              'bg-white border-gray-300 hover:border-blue-400'
+                            }`}
+                          >
+                            <div className="font-medium">{d.diaSemana.slice(0, 3)}</div>
+                            <div>{new Date(d.fechaVencimiento).getDate()}</div>
+                            <div className="text-[10px]">{formatCOP(d.montoPendiente).replace('$', '').replace(/\s/g, '')}</div>
+                          </button>
+                        )
+                      })}
+                    </div>
+
+                    {/* Botón pagar semana */}
+                    {sem.estado !== 'PAGADA' && (
+                      <Button
+                        size="sm"
+                        variant={isSelected ? 'default' : 'outline'}
+                        className="w-full mt-2"
+                        onClick={() => seleccionarSemana(sem.semana, sem.totalPendiente)}
+                      >
+                        <CreditCard className="w-3 h-3 mr-1" />
+                        {isSelected ? '✓ Semana seleccionada' : `Pagar semana completa (${formatCOP(sem.totalPendiente)})`}
+                      </Button>
+                    )}
+                  </div>
+                )
+              })}
+            </CardContent>
+          </Card>
+        )}
+
         {/* Botón reportar pago */}
         <Button onClick={() => setPagoModal(true)} className="w-full" size="lg">
           <CreditCard className="w-5 h-5 mr-2" /> Reportar pago
+          {tipoPago === 'DIA' && diaSeleccionado && ' (día seleccionado)'}
+          {tipoPago === 'SEMANA' && semanaSeleccionada && ` (semana ${semanaSeleccionada})`}
         </Button>
 
         {/* CUENTAS DE PAGO */}
@@ -541,20 +704,31 @@ export default function PortalConductorVehiculosPage() {
         <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader><DialogTitle>Reportar pago</DialogTitle></DialogHeader>
           <div className="grid grid-cols-2 gap-3">
-            <div className="col-span-2">
-              <Label>Obligación (opcional)</Label>
-              <Select value={pagoForm.obligacionId || 'NINGUNA'} onValueChange={v => setPagoForm({ ...pagoForm, obligacionId: v === 'NINGUNA' ? '' : v })}>
-                <SelectTrigger><SelectValue placeholder="Sin obligación específica" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="NINGUNA">Abono general (sin cuota específica)</SelectItem>
-                  {(data?.proximosVencimientos || []).map((o: any) => (
-                    <SelectItem key={o.id} value={o.id}>
-                      Cuota #{o.numeroCuota} - {formatCOP(o.montoPendiente)} (vence {formatDate(o.fechaVencimiento)})
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+            {/* Resumen de lo seleccionado */}
+            <div className="col-span-2 p-3 bg-blue-50 rounded border border-blue-200 text-sm">
+              {tipoPago === 'DIA' && diaSeleccionado ? (
+                <div>
+                  <strong>📅 Pago por día:</strong> Has seleccionado un día específico.
+                  {(() => {
+                    const oblig = semanas.flatMap(s => s.dias).find((d: any) => d.id === diaSeleccionado)
+                    if (oblig) return <div className="text-xs mt-1">Día: {oblig.diaSemana} {new Date(oblig.fechaVencimiento).toLocaleDateString('es-CO')} - Monto: {formatCOP(oblig.montoPendiente)}</div>
+                    return null
+                  })()}
+                </div>
+              ) : tipoPago === 'SEMANA' && semanaSeleccionada ? (
+                <div>
+                  <strong>🗓️ Pago por semana:</strong> Has seleccionado la semana completa (L-S).
+                  {(() => {
+                    const sem = semanas.find((s: any) => s.semana === semanaSeleccionada)
+                    if (sem) return <div className="text-xs mt-1">Semana {sem.semana} - Total: {formatCOP(sem.totalPendiente)} {sem.multaAtrasoSemana > 0 && <span className="text-red-700 font-medium"> (incluye $50.000 de multa por atraso)</span>}</div>
+                    return null
+                  })()}
+                </div>
+              ) : (
+                <div className="text-yellow-800">⚠️ Primero selecciona un día o una semana arriba.</div>
+              )}
             </div>
+
             <div>
               <Label>Monto *</Label>
               <Input type="number" value={pagoForm.monto} onChange={e => setPagoForm({ ...pagoForm, monto: e.target.value })} />

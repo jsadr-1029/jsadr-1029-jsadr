@@ -2212,11 +2212,22 @@ model PagoVehiculo {
   // Cuenta de pago utilizada (asignada al contrato)
   cuentaPagoId    String?
   cuentaPago      CuentaPagoVehiculo? @relation("PagoCuentaPago", fields: [cuentaPagoId], references: [id])
+  // Extensión 4: tipo de pago (DIA o SEMANA)
+  // DIA: paga un día específico (monto = tarifa diaria)
+  // SEMANA: paga toda la semana L-S (monto = tarifa × 6)
+  tipoReporte     String   @default("DIA") // DIA | SEMANA
+  diasIncluidos   String?  // JSON array con los IDs de obligaciones que cubre (vacío si DIA)
+  // Semana a la que corresponde (1, 2, 3, ...) — calculado desde fechaInicio contrato
+  semanaNumero    Int?
+  // Multa aplicada por pago tardío (día 6 sin pagar → $50.000)
+  multaAplicada   Float    @default(0)
 
   @@index([contratoId])
   @@index([conductorId])
   @@index([estado])
   @@index([fechaPago])
+  @@index([tipoReporte])
+  @@index([semanaNumero])
 }
 
 // --- COMPROBANTE (archivos adjuntos al pago) ---

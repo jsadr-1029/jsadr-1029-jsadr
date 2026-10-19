@@ -35,6 +35,7 @@ export async function POST(req: NextRequest) {
 
     let actualizadas = 0
     const alertasGeneradas: any[] = []
+    const semanasAtrasadasAplicadas = new Set<string>() // contratoId-semanaNum
 
     for (const oblig of obligaciones) {
       const contrato = oblig.contrato
@@ -51,7 +52,25 @@ export async function POST(req: NextRequest) {
       const diasRetraso = Math.max(0, diasRetrasoCrudo - diasGracia)
 
       // Multa = días de retraso × multaDiaria
-      const multa = diasRetraso * multaDiaria
+      let multa = diasRetraso * multaDiaria
+
+      // === REGLA: Si la semana ya venció (pasó el sábado) sin pagar completa,
+      // se aplica multa adicional de $50.000 a la última obligación de esa semana ===
+      const dia = oblig.fechaVencimiento.getDay() // 0=Dom, 6=Sab
+      if (dia === 6 && diasRetraso > 0) {
+        // Es sábado y ya venció → aplicar multa de $50.000 (una sola vez por semana)
+        const lunes = new Date(oblig.fechaVencimiento)
+        lunes.setDate(lunes.getDate() - 5)
+        const diffMs = lunes.getTime() - contrato.fechaInicio.getTime()
+        const diffDias = Math.floor(diffMs / (1000 * 60 * 60 * 24))
+        const semanaNum = Math.floor(diffDias / 7) + 1
+        const key = `${contrato.id}-${semanaNum}`
+        if (!semanasAtrasadasAplicadas.has(key)) {
+          semanasAtrasadasAplicadas.add(key)
+          multa += 50000 // multa fija $50.000 por semana atrasada
+        }
+      }
+
       const montoPendienteFinal = (oblig.monto + multa) - oblig.montoPagado
 
       const nuevoEstado = oblig.montoPagado > 0 ? 'PARCIAL' : (diasRetraso > 0 ? 'VENCIDA' : 'PENDIENTE')

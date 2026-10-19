@@ -80,13 +80,75 @@ export async function POST(req: NextRequest) {
       obligacionId, monto, fechaPago, metodo,
       banco, referencia, destinatario,
       comprobanteUrl, comprobanteTipo, ocrTexto,
+      // Extensión 4: tipo de pago (DIA o SEMANA)
+      tipoReporte, diasIncluidos, semanaNumero,
     } = body
+
+    const tipo = tipoReporte || 'DIA'
 
     if (!monto || !fechaPago) {
       return NextResponse.json(
         { success: false, error: 'monto y fechaPago son obligatorios' },
         { status: 400 }
       )
+    }
+
+    // Validar que los días incluidos pertenezcan al contrato y no estén ya pagados
+    let diasObligacionIds: string[] = []
+    if (tipo === 'SEMANA' && Array.isArray(diasIncluidos) && diasIncluidos.length > 0) {
+      // Verificar que esas obligaciones existan y pertenezcan al contrato
+      const obligs = await db.obligacionVehiculo.findMany({
+        where: {
+          id: { in: diasIncluidos },
+          contratoId: contrato.id,
+        },
+      })
+      if (obligs.length !== diasIncluidos.length) {
+        return NextResponse.json({
+          success: false,
+          error: 'Algunas obligaciones seleccionadas no pertenecen a tu contrato o no existen',
+        }, { status: 400 })
+      }
+      // Verificar que no estén ya pagadas
+      const yaPagadas = obligs.filter(o => o.estado === 'PAGADA')
+      if (yaPagadas.length > 0) {
+        return NextResponse.json({
+          success: false,
+          error: `Algunas obligaciones ya están pagadas: ${yaPagadas.map(o => 'cuota #' + o.numeroCuota).join(', ')}`,
+        }, { status: 400 })
+      }
+      diasObligacionIds = diasIncluidos
+    } else if (tipo === 'DIA' && obligacionId) {
+      diasObligacionIds = [obligacionId]
+    }
+
+    // Calcular multa aplicada si la semana ya venció (pago después del día 6)
+    let multaAplicada = 0
+    if (semanaNumero) {
+      // Buscar el sábado de esa semana
+      const obligsSemana = await db.obligacionVehiculo.findMany({
+        where: { contratoId: contrato.id },
+        orderBy: { fechaVencimiento: 'asc' },
+      })
+      // Calcular semanaNumero de cada obligación y buscar la del sábado
+      const ahora = new Date()
+      for (const o of obligsSemana) {
+        const dia = o.fechaVencimiento.getDay()
+        if (dia === 6) { // sábado
+          const lunes = new Date(o.fechaVencimiento)
+          lunes.setDate(lunes.getDate() - 5)
+          const diffMs = lunes.getTime() - contrato.fechaInicio.getTime()
+          const diffDias = Math.floor(diffMs / (1000 * 60 * 60 * 24))
+          const semanaNum = Math.floor(diffDias / 7) + 1
+          if (semanaNum === semanaNumero) {
+            const diasDesdeSabado = Math.floor((ahora.getTime() - o.fechaVencimiento.getTime()) / (1000 * 60 * 60 * 24))
+            if (diasDesdeSabado > 0) {
+              multaAplicada = 50000 // multa fija $50.000
+            }
+            break
+          }
+        }
+      }
     }
 
     // Verificar duplicados
@@ -115,7 +177,7 @@ export async function POST(req: NextRequest) {
     const pago = await db.pagoVehiculo.create({
       data: {
         contratoId: contrato.id,
-        obligacionId: obligacionId || null,
+        obligacionId: (tipo === 'DIA' && obligacionId) ? obligacionId : null,
         conductorId: conductor.id,
         monto: parseFloat(monto),
         fechaPago: new Date(fechaPago),
@@ -131,8 +193,27 @@ export async function POST(req: NextRequest) {
         ocrReferencia: ocrResult?.referencia || null,
         ocrDestinatario: ocrResult?.destinatario || null,
         creadoPor: 'CONDUCTOR',
+        // Extensión 4: campos de tipo de pago
+        tipoReporte: tipo,
+        diasIncluidos: diasObligacionIds.length > 0 ? JSON.stringify(diasObligacionIds) : null,
+        semanaNumero: semanaNumero || null,
+        multaAplicada,
       },
     })
+
+    // Si es pago de semana, marcar las obligaciones como EN_REVISION (parcialmente pagadas)
+    // para que no aparezcan como disponibles para otro pago
+    if (tipo === 'SEMANA' && diasObligacionIds.length > 0) {
+      for (const obligId of diasObligacionIds) {
+        const oblig = await db.obligacionVehiculo.findUnique({ where: { id: obligId } })
+        if (oblig && oblig.estado === 'PENDIENTE') {
+          await db.obligacionVehiculo.update({
+            where: { id: obligId },
+            data: { estado: 'PARCIAL' }, // se completará cuando se apruebe el pago
+          })
+        }
+      }
+    }
 
     // Crear comprobante
     if (comprobanteUrl) {
@@ -159,7 +240,7 @@ export async function POST(req: NextRequest) {
         entidad: 'PAGO',
         entidadId: pago.id,
         accion: 'CREAR',
-        descripcion: `Pago de $${parseFloat(monto).toLocaleString('es-CO')} reportado por conductor ${conductor.nombre} (${conductor.cedula}). Estado: PENDIENTE`,
+        descripcion: `Pago de $${parseFloat(monto).toLocaleString('es-CO')} reportado por conductor ${conductor.nombre} (${conductor.cedula}). Tipo: ${tipo}${semanaNumero ? `, Semana #${semanaNumero}` : ''}${multaAplicada > 0 ? `, Multa por atraso: $${multaAplicada.toLocaleString('es-CO')}` : ''}. Estado: PENDIENTE`,
         datosNuevos: JSON.stringify(pago),
         usuarioId: conductor.id,
         usuarioNombre: `${conductor.nombre} (CONDUCTOR)`,
@@ -169,7 +250,10 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       success: true,
       data: pago,
-      message: 'Pago reportado. Pendiente de verificación por el administrador.',
+      message: multaAplicada > 0
+        ? `Pago reportado (${tipo}). Incluye multa de $${multaAplicada.toLocaleString('es-CO')} por pago fuera del sábado. Pendiente de verificación por el administrador.`
+        : `Pago reportado (${tipo}). Pendiente de verificación por el administrador.`,
+      multaAplicada,
     })
   } catch (error: any) {
     console.error('[vehiculos/portal-conductor/pagos] Error:', error)
