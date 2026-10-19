@@ -76,6 +76,7 @@ function isPublicEndpoint(pathname: string): boolean {
     pathname.startsWith('/api/portal/') || // portal usa x-portal-token
     pathname.startsWith('/api/admin/portal/auth') || // login del portal admin companion (P_jsadr / 731649)
     pathname.startsWith('/api/juridico/portal/auth') || // login del portal jurídico (abogados con cédula + clave)
+    pathname.startsWith('/api/vehiculos/portal-conductor/') || // login del portal conductor (cédula + token en header)
     pathname.startsWith('/api/chat/iniciar') || // inicio de chat con cédula+teléfono (sin token previo)
     pathname.startsWith('/api/chat/otp') || // solicitud/verificación OTP del chat
     pathname === '/api/simulador' || // simulador público

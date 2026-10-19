@@ -26,6 +26,7 @@ import {
   Landmark as CajasIcon,
   Calculator,
   Megaphone,
+  Car,
   type LucideIcon,
 } from 'lucide-react'
 import {
@@ -94,6 +95,7 @@ const moreItems: NavItem[] = [
   { key: 'admin', label: 'Administración', icon: Settings },
   { key: 'exportar', label: 'Reportes', icon: BarChart3 },
   { key: 'notificaciones', label: 'Notificaciones', icon: Bell },
+  { key: 'vehiculos', label: 'Gestión de Vehículos', icon: Car },
 ]
 
 /**

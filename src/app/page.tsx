@@ -51,6 +51,7 @@ const CentroComunicacionesView = dynamic(() => import('@/components/views/Centro
 const CentroConfiguracionView = dynamic(() => import('@/components/views/CentroConfiguracionView').then(m => ({ default: m.CentroConfiguracionView })), { ssr: false })
 const BuzonSolicitudesView = dynamic(() => import('@/components/views/BuzonSolicitudesView').then(m => ({ default: m.BuzonSolicitudesView })), { ssr: false })
 const PortalAdminView = dynamic(() => import('@/components/views/PortalAdminView').then(m => ({ default: m.PortalAdminView })), { ssr: false })
+const VehiculosView = dynamic(() => import('@/components/views/VehiculosView').then(m => ({ default: m.VehiculosView })), { ssr: false })
 
 export type ViewKey =
   | 'dashboard'
@@ -76,6 +77,7 @@ export type ViewKey =
   | 'manual'
   | 'automatizacion'
   | 'buzon-solicitudes'
+  | 'vehiculos'
 
 export default function Home() {
   const [view, setView] = useState<ViewKey>('prestamos')
@@ -318,6 +320,7 @@ export default function Home() {
                 {view === 'buzon-solicitudes' && (
                   <BuzonSolicitudesView onConvertir={convertirSolicitudWeb} />
                 )}
+                {view === 'vehiculos' && <VehiculosView />}
               </>
             )}
           </div>

@@ -1999,3 +1999,377 @@ model AlertaFinanciera {
   @@index([ambito, atendida])
   @@index([createdAt])
 }
+
+// =====================================================
+// === MÓDULO: GESTIÓN DE VEHÍCULOS (Arrendamiento) ===
+// Creado 2026-10-20 — Sistema integral de arrendamiento de vehículos
+// NO modifica modelos existentes. Integra con Usuario (admin) y
+// permite login del conductor por cédula (sin reemplazar auth segura).
+// =====================================================
+
+// --- VEHÍCULO ---
+model Vehiculo {
+  id              String   @id @default(cuid())
+  placa           String   @unique
+  marca           String
+  modelo          String
+  anio            Int?
+  color           String?
+  kilometraje     Int      @default(0)
+  vin             String?  // número de chasis
+  motor           String?  // número de motor
+  soatVence       DateTime?
+  tecnomecanicaVence DateTime?
+  fechaCompra     DateTime?
+  valorCompra     Float?
+  fotoUrl         String?
+  estado          String   @default("DISPONIBLE") // DISPONIBLE | ASIGNADO | MANTENIMIENTO | INACTIVO
+  notas           String?
+  activo          Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  contratos       ContratoVehiculo[]
+  mantenimientos  MantenimientoVehiculo[]
+  repuestosInstalados RepuestoInstalado[]
+  gastos          GastoVehiculo[]
+  alertas         AlertaVehiculo[]
+  obligaciones    ObligacionVehiculo[] // obligaciones vinculadas al vehículo (para reporte rentabilidad)
+
+  @@index([estado])
+  @@index([activo])
+}
+
+// --- CONDUCTOR ---
+// Conductor del vehículo. Vinculado opcionalmente a Cliente (si ya existe
+// en el sistema como cliente de microfinanzas). Tiene licencia, documentos
+// y credenciales de portal propias.
+model ConductorVehiculo {
+  id              String   @id @default(cuid())
+  cedula          String   @unique
+  nombre          String
+  telefono        String
+  email           String?
+  direccion       String?
+  ciudad          String?
+  licenciaNumero  String
+  licenciaCategoria String? // A1 | A2 | B1 | B2 | B3 | C1 | C2 | C3
+  licenciaVence   DateTime?
+  fotoUrl         String?
+  // Documentos (array JSON: [{tipo, url, fechaSubida}])
+  documentos      String?  // JSON string
+  // Vinculación con Cliente existente (opcional)
+  clienteId       String?  // si el conductor también es cliente de microfinanzas
+  // Auth del portal conductor — login por cédula + token de sesión
+  // El conductor ingresa con su cédula; si existe un contrato activo,
+  // el sistema le envía/valida OTP al teléfono registrado.
+  otpHash         String?
+  otpExpira       DateTime?
+  tokenSesion     String?
+  tokenExpira     DateTime?
+  intentosFallidos Int @default(0)
+  bloqueadoHasta  DateTime?
+  ultimoAcceso    DateTime?
+  activo          Boolean  @default(true)
+  notas           String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  contratos       ContratoVehiculo[]
+  pagosReportados PagoVehiculo[]
+
+  @@index([cedula])
+  @@index([activo])
+}
+
+// --- CONTRATO DE ARRENDAMIENTO ---
+model ContratoVehiculo {
+  id              String   @id @default(cuid())
+  numeroContrato  String   @unique
+  vehiculoId      String
+  conductorId     String
+  // Fechas
+  fechaInicio     DateTime
+  fechaFin        DateTime?
+  estado          String   @default("ACTIVO") // BORRADOR | ACTIVO | SUSPENDIDO | FINALIZADO | CANCELADO
+  // Tarifa
+  modalidadPago   String   // DIARIO | SEMANAL | QUINCENAL | MENSUAL | PERSONALIZADO
+  tarifa          Float    // tarifa por periodo (según modalidad)
+  diasGracia      Int      @default(0) // días de gracia antes de mora
+  multaDiaria     Float    @default(0) // multa contractual por día de retraso
+  deposito        Float    @default(0)
+  // Renovación anticipada (opcional)
+  renovacionAnticipada Boolean @default(false)
+  valorRenovacionAnticipada Float? @default(9900)
+  // Documentos del contrato
+  contratoPdfUrl  String?
+  // Auditoría
+  creadoPor       String
+  modificadoPor   String?
+  motivoCancelacion String?
+  fechaCancelacion DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  vehiculo        Vehiculo @relation(fields: [vehiculoId], references: [id])
+  conductor       ConductorVehiculo @relation(fields: [conductorId], references: [id])
+  obligaciones    ObligacionVehiculo[]
+  pagos           PagoVehiculo[]
+  mantenimientos  MantenimientoVehiculo[]
+
+  @@index([vehiculoId])
+  @@index([conductorId])
+  @@index([estado])
+  @@index([fechaInicio])
+}
+
+// --- OBLIGACIÓN (cuota generada automáticamente) ---
+// Generada por el sistema según modalidadPago del contrato.
+// Una obligación = un periodo facturado. Cuando se paga, estado = PAGADA.
+model ObligacionVehiculo {
+  id              String   @id @default(cuid())
+  contratoId      String
+  vehiculoId      String
+  conductorId     String
+  numeroCuota     Int      // 1, 2, 3, ...
+  fechaVencimiento DateTime
+  monto           Float    // monto de la cuota (tarifa)
+  // Mora
+  diasRetraso     Int      @default(0)
+  multa           Float    @default(0)
+  // Estado
+  estado          String   @default("PENDIENTE") // PENDIENTE | PARCIAL | PAGADA | VENCIDA
+  montoPagado     Float    @default(0)
+  montoPendiente  Float    // monto + multa - montoPagado
+  fechaPago       DateTime?
+  // Auditoría
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  contrato        ContratoVehiculo @relation(fields: [contratoId], references: [id])
+  vehiculo        Vehiculo @relation(fields: [vehiculoId], references: [id])
+  pagos           PagoVehiculo[]
+
+  @@index([contratoId])
+  @@index([conductorId])
+  @@index([vehiculoId])
+  @@index([estado, fechaVencimiento])
+}
+
+// --- PAGO ---
+// Pago aplicado a una obligación. Puede ser aprobado/rechazado por admin.
+// Un comprobante cargado NO confirma el pago — debe ser verificado.
+model PagoVehiculo {
+  id              String   @id @default(cuid())
+  contratoId      String
+  obligacionId    String?
+  conductorId     String
+  monto           Float
+  fechaPago       DateTime
+  metodo          String   @default("CONSIGNACION") // CONSIGNACION | TRANSFERENCIA | EFECTIVO | OTRO
+  banco           String?
+  referencia      String?
+  destinatario    String?
+  // Estado de verificación
+  estado          String   @default("PENDIENTE") // PENDIENTE | EN_REVISION | APROBADO | RECHAZADO
+  motivoRechazo   String?
+  // Comprobante (foto/archivo)
+  comprobanteUrl  String?
+  // OCR/IA — datos extraídos automáticamente
+  ocrValor        Float?
+  ocrFecha        DateTime?
+  ocrBanco        String?
+  ocrReferencia   String?
+  ocrDestinatario String?
+  ocrCoincide     Boolean?
+  ocrInconsistencias String? // JSON con lista de inconsistencias
+  // Auditoría
+  aprobadoPor     String?
+  aprobadoAt      DateTime?
+  rechazadoPor    String?
+  rechazadoAt     DateTime?
+  creadoPor       String   // ADMIN | CONDUCTOR | SISTEMA
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  contrato        ContratoVehiculo @relation(fields: [contratoId], references: [id])
+  obligacion      ObligacionVehiculo? @relation(fields: [obligacionId], references: [id])
+  conductor       ConductorVehiculo @relation(fields: [conductorId], references: [id])
+  comprobantes    ComprobanteVehiculo[]
+
+  @@index([contratoId])
+  @@index([conductorId])
+  @@index([estado])
+  @@index([fechaPago])
+}
+
+// --- COMPROBANTE (archivos adjuntos al pago) ---
+// Un pago puede tener múltiples comprobantes. Detección de duplicados.
+model ComprobanteVehiculo {
+  id              String   @id @default(cuid())
+  pagoId          String
+  url             String
+  tipo            String   @default("IMAGEN") // IMAGEN | PDF
+  hashArchivo     String   // SHA-256 para detectar duplicados
+  esDuplicado     Boolean  @default(false)
+  duplicadoDeId   String?  // si es duplicado, apunta al comprobante original
+  // OCR resultado completo
+  ocrTexto        String?
+  ocrMetadatos    String?  // JSON completo
+  createdAt       DateTime @default(now())
+
+  pago            PagoVehiculo @relation(fields: [pagoId], references: [id])
+
+  @@index([pagoId])
+  @@index([hashArchivo])
+}
+
+// --- MANTENIMIENTO ---
+model MantenimientoVehiculo {
+  id              String   @id @default(cuid())
+  vehiculoId      String
+  contratoId      String?  // opcional: si estaba asignado a un contrato
+  fecha           DateTime
+  kilometraje     Int
+  tipo            String   // PREVENTIVO | CORRECTIVO | REVISION | EMERGENCIA
+  trabajoRealizado String
+  taller          String?
+  proveedor       String?
+  costo           Float    @default(0)
+  proximaRevisionKm Int?
+  proximaRevisionFecha DateTime?
+  fotosUrl        String?  // JSON array de URLs
+  notas           String?
+  creadoPor       String
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  vehiculo        Vehiculo @relation(fields: [vehiculoId], references: [id])
+  contrato        ContratoVehiculo? @relation(fields: [contratoId], references: [id])
+  repuestos       RepuestoInstalado[]
+  // Repuestos retirados en este mantenimiento (relación inversa)
+  repuestosRetirados RepuestoInstalado[] @relation("RepuestoRetiroMantenimiento")
+
+  @@index([vehiculoId])
+  @@index([fecha])
+  @@index([tipo])
+}
+
+// --- REPUESTO (catálogo) ---
+model RepuestoVehiculo {
+  id              String   @id @default(cuid())
+  nombre          String
+  marca           String?
+  referencia      String?
+  categoria       String?  // FILTRO | FRENO | MOTOR | SUSPENSION | ELECTRICO | OTRO
+  descripcion     String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  instalaciones   RepuestoInstalado[]
+
+  @@index([categoria])
+  @@index([marca])
+}
+
+// --- REPUESTO INSTALADO (trazabilidad) ---
+// Cada instalación/retiro de un repuesto en un vehículo.
+// Calcula vida útil cuando hay instalación + retiro.
+model RepuestoInstalado {
+  id              String   @id @default(cuid())
+  repuestoId      String
+  vehiculoId      String
+  mantenimientoInstalacionId String
+  mantenimientoRetiroId String?
+  // Instalación
+  fechaInstalacion DateTime
+  kilometrajeInstalacion Int
+  // Retiro (cuando se cambia)
+  fechaRetiro     DateTime?
+  kilometrajeRetiro Int?
+  motivoRetiro    String?  // DESGASTE | FALLA | MANTENIMIENTO_PREVENTIVO | ACCIDENTE
+  fallaReportada  String?
+  // Métricas de vida útil (calculadas al retirar)
+  diasEnUso       Int?
+  kmRecorridos    Int?
+  // Proveedor / garantía
+  proveedor       String?
+  costo           Float    @default(0)
+  garantiaVence   DateTime?
+  proximoCambioRecomendadoKm Int?
+  // Próxima revisión sugerida
+  proximoCambioSugeridoFecha DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  repuesto        RepuestoVehiculo @relation(fields: [repuestoId], references: [id])
+  vehiculo        Vehiculo @relation(fields: [vehiculoId], references: [id])
+  mantenimientoInstalacion MantenimientoVehiculo @relation(fields: [mantenimientoInstalacionId], references: [id])
+  mantenimientoRetiro MantenimientoVehiculo? @relation("RepuestoRetiroMantenimiento", fields: [mantenimientoRetiroId], references: [id])
+
+  @@index([vehiculoId])
+  @@index([repuestoId])
+  @@index([fechaInstalacion])
+}
+
+// --- GASTO DEL VEHÍCULO ---
+// Gastos adicionales: peajes, combustible, lavado, etc.
+model GastoVehiculo {
+  id              String   @id @default(cuid())
+  vehiculoId      String
+  fecha           DateTime
+  concepto        String
+  monto           Float
+  categoria       String   @default("OTRO") // COMBUSTIBLE | PEAJE | LAVADO | PARQUEADERO | SEGURO | OTRO
+  proveedor       String?
+  comprobanteUrl  String?
+  creadoPor       String
+  createdAt       DateTime @default(now())
+
+  vehiculo        Vehiculo @relation(fields: [vehiculoId], references: [id])
+
+  @@index([vehiculoId])
+  @@index([fecha])
+  @@index([categoria])
+}
+
+// --- ALERTA DEL VEHÍCULO ---
+// Generadas automáticamente: vencimientos, mantenimientos próximos, etc.
+model AlertaVehiculo {
+  id              String   @id @default(cuid())
+  vehiculoId      String
+  tipo            String   // MANTENIMIENTO_PROXIMO | SOAT_VENCIDO | TECNOMECANICA_VENCIDA | OBLIGACION_VENCIDA | REPUESTO_VIDA_UTIL_FIN
+  severidad       String   @default("INFO") // INFO | WARNING | CRITICAL
+  titulo          String
+  descripcion     String
+  atendida        Boolean @default(false)
+  atendidaPor     String?
+  atendidaAt      DateTime?
+  createdAt       DateTime @default(now())
+
+  vehiculo        Vehiculo @relation(fields: [vehiculoId], references: [id])
+
+  @@index([vehiculoId, atendida])
+  @@index([severidad])
+}
+
+// --- AUDITORÍA DEL MÓDULO VEHÍCULOS ---
+// Registra quién crea, modifica, aprueba o revierte cada operación.
+model AuditoriaVehiculo {
+  id              String   @id @default(cuid())
+  entidad         String   // VEHICULO | CONDUCTOR | CONTRATO | OBLIGACION | PAGO | COMPROBANTE | MANTENIMIENTO | REPUESTO | GASTO
+  entidadId       String
+  accion          String   // CREAR | MODIFICAR | ELIMINAR | APROBAR | RECHAZAR | REVERSAR | ACTIVAR | SUSPENDER
+  descripcion     String
+  datosAnteriores String?  // JSON
+  datosNuevos     String?  // JSON
+  usuarioId       String?
+  usuarioNombre   String
+  ip             String?
+  userAgent      String?
+  createdAt       DateTime @default(now())
+
+  @@index([entidad, entidadId])
+  @@index([accion])
+  @@index([createdAt])
+}

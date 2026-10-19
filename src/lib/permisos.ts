@@ -61,6 +61,7 @@ export const VISTAS_POR_ROL: Record<Rol, ViewKey[]> = {
     'codigo-fuente',
     'manual',
     'automatizacion',
+    'vehiculos',
   ],
 
   GESTOR: [
@@ -82,6 +83,7 @@ export const VISTAS_POR_ROL: Record<Rol, ViewKey[]> = {
     // portal-admin: el acompañante administrativo (P_jsadr) usa este módulo
     // como su portal principal. Otros GESTORes pueden acceder también.
     'portal-admin',
+    'vehiculos',
     // Ocultos para GESTOR (solo ADMIN):
     //   usuarios, conexiones, seguridad (parcial), auditoria,
     //   admin, configuracion, codigo-fuente,

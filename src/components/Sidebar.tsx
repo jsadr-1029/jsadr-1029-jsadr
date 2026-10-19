@@ -31,6 +31,7 @@ import {
   Megaphone,
   LayoutDashboard,
   ChevronDown,
+  Car,
   type LucideIcon,
 } from 'lucide-react'
 import { useMemo } from 'react'
@@ -89,6 +90,7 @@ const ALL_ITEMS: MenuNode[] = [
   { key: 'comunicaciones', label: 'Comunicaciones', icon: MessageSquare, description: 'Chat con clientes' },
   { key: 'notificaciones', label: 'Notificaciones', icon: Bell, description: 'Centro de avisos' },
   { key: 'automatizacion', label: 'Automatización', icon: Zap, description: 'Reglas y bots' },
+  { key: 'vehiculos', label: 'Gestión de Vehículos', icon: Car, description: 'Arrendamiento de vehículos' },
   {
     key: 'seguridad',
     label: 'Seguridad',
