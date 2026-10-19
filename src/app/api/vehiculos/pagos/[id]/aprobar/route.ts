@@ -107,10 +107,76 @@ export async function POST(
       },
     })
 
+    // === Generar recibo de pago automáticamente ===
+    let recibo: any = null
+    try {
+      // Verificar que no exista ya un recibo para este pago (idempotente)
+      const existente = await db.reciboPagoVehiculo.findUnique({
+        where: { pagoId: id },
+      })
+      if (!existente) {
+        // Buscar datos completos del contrato, vehículo y conductor
+        const contratoFull = await db.contratoVehiculo.findUnique({
+          where: { id: pago.contratoId },
+          include: { vehiculo: true, conductor: true },
+        })
+        if (contratoFull) {
+          const fechaStr = new Date().toISOString().slice(0, 10).replace(/-/g, '')
+          const contadorHoy = await db.reciboPagoVehiculo.count({
+            where: { numeroRecibo: { startsWith: `REC-${fechaStr}-` } },
+          })
+          const numeroRecibo = `REC-${fechaStr}-${String(contadorHoy + 1).padStart(6, '0')}`
+          const crypto = require('crypto')
+          const codigoVerificacion = crypto.randomBytes(12).toString('hex')
+
+          const obligacion = resultado.obligacionActualizada
+
+          recibo = await db.reciboPagoVehiculo.create({
+            data: {
+              numeroRecibo,
+              pagoId: id,
+              contratoId: pago.contratoId,
+              conductorId: pago.conductorId,
+              vehiculoId: contratoFull.vehiculoId,
+              obligacionId: pago.obligacionId || null,
+              monto: montoFinal,
+              fechaPago: pago.fechaPago,
+              fechaAprobacion: new Date(),
+              metodoPago: pago.metodo,
+              bancoOrigen: pago.banco || null,
+              referencia: pago.referencia || null,
+              numeroContrato: contratoFull.numeroContrato,
+              placaVehiculo: contratoFull.vehiculo?.placa || '',
+              nombreConductor: contratoFull.conductor?.nombre || '',
+              cedulaConductor: contratoFull.conductor?.cedula || '',
+              numeroCuota: obligacion?.numeroCuota || null,
+              montoCuota: obligacion?.monto || null,
+              multaAplicada: obligacion?.multa || null,
+              aprobadoPor: user.id,
+              nombreAprobador: user.nombre,
+              codigoVerificacion,
+            },
+          })
+
+          console.log(`✅ Recibo generado: ${numeroRecibo} (pago ${id})`)
+        }
+      } else {
+        recibo = existente
+      }
+    } catch (reciboError: any) {
+      console.error('[vehiculos/pagos/aprobar] Error al generar recibo:', reciboError)
+      // No fallar la aprobación si el recibo falla
+    }
+
     return NextResponse.json({
       success: true,
       data: resultado,
-      message: 'Pago aprobado y aplicado al saldo correctamente',
+      recibo: recibo ? {
+        id: recibo.id,
+        numeroRecibo: recibo.numeroRecibo,
+        codigoVerificacion: recibo.codigoVerificacion,
+      } : null,
+      message: 'Pago aprobado y aplicado al saldo correctamente' + (recibo ? `. Recibo generado: ${recibo.numeroRecibo}` : ''),
     })
   } catch (error: any) {
     console.error('[vehiculos/pagos/aprobar] Error:', error)

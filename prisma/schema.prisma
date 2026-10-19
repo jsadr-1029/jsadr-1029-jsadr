@@ -2038,6 +2038,8 @@ model Vehiculo {
   // Extensión: inventario y documentos adicionales
   inventario      InventarioVehiculo[]
   documentos      DocumentoVehiculo[]
+  // Extensión 2: recibos de pago
+  recibos         ReciboPagoVehiculo[]
 
   @@index([estado])
   @@index([activo])
@@ -2080,6 +2082,8 @@ model ConductorVehiculo {
 
   contratos       ContratoVehiculo[]
   pagosReportados PagoVehiculo[]
+  // Extensión 2: recibos de pago
+  recibos         ReciboPagoVehiculo[]
 
   @@index([cedula])
   @@index([activo])
@@ -2119,6 +2123,10 @@ model ContratoVehiculo {
   obligaciones    ObligacionVehiculo[]
   pagos           PagoVehiculo[]
   mantenimientos  MantenimientoVehiculo[]
+  // Extensión 2: cuentas de pago + QR + recibos
+  cuentasPago     CuentaPagoVehiculo[]
+  codigosQR       CodigoQRVehiculo[]
+  recibos         ReciboPagoVehiculo[]
 
   @@index([vehiculoId])
   @@index([conductorId])
@@ -2199,6 +2207,11 @@ model PagoVehiculo {
   obligacion      ObligacionVehiculo? @relation(fields: [obligacionId], references: [id])
   conductor       ConductorVehiculo @relation(fields: [conductorId], references: [id])
   comprobantes    ComprobanteVehiculo[]
+  // Extensión 2: recibo de pago generado al aprobar
+  recibo          ReciboPagoVehiculo?
+  // Cuenta de pago utilizada (asignada al contrato)
+  cuentaPagoId    String?
+  cuentaPago      CuentaPagoVehiculo? @relation("PagoCuentaPago", fields: [cuentaPagoId], references: [id])
 
   @@index([contratoId])
   @@index([conductorId])
@@ -2474,4 +2487,120 @@ model DocumentoVehiculo {
   @@index([vehiculoId])
   @@index([tipo])
   @@index([fechaVencimiento])
+}
+
+// =====================================================
+// === EXTENSIÓN 2: CUENTAS DE PAGO + QR + RECIBOS ===
+// Permite al admin asignar cuentas bancarias/Nequi/Daviplata
+// al contrato para que el conductor sepa dónde pagar.
+// + Códigos QR de pago (subidos por admin, escaneables por conductor)
+// + Recibos de pago descargables (PDF generado al aprobar)
+// =====================================================
+
+// --- CUENTA DE PAGO ASIGNADA A UN CONTRATO ---
+// El admin configura una o varias cuentas donde el conductor debe pagar.
+// Cada cuenta tiene: banco, tipo (AHORROS/CORRIENTE/NEQUI/DAVIPLATA/etc.),
+// número, titular, y opcionalmente datos para transferencia (email/teléfono).
+model CuentaPagoVehiculo {
+  id              String   @id @default(cuid())
+  contratoId      String   // se asigna a un contrato específico
+  // Datos de la cuenta
+  banco           String   // Bancolombia, Davivienda, BBVA, Nequi, Daviplata, etc.
+  tipoCuenta      String   // AHORROS | CORRIENTE | NEQUI | DAVIPLATA | PSE | EFECTY | OTRO
+  numeroCuenta    String   // número de cuenta o teléfono (Nequi/Daviplata)
+  titularCuenta   String   // a nombre de quién
+  tipoIdTitular   String?  // CC | NIT | CE
+  numeroIdTitular String?  // número de cédula/NIT del titular
+  // Para transferencias
+  emailPago       String?  // email para recibir notificación (Nequi/Bancolombia)
+  telefonoPago    String?  // teléfono (Nequi/Daviplata)
+  // Instrucciones adicionales
+  instrucciones   String?  // ej: "Enviar comprobante al WhatsApp 3001234567"
+  referenciaSugerida String? // ej: "ABC123-CARLOS" para que el conductor use como referencia
+  esPrincipal     Boolean  @default(false) // cuenta preferida
+  activa          Boolean  @default(true)
+  creadoPor       String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  contrato        ContratoVehiculo @relation(fields: [contratoId], references: [id])
+  codigosQR       CodigoQRVehiculo[]
+  // Pagos que usaron esta cuenta
+  pagos           PagoVehiculo[] @relation("PagoCuentaPago")
+
+  @@index([contratoId, activa])
+  @@index([banco])
+}
+
+// --- CÓDIGO QR DE PAGO ---
+// QR subido por el admin para que el conductor lo escanee.
+// Puede ser QR de Nequi, Daviplata, Bancolombia, PSE, etc.
+// El QR se sube como imagen (URL) y se le agrega una descripción.
+model CodigoQRVehiculo {
+  id              String   @id @default(cuid())
+  contratoId      String   // opcional: si es específico de un contrato
+  cuentaPagoId    String?  // opcional: si está vinculado a una cuenta
+  titulo          String   // ej: "Pago Nequi", "Pago Bancolombia QR"
+  descripcion     String?  // instrucciones de uso
+  imagenUrl       String   // URL de la imagen QR
+  montoFijo       Float?   // si el QR tiene un monto predefinido
+  tipoPago        String   @default("NEQUI") // NEQUI | DAVIPLATA | BANCOLOMBIA_QR | PSE | OTRO
+  activo          Boolean  @default(true)
+  creadoPor       String?
+  createdAt       DateTime @default(now())
+
+  contrato        ContratoVehiculo @relation(fields: [contratoId], references: [id])
+  cuentaPago      CuentaPagoVehiculo? @relation(fields: [cuentaPagoId], references: [id])
+
+  @@index([contratoId, activo])
+  @@index([tipoPago])
+}
+
+// --- RECIBO DE PAGO ---
+// Se genera automáticamente al aprobar un pago. Contiene:
+// número de recibo, fecha, monto, obligación cancelada, conductor, vehículo,
+// contrato, cuenta de pago utilizada, firma digital del admin.
+// Se puede descargar como PDF desde el portal del conductor o admin.
+model ReciboPagoVehiculo {
+  id              String   @id @default(cuid())
+  numeroRecibo    String   @unique // REC-YYYYMMDD-XXXXXX
+  pagoId          String   @unique
+  contratoId      String
+  conductorId     String
+  vehiculoId      String
+  obligacionId    String?
+  // Datos del recibo (snapshot al momento de aprobación)
+  monto           Float
+  fechaPago       DateTime
+  fechaAprobacion DateTime
+  metodoPago      String
+  bancoOrigen     String?
+  referencia      String?
+  // Datos del contrato y vehículo (snapshot)
+  numeroContrato  String
+  placaVehiculo   String
+  nombreConductor String
+  cedulaConductor String
+  // Cuota cancelada
+  numeroCuota     Int?
+  montoCuota      Float?
+  multaAplicada   Float?
+  // Firma del administrador que aprobó
+  aprobadoPor     String
+  nombreAprobador String
+  // QR de verificación (código de validación)
+  codigoVerificacion String @unique // hash para verificar autenticidad
+  // Estado
+  anulado         Boolean  @default(false)
+  motivoAnulacion String?
+  createdAt       DateTime @default(now())
+
+  pago            PagoVehiculo @relation(fields: [pagoId], references: [id])
+  contrato        ContratoVehiculo @relation(fields: [contratoId], references: [id])
+  conductor       ConductorVehiculo @relation(fields: [conductorId], references: [id])
+  vehiculo        Vehiculo @relation(fields: [vehiculoId], references: [id])
+
+  @@index([contratoId])
+  @@index([conductorId])
+  @@index([fechaAprobacion])
 }

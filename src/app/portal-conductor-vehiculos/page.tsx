@@ -8,7 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
-import { Car, LogOut, CreditCard, Calendar, Wrench, AlertTriangle, CheckCircle, Clock } from 'lucide-react'
+import { Car, LogOut, CreditCard, Calendar, Wrench, AlertTriangle, CheckCircle, Clock, QrCode, Download, Star, Phone, Mail, User } from 'lucide-react'
 import { formatCOP, formatDate, EstadoBadge } from '@/components/views/vehiculos/helpers'
 
 export default function PortalConductorVehiculosPage() {
@@ -25,6 +25,9 @@ export default function PortalConductorVehiculosPage() {
     comprobanteUrl: '', ocrTexto: '',
   })
   const [pagoResult, setPagoResult] = useState<any>(null)
+  const [cuentasPago, setCuentasPago] = useState<any[]>([])
+  const [codigosQR, setCodigosQR] = useState<any[]>([])
+  const [recibos, setRecibos] = useState<any[]>([])
 
   // Cargar token del localStorage
   useEffect(() => {
@@ -74,19 +77,53 @@ export default function PortalConductorVehiculosPage() {
   const cargarEstado = async () => {
     setLoadingData(true)
     try {
-      const res = await fetch('/api/vehiculos/portal-conductor/estado', {
-        headers: { 'x-portal-token': token! },
-      })
-      const r = await res.json()
+      const headers = { 'x-portal-token': token! }
+      const [resEstado, resCuentas, resQR, resRecibos] = await Promise.all([
+        fetch('/api/vehiculos/portal-conductor/estado', { headers }),
+        fetch('/api/vehiculos/portal-conductor/cuentas-pago', { headers }),
+        fetch('/api/vehiculos/portal-conductor/codigos-qr', { headers }),
+        fetch('/api/vehiculos/portal-conductor/recibos', { headers }),
+      ])
+      const r = await resEstado.json()
       if (r.success) {
         setData(r.data)
       } else {
         if (r.error && r.error.includes('expirado')) {
           logout()
+          return
         }
       }
+      const rc = await resCuentas.json()
+      if (rc.success) setCuentasPago(rc.data?.cuentas || [])
+      const rq = await resQR.json()
+      if (rq.success) setCodigosQR(rq.data || [])
+      const rr = await resRecibos.json()
+      if (rr.success) setRecibos(rr.data || [])
     } catch (e) {}
     setLoadingData(false)
+  }
+
+  const descargarRecibo = async (reciboId: string) => {
+    try {
+      const res = await fetch(`/api/vehiculos/portal-conductor/recibos/${reciboId}/pdf`, {
+        headers: { 'x-portal-token': token! },
+      })
+      if (!res.ok) {
+        alert('Error al descargar recibo')
+        return
+      }
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `Recibo.pdf`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+    } catch (e: any) {
+      alert(e.message)
+    }
   }
 
   const reportarPago = async () => {
@@ -261,6 +298,123 @@ export default function PortalConductorVehiculosPage() {
         <Button onClick={() => setPagoModal(true)} className="w-full" size="lg">
           <CreditCard className="w-5 h-5 mr-2" /> Reportar pago
         </Button>
+
+        {/* CUENTAS DE PAGO */}
+        {cuentasPago.length > 0 && (
+          <Card className="border-blue-300">
+            <CardHeader className="pb-2"><CardTitle className="text-base flex items-center gap-2">
+              <CreditCard className="w-4 h-4 text-blue-600" /> ¿Dónde pago?
+            </CardTitle></CardHeader>
+            <CardContent className="space-y-2">
+              <p className="text-xs text-muted-foreground mb-2">
+                Realiza tu pago a cualquiera de estas cuentas. Usa la referencia sugerida si la hay.
+              </p>
+              {cuentasPago.map((c: any) => (
+                <div key={c.id} className={`p-3 rounded border ${c.esPrincipal ? 'border-blue-400 bg-blue-50' : 'border-gray-200'}`}>
+                  <div className="flex justify-between items-start mb-2">
+                    <div className="flex items-center gap-2">
+                      <span className="font-bold">{c.banco}</span>
+                      <span className="text-xs bg-blue-100 text-blue-800 px-1.5 py-0.5 rounded">{c.tipoCuenta}</span>
+                      {c.esPrincipal && (
+                        <span className="text-xs bg-blue-600 text-white px-1.5 py-0.5 rounded inline-flex items-center gap-1">
+                          <Star className="w-3 h-3 fill-current" /> Principal
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  <div className="text-sm space-y-1">
+                    <div className="flex items-center gap-1.5">
+                      <User className="w-3 h-3 text-muted-foreground" />
+                      <span className="text-muted-foreground">Titular:</span>
+                      <strong>{c.titularCuenta}</strong>
+                      {c.numeroIdTitular && <span className="text-xs text-muted-foreground">({c.tipoIdTitular} {c.numeroIdTitular})</span>}
+                    </div>
+                    <div className="font-mono text-base bg-white p-2 rounded border">
+                      {c.numeroCuenta}
+                    </div>
+                    {c.telefonoPago && (
+                      <div className="flex items-center gap-1.5 text-xs">
+                        <Phone className="w-3 h-3" /> {c.telefonoPago}
+                      </div>
+                    )}
+                    {c.emailPago && (
+                      <div className="flex items-center gap-1.5 text-xs">
+                        <Mail className="w-3 h-3" /> {c.emailPago}
+                      </div>
+                    )}
+                    {c.referenciaSugerida && (
+                      <div className="text-xs text-blue-700 font-medium">Referencia: {c.referenciaSugerida}</div>
+                    )}
+                    {c.instrucciones && (
+                      <div className="text-xs p-2 bg-yellow-50 rounded mt-1">💡 {c.instrucciones}</div>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+        )}
+
+        {/* CÓDIGOS QR DE PAGO */}
+        {codigosQR.length > 0 && (
+          <Card>
+            <CardHeader className="pb-2"><CardTitle className="text-base flex items-center gap-2">
+              <QrCode className="w-4 h-4 text-purple-600" /> Códigos QR para pago
+            </CardTitle></CardHeader>
+            <CardContent>
+              <p className="text-xs text-muted-foreground mb-3">
+                Escanea estos QR con la app de tu banco o Nequi/Daviplata para pagar rápidamente.
+              </p>
+              <div className="grid grid-cols-2 gap-3">
+                {codigosQR.map((qr: any) => (
+                  <div key={qr.id} className="p-3 rounded border text-center">
+                    <div className="font-medium text-sm mb-2">{qr.titulo}</div>
+                    <div className="bg-white p-2 rounded border inline-block">
+                      <img src={qr.imagenUrl} alt={qr.titulo} className="w-32 h-32 object-contain" />
+                    </div>
+                    {qr.montoFijo && (
+                      <div className="mt-2 text-sm font-medium text-blue-700">{formatCOP(qr.montoFijo)}</div>
+                    )}
+                    {qr.descripcion && (
+                      <div className="mt-1 text-xs text-muted-foreground">{qr.descripcion}</div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* RECIBOS DESCARGABLES */}
+        {recibos.length > 0 && (
+          <Card>
+            <CardHeader className="pb-2"><CardTitle className="text-base flex items-center gap-2">
+              <Download className="w-4 h-4 text-green-600" /> Mis recibos de pago
+            </CardTitle></CardHeader>
+            <CardContent>
+              <p className="text-xs text-muted-foreground mb-3">
+                Descarga el recibo de tus pagos aprobados.
+              </p>
+              <div className="space-y-1">
+                {recibos.map((r: any) => (
+                  <div key={r.id} className="p-2 rounded border text-sm flex justify-between items-center">
+                    <div>
+                      <div className="font-medium">{r.numeroRecibo}</div>
+                      <div className="text-xs text-muted-foreground">
+                        {formatCOP(r.monto)} · {formatDate(r.fechaAprobacion)} · {r.metodoPago}
+                        {r.numeroCuota && ` · Cuota #${r.numeroCuota}`}
+                      </div>
+                      <div className="text-xs text-blue-700 font-mono mt-0.5">{r.codigoVerificacion.slice(0, 16)}...</div>
+                    </div>
+                    <Button size="sm" variant="outline" onClick={() => descargarRecibo(r.id)}>
+                      <Download className="w-3 h-3 mr-1" /> PDF
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         {pagoResult && (
           <div className="p-3 bg-yellow-50 border border-yellow-200 rounded text-sm">
