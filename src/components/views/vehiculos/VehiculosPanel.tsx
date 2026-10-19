@@ -10,8 +10,9 @@ import { Badge } from '@/components/ui/badge'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { useToast } from '@/hooks/use-toast'
-import { Plus, Edit, Search, Car } from 'lucide-react'
+import { Plus, Edit, Search, Car, FileText } from 'lucide-react'
 import { apiFetch, formatCOP, EstadoBadge, ESTADOS_VEHICULO } from './helpers'
+import { FichaTecnicaVehiculo } from './FichaTecnicaVehiculo'
 
 export function VehiculosPanel({ onChanged }: { onChanged?: () => void }) {
   const { toast } = useToast()
@@ -19,6 +20,8 @@ export function VehiculosPanel({ onChanged }: { onChanged?: () => void }) {
   const [loading, setLoading] = useState(true)
   const [filtroPlaca, setFiltroPlaca] = useState('')
   const [modalOpen, setModalOpen] = useState(false)
+  const [fichaOpen, setFichaOpen] = useState(false)
+  const [vehiculoFicha, setVehiculoFicha] = useState<string | null>(null)
   const [editando, setEditando] = useState<any | null>(null)
   const [form, setForm] = useState<any>({
     placa: '', marca: '', modelo: '', anio: '', color: '', kilometraje: 0,
@@ -141,6 +144,9 @@ export function VehiculosPanel({ onChanged }: { onChanged?: () => void }) {
                   <Button size="sm" variant="outline" onClick={() => abrirEditar(v)}>
                     <Edit className="w-3 h-3 mr-1" /> Editar
                   </Button>
+                  <Button size="sm" variant="default" onClick={() => { setVehiculoFicha(v.id); setFichaOpen(true) }}>
+                    <FileText className="w-3 h-3 mr-1" /> Ficha
+                  </Button>
                   <Button size="sm" variant="outline" onClick={() => eliminar(v)} className="text-red-600">
                     Eliminar
                   </Button>
@@ -227,6 +233,13 @@ export function VehiculosPanel({ onChanged }: { onChanged?: () => void }) {
             <Button variant="outline" onClick={() => setModalOpen(false)}>Cancelar</Button>
             <Button onClick={guardar}>{editando ? 'Guardar' : 'Crear'}</Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal Ficha Técnica completa */}
+      <Dialog open={fichaOpen} onOpenChange={setFichaOpen}>
+        <DialogContent className="max-w-5xl max-h-[95vh] overflow-y-auto">
+          {vehiculoFicha && <FichaTecnicaVehiculo vehiculoId={vehiculoFicha} onClose={() => setFichaOpen(false)} />}
         </DialogContent>
       </Dialog>
     </div>

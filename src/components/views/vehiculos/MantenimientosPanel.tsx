@@ -17,27 +17,30 @@ export function MantenimientosPanel({ onChanged }: { onChanged?: () => void }) {
   const [mantenimientos, setMantenimientos] = useState<any[]>([])
   const [vehiculos, setVehiculos] = useState<any[]>([])
   const [contratos, setContratos] = useState<any[]>([])
+  const [proveedores, setProveedores] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [filtroVeh, setFiltroVeh] = useState('')
   const [modalOpen, setModalOpen] = useState(false)
   const [form, setForm] = useState<any>({
     vehiculoId: '', contratoId: '', fecha: new Date().toISOString().slice(0, 10),
     kilometraje: 0, tipo: 'PREVENTIVO', trabajoRealizado: '',
-    taller: '', proveedor: '', costo: 0,
+    taller: '', proveedor: '', proveedorRefId: '', costo: 0,
     proximaRevisionKm: '', proximaRevisionFecha: '',
     notas: '',
   })
 
   const cargar = async () => {
     setLoading(true)
-    const [rm, rv, rc] = await Promise.all([
+    const [rm, rv, rc, rp] = await Promise.all([
       apiFetch('/api/vehiculos/mantenimientos' + (filtroVeh ? `?vehiculoId=${filtroVeh}` : '')),
       apiFetch('/api/vehiculos/vehiculos'),
       apiFetch('/api/vehiculos/contratos'),
+      apiFetch('/api/vehiculos/proveedores'),
     ])
     if (rm.success) setMantenimientos(rm.data || [])
     if (rv.success) setVehiculos(rv.data || [])
     if (rc.success) setContratos(rc.data || [])
+    if (rp.success) setProveedores(rp.data || [])
     setLoading(false)
   }
 
@@ -162,7 +165,17 @@ export function MantenimientosPanel({ onChanged }: { onChanged?: () => void }) {
               <Textarea value={form.trabajoRealizado} onChange={e => setForm({ ...form, trabajoRealizado: e.target.value })} rows={2} />
             </div>
             <div><Label>Taller</Label><Input value={form.taller} onChange={e => setForm({ ...form, taller: e.target.value })} /></div>
-            <div><Label>Proveedor</Label><Input value={form.proveedor} onChange={e => setForm({ ...form, proveedor: e.target.value })} /></div>
+            <div><Label>Proveedor (texto libre)</Label><Input value={form.proveedor} onChange={e => setForm({ ...form, proveedor: e.target.value })} placeholder="O escribe nombre del proveedor..." /></div>
+            <div className="col-span-2">
+              <Label>Proveedor (de la agenda)</Label>
+              <Select value={form.proveedorRefId || 'NINGUNO'} onValueChange={v => setForm({ ...form, proveedorRefId: v === 'NINGUNO' ? '' : v })}>
+                <SelectTrigger><SelectValue placeholder="Sin proveedor vinculado" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="NINGUNO">— Sin proveedor vinculado —</SelectItem>
+                  {proveedores.map(p => <SelectItem key={p.id} value={p.id}>{p.nombre} ({p.tipo})</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
             <div><Label>Costo</Label><Input type="number" value={form.costo} onChange={e => setForm({ ...form, costo: e.target.value })} /></div>
             <div><Label>Próxima revisión (km)</Label><Input type="number" value={form.proximaRevisionKm} onChange={e => setForm({ ...form, proximaRevisionKm: e.target.value })} /></div>
             <div><Label>Próxima revisión (fecha)</Label><Input type="date" value={form.proximaRevisionFecha} onChange={e => setForm({ ...form, proximaRevisionFecha: e.target.value })} /></div>

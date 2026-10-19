@@ -2035,6 +2035,9 @@ model Vehiculo {
   gastos          GastoVehiculo[]
   alertas         AlertaVehiculo[]
   obligaciones    ObligacionVehiculo[] // obligaciones vinculadas al vehículo (para reporte rentabilidad)
+  // Extensión: inventario y documentos adicionales
+  inventario      InventarioVehiculo[]
+  documentos      DocumentoVehiculo[]
 
   @@index([estado])
   @@index([activo])
@@ -2249,6 +2252,9 @@ model MantenimientoVehiculo {
   repuestos       RepuestoInstalado[]
   // Repuestos retirados en este mantenimiento (relación inversa)
   repuestosRetirados RepuestoInstalado[] @relation("RepuestoRetiroMantenimiento")
+  // Extensión: proveedor vinculado (agenda)
+  proveedorRefId  String?
+  proveedorRef    ProveedorVehiculo? @relation(fields: [proveedorRefId], references: [id])
 
   @@index([vehiculoId])
   @@index([fecha])
@@ -2306,6 +2312,9 @@ model RepuestoInstalado {
   vehiculo        Vehiculo @relation(fields: [vehiculoId], references: [id])
   mantenimientoInstalacion MantenimientoVehiculo @relation(fields: [mantenimientoInstalacionId], references: [id])
   mantenimientoRetiro MantenimientoVehiculo? @relation("RepuestoRetiroMantenimiento", fields: [mantenimientoRetiroId], references: [id])
+  // Extensión: proveedor vinculado (agenda)
+  proveedorRefId  String?
+  proveedorRef    ProveedorVehiculo? @relation(fields: [proveedorRefId], references: [id])
 
   @@index([vehiculoId])
   @@index([repuestoId])
@@ -2327,6 +2336,9 @@ model GastoVehiculo {
   createdAt       DateTime @default(now())
 
   vehiculo        Vehiculo @relation(fields: [vehiculoId], references: [id])
+  // Extensión: proveedor vinculado (agenda)
+  proveedorRefId  String?
+  proveedorRef    ProveedorVehiculo? @relation(fields: [proveedorRefId], references: [id])
 
   @@index([vehiculoId])
   @@index([fecha])
@@ -2372,4 +2384,94 @@ model AuditoriaVehiculo {
   @@index([entidad, entidadId])
   @@index([accion])
   @@index([createdAt])
+}
+
+// =====================================================
+// === EXTENSIÓN: AGENDA DE PROVEEDORES + INVENTARIO +
+// === FICHA TÉCNICA AMPLIADA + ENTREGA DE VEHÍCULO ===
+// (sin alterar modelos existentes — solo adiciones)
+// =====================================================
+
+// --- PROVEEDOR (agenda/libreta de contactos) ---
+// Catálogo de proveedores: talleres, repuesteros, seguros,
+// gasolineras, etc. Reutilizable en mantenimientos, repuestos y gastos.
+model ProveedorVehiculo {
+  id              String   @id @default(cuid())
+  nombre          String
+  tipo            String   @default("TALLER") // TALLER | REPUESTERO | SEGURO | GASOLINERA | OTRO
+  documento       String?  // NIT o cédula
+  contacto        String?  // nombre del contacto principal
+  telefono        String?
+  telefono2       String?
+  email           String?
+  direccion       String?
+  ciudad          String?
+  barrio          String?
+  notas           String?
+  activo          Boolean  @default(true)
+  creadoPor       String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  mantenimientos  MantenimientoVehiculo[]
+  repuestosInstalados RepuestoInstalado[]
+  gastos          GastoVehiculo[]
+
+  @@index([tipo, activo])
+  @@index([nombre])
+  @@index([ciudad])
+}
+
+// --- ÍTEM DE INVENTARIO DEL VEHÍCULO ---
+// Lista de elementos físicos que se entregan junto con el vehículo
+// al conductor (llaves, documentos, herramientas, accesorios, etc.)
+// Sirve para control de entrega y devolución.
+model InventarioVehiculo {
+  id              String   @id @default(cuid())
+  vehiculoId      String
+  nombre          String   // ej: "Llave de contacto"
+  descripcion     String?
+  cantidad        Int      @default(1)
+  estado          String   @default("BUENO") // NUEVO | BUENO | REGULAR | MALO
+  fotoUrl         String?
+  // Control de entrega
+  fechaIngreso    DateTime @default(now())
+  entregadoAConductorId String? // si está asignado a un contrato
+  fechaEntrega    DateTime?
+  fechaDevolucion DateTime?
+  estadoDevolucion String? // estado al devolver
+  notas           String?
+  creadoPor       String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  vehiculo        Vehiculo @relation(fields: [vehiculoId], references: [id])
+
+  @@index([vehiculoId])
+  @@index([entregadoAConductorId])
+}
+
+// --- DOCUMENTO ADICIONAL DEL VEHÍCULO ---
+// Documentos asociados: SOAT, tecnomecánica, tarjeta de propiedad,
+// seguro obligatorio, contrato de leasing, etc. (con fotos/archivos).
+model DocumentoVehiculo {
+  id              String   @id @default(cuid())
+  vehiculoId      String
+  tipo            String   // SOAT | TECNOMECANICA | TARJETA_PROPIEDAD | SEGURO | CONTRATO | OTRO
+  numero          String?  // número de póliza / certificado
+  fechaEmision    DateTime?
+  fechaVencimiento DateTime?
+  entidadEmisora  String?  // aseguradora, taller autorizado, etc.
+  archivoUrl      String?  // foto o PDF del documento
+  estado          String   @default("VIGENTE") // VIGENTE | POR_VENCER | VENCIDO
+  notas           String?
+  creadoPor       String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  vehiculo        Vehiculo @relation(fields: [vehiculoId], references: [id])
+
+  @@index([vehiculoId])
+  @@index([tipo])
+  @@index([fechaVencimiento])
 }

@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { PageHeader } from '@/components/ui-basics'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Car, LayoutDashboard, Users, FileText, CreditCard, Wrench, Package, Receipt, ShieldAlert } from 'lucide-react'
+import { Car, LayoutDashboard, Users, FileText, CreditCard, Wrench, Package, Receipt, ShieldAlert, BookUser } from 'lucide-react'
 import { VehiculosDashboard } from './vehiculos/VehiculosDashboard'
 import { VehiculosPanel } from './vehiculos/VehiculosPanel'
 import { ConductoresPanel } from './vehiculos/ConductoresPanel'
@@ -13,6 +13,7 @@ import { MantenimientosPanel } from './vehiculos/MantenimientosPanel'
 import { RepuestosPanel } from './vehiculos/RepuestosPanel'
 import { GastosPanel } from './vehiculos/GastosPanel'
 import { AuditoriaPanel } from './vehiculos/AuditoriaPanel'
+import { ProveedoresPanel } from './vehiculos/ProveedoresPanel'
 
 export function VehiculosView() {
   const [tab, setTab] = useState('dashboard')
@@ -28,7 +29,7 @@ export function VehiculosView() {
       />
 
       <Tabs value={tab} onValueChange={setTab}>
-        <TabsList className="flex overflow-x-auto whitespace-nowrap md:grid md:grid-cols-9 w-full no-scrollbar h-auto">
+        <TabsList className="flex overflow-x-auto whitespace-nowrap md:grid md:grid-cols-10 w-full no-scrollbar h-auto">
           <TabsTrigger value="dashboard" className="flex flex-col items-center gap-1 py-2">
             <LayoutDashboard className="w-4 h-4" />
             <span className="text-xs">Dashboard</span>
@@ -61,6 +62,10 @@ export function VehiculosView() {
             <Receipt className="w-4 h-4" />
             <span className="text-xs">Gastos</span>
           </TabsTrigger>
+          <TabsTrigger value="proveedores" className="flex flex-col items-center gap-1 py-2">
+            <BookUser className="w-4 h-4" />
+            <span className="text-xs">Proveedores</span>
+          </TabsTrigger>
           <TabsTrigger value="auditoria" className="flex flex-col items-center gap-1 py-2">
             <ShieldAlert className="w-4 h-4" />
             <span className="text-xs">Auditoría</span>
@@ -75,6 +80,7 @@ export function VehiculosView() {
         <TabsContent value="mantenimientos"><MantenimientosPanel key={refreshKey} onChanged={refresh} /></TabsContent>
         <TabsContent value="repuestos"><RepuestosPanel key={refreshKey} onChanged={refresh} /></TabsContent>
         <TabsContent value="gastos"><GastosPanel key={refreshKey} onChanged={refresh} /></TabsContent>
+        <TabsContent value="proveedores"><ProveedoresPanel key={refreshKey} onChanged={refresh} /></TabsContent>
         <TabsContent value="auditoria"><AuditoriaPanel key={refreshKey} /></TabsContent>
       </Tabs>
     </div>
