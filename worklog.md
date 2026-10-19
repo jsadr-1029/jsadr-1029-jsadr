@@ -3029,3 +3029,142 @@ Stage Summary:
 - ✅ Orden de controles: Frecuencia → Monto → Plazo → Flexibilidad
 - ✅ Flexibilidad Financiera: explicación completa de cada plan
 
+
+---
+Task ID: 26-vehiculos-sistema-integral-arrendamiento
+Agent: Super Z (main)
+Task: Crear sistema integral de arrendamiento de vehículos (GESTIÓN DE VEHÍCULOS) SIN eliminar ni alterar módulos existentes. 7 áreas: conductores/contratos, cobros automáticos, pagos con OCR, mantenimientos, panel admin, automatización/trazabilidad, seguridad. Sincronizar con GitHub, Vercel y Neon al 100%.
+
+Work Log:
+
+ANÁLISIS DE ARQUITECTURA EXISTENTE:
+- Next.js 16 App Router + Turbopack, Prisma + Neon Postgres
+- Auth: JWT en header Authorization Bearer + proxy.ts perimetral
+- Vistas admin: ViewKey enum + VISTAS_POR_ROL en lib/permisos.ts
+- Sidebar.tsx y mobile-nav.tsx con items jerárquicos
+- proxies.ts: isPublicEndpoint() define rutas públicas sin JWT
+
+MODELOS PRISMA AGREGADOS (al final de schema, sin tocar existentes):
+- Vehiculo (placa unique, marca, modelo, anio, kilometraje, VIN, motor, SOAT, tecnomecanica, estado, fotoUrl)
+- ConductorVehiculo (cedula unique, nombre, telefono, licencia, documentos JSON, tokenSesion, OTP)
+- ContratoVehiculo (numeroContrato unique, vehiculoId, conductorId, modalidadPago, tarifa, diasGracia, multaDiaria, deposito, renovacionAnticipada)
+- ObligacionVehiculo (auto-generada al crear contrato ACTIVO)
+- PagoVehiculo (con comprobante, OCR datos, estados PENDIENTE/EN_REVISION/APROBADO/RECHAZADO)
+- ComprobanteVehiculo (hash SHA-256 para detección de duplicados)
+- MantenimientoVehiculo (con repuestos instalados, proximaRevisionKm/Fecha)
+- RepuestoVehiculo (catálogo)
+- RepuestoInstalado (trazabilidad: instalación + retiro + vida útil calculada)
+- GastoVehiculo (combustible, peajes, lavado, etc.)
+- AlertaVehiculo (mantenimiento próximo, SOAT vencido, etc.)
+- AuditoriaVehiculo (registra quién crea/modifica/aprueba/reversa cada operación)
+
+API ROUTES (/api/vehiculos/*):
+- GET /dashboard — KPIs admin (ingresos facturados vs recibido, cartera vencida, rentabilidad por vehículo)
+- GET/POST /vehiculos — CRUD vehículos
+- PUT/DELETE /vehiculos/[id] — editar/desactivar vehículo
+- GET/POST /conductores — CRUD conductores
+- PUT/DELETE /conductores/[id] — editar/desactivar conductor
+- GET/POST /contratos — crear contrato ACTIVO genera obligaciones automáticamente
+- GET/PUT/DELETE /contratos/[id] — detalle completo + cancelar
+- POST /contratos/[id]/generar-obligaciones — añadir cuotas extras
+- POST /obligaciones/recalcular-mora — cron diario, aplica multaDiaria × diasRetraso
+- GET/POST /pagos — listar/registrar pago con comprobante
+- POST /pagos/[id]/aprobar — aprueba y actualiza saldo obligación (transacción)
+- POST /pagos/[id]/rechazar — rechaza (o reversa si ya estaba aprobado)
+- GET/POST /mantenimientos — con repuestos instalados
+- GET/POST /repuestos — catálogo
+- GET /repuestos/instalados — traza con vida útil
+- POST /repuestos/[id]/retirar — calcula vida útil + sugerencia próximo cambio
+- GET/POST /gastos — CRUD gastos
+- GET /auditoria — histórico con filtros
+
+PORTAL CONDUCTOR (/api/vehiculos/portal-conductor/*):
+- POST /login — cédula → token de sesión 12h (NO reemplaza autenticación segura)
+- GET /estado — contrato activo + vehículo + obligaciones + saldos + mantenimientos + próximas revisiones
+- GET/POST /pagos — conductor reporta pago (queda PENDIENTE)
+- Proxy.ts: añadidos a isPublicEndpoint (no requieren JWT, solo token conductor en header x-portal)
+
+CARACTERÍSTICAS CRÍTICAS IMPLEMENTADAS:
+1. Generación automática de obligaciones según modalidadPago (DIARIO/SEMANAL/QUINCENAL/MENSUAL/PERSONALIZADO)
+2. Cálculo de mora con días de gracia y multaDiaria (recalcular-mora endpoint)
+3. OCR básico: extrae valor/fecha/banco/referencia/destinatario del texto del comprobante
+4. Detección de duplicados por hash SHA-256 del comprobante
+5. Comparación OCR vs obligación esperada → marca inconsistencias
+6. Aprobación de pagos con transacción Prisma ($transaction): actualiza pago + saldo obligación
+7. Verificación: conductor NO puede aprobar sus propios pagos (server-side check)
+8. Reversa: si un pago aprobado se rechaza, se restaura el saldo de la obligación
+9. Trazabilidad de repuestos: instalación + retiro + vida útil (días + km) + sugerencia próximo cambio
+10. Alertas automáticas: mora > 3 días, vida útil corta (< 30 días / < 5000 km), vencimientos SOAT/tecno
+11. Auditoría completa: cada operación registra entidad/entidadId/accion/datosAnteriores/datosNuevos/usuario
+12. Sin simulación de conexiones bancarias inexistentes: aprobación solo manual o por integración real
+
+FRONTEND ADMIN (VehiculosView.tsx):
+- 9 tabs: Dashboard, Vehículos, Conductores, Contratos, Pagos, Mantenimientos, Repuestos, Gastos, Auditoría
+- Mobile-first responsive: grid 1 col móvil, multi-col desktop
+- Componentes reutilizables: Card, Button, Input, Select, Dialog, Sheet de shadcn/ui
+- EstadoBadge con colores por estado (PENDIENTE/APROBADO/etc)
+- Dashboard con KPIs + rentabilidad por vehículo + alertas críticas
+- ContratoDetalle (Sheet): resumen, totales, obligaciones, pagos, comprobantes
+- PagosPanel: filtro por estado, botones Aprobar/Rechazar, modal de revisión con comprobante + OCR
+
+FRONTEND PORTAL CONDUCTOR (/portal-conductor-vehiculos):
+- Login simple con cédula → token en localStorage
+- Pantalla principal: vehículo, contrato, saldos, próximos vencimientos, próximas revisiones, pagos, mantenimientos
+- Botón "Reportar pago" → modal con monto/fecha/método/banco/referencia/URL comprobante
+- Banner de aviso: "Tu pago quedará PENDIENTE, debe ser verificado por admin"
+- Mobile-first responsive: header azul, cards, grid adaptable
+
+SEGURIDAD:
+- Todos los endpoints /api/vehiculos/* (excepto portal-conductor) requieren JWT y rol ADMIN/GESTOR/CONSULTOR
+- Endpoints de portal-conductor son públicos pero validan token de sesión conductor en header x-portal-token
+- Verificación server-side: conductor no puede aprobar sus propios pagos
+- Auditoría inmutable: cada operación queda registrada con usuario/IP/timestamp
+- Soft delete: vehículos y conductores se desactivan (activo=false), no se eliminan
+- Permisos por rol: ADMIN ve todo, GESTOR no ve auditoría completa, CONSULTOR solo lectura
+
+VIEWKEY + PERMISOS:
+- ViewKey 'vehiculos' agregado a src/app/page.tsx (type union)
+- Import dinámico VehiculosView en page.tsx con ssr:false
+- Renderizado cuando view === 'vehiculos'
+- VISTAS_POR_ROL: ADMIN y GESTOR tienen acceso
+- Sidebar.tsx: nuevo item con icono Car después de Automatización
+- mobile-nav.tsx: nuevo item en moreItems
+
+DATOS DE PRUEBA (script scripts/_seed-vehiculos-prueba.cjs):
+- 2 vehículos: ABC123 (Chevrolet Spark 2020), XYZ789 (Renault Logan 2021)
+- 2 conductores: Carlos Ramírez (CC 1020304050), María González (CC 70506070)
+- 2 contratos ACTIVOS:
+  * CONTR-20261019-001: $80.000 DIARIO con multa $20.000/día (Carlos, ABC123)
+  * CONTR-20261019-002: $1.500.000 MENSUAL con multa $50.000/día (María, XYZ789)
+- 15 obligaciones (10 diarias + 4 mensuales + 1 vencida con 4 días mora)
+- 1 mantenimiento preventivo con repuesto instalado (filtro Bosch)
+- 1 gasto de combustible $180.000
+- 1 pago PENDIENTE de $80.000 con OCR detectado (coincide con obligación)
+
+VERIFICACIÓN EN PRODUCCIÓN:
+- POST /api/vehiculos/portal-conductor/login con cedula=1020304050 → success:true con token
+- GET /api/vehiculos/portal-conductor/estado con token → success:true con datos completos:
+  * Conductor: Carlos Ramírez
+  * Vehículo: ABC123 Chevrolet Spark GT, 45000 km
+  * Contrato: DIARIO, $80.000, multa $20.000/día
+  * Saldos: pendiente $880.000, multas $80.000
+  * 5 próximos vencimientos (incluyendo 1 vencida hace 5 días)
+  * 3 próximas revisiones (SOAT, tecno, mantenimiento)
+- GET /api/vehiculos/dashboard → requiere JWT (correcto)
+- Página /portal-conductor-vehiculos → HTTP 200
+
+Stage Summary:
+- ✅ GitHub: commit de4428c en origin/main
+- ✅ Vercel: deploy exitoso a jsadr-1029-jsadr (auto-deploy por GitHub integration)
+- ✅ Neon: schema migrado con prisma db push (12 tablas nuevas creadas)
+- ✅ Prisma client generado con modelos nuevos
+- ✅ Dashboard admin: 9 KPIs + rentabilidad por vehículo + alertas críticas
+- ✅ Portal conductor: login por cédula → estado completo con saldos, vencimientos, mantenimientos
+- ✅ Pagos con OCR + detección duplicados + aprobación con transacción
+- ✅ Trazabilidad repuestos con cálculo vida útil
+- ✅ Auditoría inmutable de todas las operaciones
+- ✅ Datos de prueba cargados (2 vehículos, 2 conductores, 2 contratos, 15 obligaciones, 1 pago)
+- 📌 Acceso admin: https://jsadr.com.co → login con cédula 95102913940 → sidebar "Gestión de Vehículos"
+- 📌 Portal conductor: https://jsadr.com.co/portal-conductor-vehiculos → cédula 1020304050
+- 📌 Para OCR real de alta precisión, integrar Google Cloud Vision / AWS Textract / Azure Computer Vision
+- 📌 Para verificación bancaria automática, integrar PSE/Bancolombia API (NO simulada)
