@@ -168,6 +168,27 @@ export default function LoginPage() {
               router.replace('/')
               router.refresh()
             }, 1100)
+          } else if (data.tipo === 'CONDUCTOR_VEHICULO') {
+            // Es conductor de vehículo — redirigir al portal del conductor
+            try {
+              localStorage.setItem('portalConductorToken', data.token)
+              localStorage.setItem('portalConductorCedula', idTrim)
+              localStorage.setItem('portalConductorNombre', data.nombre)
+            } catch {}
+            setTokens('portal_conductor_' + data.token, 'portal_conductor_' + data.token)
+            setUserData({
+              id: data.conductorId || data.clienteId,
+              nombre: data.nombre,
+              username: idTrim,
+              cedula: idTrim,
+              rol: 'CONDUCTOR_VEHICULO',
+              esPortalConductor: true,
+            })
+            setSuccess({ nombre: data.nombre })
+            setTimeout(() => {
+              router.replace('/portal-conductor-vehiculos')
+              router.refresh()
+            }, 1100)
           } else {
             // Es Cliente — redirigir al portal Neobanco Glass
             setTokens('portal_cliente_' + data.token, 'portal_cliente_' + data.token)

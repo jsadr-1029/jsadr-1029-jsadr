@@ -96,7 +96,81 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    // === 2. Buscar en tabla Cliente ===
+    // === 2. Buscar en ConductorVehiculo (conductores de arrendamiento) ===
+    const conductorVehiculo = await db.conductorVehiculo.findUnique({
+      where: { cedula: cedulaLimpia },
+      include: {
+        contratos: {
+          where: { estado: 'ACTIVO' },
+          include: { vehiculo: true },
+          take: 1,
+        },
+      },
+    })
+
+    if (conductorVehiculo) {
+      if (!conductorVehiculo.activo) {
+        return NextResponse.json(
+          { success: false, error: 'Cuenta de conductor inactiva. Contacta al administrador.', codigo: 'CUENTA_INACTIVA' },
+          { status: 403 }
+        )
+      }
+      // Verificar bloqueo temporal
+      if (conductorVehiculo.bloqueadoHasta && conductorVehiculo.bloqueadoHasta > new Date()) {
+        return NextResponse.json(
+          { success: false, error: `Cuenta bloqueada hasta ${conductorVehiculo.bloqueadoHasta.toLocaleString('es-CO')}`, codigo: 'BLOQUEADO' },
+          { status: 403 }
+        )
+      }
+      // Generar token de sesión (12h)
+      const crypto = require('crypto')
+      const token = crypto.randomBytes(32).toString('hex')
+      const tokenExpira = new Date(Date.now() + 12 * 60 * 60 * 1000)
+
+      await db.conductorVehiculo.update({
+        where: { id: conductorVehiculo.id },
+        data: {
+          tokenSesion: token,
+          tokenExpira,
+          ultimoAcceso: new Date(),
+          intentosFallidos: 0,
+          bloqueadoHasta: null,
+        },
+      })
+
+      await db.accesoPortal.create({
+        data: {
+          clienteCedula: cedulaLimpia,
+          clienteNombre: conductorVehiculo.nombre,
+          ipOrigen: clientInfo.ip,
+          userAgent: clientInfo.userAgent,
+          accion: 'LOGIN_CONDUCTOR_VEHICULO',
+          exito: true,
+          detalle: `Login conductor de arrendamiento (cédula)`,
+        },
+      })
+
+      const contratoActivo = conductorVehiculo.contratos[0]
+      return NextResponse.json({
+        success: true,
+        tipo: 'CONDUCTOR_VEHICULO',
+        token,
+        conductorId: conductorVehiculo.id,
+        clienteId: conductorVehiculo.id,
+        nombre: conductorVehiculo.nombre,
+        cedula: conductorVehiculo.cedula,
+        tieneContratoActivo: !!contratoActivo,
+        vehiculo: contratoActivo?.vehiculo
+          ? {
+              placa: contratoActivo.vehiculo.placa,
+              marca: contratoActivo.vehiculo.marca,
+              modelo: contratoActivo.vehiculo.modelo,
+            }
+          : null,
+      })
+    }
+
+    // === 3. Buscar en tabla Cliente ===
     const cliente = await db.cliente.findUnique({ where: { cedula: cedulaLimpia } })
 
     if (!cliente) {

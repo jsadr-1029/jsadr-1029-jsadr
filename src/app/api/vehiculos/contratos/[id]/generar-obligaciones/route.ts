@@ -7,6 +7,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { requireRole } from '@/lib/auth-guard'
 import { db } from '@/lib/db'
 
+// === Helper: generar fechas de vencimiento según modalidad ===
+// REGLA DE NEGOCIO: las liquidaciones son de LUNES a SÁBADO (excluye domingos)
 function generarFechasVencimiento(
   fechaInicio: Date,
   modalidad: string,
@@ -23,12 +25,24 @@ function generarFechasVencimiento(
     return fechas
   }
 
+  if (modalidad === 'DIARIO') {
+    let fechaCursor = new Date(base)
+    let generadas = 0
+    while (generadas < cantidadCuotas) {
+      const dia = fechaCursor.getDay()
+      if (dia !== 0) {
+        fechas.push(new Date(fechaCursor))
+        generadas++
+      }
+      fechaCursor.setDate(fechaCursor.getDate() + 1)
+      if (fechas.length > 365) break
+    }
+    return fechas
+  }
+
   for (let i = 1; i <= cantidadCuotas; i++) {
     const venc = new Date(base)
     switch (modalidad) {
-      case 'DIARIO':
-        venc.setDate(venc.getDate() + i)
-        break
       case 'SEMANAL':
         venc.setDate(venc.getDate() + (i * 7))
         break
