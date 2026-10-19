@@ -77,6 +77,11 @@ function isPublicEndpoint(pathname: string): boolean {
     pathname.startsWith('/api/admin/portal/auth') || // login del portal admin companion (P_jsadr / 731649)
     pathname.startsWith('/api/juridico/portal/auth') || // login del portal jurídico (abogados con cédula + clave)
     pathname.startsWith('/api/vehiculos/portal-conductor/') || // login del portal conductor (cédula + token en header)
+    pathname.startsWith('/api/vehiculos/registro-conductor/iniciar') || // registro público de conductor
+    pathname.startsWith('/api/vehiculos/registro-conductor/documentos') || // subir documentos (token en body)
+    pathname.startsWith('/api/vehiculos/registro-conductor/firma') || // firma electrónica (token en body)
+    pathname.startsWith('/api/vehiculos/registro-conductor/otp') || // solicitar OTP (token en body)
+    pathname.startsWith('/api/vehiculos/registro-conductor/verificar-otp') || // verificar OTP (token en body)
     pathname.startsWith('/api/chat/iniciar') || // inicio de chat con cédula+teléfono (sin token previo)
     pathname.startsWith('/api/chat/otp') || // solicitud/verificación OTP del chat
     pathname === '/api/simulador' || // simulador público

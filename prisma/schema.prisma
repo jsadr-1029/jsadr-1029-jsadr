@@ -2615,3 +2615,71 @@ model ReciboPagoVehiculo {
   @@index([conductorId])
   @@index([fechaAprobacion])
 }
+
+// =====================================================
+// === EXTENSIÓN 5: REGISTRO DE CONDUCTOR POR SELF-SERVICE ===
+// El conductor se registra desde /registro-conductor:
+//  - Datos de contacto (nombre, cédula, teléfono, email, dirección, etc.)
+//  - Fotos: cédula frente, cédula reverso, licencia frente, licencia reverso,
+//    selfie sosteniendo ambos documentos, recibo de servicios públicos
+//  - Firma electrónica (imagen base64)
+//  - Validación OTP por teléfono/email → firma del contrato digital
+//  - Vinculación con vehículo y contrato asignados
+// El admin aprueba y se crea ConductorVehiculo + contrato.
+// =====================================================
+
+model SolicitudConductorVehiculo {
+  id              String   @id @default(cuid())
+  // Estado del proceso
+  estado          String   @default("PENDIENTE") // PENDIENTE | DOCUMENTOS | FIRMA | OTP | COMPLETADA | APROBADA | RECHAZADA
+  // Datos del conductor
+  cedula          String
+  nombre          String
+  telefono        String
+  email           String?
+  direccion       String?
+  ciudad          String?
+  barrio          String?
+  fechaNacimiento DateTime?
+  // Licencia
+  licenciaNumero  String?
+  licenciaCategoria String?
+  licenciaVence   DateTime?
+  // Referencia personal
+  contactoEmergenciaNombre String?
+  contactoEmergenciaTelefono String?
+  contactoEmergenciaParentesco String?
+  // Fotos (URLs)
+  fotoCedulaFrente    String?
+  fotoCedulaReverso   String?
+  fotoLicenciaFrente  String?
+  fotoLicenciaReverso String?
+  fotoSelfie           String?
+  fotoReciboServicios  String?
+  // Firma electrónica
+  firmaElectronica    String?  // base64 PNG
+  fechaFirma         DateTime?
+  // OTP
+  otpHash             String?
+  otpExpira           DateTime?
+  otpVerificado       Boolean  @default(false)
+  // Vehículo y contrato asignados (pre-asignados por admin)
+  vehiculoIdPreasignado   String?
+  contratoIdPreasignado   String?
+  // Token de acceso (para que el conductor retome el registro)
+  tokenRegistro      String?  @unique
+  tokenExpira         DateTime?
+  // Auditoría
+  creadoPor           String?  // admin que pre-asignó, o SELF si viene de página pública
+  aprobadoPor         String?
+  aprobadoAt          DateTime?
+  motivoRechazo       String?
+  // Cuando se aprueba, se crea el conductor y se vincula
+  conductorCreadoId   String?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@index([cedula])
+  @@index([estado])
+  @@index([tokenRegistro])
+}

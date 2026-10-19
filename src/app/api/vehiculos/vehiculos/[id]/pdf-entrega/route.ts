@@ -349,10 +349,12 @@ export async function GET(
       )
     }
 
-    doc.end()
-
-    const pdfBuffer = await new Promise<Buffer>((resolve) => {
+    // === IMPORTANTE: registrar listener 'end' ANTES de llamar a doc.end() ===
+    const pdfBuffer = await new Promise<Buffer>((resolve, reject) => {
       doc.on('end', () => resolve(Buffer.concat(buffers)))
+      doc.on('error', (err: any) => reject(err))
+      // Llamar a end() después de registrar los listeners
+      doc.end()
     })
 
     const filename = `Entrega_${vehiculo.placa}_${new Date().toISOString().slice(0, 10)}.pdf`

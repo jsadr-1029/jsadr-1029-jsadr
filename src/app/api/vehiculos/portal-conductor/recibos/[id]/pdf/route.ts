@@ -196,10 +196,11 @@ export async function GET(
       50, doc.page.height - 30, { align: 'center', width: ancho }
     )
 
-    doc.end()
-
-    const pdfBuffer = await new Promise<Buffer>((resolve) => {
+    // IMPORTANTE: registrar listeners ANTES de end()
+    const pdfBuffer = await new Promise<Buffer>((resolve, reject) => {
       doc.on('end', () => resolve(Buffer.concat(buffers)))
+      doc.on('error', (err: any) => reject(err))
+      doc.end()
     })
 
     const filename = `Recibo_${recibo.numeroRecibo}.pdf`

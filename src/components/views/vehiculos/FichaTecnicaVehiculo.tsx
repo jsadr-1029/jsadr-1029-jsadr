@@ -14,7 +14,7 @@ import { useToast } from '@/hooks/use-toast'
 import { Download, FileText, Package, Wrench, Calendar, Car, AlertTriangle, Plus, Trash2, FileCheck, Phone, MapPin } from 'lucide-react'
 import { apiFetch, formatCOP, formatDate, EstadoBadge } from './helpers'
 
-const TIPOS_DOCUMENTO = ['SOAT', 'TECNOMECANICA', 'TARJETA_PROPIEDAD', 'SEGURO', 'CONTRATO', 'OTRO']
+const TIPOS_DOCUMENTO = ['SOAT', 'TECNOMECANICA', 'TARJETA_PROPIEDAD', 'SEGURO', 'POLIZA_TODO_RIESGO', 'CONTRATO', 'OTRO']
 const ESTADOS_INVENTARIO = ['NUEVO', 'BUENO', 'REGULAR', 'MALO']
 
 const COLORES_DOC: Record<string, string> = {

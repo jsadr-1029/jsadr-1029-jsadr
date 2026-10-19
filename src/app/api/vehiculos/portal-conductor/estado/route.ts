@@ -145,6 +145,44 @@ export async function GET(req: NextRequest) {
       })
     }
 
+    // === Póliza todo riesgo ===
+    // Buscar en DocumentoVehiculo los documentos tipo POLIZA_TODO_RIESGO o SEGURO
+    // con fecha de vencimiento y agregarlos a próximas revisiones
+    const documentosVehiculo = await db.documentoVehiculo.findMany({
+      where: {
+        vehiculoId: contrato.vehiculoId,
+        tipo: { in: ['POLIZA_TODO_RIESGO', 'SEGURO'] },
+        fechaVencimiento: { not: null },
+      },
+      orderBy: { fechaVencimiento: 'asc' },
+    })
+    for (const doc of documentosVehiculo) {
+      if (!doc.fechaVencimiento) continue
+      const dias = Math.ceil((doc.fechaVencimiento.getTime() - ahora.getTime()) / (1000 * 60 * 60 * 24))
+      const etiqueta = doc.tipo === 'POLIZA_TODO_RIESGO' ? 'Póliza Todo Riesgo' : 'Seguro'
+      const etiquetaCompleta = doc.numero ? `${etiqueta} (${doc.numero})` : etiqueta
+      proximasRevisiones.push({
+        tipo: etiquetaCompleta,
+        fecha: doc.fechaVencimiento,
+        diasParaVencer: dias,
+        severidad: dias < 0 ? 'CRITICAL' : dias < 15 ? 'WARNING' : 'INFO',
+      })
+    }
+
+    // Licencia de conducir del conductor
+    if (conductor.licenciaVence) {
+      const dias = Math.ceil((conductor.licenciaVence.getTime() - ahora.getTime()) / (1000 * 60 * 60 * 24))
+      proximasRevisiones.push({
+        tipo: 'Licencia de conducir',
+        fecha: conductor.licenciaVence,
+        diasParaVencer: dias,
+        severidad: dias < 0 ? 'CRITICAL' : dias < 30 ? 'WARNING' : 'INFO',
+      })
+    }
+
+    // Ordenar próximas revisiones por fecha
+    proximasRevisiones.sort((a, b) => new Date(a.fecha).getTime() - new Date(b.fecha).getTime())
+
     return NextResponse.json({
       success: true,
       data: {
