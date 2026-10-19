@@ -3490,3 +3490,101 @@ Stage Summary:
 - 📌 Acceso: https://jsadr.com.co/login → cedula 12147316499 → portal del conductor
 - 📌 Sebastian vera: su vehiculo Ford Fiesta, contrato $80.000 L-S, 24 obligaciones
   (Lun-Vie-Sab, sin domingos), cuenta Bancolombia + QR Nequi
+
+---
+Task ID: 30-vehiculos-pago-dia-semana-multa-50000
+Agent: Super Z (main)
+Task: Permitir al conductor escoger pagar un dia especifico o toda la semana (L-S). Recordar que despues del dia 6 (sabado) sin pagar se cobraran $50.000 de multa. Los pagos deben reportarse todos los sabados.
+
+Work Log:
+
+MODELO PRISMA ACTUALIZADO (sin recrear):
+- PagoVehiculo: agregados 4 campos nuevos:
+  * tipoReporte: String default 'DIA' (DIA | SEMANA)
+  * diasIncluidos: String? (JSON array con IDs de obligaciones que cubre)
+  * semanaNumero: Int? (numero relativo al inicio del contrato)
+  * multaAplicada: Float default 0 (multa $50.000 si pago tarde)
+- Indexes nuevos: [tipoReporte], [semanaNumero]
+
+API NUEVA /api/vehiculos/portal-conductor/semanas:
+- Devuelve obligaciones agrupadas por semana (L-S, sin domingos)
+- Calcula semanaNumero: diffDias(lunes-semana) / 7 + 1 desde fechaInicio contrato
+- Para cada semana:
+  * estado: PENDIENTE | PARCIAL | PAGADA | ATRASADA
+  * total, totalPagado, totalPendiente
+  * multaPorMora: suma de multas de las obligaciones
+  * multaAtrasoSemana: $50.000 si ya paso el sabado y no esta pagada
+  * dias[]: cada dia con fecha, diaSemana (LUNES..SABADO), monto, estado, esHoy
+  * mensaje contextual:
+    - ATRASADA: "⚠️ Venció el sábado sin pagar. Multa $50.000 aplicada"
+    - PARCIAL: "✅ Pago parcial. Completa para evitar multas"
+    - PAGADA: "✅ Semana pagada completamente"
+    - PENDIENTE: "💳 Paga antes del sábado para evitar multa de $50.000"
+- Recordatorio general: "Los pagos deben reportarse todos los sábados..."
+
+MULTA AUTOMATICA $50.000 (en 2 lugares):
+1. /api/vehiculos/portal-conductor/pagos POST:
+   - Si semanaNumero presente, busca el sabado de esa semana
+   - Calcula diasDesdeSabado
+   - Si diasDesdeSabado > 0: multaAplicada = 50000
+   - Devuelve mensaje: "Incluye multa de $50.000 por pago fuera del sábado"
+2. /api/vehiculos/obligaciones/recalcular-mora POST:
+   - Para obligaciones del sabado con diasRetraso > 0:
+     suma $50.000 a la multa (una sola vez por semana usando Set de keys)
+   - Set<string> semanasAtrasadasAplicadas evita duplicar multa en misma semana
+
+PORTAL CONDUCTOR (page.tsx):
+- Nuevo estado: semanas[], recordatorio, tipoPago, diaSeleccionado,
+  semanaSeleccionada
+- cargarEstado ahora hace Promise.all con 5 endpoints (incluye /semanas)
+- Banner recordatorio amarillo permanente:
+  "Recordatorio de pago semanal - Los pagos deben reportarse todos
+  los sábados. Si pagas después del día 6, se cobrarán $50.000 de multa"
+- Card 'Mis semanas de pago' con tarjetas por semana:
+  * Color por estado: verde=pagada, rojo=atrasada, amarillo=parcial, azul=pendiente
+  * Header: Semana N + fechas (desde Lunes hasta Sábado)
+  * Badge de estado + total pendiente
+  * Mensaje contextual con color
+  * Grid 6 botones (Lunes-Sábado):
+    - Click individual → tipoPago='DIA', diaSeleccionado=obligId, monto=day.montoPendiente
+    - Dia actual resaltado con ring azul (esHoy=true)
+    - Dias pagados deshabilitados (verde)
+  * Boton 'Pagar semana completa':
+    - tipoPago='SEMANA', semanaSeleccionada=N, monto=totalPendiente
+- Modal reportar pago:
+  * Resumen arriba muestra que se selecciono:
+    - DIA: "📅 Pago por día - LUNES 20/10 - $80.000"
+    - SEMANA: "🗓️ Pago por semana - Semana 1 - $480.000 (incluye $50.000 multa)"
+    - Vacio: "⚠️ Primero selecciona un día o una semana"
+  * Boton principal dinamico: "Reportar pago (día seleccionado)" o "(semana 3)"
+- Funciones seleccionarDia() y seleccionarSemana() setean estado + monto
+
+VALIDACIONES SERVER-SIDE:
+- Si tipo=SEMANA: verifica que las obligaciones pertenezcan al contrato
+- Si tipo=SEMANA: verifica que no esten ya pagadas (404 si lo estan)
+- Si tipo=SEMANA: marca obligaciones como PARCIAL hasta aprobar el pago
+  (evita que se puedan pagar dos veces)
+- Si tipo=DIA: obligacionId se guarda directo
+
+VERIFICACION EN PRODUCCION:
+- POST /api/portal/login cedula=12147316499 → token conductor
+- GET /api/vehiculos/portal-conductor/semanas → 4 semanas generadas
+  * Semana 0: Lunes 19 - Sábado 24 octubre ($480.000)
+    - Lunes 19 marcado como esHoy (hoy)
+  * Semana 1: Lunes 26 - Sábado 31 octubre ($480.000)
+  * Semana 2: Lunes 2 - Sábado 7 noviembre ($480.000)
+  * Semana 3: Lunes 9 - Sábado 14 noviembre ($480.000)
+- Recordatorio visible: "Los pagos deben reportarse todos los sábados..."
+- Multa $50.000 pendiente (no se aplica porque semana 0 vence sábado 24)
+
+Stage Summary:
+- ✅ GitHub: commit 2816c1b en origin/main
+- ✅ Vercel: deploy exitoso
+- ✅ Neon: schema actualizado (4 campos en PagoVehiculo)
+- ✅ Selector dia/semana funcional en portal conductor
+- ✅ Multa $50.000 automatica si paga despues del sabado
+- ✅ Recordatorio de pago sabado visible siempre
+- ✅ Generacion automatica de semanas L-S (sin domingos)
+- 📌 Acceso: https://jsadr.com.co/login → cedula 12147316499 → portal conductor
+- 📌 Sebastian vera: 4 semanas (L-S) + recordatorio multa $50.000 + botones
+  de pago individual y de semana completa
