@@ -3275,3 +3275,107 @@ Stage Summary:
   documentos y mantenimiento vinculado a Taller Auto-Plus
 - 📌 Para descargar PDF: abrir ficha del vehiculo → boton 'PDF completo' (o 'Solo ficha'
   o 'Solo inventario')
+
+---
+Task ID: 28-vehiculos-cuentas-pago-qr-recibos
+Agent: Super Z (main)
+Task: Permitir asignar cuentas de pago a conductores (con titular, banco, telefono, etc.) + códigos QR escaneables + recibos PDF descargables. El conductor debe ver todo esto al iniciar sesión con su cédula.
+
+Work Log:
+
+MODELOS PRISMA AGREGADOS:
+- CuentaPagoVehiculo: banco, tipoCuenta, numeroCuenta, titularCuenta,
+  tipoIdTitular, numeroIdTitular, emailPago, telefonoPago, instrucciones,
+  referenciaSugerida, esPrincipal. Vinculada a ContratoVehiculo.
+- CodigoQRVehiculo: titulo, descripcion, imagenUrl, montoFijo, tipoPago.
+  Vinculada a ContratoVehiculo y opcional a CuentaPagoVehiculo.
+- ReciboPagoVehiculo: numeroRecibo unico (REC-YYYYMMDD-XXXXXX),
+  codigoVerificacion hash, snapshot completo del pago + contrato + conductor +
+  vehiculo al aprobar. Relacion 1:1 con PagoVehiculo.
+- Relaciones inversas agregadas en Vehiculo, ConductorVehiculo,
+  ContratoVehiculo, PagoVehiculo (sin alterar campos existentes).
+
+API ROUTES NUEVAS:
+- /api/vehiculos/cuentas-pago (GET/POST)
+- /api/vehiculos/cuentas-pago/[id] (PUT/DELETE soft)
+- /api/vehiculos/codigos-qr (GET/POST)
+- /api/vehiculos/codigos-qr/[id] (DELETE soft)
+- /api/vehiculos/pagos/[id]/recibo (GET JSON o ?format=pdf para PDF con JWT admin)
+- /api/vehiculos/portal-conductor/cuentas-pago (GET con token conductor)
+- /api/vehiculos/portal-conductor/codigos-qr (GET con token conductor)
+- /api/vehiculos/portal-conductor/recibos (GET lista con token conductor)
+- /api/vehiculos/portal-conductor/recibos/[id]/pdf (GET PDF con token conductor)
+
+GENERACIÓN AUTOMÁTICA DE RECIBO:
+- Modificado /api/vehiculos/pagos/[id]/aprobar: después de aprobar, genera
+  automáticamente el ReciboPagoVehiculo con snapshot completo y código de
+  verificación SHA-256. Es idempotente (si ya existe, lo retorna).
+- Si falla la generación del recibo, no falla la aprobación del pago.
+
+PDF DE RECIBO (PDFKit):
+- Header: RECIBO DE PAGO + número de recibo
+- Sección 1: Detalles del pago (monto, fecha, método, banco, referencia,
+  código verificación)
+- Sección 2: Contrato y vehículo (número contrato, conductor, cédula, placa)
+- Sección 3: Obligación cancelada (cuota, monto, multa, total)
+- Sección 4: Firma del administrador que aprobó
+- Sección 5: Código de verificación (font Courier, alineado centro)
+- Footer con paginación
+
+PORTAL CONDUCTOR MEJORADO (src/app/portal-conductor-vehiculos/page.tsx):
+- Carga paralela al iniciar sesión: estado + cuentas + QR + recibos
+- Sección "¿Dónde pago?" muestra todas las cuentas con banco, tipo, número,
+  titular (con tipo/numero ID), teléfono, email, referencia sugerida,
+  instrucciones. Cuenta principal destacada con borde azul y badge.
+- Sección "Códigos QR para pago" muestra QR escaneables en grid 2 columnas,
+  con imagen, monto fijo si existe, descripción.
+- Sección "Mis recibos de pago" lista recibos con número, monto, fecha,
+  código verificación y botón "PDF" para descargar.
+- Función descargarRecibo(id) hace fetch del PDF y lo descarga automáticamente.
+
+PANEL ADMIN (VehiculosView):
+- Ahora 12 tabs: Dashboard, Vehículos, Conductores, Contratos, Pagos,
+  Cuentas Pago, Códigos QR, Mantenimientos, Repuestos, Gastos, Proveedores,
+  Auditoría
+- CuentasPagoPanel: tarjetas por cuenta con banco, tipo, número (font mono),
+  titular, ID titular, teléfono, email, referencia, instrucciones. Filtro por
+  contrato, marcado principal con badge y borde azul.
+- CodigosQRPanel: grid de QRs con preview de imagen, monto fijo, descripción,
+  contrato y cuenta vinculada.
+
+DATOS DE PRUEBA (scripts/_seed-cuentas-pago-qr.cjs):
+- 3 cuentas para contrato CONTR-20261019-001 (Carlos Ramírez, ABC123):
+  * Bancolombia Ahorros 1234 5678 9012 - titular Jsadr Arrendamientos SAS
+    (NIT 901234567-8) - PRINCIPAL - email pagos@jsadr.com.co
+    - referencia: ABC123-1020304050
+    - instrucciones: Enviar comprobante al WhatsApp 3001234567
+  * Nequi 3001234567 - titular Jsadr Arrendamientos (CC 95102913940)
+  * Davivienda Corriente 0098 7654 3210 - titular Jsadr Arrendamientos SAS
+- 2 códigos QR:
+  * Pago Nequi (monto fijo $80.000) - QR generado dinámicamente
+  * Pago Bancolombia QR
+
+VERIFICACIÓN EN PRODUCCIÓN:
+- POST /api/vehiculos/portal-conductor/login cedula=1020304050 → token válido
+- GET /api/vehiculos/portal-conductor/cuentas-pago → 3 cuentas (Bancolombia
+  principal, Nequi, Davivienda) con todos los datos
+- GET /api/vehiculos/portal-conductor/codigos-qr → 2 QR escaneables
+- GET /api/vehiculos/portal-conductor/recibos → 0 recibos (ningún pago
+  aprobado aún en producción)
+
+Stage Summary:
+- ✅ GitHub: commit 79b1feb en origin/main
+- ✅ Vercel: deploy exitoso (auto-deploy)
+- ✅ Neon: schema migrado (3 modelos nuevos: CuentaPagoVehiculo,
+  CodigoQRVehiculo, ReciboPagoVehiculo)
+- ✅ Cuentas de pago configurables por contrato
+- ✅ Códigos QR escaneables en portal conductor
+- ✅ Recibos PDF descargables (generación automática al aprobar)
+- ✅ Datos de prueba cargados (3 cuentas + 2 QR para contrato de Carlos)
+- 📌 Acceso admin: https://jsadr.com.co → login cédula 95102913940 →
+  sidebar 'Gestión de Vehículos' → tabs 'Cuentas Pago' y 'Códigos QR'
+- 📌 Portal conductor: https://jsadr.com.co/portal-conductor-vehiculos →
+  cédula 1020304050 → secciones '¿Dónde pago?', 'Códigos QR para pago' y
+  'Mis recibos de pago' (visible cuando apruebes un pago)
+- 📌 Para ver un recibo: aprueba un pago desde el admin → el conductor verá
+  el recibo PDF descargable en su portal
