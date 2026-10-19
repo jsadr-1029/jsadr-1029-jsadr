@@ -3379,3 +3379,114 @@ Stage Summary:
   'Mis recibos de pago' (visible cuando apruebes un pago)
 - 📌 Para ver un recibo: aprueba un pago desde el admin → el conductor verá
   el recibo PDF descargable en su portal
+
+---
+Task ID: 29-vehiculos-sebastian-ford-fiesta-lunes-sabado
+Agent: Super Z (main)
+Task: Crear conductor Sebastian con Ford Fiesta 2012, cedula 12147316499, contrato $80.000 diarios de LUNES A SABADO. El login con esa cedula debe llevarlo al portal del conductor (no al admin). Las liquidaciones son L-S obligatorias (sin domingos).
+
+Work Log:
+
+CAMBIO EN REGLA DE NEGOCIO - LIQUIDACION L-S:
+- Funcion generarFechasVencimiento en:
+  * src/app/api/vehiculos/contratos/route.ts (creacion de contrato)
+  * src/app/api/vehiculos/contratos/[id]/generar-obligaciones/route.ts (cuotas extra)
+- Cuando modalidad=DIARIO, ahora recorre dia por dia y EXCLUYE domingos
+  (dia.getDay() === 0 se omite automaticamente)
+- Safety break: maximo 365 iteraciones para evitar loops infinitos
+- Aplica tambien a contratos existentes que generen obligaciones adicionales
+
+LOGIN UNIFICADO CON CEDULA (3 tablas):
+- Modificado /api/portal/login/route.ts para buscar en este orden:
+  1. Usuario (admin/gestor/consultor)
+  2. ConductorVehiculo (conductores de arrendamiento) - NUEVO
+  3. Cliente (microfinanzas)
+- Si es ConductorVehiculo:
+  * Verifica activo y bloqueadoHasta
+  * Genera token 32 bytes hex (12h expiracion)
+  * Actualiza ultimoAcceso, resetea intentosFallidos
+  * Registra accesoPortal con accion=LOGIN_CONDUCTOR_VEHICULO
+  * Devuelve tipo=CONDUCTOR_VEHICULO + datos del vehiculo si tiene contrato activo
+
+REDIRECCION EN /login:
+- Modificado src/app/login/page.tsx para manejar nuevo tipo:
+  if (data.tipo === 'CONDUCTOR_VEHICULO') {
+    localStorage.setItem('portalConductorToken', data.token)
+    localStorage.setItem('portalConductorCedula', idTrim)
+    setUserData({ rol: 'CONDUCTOR_VEHICULO', esPortalConductor: true, ... })
+    router.replace('/portal-conductor-vehiculos')
+  }
+- El conductor NO entra al panel admin, va directo a su portal
+
+CONDUCTOR DE PRUEBA SEBASTIAN (script _seed-sebastian-ford-fiesta.cjs):
+- Conductor:
+  * Cedula: 12147316499
+  * Nombre: Sebastian
+  * Telefono: 3009876543
+  * Email: sebastian.conductor@example.com
+  * Licencia: B1, LC-99887766-MED, vence 2028-06-30
+- Vehiculo:
+  * Placa: FOR2012
+  * Marca/Modelo: Ford Fiesta 2012
+  * Color: Gris
+  * Kilometraje: 95000 km
+  * VIN: 3FAHP0HA1CR123456
+  * Motor: 1.6L TiVCT
+- Contrato CONTR-20261019-003:
+  * Modalidad: DIARIO
+  * Tarifa: $80.000 (Lunes a Sabado)
+  * Dias de gracia: 1
+  * Multa diaria: $20.000
+  * Deposito: $100.000
+  * 24 obligaciones generadas (4 semanas L-S, SIN domingos)
+    - Primera: lunes 19 de octubre
+    - Ultima: sabado 14 de noviembre
+- Cuenta de pago principal:
+  * Bancolombia Ahorros 0098 7654 3210 99
+  * Titular: Jsadr Arrendamientos SAS (NIT 901234567-8)
+  * Referencia: FOR2012-12147316499
+  * Instrucciones: Enviar comprobante al WhatsApp 3001234567
+- QR de pago Nequi ($80.000 fijo)
+- 10 items de inventario:
+  * Llave de contacto + repuesto
+  * Gato hidraulico + llave de cruz
+  * Llanta de repuesto
+  * Triangulos de seguridad x2
+  * Botiquin + extintor
+  * Manual del propietario + kit herramientas
+- 3 documentos:
+  * SOAT (vence 2027-02-28)
+  * Tecnomecanica (vence 2027-03-15)
+  * Tarjeta de propiedad
+
+VERIFICACION EN PRODUCCION:
+- POST /api/portal/login cedula=12147316499 → success:true con tipo=CONDUCTOR_VEHICULO
+  * token: c9c5c642266ab07c7e6f9fdb72da297e655bff7bbfa2e93335c9b7983cf77128
+  * nombre: Sebastian
+  * tieneContratoActivo: true
+  * vehiculo: FOR2012 Ford Fiesta
+- GET /api/vehiculos/portal-conductor/estado con token:
+  * Conductor: Sebastian
+  * Contrato: CONTR-20261019-003 - DIARIO $80.000
+  * Vehiculo: FOR2012 Ford Fiesta
+  * 5 proximos vencimientos:
+    - Lunes 19/10 - Cuota #1
+    - Martes 20/10 - Cuota #2
+    - Miercoles 21/10 - Cuota #3
+    - (no hay domingos en las obligaciones)
+- GET /api/vehiculos/portal-conductor/cuentas-pago → 1 cuenta (Bancolombia)
+- GET /api/vehiculos/portal-conductor/codigos-qr → 1 QR (Nequi $80.000)
+
+Stage Summary:
+- ✅ GitHub: commit 5f2bb68 en origin/main
+- ✅ Vercel: deploy exitoso (auto-deploy)
+- ✅ Neon: schema sin cambios (modelos ya existian)
+- ✅ Conductor Sebastian creado con todos sus datos
+- ✅ Ford Fiesta 2012 asignado (placa FOR2012)
+- ✅ Contrato $80.000 diarios L-S con 24 obligaciones (sin domingos)
+- ✅ Login unificado: cedula 12147316499 detecta CONDUCTOR_VEHICULO
+- ✅ Redireccion automatica a /portal-conductor-vehiculos (no entra al admin)
+- ✅ Cuenta de pago + QR + inventario + documentos cargados
+- 📌 Acceso: https://jsadr.com.co/login → cedula 12147316499 → portal del conductor
+- 📌 Sebastian vera: su vehiculo Ford Fiesta, contrato $80.000 L-S, 24 obligaciones
+  (Lun-Vie-Sab, sin domingos), cuenta Bancolombia + QR Nequi
