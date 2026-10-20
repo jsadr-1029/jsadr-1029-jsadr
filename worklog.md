@@ -3588,3 +3588,95 @@ Stage Summary:
 - 📌 Acceso: https://jsadr.com.co/login → cedula 12147316499 → portal conductor
 - 📌 Sebastian vera: 4 semanas (L-S) + recordatorio multa $50.000 + botones
   de pago individual y de semana completa
+
+---
+Task ID: 31-portal-conductor-redesign-seleccion-multiple-dias
+Agent: Super Z (main)
+Task: Rediseñar el menú del conductor mejorando su apariencia. Cuando la persona quiera pagar la semana completa debe poder escoger todos los días en una opción (no día por día).
+
+Work Log:
+
+REDISEÑO COMPLETO DEL PORTAL DEL CONDUCTOR:
+- Login screen:
+  * Fondo gradiente indigo → blue → purple con blobs blancos difuminados
+  * Card central con shadow-2xl, icono Car con gradiente
+  * Título con gradiente bg-clip-text
+  * Input más grande (h-12, text-lg) para mejor UX
+  * Botón con gradiente blue → indigo
+  * Link a /registro-conductor al final
+
+- Header (gradiente indigo → blue → purple):
+  * Avatar con icono User en backdrop-blur
+  * Tarjeta del vehículo con backdrop-blur + bordes translucidos
+  * Muestra marca, modelo, placa, año y kilometraje actual
+
+- Navegación por tabs (5 secciones):
+  * Inicio (Sparkles): saldos + contrato + revisiones + mantenimientos + CTA
+  * Pagos (CreditCard): semanas con selección múltiple + historial
+  * Cuentas (Wallet): tarjetas de cuentas de pago
+  * QR (QrCode): grid 2 col de códigos QR escaneables
+  * Recibos (Download): lista con botón PDF
+  * Estilo: botones con gradiente cuando están activos + iconos temáticos
+
+- Cards de saldos (3 columnas con gradientes temáticos):
+  * Pendiente: gradiente naranja
+  * Multas: gradiente rojo
+  * Pagado: gradiente verde/emerald
+  * border-0 + shadow-md para look limpio
+
+- Recordatorio de pago semanal:
+  * Card con gradiente amber → orange + icono Bell
+  * Banner destacado con borde grueso
+
+SELECCIÓN MÚLTIPLE DE DÍAS:
+- 3 modos de selección:
+  1. DIA (azul): clic en un día individual
+  2. SEMANA (azul): botón "Pagar semana completa" - selecciona toda la semana L-S
+  3. PERSONALIZADO (morado): botón "Seleccionar todos los días" - marcar/desmarcar múltiples
+
+- Botón "Seleccionar todos los días" por semana:
+  * Selecciona TODOS los días pendientes de pago de esa semana
+  * Toggle: si ya están todos seleccionados, los desmarca
+  * Muestra contador: "✓ 5 días seleccionados"
+  * Color morado cuando hay selección personalizada activa
+  * Días individuales se colorean morado al ser seleccionados
+
+- Botón "Pagar semana completa" (azul):
+  * Selecciona toda la semana (los 6 días L-S)
+  * Color azul con checkmark cuando está activo
+
+- Modal de pago con 3 tipos de resumen:
+  * DIA: muestra día + fecha + monto (icono 📅)
+  * SEMANA: muestra semana + total + multa si aplica (icono 🗓️)
+  * PERSONALIZADO: lista días seleccionados + total (icono ✓)
+  * Si no hay selección: advertencia amarilla
+
+- Botón principal "Pagar" contextual:
+  * "Pagar (día)" cuando se selecciona un día
+  * "Pagar (sem 3)" cuando se selecciona una semana
+  * "Pagar (5 días)" cuando hay selección personalizada
+
+- Backend: tipoPago='PERSONALIZADO' se envía como 'SEMANA' al API
+  (diasIncluidos contiene los IDs de los días seleccionados personalmente)
+
+UX MEJORADA:
+- Cards border-0 + shadow-md con gradientes suaves
+- Botones con gradientes temáticos (emerald/green para pagar)
+- Animaciones de hover y transición
+- Iconos lucide-react con colores coherentes
+- Responsive: max-w-3xl centrado, grids adaptables
+- Día actual resaltado con ring azul
+- Estados visuales claros: pagado (verde), vencido (rojo), pendiente (azul)
+
+VERIFICACIÓN EN PRODUCCIÓN:
+- GET /portal-conductor-vehiculos → HTTP 200
+- POST /api/portal/login cedula=12147316499 → tipo=CONDUCTOR_VEHICULO, nombre=Sebastian
+- GET /api/vehiculos/portal-conductor/semanas → 4 semanas disponibles
+
+Stage Summary:
+- ✅ GitHub: commit 5084c68 en origin/main
+- ✅ Vercel: deploy exitoso
+- ✅ Portal conductor rediseñado con apariencia moderna
+- ✅ Selección múltiple de días implementada (3 modos)
+- ✅ Botón "Seleccionar todos los días" por semana
+- 📌 Acceso: https://jsadr.com.co/portal-conductor-vehiculos → cédula 12147316499
