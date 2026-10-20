@@ -3680,3 +3680,115 @@ Stage Summary:
 - ✅ Selección múltiple de días implementada (3 modos)
 - ✅ Botón "Seleccionar todos los días" por semana
 - 📌 Acceso: https://jsadr.com.co/portal-conductor-vehiculos → cédula 12147316499
+
+---
+Task ID: 32-vehiculos-reservas + simplificar-pago + camara-comprobante
+Agent: Super Z (main)
+Task: Crear sección Reservas conectada admin-conductor (autorización de viajes con distribución conductor/admin/mantenimiento/peajes). Simplificar modal de pago (auto-cargar banco y destinatario, sin referencia, subir foto con cámara nativa).
+
+Work Log:
+
+MODELO PRISMA ReservaVehiculo:
+- numeroReserva unico RES-YYYYMMDD-XXXXXX
+- contratoId, vehiculoId, conductorId
+- origen, destino, fechaInicio, fechaFin, descripcion
+- valorTotal (contratado)
+- Porcentajes: porcentajeConductor (60%), porcentajeAdministrador (25%),
+  porcentajeMantenimiento (15%) - suman 100%
+- cantidadPeajes, valorTotalPeajes
+- peajesDescontadosDelTotal (Boolean) - peajes se restan antes de %
+- Montos calculados automaticamente:
+  montoConductor, montoAdministrador, montoMantenimiento, montoPeajes
+- estado: PENDIENTE_APROBACION | APROBADA | EN_CURSO | COMPLETADA | RECHAZADA | CANCELADA
+- Datos del cliente: clienteNombre, clienteTelefono, clienteDocumento
+- Reporte del conductor al finalizar: peajesReportados, valorPeajesReportado,
+  observacionesConductor, fotosPeajesUrl
+- Auditoria: creadoPor, aprobadoPor, aprobadoAt, motivoRechazo
+- Relaciones inversas en Vehiculo, ConductorVehiculo, ContratoVehiculo
+
+API ROUTES ADMIN:
+- GET /api/vehiculos/reservas (con filtros estado, conductorId, vehiculoId)
+- POST /api/vehiculos/reservas (calcula distribución, valida % sumen 100)
+- GET /api/vehiculos/reservas/[id]
+- DELETE /api/vehiculos/reservas/[id] (cancela)
+- POST /api/vehiculos/reservas/[id]/aprobar
+- POST /api/vehiculos/reservas/[id]/rechazar (con motivo)
+- POST /api/vehiculos/reservas/[id]/finalizar (reporta peajes reales y recalcula)
+
+API ROUTES CONDUCTOR:
+- GET /api/vehiculos/portal-conductor/reservas (lista propias)
+- POST /api/vehiculos/portal-conductor/reservas (solicita nueva con % default 60/25/15)
+
+RESERVAS PANEL (admin):
+- Tab 'Reservas' agregado a VehiculosView (13 tabs total)
+- Lista reservas con: numeroReserva, estado, origen → destino, fechas
+- Distribución visible: conductor (azul), admin (morado), mant (naranja), peajes (rojo)
+- Modal crear reserva con:
+  * Contrato, origen, destino, fechas inicio/fin
+  * Valor total, cantidad peajes, valor total peajes
+  * Checkbox "peajes descuentan del total"
+  * Porcentajes editable (deben sumar 100%)
+  * Vista previa en vivo de la distribución
+  * Datos del cliente (opcional)
+- Modal detalle con:
+  * Todos los datos del viaje
+  * Distribución completa en card azul
+  * Botones según estado:
+    - PENDIENTE_APROBACION: Aprobar / Rechazar (con motivo)
+    - APROBADA: Finalizar viaje y reportar peajes
+- Modal finalizar:
+  * Cantidad de peajes reales
+  * Valor total de peajes real
+  * Observaciones del conductor
+  * Recalcula montos automáticamente
+
+PORTAL CONDUCTOR - TAB RESERVAS:
+- Navegación actualizada a 6 tabs: Inicio, Pagos, Reservas, Cuentas, QR, Recibos
+- Lista reservas del conductor con estado, origen→destino, fechas
+- Distribución visible (cond, admin, mant, peajes) en cada card
+- Modal "Solicitar viaje":
+  * Origen, destino, fechas inicio/fin
+  * Descripción, valor total, cantidad peajes, valor total peajes
+  * Datos del cliente (opcional)
+  * Vista previa en vivo de distribución (60/25/15 + peajes)
+  * Banner informativo: "Distribución automática"
+- Al crear queda PENDIENTE_APROBACION, admin aprueba desde su panel
+- Conexión bidireccional admin-conductor
+
+SIMPLIFICAR MODAL DE PAGO:
+- Banco: AUTO-CARGADO de la cuenta principal del contrato
+- Destinatario: AUTO-CARGADO del titular de la cuenta principal
+- Referencia: ELIMINADA (no es necesaria)
+- Campo "URL comprobante" reemplazado por:
+  * Botón "Tomar foto / Subir imagen" que abre cámara nativa móvil
+  * <input type="file" accept="image/*" capture="environment">
+  * Compresión automática a 1280px calidad 0.7 (canvas API)
+  * Preview de la imagen cargada
+  * CheckCircle verde cuando se carga
+- Card informativa muestra cuenta asignada (banco, tipo, número, titular) - solo lectura
+- Footer mantiene aviso: "Tu pago quedará PENDIENTE"
+
+VERIFICACIÓN EN PRODUCCIÓN:
+- GET /portal-conductor-vehiculos → HTTP 200
+- GET /api/vehiculos/portal-conductor/reservas (con token Sebastian) → 0 reservas
+- POST /api/vehiculos/portal-conductor/reservas → success:true, reserva creada:
+  * numeroReserva: RES-20261020-000001
+  * valorTotal: $500.000
+  * Peajes: $36.000 (3 peajes)
+  * Base: $464.000
+  * montoConductor (60%): $278.400
+  * montoAdministrador (25%): $116.000
+  * montoMantenimiento (15%): $69.600
+  * estado: PENDIENTE_APROBACION
+- Distribución calculada correctamente en backend
+
+Stage Summary:
+- ✅ GitHub: commit 1504d22 en origin/main
+- ✅ Vercel: deploy exitoso
+- ✅ Neon: schema actualizado (modelo ReservaVehiculo)
+- ✅ Sección Reservas funcional (admin + conductor)
+- ✅ Modal de pago simplificado (banco/destinatario auto, sin referencia)
+- ✅ Cámara nativa para comprobante de pago
+- ✅ Distribución automática 60/25/15 + peajes
+- 📌 Acceso admin: https://jsadr.com.co → cédula 95102913940 → sidebar 'Gestión de Vehículos' → tab 'Reservas'
+- 📌 Acceso conductor: https://jsadr.com.co/portal-conductor-vehiculos → cédula 12147316499 → tab 'Reservas'
