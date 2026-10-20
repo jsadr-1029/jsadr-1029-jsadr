@@ -2040,6 +2040,8 @@ model Vehiculo {
   documentos      DocumentoVehiculo[]
   // Extensión 2: recibos de pago
   recibos         ReciboPagoVehiculo[]
+  // Extensión 6: reservas de viajes
+  reservas        ReservaVehiculo[]
 
   @@index([estado])
   @@index([activo])
@@ -2084,6 +2086,8 @@ model ConductorVehiculo {
   pagosReportados PagoVehiculo[]
   // Extensión 2: recibos de pago
   recibos         ReciboPagoVehiculo[]
+  // Extensión 6: reservas de viajes
+  reservas        ReservaVehiculo[]
 
   @@index([cedula])
   @@index([activo])
@@ -2127,6 +2131,8 @@ model ContratoVehiculo {
   cuentasPago     CuentaPagoVehiculo[]
   codigosQR       CodigoQRVehiculo[]
   recibos         ReciboPagoVehiculo[]
+  // Extensión 6: reservas de viajes
+  reservas        ReservaVehiculo[]
 
   @@index([vehiculoId])
   @@index([conductorId])
@@ -2682,4 +2688,84 @@ model SolicitudConductorVehiculo {
   @@index([cedula])
   @@index([estado])
   @@index([tokenRegistro])
+}
+
+// =====================================================
+// === EXTENSIÓN 6: RESERVAS DE VIAJES ===
+// Permite al conductor reportar viajes/reservas contratadas:
+//  - Fechas del viaje (inicio/fin)
+//  - Valor total contratado
+//  - Distribución automática:
+//    % conductor, % administrador, % mantenimiento, $ peajes
+//  - Estado: PENDIENTE_APROBACION → APROBADA → EN_CURSO → COMPLETADA → RECHAZADA
+//  - Cantidad de peajes y valor total de peajes
+// El admin aprueba/rechaza desde el panel admin.
+// El conductor reporta peajes reales al finalizar.
+// =====================================================
+
+model ReservaVehiculo {
+  id                String   @id @default(cuid())
+  numeroReserva     String   @unique // RES-YYYYMMDD-XXXXXX
+  contratoId        String
+  vehiculoId        String
+  conductorId       String
+
+  // Datos del viaje
+  origen            String
+  destino           String
+  fechaInicio       DateTime
+  fechaFin          DateTime?
+  descripcion       String?  // detalles del viaje
+
+  // Valor contratado
+  valorTotal        Float    // monto total que el cliente paga por el viaje
+
+  // === Distribución del cobro ===
+  // Porcentajes (deben sumar 100% entre conductor+admin+mantenimiento)
+  porcentajeConductor      Float @default(60)  // 60% para el conductor
+  porcentajeAdministrador  Float @default(25)  // 25% para el admin
+  porcentajeMantenimiento  Float @default(15)  // 15% para mantenimiento del carro
+  // Peajes: el conductor reporta cuántos peajes y su valor
+  cantidadPeajes           Int   @default(0)
+  valorTotalPeajes         Float @default(0)
+  // Si peajes se descuentan del valor total antes de distribuir porcentajes
+  peajesDescontadosDelTotal Boolean @default(true)
+
+  // === Montos calculados automáticamente ===
+  montoConductor    Float?  // (valorTotal - peajes) × %conductor
+  montoAdministrador Float? // (valorTotal - peajes) × %admin
+  montoMantenimiento Float? // (valorTotal - peajes) × %mant
+  montoPeajes       Float?  // valor de peajes para el conductor
+
+  // Estado
+  estado            String   @default("PENDIENTE_APROBACION")
+  // PENDIENTE_APROBACION | APROBADA | EN_CURSO | COMPLETADA | RECHAZADA | CANCELADA
+  motivoRechazo     String?
+  aprobadoPor       String?
+  aprobadoAt        DateTime?
+
+  // Datos del cliente que contrató el viaje (opcional)
+  clienteNombre     String?
+  clienteTelefono   String?
+  clienteDocumento  String?
+
+  // Reporte del conductor al finalizar
+  peajesReportados  Int?
+  valorPeajesReportado Float?
+  observacionesConductor String?
+  fotosPeajesUrl    String?  // JSON array de URLs
+
+  // Auditoría
+  creadoPor         String   // CONDUCTOR | ADMIN
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  contrato           ContratoVehiculo @relation(fields: [contratoId], references: [id])
+  vehiculo           Vehiculo @relation(fields: [vehiculoId], references: [id])
+  conductor          ConductorVehiculo @relation(fields: [conductorId], references: [id])
+
+  @@index([contratoId])
+  @@index([conductorId])
+  @@index([vehiculoId])
+  @@index([estado, fechaInicio])
 }

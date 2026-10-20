@@ -11,11 +11,11 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import {
   Car, LogOut, CreditCard, Calendar, Wrench, AlertTriangle, CheckCircle, Clock,
   QrCode, Download, Star, Phone, Mail, User, MapPin, FileText, Wallet,
-  ChevronRight, Sparkles, Bell, TrendingUp, Settings,
+  ChevronRight, Sparkles, Bell, TrendingUp, Settings, Plus, Upload,
 } from 'lucide-react'
 import { formatCOP, formatDate, EstadoBadge } from '@/components/views/vehiculos/helpers'
 
-type Tab = 'inicio' | 'pagos' | 'cuentas' | 'qr' | 'recibos'
+type Tab = 'inicio' | 'pagos' | 'reservas' | 'cuentas' | 'qr' | 'recibos'
 
 export default function PortalConductorVehiculosPage() {
   const [token, setToken] = useState<string | null>(null)
@@ -41,6 +41,20 @@ export default function PortalConductorVehiculosPage() {
   const [recibos, setRecibos] = useState<any[]>([])
   const [semanas, setSemanas] = useState<any[]>([])
   const [recordatorio, setRecordatorio] = useState<string>('')
+  const [reservas, setReservas] = useState<any[]>([])
+
+  // Reserva form
+  const [reservaModal, setReservaModal] = useState(false)
+  const [reservaForm, setReservaForm] = useState<any>({
+    origen: '', destino: '',
+    fechaInicio: new Date().toISOString().slice(0, 16),
+    fechaFin: '',
+    descripcion: '',
+    valorTotal: '',
+    cantidadPeajes: 0,
+    valorTotalPeajes: 0,
+    clienteNombre: '', clienteTelefono: '', clienteDocumento: '',
+  })
 
   // Selección de pago
   const [tipoPago, setTipoPago] = useState<'DIA' | 'SEMANA' | 'PERSONALIZADO'>('DIA')
@@ -84,12 +98,13 @@ export default function PortalConductorVehiculosPage() {
     setLoadingData(true)
     try {
       const headers = { 'x-portal-token': token! }
-      const [resEstado, resCuentas, resQR, resRecibos, resSemanas] = await Promise.all([
+      const [resEstado, resCuentas, resQR, resRecibos, resSemanas, resReservas] = await Promise.all([
         fetch('/api/vehiculos/portal-conductor/estado', { headers }),
         fetch('/api/vehiculos/portal-conductor/cuentas-pago', { headers }),
         fetch('/api/vehiculos/portal-conductor/codigos-qr', { headers }),
         fetch('/api/vehiculos/portal-conductor/recibos', { headers }),
         fetch('/api/vehiculos/portal-conductor/semanas', { headers }),
+        fetch('/api/vehiculos/portal-conductor/reservas', { headers }),
       ])
       const r = await resEstado.json()
       if (r.success) setData(r.data)
@@ -105,6 +120,8 @@ export default function PortalConductorVehiculosPage() {
         setSemanas(rs.data?.semanas || [])
         setRecordatorio(rs.data?.recordatorio || '')
       }
+      const rres = await resReservas.json()
+      if (rres.success) setReservas(rres.data || [])
     } catch (e) {}
     setLoadingData(false)
   }
@@ -188,6 +205,8 @@ export default function PortalConductorVehiculosPage() {
     if (tipoPago === 'DIA' && !diaSeleccionado) { alert('Selecciona el día a pagar'); return }
     if (tipoPago === 'PERSONALIZADO' && diasSeleccionados.length === 0) { alert('Selecciona al menos un día'); return }
 
+    // Cargar automáticamente la cuenta principal si no se ha cargado
+    const cuentaPrincipal = cuentasPago.find(c => c.esPrincipal) || cuentasPago[0]
     let diasIncluidos: string[] = []
     let semanaNumero: number | null = null
     if (tipoPago === 'SEMANA') {
@@ -203,6 +222,12 @@ export default function PortalConductorVehiculosPage() {
     try {
       const body = {
         ...pagoForm,
+        // Auto-cargar datos de la cuenta principal
+        banco: cuentaPrincipal?.banco || pagoForm.banco,
+        destinatario: cuentaPrincipal?.titularCuenta || pagoForm.destinatario,
+        cuentaPagoId: cuentaPrincipal?.id || null,
+        // Sin referencia (no es necesaria)
+        referencia: pagoForm.referencia || undefined,
         tipoReporte: tipoPago === 'PERSONALIZADO' ? 'SEMANA' : tipoPago,
         obligacionId: tipoPago === 'DIA' ? diaSeleccionado : null,
         diasIncluidos: (tipoPago === 'SEMANA' || tipoPago === 'PERSONALIZADO') ? diasIncluidos : null,
@@ -221,9 +246,85 @@ export default function PortalConductorVehiculosPage() {
         setSemanaSeleccionada(null)
         setDiasSeleccionados([])
         setTipoPago('DIA')
+        // Resetear pagoForm pero mantener comprobante vacío
+        setPagoForm({
+          monto: '', fechaPago: new Date().toISOString().slice(0, 10),
+          metodo: 'CONSIGNACION', banco: '', referencia: '', destinatario: '',
+          comprobanteUrl: '',
+        })
         cargarEstado()
       } else { alert(r.error || 'Error') }
     } catch (e: any) { alert(e.message) }
+  }
+
+  // Solicitar nueva reserva de viaje
+  const solicitarReserva = async () => {
+    if (!reservaForm.origen || !reservaForm.destino || !reservaForm.fechaInicio || !reservaForm.valorTotal) {
+      alert('Origen, destino, fecha y valor son obligatorios')
+      return
+    }
+    try {
+      const res = await fetch('/api/vehiculos/portal-conductor/reservas', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-portal-token': token! },
+        body: JSON.stringify(reservaForm),
+      })
+      const r = await res.json()
+      if (r.success) {
+        alert('Reserva solicitada: ' + r.data.numeroReserva + '. Pendiente de aprobación.')
+        setReservaModal(false)
+        setReservaForm({
+          origen: '', destino: '',
+          fechaInicio: new Date().toISOString().slice(0, 16),
+          fechaFin: '',
+          descripcion: '',
+          valorTotal: '',
+          cantidadPeajes: 0,
+          valorTotalPeajes: 0,
+          clienteNombre: '', clienteTelefono: '', clienteDocumento: '',
+        })
+        cargarEstado()
+      } else { alert(r.error || 'Error') }
+    } catch (e: any) { alert(e.message) }
+  }
+
+  // Subir comprobante de pago con cámara o archivo
+  const comprimirImagen = (file: File, maxWidth: number = 1280, quality: number = 0.7): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader()
+      reader.onload = (e) => {
+        const img = new Image()
+        img.onload = () => {
+          const canvas = document.createElement('canvas')
+          let w = img.width, h = img.height
+          if (w > maxWidth) {
+            h = (h * maxWidth) / w
+            w = maxWidth
+          }
+          canvas.width = w
+          canvas.height = h
+          const ctx = canvas.getContext('2d')
+          if (!ctx) return reject(new Error('Canvas error'))
+          ctx.drawImage(img, 0, 0, w, h)
+          resolve(canvas.toDataURL('image/jpeg', quality))
+        }
+        img.onerror = reject
+        img.src = e.target?.result as string
+      }
+      reader.onerror = reject
+      reader.readAsDataURL(file)
+    })
+  }
+
+  const handleComprobanteUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    try {
+      const base64 = await comprimirImagen(file)
+      setPagoForm(prev => ({ ...prev, comprobanteUrl: base64 }))
+    } catch (err: any) {
+      alert('Error al cargar imagen: ' + err.message)
+    }
   }
 
   // ====== LOGIN SCREEN ======
@@ -355,10 +456,11 @@ export default function PortalConductorVehiculosPage() {
 
       <div className="max-w-3xl mx-auto p-4 space-y-4">
         {/* Tabs navegación */}
-        <div className="grid grid-cols-5 gap-1 p-1 bg-white rounded-2xl shadow-sm border">
+        <div className="grid grid-cols-6 gap-1 p-1 bg-white rounded-2xl shadow-sm border">
           {[
             { key: 'inicio', label: 'Inicio', icon: Sparkles },
             { key: 'pagos', label: 'Pagos', icon: CreditCard },
+            { key: 'reservas', label: 'Reservas', icon: Calendar },
             { key: 'cuentas', label: 'Cuentas', icon: Wallet },
             { key: 'qr', label: 'QR', icon: QrCode },
             { key: 'recibos', label: 'Recibos', icon: Download },
@@ -668,6 +770,74 @@ export default function PortalConductorVehiculosPage() {
           </div>
         )}
 
+        {/* ====== TAB: RESERVAS ====== */}
+        {tab === 'reservas' && (
+          <div className="space-y-3">
+            <div className="flex justify-between items-center">
+              <h2 className="text-lg font-bold flex items-center gap-2">
+                <Calendar className="w-5 h-5 text-purple-600" /> Mis reservas
+              </h2>
+              <Button size="sm" onClick={() => setReservaModal(true)} className="bg-gradient-to-r from-purple-500 to-indigo-600">
+                <Plus className="w-4 h-4 mr-1" /> Solicitar viaje
+              </Button>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Reporta los viajes que contrates para que el administrador los apruebe.
+              El sistema distribuye automáticamente el cobro entre conductor, administrador,
+              mantenimiento y peajes.
+            </p>
+            {reservas.length === 0 ? (
+              <Card><CardContent className="py-8 text-center text-muted-foreground">
+                <Calendar className="w-12 h-12 mx-auto mb-2 opacity-50" />
+                No tienes reservas registradas.
+                <div className="text-xs mt-1">Solicita tu primer viaje con el botón superior.</div>
+              </CardContent></Card>
+            ) : (
+              <div className="space-y-2">
+                {reservas.map((r: any) => (
+                  <Card key={r.id} className="border-0 shadow-md">
+                    <CardContent className="p-3">
+                      <div className="flex justify-between items-start">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="font-bold text-sm">{r.numeroReserva}</span>
+                            <span className={`text-xs px-2 py-0.5 rounded-full ${
+                              r.estado === 'COMPLETADA' ? 'bg-green-100 text-green-800' :
+                              r.estado === 'APROBADA' ? 'bg-blue-100 text-blue-800' :
+                              r.estado === 'RECHAZADA' ? 'bg-red-100 text-red-800' :
+                              r.estado === 'EN_CURSO' ? 'bg-purple-100 text-purple-800' :
+                              'bg-yellow-100 text-yellow-800'
+                            }`}>{r.estado.replace(/_/g, ' ')}</span>
+                          </div>
+                          <div className="text-sm mt-1">
+                            <MapPin className="w-3 h-3 inline mr-1" />
+                            {r.origen} → {r.destino}
+                          </div>
+                          <div className="text-xs text-muted-foreground mt-0.5">
+                            {formatDate(r.fechaInicio)} {r.fechaFin && `- ${formatDate(r.fechaFin)}`}
+                          </div>
+                          <div className="text-xs mt-1 grid grid-cols-2 gap-1">
+                            <span className="text-blue-700">Cond: {formatCOP(r.montoConductor)}</span>
+                            <span className="text-purple-700">Admin: {formatCOP(r.montoAdministrador)}</span>
+                            <span className="text-orange-700">Mant: {formatCOP(r.montoMantenimiento)}</span>
+                            <span className="text-red-700">Peajes: {formatCOP(r.montoPeajes)} ({r.cantidadPeajes})</span>
+                          </div>
+                          {r.motivoRechazo && (
+                            <div className="text-xs text-red-700 mt-1">⚠️ {r.motivoRechazo}</div>
+                          )}
+                        </div>
+                        <div className="text-right">
+                          <div className="text-lg font-bold">{formatCOP(r.valorTotal)}</div>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
         {/* ====== TAB: CUENTAS ====== */}
         {tab === 'cuentas' && (
           <div className="space-y-3">
@@ -899,12 +1069,56 @@ export default function PortalConductorVehiculosPage() {
                 </SelectContent>
               </Select>
             </div>
-            <div><Label>Banco</Label><Input value={pagoForm.banco} onChange={e => setPagoForm({ ...pagoForm, banco: e.target.value })} placeholder="Bancolombia, Davivienda..." /></div>
-            <div><Label>Referencia</Label><Input value={pagoForm.referencia} onChange={e => setPagoForm({ ...pagoForm, referencia: e.target.value })} /></div>
-            <div><Label>Destinatario</Label><Input value={pagoForm.destinatario} onChange={e => setPagoForm({ ...pagoForm, destinatario: e.target.value })} /></div>
+
+            {/* Cuenta de pago precargada automáticamente */}
             <div className="col-span-2">
-              <Label>URL comprobante</Label>
-              <Input value={pagoForm.comprobanteUrl} onChange={e => setPagoForm({ ...pagoForm, comprobanteUrl: e.target.value })} placeholder="Sube la imagen y pega la URL aquí" />
+              <Label>Cuenta de pago (auto-cargada)</Label>
+              {(() => {
+                const cuentaPrincipal = cuentasPago.find(c => c.esPrincipal) || cuentasPago[0]
+                if (!cuentaPrincipal) {
+                  return <div className="p-2 bg-yellow-50 rounded text-xs text-yellow-800">No hay cuenta asignada. Contacta al administrador.</div>
+                }
+                return (
+                  <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg text-sm">
+                    <div className="flex items-center gap-2">
+                      <CreditCard className="w-4 h-4 text-blue-600" />
+                      <strong>{cuentaPrincipal.banco}</strong>
+                      <span className="text-xs bg-blue-100 text-blue-800 px-1.5 rounded">{cuentaPrincipal.tipoCuenta}</span>
+                      {cuentaPrincipal.esPrincipal && <span className="text-xs text-blue-700">★ Principal</span>}
+                    </div>
+                    <div className="font-mono text-xs mt-1">{cuentaPrincipal.numeroCuenta}</div>
+                    <div className="text-xs text-muted-foreground mt-0.5">
+                      Titular: <strong>{cuentaPrincipal.titularCuenta}</strong>
+                      {cuentaPrincipal.numeroIdTitular && ` (${cuentaPrincipal.tipoIdTitular} ${cuentaPrincipal.numeroIdTitular})`}
+                    </div>
+                  </div>
+                )
+              })()}
+            </div>
+
+            {/* Comprobante - captura o sube foto */}
+            <div className="col-span-2">
+              <Label>Comprobante de pago (foto o captura)</Label>
+              <p className="text-xs text-muted-foreground mb-2">
+                Toma una foto del recibo o sube una captura de pantalla del pago.
+              </p>
+              <div className="flex items-center gap-2 flex-wrap">
+                <input
+                  type="file"
+                  accept="image/*"
+                  capture="environment"
+                  onChange={handleComprobanteUpload}
+                  className="hidden"
+                  id="file-comprobante"
+                />
+                <Button type="button" variant="outline" size="sm" onClick={() => document.getElementById('file-comprobante')?.click()}>
+                  <Upload className="w-4 h-4 mr-1" /> Tomar foto / Subir imagen
+                </Button>
+                {pagoForm.comprobanteUrl && <CheckCircle className="w-4 h-4 text-green-600" />}
+              </div>
+              {pagoForm.comprobanteUrl && (
+                <img src={pagoForm.comprobanteUrl} alt="Comprobante" className="mt-2 max-h-48 object-contain border rounded" />
+              )}
             </div>
             <div className="col-span-2 p-2 bg-yellow-50 rounded text-xs text-yellow-800">
               ℹ️ Tu pago quedará en estado <strong>PENDIENTE</strong>. Un administrador debe verificarlo antes de aplicarlo al saldo.
@@ -913,6 +1127,76 @@ export default function PortalConductorVehiculosPage() {
           <DialogFooter>
             <Button variant="outline" onClick={() => setPagoModal(false)}>Cancelar</Button>
             <Button onClick={reportarPago} className="bg-gradient-to-r from-emerald-500 to-green-600">Enviar pago</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ====== MODAL RESERVA ====== */}
+      <Dialog open={reservaModal} onOpenChange={setReservaModal}>
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+          <DialogHeader><DialogTitle>Solicitar reserva de viaje</DialogTitle></DialogHeader>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <Label>Origen *</Label>
+              <Input value={reservaForm.origen} onChange={e => setReservaForm({ ...reservaForm, origen: e.target.value })} placeholder="Medellín" />
+            </div>
+            <div>
+              <Label>Destino *</Label>
+              <Input value={reservaForm.destino} onChange={e => setReservaForm({ ...reservaForm, destino: e.target.value })} placeholder="Bogotá" />
+            </div>
+            <div>
+              <Label>Fecha y hora de inicio *</Label>
+              <Input type="datetime-local" value={reservaForm.fechaInicio} onChange={e => setReservaForm({ ...reservaForm, fechaInicio: e.target.value })} />
+            </div>
+            <div>
+              <Label>Fecha y hora fin</Label>
+              <Input type="datetime-local" value={reservaForm.fechaFin} onChange={e => setReservaForm({ ...reservaForm, fechaFin: e.target.value })} />
+            </div>
+            <div className="col-span-2">
+              <Label>Descripción del viaje</Label>
+              <Input value={reservaForm.descripcion} onChange={e => setReservaForm({ ...reservaForm, descripcion: e.target.value })} placeholder="Detalle del servicio contratado" />
+            </div>
+            <div>
+              <Label>Valor total contratado *</Label>
+              <Input type="number" value={reservaForm.valorTotal} onChange={e => setReservaForm({ ...reservaForm, valorTotal: e.target.value })} placeholder="ej: 500000" />
+            </div>
+            <div>
+              <Label>Cantidad de peajes</Label>
+              <Input type="number" value={reservaForm.cantidadPeajes} onChange={e => setReservaForm({ ...reservaForm, cantidadPeajes: e.target.value })} />
+            </div>
+            <div className="col-span-2">
+              <Label>Valor total de peajes</Label>
+              <Input type="number" value={reservaForm.valorTotalPeajes} onChange={e => setReservaForm({ ...reservaForm, valorTotalPeajes: e.target.value })} placeholder="Suma de los peajes" />
+            </div>
+            <div className="col-span-2 p-2 bg-blue-50 rounded text-xs text-blue-800">
+              <strong>💡 Distribución automática:</strong> Conductor 60%, Administrador 25%, Mantenimiento 15%.
+              Los peajes se descuentan del total antes de calcular los porcentajes.
+            </div>
+            {(() => {
+              const vTotal = parseFloat(reservaForm.valorTotal) || 0
+              const vPeajes = parseFloat(reservaForm.valorTotalPeajes) || 0
+              const base = Math.max(0, vTotal - vPeajes)
+              return (
+                <div className="col-span-2 grid grid-cols-4 gap-2 p-2 bg-purple-50 rounded text-xs">
+                  <div><div className="text-muted-foreground">Conductor (60%)</div><div className="font-bold text-blue-700">{formatCOP(base * 0.6)}</div></div>
+                  <div><div className="text-muted-foreground">Admin (25%)</div><div className="font-bold text-purple-700">{formatCOP(base * 0.25)}</div></div>
+                  <div><div className="text-muted-foreground">Mant (15%)</div><div className="font-bold text-orange-700">{formatCOP(base * 0.15)}</div></div>
+                  <div><div className="text-muted-foreground">Peajes</div><div className="font-bold text-red-700">{formatCOP(vPeajes)}</div></div>
+                </div>
+              )
+            })()}
+            <div className="col-span-2 border-t pt-3">
+              <h3 className="font-semibold text-sm mb-2">Datos del cliente (opcional)</h3>
+              <div className="grid grid-cols-3 gap-2">
+                <Input placeholder="Nombre" value={reservaForm.clienteNombre} onChange={e => setReservaForm({ ...reservaForm, clienteNombre: e.target.value })} />
+                <Input placeholder="Teléfono" value={reservaForm.clienteTelefono} onChange={e => setReservaForm({ ...reservaForm, clienteTelefono: e.target.value })} />
+                <Input placeholder="Documento" value={reservaForm.clienteDocumento} onChange={e => setReservaForm({ ...reservaForm, clienteDocumento: e.target.value })} />
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setReservaModal(false)}>Cancelar</Button>
+            <Button onClick={solicitarReserva} className="bg-gradient-to-r from-purple-500 to-indigo-600">Solicitar reserva</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

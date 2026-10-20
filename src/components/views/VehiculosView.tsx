@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { PageHeader } from '@/components/ui-basics'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Car, LayoutDashboard, Users, FileText, CreditCard, Wrench, Package, Receipt, ShieldAlert, BookUser, QrCode } from 'lucide-react'
+import { Car, LayoutDashboard, Users, FileText, CreditCard, Wrench, Package, Receipt, ShieldAlert, BookUser, QrCode, Calendar } from 'lucide-react'
 import { VehiculosDashboard } from './vehiculos/VehiculosDashboard'
 import { VehiculosPanel } from './vehiculos/VehiculosPanel'
 import { ConductoresPanel } from './vehiculos/ConductoresPanel'
@@ -16,6 +16,7 @@ import { AuditoriaPanel } from './vehiculos/AuditoriaPanel'
 import { ProveedoresPanel } from './vehiculos/ProveedoresPanel'
 import { CuentasPagoPanel } from './vehiculos/CuentasPagoPanel'
 import { CodigosQRPanel } from './vehiculos/CodigosQRPanel'
+import { ReservasPanel } from './vehiculos/ReservasPanel'
 
 export function VehiculosView() {
   const [tab, setTab] = useState('dashboard')
@@ -31,7 +32,7 @@ export function VehiculosView() {
       />
 
       <Tabs value={tab} onValueChange={setTab}>
-        <TabsList className="flex overflow-x-auto whitespace-nowrap md:grid md:grid-cols-12 w-full no-scrollbar h-auto">
+        <TabsList className="flex overflow-x-auto whitespace-nowrap md:grid md:grid-cols-13 w-full no-scrollbar h-auto">
           <TabsTrigger value="dashboard" className="flex flex-col items-center gap-1 py-2">
             <LayoutDashboard className="w-4 h-4" />
             <span className="text-xs">Dashboard</span>
@@ -47,6 +48,10 @@ export function VehiculosView() {
           <TabsTrigger value="contratos" className="flex flex-col items-center gap-1 py-2">
             <FileText className="w-4 h-4" />
             <span className="text-xs">Contratos</span>
+          </TabsTrigger>
+          <TabsTrigger value="reservas" className="flex flex-col items-center gap-1 py-2">
+            <Calendar className="w-4 h-4" />
+            <span className="text-xs">Reservas</span>
           </TabsTrigger>
           <TabsTrigger value="pagos" className="flex flex-col items-center gap-1 py-2">
             <CreditCard className="w-4 h-4" />
@@ -86,6 +91,7 @@ export function VehiculosView() {
         <TabsContent value="vehiculos"><VehiculosPanel key={refreshKey} onChanged={refresh} /></TabsContent>
         <TabsContent value="conductores"><ConductoresPanel key={refreshKey} onChanged={refresh} /></TabsContent>
         <TabsContent value="contratos"><ContratosPanel key={refreshKey} onChanged={refresh} /></TabsContent>
+        <TabsContent value="reservas"><ReservasPanel key={refreshKey} onChanged={refresh} /></TabsContent>
         <TabsContent value="pagos"><PagosPanel key={refreshKey} onChanged={refresh} /></TabsContent>
         <TabsContent value="cuentas-pago"><CuentasPagoPanel key={refreshKey} onChanged={refresh} /></TabsContent>
         <TabsContent value="codigos-qr"><CodigosQRPanel key={refreshKey} onChanged={refresh} /></TabsContent>
