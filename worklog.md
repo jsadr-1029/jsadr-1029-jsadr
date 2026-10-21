@@ -4375,3 +4375,63 @@ Stage Summary:
 - ✅ Pagaré en blanco: descarga correctamente (admin y portal)
 - ✅ Carta de instrucciones: descarga correctamente (admin y portal)
 - ✅ Paz y salvo: ya funcionaba, sigue funcionando
+
+---
+Task ID: 41-camara-nativa-inventario-documentos-vehiculo
+Agent: Super Z (main)
+Task: En el modal de inventario no debe pedir URL foto, debe permitir tomar foto con cámara. En la sección documentos del vehículo también debe permitir subir archivos (fotos/PDF) con cámara nativa.
+
+Work Log:
+
+CAMBIOS EN FichaTecnicaVehiculo.tsx:
+
+1. MODAL AGREGAR ITEM DE INVENTARIO:
+   - ANTES: campo 'URL foto' (Input de texto que pedía https://...)
+   - AHORA: botón 'Tomar foto / Subir imagen' con cámara nativa
+   - <input type='file' accept='image/*' capture='environment'>
+   - Compresión automática a 1280px calidad 0.7 (canvas API)
+   - Preview de la imagen cargada
+   - Icono CheckCircle verde cuando se carga
+   - Funciona en móvil (cámara) y desktop (subir archivo)
+
+2. MODAL AGREGAR DOCUMENTO (SOAT, tecno, póliza, etc.):
+   - ANTES: campo 'URL archivo (foto/PDF)' (Input de texto)
+   - AHORA: botón 'Tomar foto / Subir archivo' con cámara nativa
+   - <input type='file' accept='image/*,application/pdf' capture='environment'>
+   - Si es imagen: comprime a 1280px calidad 0.7 + preview
+   - Si es PDF: lee como base64 directamente (sin comprimir) + mensaje 'PDF cargado'
+   - Icono CheckCircle verde cuando se carga
+   - Permite subir SOAT, tecnomecánica, tarjeta de propiedad, seguro,
+     póliza todo riesgo, contrato u otros documentos
+
+3. HELPER comprimirImagen():
+   - Función reutilizable para comprimir imágenes con canvas API
+   - maxWidth 1280px (mantiene proporción)
+   - Calidad JPEG 0.7 (balance tamaño/calidad)
+   - Retorna base64 data URL
+   - Maneja errores (Canvas error, File reader error)
+
+4. ICONOS AGREGADOS:
+   - Upload (botón de subida)
+   - CheckCircle (confirmación de carga)
+
+VERIFICACIÓN EN PRODUCCIÓN:
+- GET https://jsadr.com.co → HTTP 200 OK
+- Deploy exitoso en Vercel
+
+RESULTADO:
+- El admin/gestor puede tomar fotos directamente desde la cámara del móvil
+  al agregar items de inventario (llaves, herramientas, etc.)
+- El admin/gestor puede tomar fotos o subir PDFs de documentos del vehículo
+  (SOAT, tecnomecánica, póliza, etc.)
+- Ya no es necesario pegar URLs externas
+- Las imágenes se comprimen automáticamente para no exceder el body size
+- Compatible con Android (capture=environment) e iOS
+
+Stage Summary:
+- ✅ GitHub: commit 4b2400d en origin/main
+- ✅ Vercel: deploy exitoso
+- ✅ Modal inventario: cámara nativa en vez de URL
+- ✅ Modal documentos: cámara nativa + PDF en vez de URL
+- ✅ Compresión automática de imágenes
+- ✅ Compatible con móvil y desktop
