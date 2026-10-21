@@ -4435,3 +4435,66 @@ Stage Summary:
 - ✅ Modal documentos: cámara nativa + PDF en vez de URL
 - ✅ Compresión automática de imágenes
 - ✅ Compatible con móvil y desktop
+
+---
+Task ID: 42-login-registro-conductor-fotos-cedula-licencia-recibo
+Agent: Super Z (main)
+Task: Agregar sección de registro de conductor en la página de login. Pedir datos de contacto, foto cédula por ambos lados, licencia por ambos lados, recibo de servicios públicos. Sin eliminar el formulario existente.
+
+Work Log:
+
+CAMBIOS EN src/app/login/page.tsx:
+
+1. BOTÓN 'REGÍSTRATE COMO CONDUCTOR':
+   - Agregado después del botón 'Regístrate como nuevo cliente'
+   - Estilo azul (diferenciado del verde de cliente)
+   - Icono Car
+   - Descripción: '¿Vas a conducir un vehículo? Regístrate aquí · Cédula, licencia y recibo de servicios'
+   - No elimina el botón existente de registro de cliente
+
+2. MODAL REGISTRO CONDUCTOR (3 pasos):
+
+   Paso 1 - Datos de contacto:
+   - Cédula (solo dígitos)
+   - Nombre completo *
+   - Teléfono *
+   - Email
+   - Dirección, ciudad, barrio
+   - Licencia de conducción (número, categoría, vence)
+   - Contacto de emergencia (nombre, teléfono, parentesco)
+
+   Paso 2 - Fotos con cámara nativa:
+   - Cédula frente (capture=environment)
+   - Cédula reverso
+   - Licencia frente
+   - Licencia reverso
+   - Recibo de servicios públicos (donde se evidencie dirección)
+   - Compresión automática a 1280px calidad 0.7
+   - Preview de cada foto cargada
+   - CheckCircle verde de confirmación
+
+   Paso 3 - Confirmación:
+   - Mensaje '¡Registro enviado!'
+   - Resumen de datos guardados
+   - Aviso: 'Un administrador revisará tus datos'
+
+3. FLUJO BACKEND (ya existente, reutilizado):
+   - POST /api/vehiculos/registro-conductor/iniciar
+     → crea SolicitudConductorVehiculo con token 24h
+   - POST /api/vehiculos/registro-conductor/documentos
+     → guarda URLs base64 de fotos y datos adicionales
+   - Estado: COMPLETADA → admin aprueba desde panel admin
+   - Al aprobar, se crea ConductorVehiculo + contrato
+
+VERIFICACIÓN EN PRODUCCIÓN:
+- GET /login → HTTP 200 OK
+- Deploy exitoso en Vercel
+
+Stage Summary:
+- ✅ GitHub: commit e40b02a en origin/main
+- ✅ Vercel: deploy exitoso
+- ✅ Botón "Regístrate como conductor" agregado en login
+- ✅ Modal con 3 pasos (datos → fotos → confirmación)
+- ✅ Cámara nativa para 5 fotos (cédula frente/reverso, licencia frente/reverso, recibo)
+- ✅ Sin eliminar formulario de login existente
+- 📌 Acceso: https://jsadr.com.co/login → botón azul "Regístrate como conductor"
