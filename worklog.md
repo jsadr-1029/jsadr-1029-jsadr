@@ -3792,3 +3792,51 @@ Stage Summary:
 - ✅ Distribución automática 60/25/15 + peajes
 - 📌 Acceso admin: https://jsadr.com.co → cédula 95102913940 → sidebar 'Gestión de Vehículos' → tab 'Reservas'
 - 📌 Acceso conductor: https://jsadr.com.co/portal-conductor-vehiculos → cédula 12147316499 → tab 'Reservas'
+
+---
+Task ID: 33-fix-simulador-monto-minimo-no-limitante
+Agent: Super Z (main)
+Task: El simulador impedía continuar a clientes de cualquier categoría porque el monto era menor al mínimo de la categoría. Quitar esa limitación — el monto mínimo no debe ser limitante, solo el máximo.
+
+Work Log:
+
+PROBLEMA:
+- En /api/portal/simular/route.ts existía validación:
+  if (montoMin > 0 && montoNum < montoMin) {
+    return NextResponse.json({ error: '...inferior al mínimo permitido...',
+                                codigo: 'MONTO_INFERIOR_CATEGORIA' }, { status: 400 })
+  }
+- Esto bloqueaba simulaciones de clientes que solicitaban montos menores al mínimo de su categoría.
+
+FIX:
+- ELIMINADA la validación de monto mínimo en /api/portal/simular/route.ts
+- Solo se mantiene la validación de monto MÁXIMO (no se puede superar)
+- Comentario explicativo agregado:
+  "El monto MÍNIMO de la categoría NO es limitante — solo se usa como
+   referencia. Cualquier cliente puede solicitar el monto que necesite,
+   solo se valida que no supere el máximo permitido para su categoría."
+- Variable `montoMin` eliminada (ya no se usa)
+- En SimuladorView.tsx (frontend):
+  * MONTO_MIN reducido de 100.000 a 50.000 (slider permite montos menores)
+  * MONTO_STEP reducido de 50.000 a 10.000 (mayor granularidad)
+
+REGLA DE NEGOCIO FINAL:
+- montoMinimo de categoría: NO es limitante (informativo)
+- montoMaximo de categoría: SÍ es limitante (no se puede superar)
+- El cliente puede solicitar cualquier monto por debajo del máximo
+
+VERIFICACIÓN EN PRODUCCIÓN (cliente Ana Maria Ocampo, cédula 43043108):
+- Categoría: "Categoría 20% mensual" (montoMin=50000, montoMax=5000000)
+- TEST 1: monto $10.000 (menor al mínimo) → ✅ PERMITIDO (antes fallaba)
+- TEST 2: monto $100.000 (entre min y max) → ✅ PERMITIDO
+- TEST 3: monto $99.999.999 (supera máximo) → ✅ RECHAZADO correctamente
+  con código MONTO_EXCEDE_CATEGORIA
+
+Stage Summary:
+- ✅ GitHub: commit 1a639df en origin/main
+- ✅ Vercel: deploy exitoso
+- ✅ Validación de monto mínimo eliminada en backend
+- ✅ Slider permite desde $50.000 con step $10.000
+- ✅ Monto máximo sigue siendo limitante (correcto)
+- 📌 Clientes de cualquier categoría ahora pueden simular cualquier monto
+  por debajo del máximo de su categoría
