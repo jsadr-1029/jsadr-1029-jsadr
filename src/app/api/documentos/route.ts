@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { calcularPrestamo, formatearFecha, formatearMoneda, getTasaMoraAnual } from '@/lib/finanzas'
 import { sanitizeError } from '@/lib/error-handler'
-import { rateLimit, getClientInfo } from '@/lib/security'
+import { rateLimit, getClientInfo, safeCompare } from '@/lib/security'
 import { requireRole as requireRoleAuth } from '@/lib/auth-guard'
 import QRCode from 'qrcode'
 import crypto from 'crypto'
@@ -15,6 +15,11 @@ import crypto from 'crypto'
 //      Query: accion=listar & q=busqueda & tipo=FOTO_SELFI & prestamoId=xxx & clienteId=xxx
 //   2. ?prestamoId=xxx & tipo=pagare-diligenciado → genera HTML imprimible del pagaré/carta
 //      tipo: pagare-blanco | pagare-diligenciado | carta
+//
+// AUTENTICACIÓN:
+//   - Si viene ?token=XXX en query: valida sesión del cliente (portal token)
+//     → permite descargar documentos del propio préstamo
+//   - Si no viene token: exige JWT de staff (admin/gestor/consultor)
 // =====================================================
 export async function GET(req: NextRequest) {
   try {
@@ -80,12 +85,48 @@ export async function GET(req: NextRequest) {
     // === MODO GENERAR HTML DE PAGARÉ/CARTA ===
     const prestamoId = searchParams.get('prestamoId')
     const tipo = searchParams.get('tipo') || 'pagare-diligenciado'
+    const portalToken = searchParams.get('token')
 
     if (!prestamoId) {
       return NextResponse.json(
         { success: false, error: 'prestamoId es obligatorio (o usa ?accion=listar)' },
         { status: 400 }
       )
+    }
+
+    // === Validación de acceso para modo generar HTML ===
+    // Si viene ?token=XXX → validar sesión del cliente (portal)
+    // Si no → exigir JWT de staff (admin/gestor/consultor)
+    if (portalToken) {
+      // Buscar el préstamo + cliente para validar token
+      const prestamoParaAuth = await db.prestamo.findUnique({
+        where: { id: prestamoId },
+        include: { cliente: true },
+      })
+      if (!prestamoParaAuth) {
+        return NextResponse.json(
+          { success: false, error: 'Préstamo no encontrado' },
+          { status: 404 }
+        )
+      }
+      const cliente = prestamoParaAuth.cliente
+      const now = new Date()
+      const tokenValido =
+        cliente &&
+        !!cliente.tokenSesion &&
+        safeCompare(cliente.tokenSesion, portalToken) &&
+        !!cliente.tokenExpira &&
+        cliente.tokenExpira > now
+      if (!tokenValido) {
+        return NextResponse.json(
+          { success: false, error: 'Sesión inválida o expirada. Inicie sesión nuevamente.', code: 'SESSION_EXPIRED' },
+          { status: 401 }
+        )
+      }
+    } else {
+      // Sin token de portal → debe ser staff autenticado
+      const auth = requireRoleAuth(req, ['ADMIN', 'GESTOR', 'CONSULTOR'])
+      if (auth instanceof NextResponse) return auth
     }
 
     const prestamo = await db.prestamo.findUnique({

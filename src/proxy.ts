@@ -180,7 +180,8 @@ function getRateLimitForPath(pathname: string): { max: number; key: string } | n
   if (
     pathname.startsWith('/api/export') ||
     pathname.startsWith('/api/paz-y-salvo') ||
-    pathname.startsWith('/api/estado-cuenta')
+    pathname.startsWith('/api/estado-cuenta') ||
+    pathname.startsWith('/api/documentos')
   ) {
     return { max: RATE_LIMIT_EXPORT, key: `export:${pathname}` }
   }
@@ -252,7 +253,9 @@ export async function proxy(req: NextRequest) {
   const fullUrl = new URL(req.url)
   const queryToken = fullUrl.searchParams.get('token')
   const isDocEndpointWithToken =
-    (pathname.startsWith('/api/estado-cuenta') || pathname.startsWith('/api/paz-y-salvo')) &&
+    (pathname.startsWith('/api/estado-cuenta') ||
+     pathname.startsWith('/api/paz-y-salvo') ||
+     pathname.startsWith('/api/documentos')) &&
     !!queryToken
   if (isProductionEnv && isApiPath && !isPublicEndpoint(pathname) && !isDocEndpointWithToken) {
     const authHeader = req.headers.get('authorization')
