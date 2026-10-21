@@ -3979,3 +3979,84 @@ Stage Summary:
 - 📌 Acceso: https://jsadr.com.co/login
   * Andrés: cédula 11127850388
   * Oscar: cédula 703855144
+
+---
+Task ID: 36-gestor-vehiculos-1017231419-dedicatorio-DLW357
+Agent: Super Z (main)
+Task: Crear usuario gestor con cédula 1017231419 con acceso ÚNICAMENTE al módulo de Gestión de Vehículos. Función aplicada a la gestión del vehículo con placa DLW357.
+
+Work Log:
+
+NUEVO USUARIO GESTOR DEDICADO A VEHÍCULOS:
+- Cédula: 1017231419
+- Nombre: Gestor Vehículos
+- Username: gestor.vehiculos
+- Email: gestor.vehiculos@jsadr.com.co
+- Password inicial: 1017231419 (igual a cédula)
+- Rol: GESTOR
+- Activo: true
+
+RESTRICCIÓN DE ACCESO (BLOQUEO A PORTAL DEDICADO):
+- En src/lib/permisos.ts, matriz USUARIOS_BLOQUEADOS_A_PORTAL:
+  '1017231419': 'vehiculos'
+  'gestor.vehiculos': 'vehiculos'
+- Esto significa que el usuario SOLO puede acceder al módulo 'vehiculos'
+- NO verá: dashboard, clientes, préstamos, pagos, jurídico, cajas, simulador,
+  campañas, portal, comunicaciones, buzon-solicitudes, notificaciones,
+  exportar, manual, portal-admin, etc.
+- Es el MISMO mecanismo que usa 'p_jsadr' (solo ve portal-admin)
+- Las funciones vistasPermitidasUsuario() y puedeAccederUsuario()
+  respetan este bloqueo: si hay bloqueo, retorna solo [bloqueada]
+- La vista por defecto al iniciar sesión será la única permitida ('vehiculos')
+
+VEHÍCULO CREADO:
+- Placa: DLW357
+- Marca/Modelo: Chevrolet Onix 2022
+- Color: Blanco
+- Kilometraje: 25.000 km
+- VIN: 8LSCL19F98C765432
+- Motor: L4-1.4L Turbo
+- Estado: DISPONIBLE
+- SOAT vence: 2027-06-15
+- Tecnomecánica vence: 2027-08-20
+- Fecha compra: 2023-03-10
+- Valor compra: $38.000.000
+- Notas: Vehículo asignado para gestión del gestor con cédula 1017231419
+
+SISTEMA DE BLOQUEO A PORTAL DEDICADO (existente, reutilizado):
+- Matriz USUARIOS_BLOQUEADOS_A_PORTAL en permisos.ts
+- Clave: cédula o username (lowercase)
+- Valor: ViewKey a la que el usuario está bloqueado
+- Función getVistaBloqueadaUsuario() devuelve la vista bloqueada
+- puedeAccederUsuario(): si hay bloqueo, solo permite la vista bloqueada
+- vistasPermitidasUsuario(): si hay bloqueo, retorna solo [bloqueada]
+- page.tsx usa vistasPermitidasUsuario() para setear la vista inicial
+
+VERIFICACIÓN EN PRODUCCIÓN:
+- POST /api/portal/login cedula=1017231419 → success:true
+  * tipo: USUARIO
+  * nombre: Gestor Vehículos
+  * rol: GESTOR
+- El usuario podrá iniciar sesión y verá SOLO el módulo 'Gestión de Vehículos'
+- El vehículo DLW357 está disponible para gestión
+
+CÓMO INGRESA:
+- https://jsadr.com.co/login → cédula 1017231419
+- El sistema detecta tipo=USUARIO y redirige al panel admin
+- El sidebar mostrará ÚNICAMENTE el ítem 'Gestión de Vehículos'
+- No verá otros módulos del panel admin
+- Dentro de Gestión de Vehículos tiene acceso completo:
+  dashboard, vehículos, conductores, contratos, reservas, pagos,
+  cuentas pago, códigos QR, mantenimientos, repuestos, gastos,
+  proveedores, auditoría
+- El vehículo DLW357 aparecerá en el listado de vehículos
+
+Stage Summary:
+- ✅ GitHub: commit 9388241 en origin/main
+- ✅ Vercel: deploy exitoso
+- ✅ Usuario gestor creado en Neon
+- ✅ Vehículo DLW357 creado en Neon
+- ✅ Bloqueo a portal dedicado configurado en permisos.ts
+- ✅ Login verificado en producción
+- 📌 Acceso: https://jsadr.com.co/login → cédula 1017231419
+- 📌 Solo verá el módulo 'Gestión de Vehículos'
