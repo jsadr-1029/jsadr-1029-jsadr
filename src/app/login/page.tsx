@@ -817,18 +817,13 @@ function RegistroConductorModal({ onClose }: { onClose: () => void }) {
   }
 
   const submitFotos = async () => {
-    if (!token) return
-    if (!form.fotoCedulaFrente || !form.fotoCedulaReverso || !form.fotoLicenciaFrente || !form.fotoLicenciaReverso || !form.fotoSelfie || !form.fotoReciboServicios) {
-      setError('Debes cargar las 6 fotos obligatorias')
-      return
-    }
     setLoading(true)
     setError('')
     try {
       const res = await fetch('/api/vehiculos/registro-conductor/documentos', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(form),
+        body: JSON.stringify({ ...form, token, cedula: form.cedula }),
       })
       const r = await res.json()
       if (r.success) {

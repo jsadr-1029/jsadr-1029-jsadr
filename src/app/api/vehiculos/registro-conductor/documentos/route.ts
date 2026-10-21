@@ -15,7 +15,8 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
     const {
-      token, direccion, ciudad, barrio, fechaNacimiento,
+      token, cedula,
+      direccion, ciudad, barrio, fechaNacimiento,
       licenciaNumero, licenciaCategoria, licenciaVence,
       contactoEmergenciaNombre, contactoEmergenciaTelefono, contactoEmergenciaParentesco,
       fotoCedulaFrente, fotoCedulaReverso,
@@ -23,19 +24,30 @@ export async function POST(req: NextRequest) {
       fotoSelfie, fotoReciboServicios,
     } = body
 
-    if (!token) {
-      return NextResponse.json({ success: false, error: 'Token requerido' }, { status: 400 })
+    // === Buscar solicitud por token O por cédula ===
+    // Si viene token, usarlo. Si no, buscar por cédula (última solicitud pendiente)
+    let solicitud: any = null
+    if (token) {
+      solicitud = await db.solicitudConductorVehiculo.findFirst({
+        where: {
+          tokenRegistro: token,
+          tokenExpira: { gt: new Date() },
+        },
+      })
+    }
+    if (!solicitud && cedula) {
+      // Buscar la última solicitud pendiente de esta cédula
+      solicitud = await db.solicitudConductorVehiculo.findFirst({
+        where: {
+          cedula: String(cedula).trim(),
+          estado: { in: ['PENDIENTE', 'DOCUMENTOS'] },
+        },
+        orderBy: { createdAt: 'desc' },
+      })
     }
 
-    const solicitud = await db.solicitudConductorVehiculo.findFirst({
-      where: {
-        tokenRegistro: token,
-        tokenExpira: { gt: new Date() },
-      },
-    })
-
     if (!solicitud) {
-      return NextResponse.json({ success: false, error: 'Token inválido o expirado' }, { status: 401 })
+      return NextResponse.json({ success: false, error: 'No se encontró una solicitud de registro activa. Inicia el registro nuevamente.' }, { status: 404 })
     }
 
     // Validar que las 6 fotos estén cargadas para pasar a fase FIRMA
