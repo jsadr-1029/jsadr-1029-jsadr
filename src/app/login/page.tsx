@@ -23,6 +23,10 @@ import {
   X,
   Mail,
   UserPlus,
+  Car,
+  Upload,
+  CheckCircle,
+  ArrowLeft,
 } from 'lucide-react'
 import { login, isAuthenticated, setTokens, setUserData, getUserData } from '@/lib/api-client'
 import Link from 'next/link'
@@ -66,6 +70,7 @@ export default function LoginPage() {
 
   // Estado de recuperación de clave por correo
   const [showRecuperar, setShowRecuperar] = useState(false)
+  const [showRegistroConductor, setShowRegistroConductor] = useState(false)
   const [recuperarIdentificador, setRecuperarIdentificador] = useState('')
   const [recuperarLoading, setRecuperarLoading] = useState(false)
   const [recuperarMensaje, setRecuperarMensaje] = useState<
@@ -539,6 +544,20 @@ export default function LoginPage() {
                 Solicita tu crédito en 5 minutos · Validación de identidad con cédula y selfie
               </p>
 
+              {/* CTA Registro nuevo conductor */}
+              <button
+                type="button"
+                onClick={() => setShowRegistroConductor(true)}
+                className="group flex items-center justify-center gap-2 w-full h-11 rounded-xl border border-blue-500/40 bg-blue-500/10 hover:bg-blue-500/20 hover:border-blue-500/60 text-blue-200 text-sm font-medium transition-all mt-3"
+              >
+                <Car className="w-4 h-4" />
+                Regístrate como conductor
+                <ArrowRight className="w-3.5 h-3.5 opacity-60 group-hover:translate-x-0.5 transition-transform" />
+              </button>
+              <p className="text-center text-[10px] text-slate-500 mt-1">
+                ¿Vas a conducir un vehículo? Regístrate aquí · Cédula, licencia y recibo de servicios
+              </p>
+
             </div>
           </div>
 
@@ -557,6 +576,11 @@ export default function LoginPage() {
           40%, 80% { transform: translateX(8px); }
         }
       `}</style>
+
+      {/* === MODAL DE REGISTRO DE CONDUCTOR === */}
+      {showRegistroConductor && (
+        <RegistroConductorModal onClose={() => setShowRegistroConductor(false)} />
+      )}
 
       {/* === MODAL DE RECUPERACIÓN DE CLAVE POR CORREO === */}
       {showRecuperar && (
@@ -682,6 +706,328 @@ export default function LoginPage() {
           </div>
         </div>
       )}
+    </div>
+  )
+}
+
+// =====================================================
+// MODAL DE REGISTRO DE CONDUCTOR
+// Permite a un conductor nuevo registrarse con:
+// - Datos de contacto (nombre, cédula, teléfono, email, dirección, etc.)
+// - Foto cédula frente y reverso
+// - Foto licencia de conducción frente y reverso
+// - Foto recibo de servicios públicos
+// Al finalizar, crea una SolicitudConductorVehiculo que el admin aprueba.
+// =====================================================
+
+function comprimirImagenLogin(file: File, maxWidth: number = 1280, quality: number = 0.7): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = (e) => {
+      const img = new Image()
+      img.onload = () => {
+        const canvas = document.createElement('canvas')
+        let w = img.width, h = img.height
+        if (w > maxWidth) {
+          h = (h * maxWidth) / w
+          w = maxWidth
+        }
+        canvas.width = w
+        canvas.height = h
+        const ctx = canvas.getContext('2d')
+        if (!ctx) return reject(new Error('Canvas error'))
+        ctx.drawImage(img, 0, 0, w, h)
+        resolve(canvas.toDataURL('image/jpeg', quality))
+      }
+      img.onerror = reject
+      img.src = e.target?.result as string
+    }
+    reader.onerror = reject
+    reader.readAsDataURL(file)
+  })
+}
+
+function RegistroConductorModal({ onClose }: { onClose: () => void }) {
+  const [step, setStep] = useState(1) // 1=datos, 2=fotos, 3=ok
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+  const [token, setToken] = useState<string | null>(null)
+  const [form, setForm] = useState({
+    cedula: '',
+    nombre: '',
+    telefono: '',
+    email: '',
+    direccion: '',
+    ciudad: '',
+    barrio: '',
+    licenciaNumero: '',
+    licenciaCategoria: '',
+    licenciaVence: '',
+    contactoEmergenciaNombre: '',
+    contactoEmergenciaTelefono: '',
+    contactoEmergenciaParentesco: '',
+    fotoCedulaFrente: '',
+    fotoCedulaReverso: '',
+    fotoLicenciaFrente: '',
+    fotoLicenciaReverso: '',
+    fotoReciboServicios: '',
+  })
+
+  const handlePhoto = async (e: React.ChangeEvent<HTMLInputElement>, campo: string) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    try {
+      const base64 = await comprimirImagenLogin(file)
+      setForm(prev => ({ ...prev, [campo]: base64 }))
+    } catch (err: any) {
+      setError('Error al cargar imagen: ' + err.message)
+    }
+  }
+
+  const submitDatos = async () => {
+    if (!form.cedula || !form.nombre || !form.telefono) {
+      setError('Cédula, nombre y teléfono son obligatorios')
+      return
+    }
+    setLoading(true)
+    setError('')
+    try {
+      const res = await fetch('/api/vehiculos/registro-conductor/iniciar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          cedula: form.cedula,
+          nombre: form.nombre,
+          telefono: form.telefono,
+          email: form.email,
+        }),
+      })
+      const r = await res.json()
+      if (r.success) {
+        setToken(r.token)
+        setStep(2)
+      } else {
+        setError(r.error || 'Error al iniciar registro')
+      }
+    } catch (e: any) {
+      setError(e.message)
+    }
+    setLoading(false)
+  }
+
+  const submitFotos = async () => {
+    if (!token) return
+    if (!form.fotoCedulaFrente || !form.fotoCedulaReverso || !form.fotoLicenciaFrente || !form.fotoLicenciaReverso || !form.fotoReciboServicios) {
+      setError('Debes cargar las 5 fotos obligatorias')
+      return
+    }
+    setLoading(true)
+    setError('')
+    try {
+      const res = await fetch('/api/vehiculos/registro-conductor/documentos', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(form),
+      })
+      const r = await res.json()
+      if (r.success) {
+        setStep(3)
+      } else {
+        setError(r.error || 'Error al guardar documentos')
+      }
+    } catch (e: any) {
+      setError(e.message)
+    }
+    setLoading(false)
+  }
+
+  const FotoField = ({ campo, label, descripcion }: { campo: string; label: string; descripcion: string }) => (
+    <div>
+      <Label className="text-slate-200 text-sm font-medium">{label} *</Label>
+      <p className="text-xs text-slate-400 mb-2">{descripcion}</p>
+      <div className="flex items-center gap-2">
+        <input
+          type="file"
+          accept="image/*"
+          capture="environment"
+          onChange={(e) => handlePhoto(e, campo)}
+          className="hidden"
+          id={`file-${campo}`}
+        />
+        <Button type="button" variant="outline" size="sm" onClick={() => document.getElementById(`file-${campo}`)?.click()}
+          className="bg-slate-800/50 border-slate-700 text-slate-200 hover:bg-slate-800">
+          <Upload className="w-4 h-4 mr-1" /> Tomar foto
+        </Button>
+        {(form as any)[campo] && <CheckCircle className="w-4 h-4 text-green-500" />}
+      </div>
+      {(form as any)[campo] && (
+        <img src={(form as any)[campo]} alt={label} className="mt-2 max-h-28 object-contain rounded border border-slate-700" />
+      )}
+    </div>
+  )
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm overflow-y-auto">
+      <div className="bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl max-w-lg w-full my-8">
+        {/* Header */}
+        <div className="bg-gradient-to-r from-blue-500 via-indigo-500 to-purple-500 p-5 text-white rounded-t-2xl">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <Car className="w-6 h-6" />
+              <div>
+                <h2 className="text-lg font-bold">Registro de Conductor</h2>
+                <p className="text-xs opacity-80">Paso {step} de 3</p>
+              </div>
+            </div>
+            <button onClick={onClose} className="text-white/80 hover:text-white">
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+        </div>
+
+        {/* Body */}
+        <div className="p-5 max-h-[70vh] overflow-y-auto">
+          {error && (
+            <Alert className="bg-red-500/10 border-red-500/30 text-red-200 mb-4">
+              <AlertCircle className="w-4 h-4" />
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
+          )}
+
+          {/* STEP 1: Datos de contacto */}
+          {step === 1 && (
+            <div className="space-y-3">
+              <div>
+                <Label className="text-slate-200 text-sm">Cédula *</Label>
+                <Input value={form.cedula} onChange={e => setForm({ ...form, cedula: e.target.value.replace(/\D/g, '') })}
+                  placeholder="Sin puntos ni guiones" className="bg-slate-800/50 border-slate-700 text-white" />
+              </div>
+              <div>
+                <Label className="text-slate-200 text-sm">Nombre completo *</Label>
+                <Input value={form.nombre} onChange={e => setForm({ ...form, nombre: e.target.value })}
+                  className="bg-slate-800/50 border-slate-700 text-white" />
+              </div>
+              <div>
+                <Label className="text-slate-200 text-sm">Teléfono *</Label>
+                <Input value={form.telefono} onChange={e => setForm({ ...form, telefono: e.target.value.replace(/\D/g, '') })}
+                  placeholder="3001234567" className="bg-slate-800/50 border-slate-700 text-white" />
+              </div>
+              <div>
+                <Label className="text-slate-200 text-sm">Email</Label>
+                <Input type="email" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })}
+                  className="bg-slate-800/50 border-slate-700 text-white" />
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <Label className="text-slate-200 text-sm">Dirección</Label>
+                  <Input value={form.direccion} onChange={e => setForm({ ...form, direccion: e.target.value })}
+                    className="bg-slate-800/50 border-slate-700 text-white" />
+                </div>
+                <div>
+                  <Label className="text-slate-200 text-sm">Ciudad</Label>
+                  <Input value={form.ciudad} onChange={e => setForm({ ...form, ciudad: e.target.value })}
+                    className="bg-slate-800/50 border-slate-700 text-white" />
+                </div>
+              </div>
+              <div>
+                <Label className="text-slate-200 text-sm">Barrio</Label>
+                <Input value={form.barrio} onChange={e => setForm({ ...form, barrio: e.target.value })}
+                  className="bg-slate-800/50 border-slate-700 text-white" />
+              </div>
+              <div className="border-t border-slate-700 pt-3 mt-3">
+                <h3 className="text-sm font-medium text-slate-200 mb-2">Licencia de conducción</h3>
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <Label className="text-slate-200 text-sm">Número</Label>
+                    <Input value={form.licenciaNumero} onChange={e => setForm({ ...form, licenciaNumero: e.target.value })}
+                      className="bg-slate-800/50 border-slate-700 text-white" />
+                  </div>
+                  <div>
+                    <Label className="text-slate-200 text-sm">Categoría</Label>
+                    <Input value={form.licenciaCategoria} onChange={e => setForm({ ...form, licenciaCategoria: e.target.value })}
+                      placeholder="A1, B1, B2, etc." className="bg-slate-800/50 border-slate-700 text-white" />
+                  </div>
+                </div>
+                <div className="mt-2">
+                  <Label className="text-slate-200 text-sm">Vence</Label>
+                  <Input type="date" value={form.licenciaVence} onChange={e => setForm({ ...form, licenciaVence: e.target.value })}
+                    className="bg-slate-800/50 border-slate-700 text-white" />
+                </div>
+              </div>
+              <div className="border-t border-slate-700 pt-3 mt-3">
+                <h3 className="text-sm font-medium text-slate-200 mb-2">Contacto de emergencia</h3>
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <Label className="text-slate-200 text-sm">Nombre</Label>
+                    <Input value={form.contactoEmergenciaNombre} onChange={e => setForm({ ...form, contactoEmergenciaNombre: e.target.value })}
+                      className="bg-slate-800/50 border-slate-700 text-white" />
+                  </div>
+                  <div>
+                    <Label className="text-slate-200 text-sm">Teléfono</Label>
+                    <Input value={form.contactoEmergenciaTelefono} onChange={e => setForm({ ...form, contactoEmergenciaTelefono: e.target.value.replace(/\D/g, '') })}
+                      className="bg-slate-800/50 border-slate-700 text-white" />
+                  </div>
+                </div>
+                <div className="mt-2">
+                  <Label className="text-slate-200 text-sm">Parentesco</Label>
+                  <Input value={form.contactoEmergenciaParentesco} onChange={e => setForm({ ...form, contactoEmergenciaParentesco: e.target.value })}
+                    placeholder="Hijo/a, esposa, hermano, etc." className="bg-slate-800/50 border-slate-700 text-white" />
+                </div>
+              </div>
+              <Button onClick={submitDatos} disabled={loading} className="w-full bg-gradient-to-r from-blue-500 to-indigo-500 hover:from-blue-600 hover:to-indigo-600">
+                {loading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
+                Continuar a fotos
+                <ArrowRight className="w-4 h-4 ml-2" />
+              </Button>
+            </div>
+          )}
+
+          {/* STEP 2: Fotos */}
+          {step === 2 && (
+            <div className="space-y-4">
+              <p className="text-xs text-slate-400">
+                Toma fotos claras con buena iluminación. Todos los documentos deben ser legibles.
+              </p>
+              <FotoField campo="fotoCedulaFrente" label="Cédula - Frente" descripcion="Foto del frente de la cédula" />
+              <FotoField campo="fotoCedulaReverso" label="Cédula - Reverso" descripcion="Foto del reverso de la cédula" />
+              <FotoField campo="fotoLicenciaFrente" label="Licencia - Frente" descripcion="Foto del frente de la licencia de conducción" />
+              <FotoField campo="fotoLicenciaReverso" label="Licencia - Reverso" descripcion="Foto del reverso de la licencia" />
+              <FotoField campo="fotoReciboServicios" label="Recibo de servicios públicos" descripcion="Donde se evidencie tu dirección de residencia" />
+              <div className="flex gap-2">
+                <Button variant="outline" onClick={() => setStep(1)} className="bg-slate-800/50 border-slate-700 text-slate-200">
+                  <ArrowLeft className="w-4 h-4 mr-1" /> Atrás
+                </Button>
+                <Button onClick={submitFotos} disabled={loading} className="flex-1 bg-gradient-to-r from-blue-500 to-indigo-500 hover:from-blue-600 hover:to-indigo-600">
+                  {loading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
+                  Enviar registro
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {/* STEP 3: Completado */}
+          {step === 3 && (
+            <div className="text-center py-6">
+              <CheckCircle2 className="w-16 h-16 text-green-500 mx-auto mb-3" />
+              <h3 className="text-lg font-bold text-white">¡Registro enviado!</h3>
+              <p className="text-sm text-slate-400 mt-2 max-w-sm mx-auto">
+                Tu solicitud de registro como conductor ha sido enviada correctamente.
+                Un administrador revisará tus datos y documentos. Una vez aprobado,
+                podrás iniciar sesión con tu cédula en el portal del conductor.
+              </p>
+              <div className="mt-4 p-3 bg-slate-800/50 rounded-lg text-left text-xs text-slate-300 space-y-1">
+                <div>✓ Datos personales guardados</div>
+                <div>✓ Cédula (frente y reverso)</div>
+                <div>✓ Licencia de conducción (frente y reverso)</div>
+                <div>✓ Recibo de servicios públicos</div>
+              </div>
+              <Button onClick={onClose} className="mt-4 bg-gradient-to-r from-blue-500 to-indigo-500">
+                Cerrar
+              </Button>
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   )
 }
