@@ -160,6 +160,12 @@ const USUARIOS_BLOQUEADOS_A_PORTAL: Record<string, ViewKey> = {
   p_jsadr: 'portal-admin',
   // Jd_jsadr es ABOGADO y ya tiene VISTAS_POR_ROL vacío (usa /juridico),
   // así que no necesita bloqueo adicional aquí.
+
+  // === Gestores dedicados al módulo de Vehículos ===
+  // Estos usuarios solo pueden acceder a 'vehiculos', no al resto del sistema.
+  // La clave puede ser username o cédula (en lowercase).
+  '1017231419': 'vehiculos',
+  'gestor.vehiculos': 'vehiculos',
 }
 
 // =====================================================
