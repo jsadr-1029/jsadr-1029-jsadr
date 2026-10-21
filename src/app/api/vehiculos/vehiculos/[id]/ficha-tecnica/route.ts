@@ -14,6 +14,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireRole } from '@/lib/auth-guard'
 import { db } from '@/lib/db'
+import { getVehiculosPermitidos } from '@/lib/permisos'
 
 export async function GET(
   req: NextRequest,
@@ -21,6 +22,7 @@ export async function GET(
 ) {
   const authResult = requireRole(req, ['ADMIN', 'GESTOR', 'CONSULTOR'])
   if (authResult instanceof NextResponse) return authResult
+  const user = authResult
 
   try {
     const { id } = await params
@@ -48,6 +50,15 @@ export async function GET(
 
     if (!vehiculo) {
       return NextResponse.json({ success: false, error: 'Vehículo no encontrado' }, { status: 404 })
+    }
+
+    // === VERIFICAR VEHÍCULOS PERMITIDOS POR USUARIO ===
+    const vehiculosPermitidos = getVehiculosPermitidos(user.username || user.id)
+    if (vehiculosPermitidos !== null && !vehiculosPermitidos.includes(vehiculo.placa.toUpperCase())) {
+      return NextResponse.json(
+        { success: false, error: 'No tienes permiso para ver este vehículo' },
+        { status: 403 }
+      )
     }
 
     // Repuestos activos (instalados, no retirados)

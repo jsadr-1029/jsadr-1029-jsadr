@@ -5,6 +5,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireRole } from '@/lib/auth-guard'
 import { db } from '@/lib/db'
+import { getVehiculosPermitidos } from '@/lib/permisos'
 
 // === Helper: calcular distribución de montos ===
 function calcularDistribucion(
@@ -33,6 +34,7 @@ function calcularDistribucion(
 export async function GET(req: NextRequest) {
   const authResult = requireRole(req, ['ADMIN', 'GESTOR', 'CONSULTOR'])
   if (authResult instanceof NextResponse) return authResult
+  const user = authResult
 
   try {
     const { searchParams } = new URL(req.url)
@@ -44,6 +46,12 @@ export async function GET(req: NextRequest) {
     if (estado) where.estado = estado
     if (conductorId) where.conductorId = conductorId
     if (vehiculoId) where.vehiculoId = vehiculoId
+
+    // === FILTRO POR VEHÍCULOS PERMITIDOS POR USUARIO ===
+    const vehiculosPermitidos = getVehiculosPermitidos(user.username || user.id)
+    if (vehiculosPermitidos !== null) {
+      where.vehiculo = { placa: { in: vehiculosPermitidos } }
+    }
 
     const reservas = await db.reservaVehiculo.findMany({
       where,

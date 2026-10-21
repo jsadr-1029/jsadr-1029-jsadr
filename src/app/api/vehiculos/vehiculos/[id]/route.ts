@@ -4,6 +4,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireRole } from '@/lib/auth-guard'
 import { db } from '@/lib/db'
+import { getVehiculosPermitidos } from '@/lib/permisos'
 
 export async function PUT(
   req: NextRequest,
@@ -20,6 +21,15 @@ export async function PUT(
     const anterior = await db.vehiculo.findUnique({ where: { id } })
     if (!anterior) {
       return NextResponse.json({ success: false, error: 'Vehículo no encontrado' }, { status: 404 })
+    }
+
+    // === VERIFICAR VEHÍCULOS PERMITIDOS POR USUARIO ===
+    const vehiculosPermitidos = getVehiculosPermitidos(user.username || user.id)
+    if (vehiculosPermitidos !== null && !vehiculosPermitidos.includes(anterior.placa.toUpperCase())) {
+      return NextResponse.json(
+        { success: false, error: 'No tienes permiso para modificar este vehículo' },
+        { status: 403 }
+      )
     }
 
     const data: any = {}
@@ -70,6 +80,15 @@ export async function DELETE(
     const anterior = await db.vehiculo.findUnique({ where: { id } })
     if (!anterior) {
       return NextResponse.json({ success: false, error: 'Vehículo no encontrado' }, { status: 404 })
+    }
+
+    // === VERIFICAR VEHÍCULOS PERMITIDOS POR USUARIO ===
+    const vehiculosPermitidosDel = getVehiculosPermitidos(user.username || user.id)
+    if (vehiculosPermitidosDel !== null && !vehiculosPermitidosDel.includes(anterior.placa.toUpperCase())) {
+      return NextResponse.json(
+        { success: false, error: 'No tienes permiso para eliminar este vehículo' },
+        { status: 403 }
+      )
     }
 
     // Soft delete: marcar como inactivo

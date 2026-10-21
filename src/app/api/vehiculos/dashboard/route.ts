@@ -4,12 +4,23 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireRole } from '@/lib/auth-guard'
 import { db } from '@/lib/db'
+import { getVehiculosPermitidos } from '@/lib/permisos'
 
 export async function GET(req: NextRequest) {
   const authResult = requireRole(req, ['ADMIN', 'GESTOR'])
   if (authResult instanceof NextResponse) return authResult
+  const user = authResult
 
   try {
+    // === FILTRO POR VEHÍCULOS PERMITIDOS POR USUARIO ===
+    const vehiculosPermitidos = getVehiculosPermitidos(user.username || user.id)
+    const vehiculoFilter = vehiculosPermitidos !== null
+      ? { vehiculo: { placa: { in: vehiculosPermitidos } } }
+      : undefined
+    const vehiculoPlacaFilter = vehiculosPermitidos !== null
+      ? { placa: { in: vehiculosPermitidos } }
+      : undefined
+
     const [
       vehiculos,
       conductores,
@@ -20,19 +31,27 @@ export async function GET(req: NextRequest) {
       gastos,
       alertas,
     ] = await Promise.all([
-      db.vehiculo.findMany({ where: { activo: true } }),
+      db.vehiculo.findMany({ where: { activo: true, ...(vehiculoPlacaFilter || {}) } }),
       db.conductorVehiculo.findMany({ where: { activo: true } }),
       db.contratoVehiculo.findMany({
-        where: { estado: 'ACTIVO' },
+        where: { estado: 'ACTIVO', ...(vehiculoFilter || {}) },
         include: { vehiculo: true, conductor: true },
       }),
       db.obligacionVehiculo.findMany({
-        where: { estado: { in: ['PENDIENTE', 'PARCIAL', 'VENCIDA'] } },
+        where: { estado: { in: ['PENDIENTE', 'PARCIAL', 'VENCIDA'] }, ...(vehiculoFilter || {}) },
       }),
-      db.pagoVehiculo.findMany(),
-      db.mantenimientoVehiculo.findMany(),
-      db.gastoVehiculo.findMany(),
-      db.alertaVehiculo.findMany({ where: { atendida: false } }),
+      db.pagoVehiculo.findMany({
+        where: vehiculoFilter ? { contrato: { vehiculo: { placa: { in: vehiculosPermitidos! } } } } : {},
+      }),
+      db.mantenimientoVehiculo.findMany({
+        where: vehiculoFilter || {},
+      }),
+      db.gastoVehiculo.findMany({
+        where: vehiculoFilter || {},
+      }),
+      db.alertaVehiculo.findMany({
+        where: { atendida: false, ...(vehiculoFilter || {}) },
+      }),
     ])
 
     const ingresosFacturados = obligaciones.reduce((s, o) => s + (o.monto || 0), 0)

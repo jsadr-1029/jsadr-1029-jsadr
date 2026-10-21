@@ -17,6 +17,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireRole } from '@/lib/auth-guard'
 import { db } from '@/lib/db'
+import { getVehiculosPermitidos } from '@/lib/permisos'
 import crypto from 'crypto'
 
 // === OCR BÁSICO (STUB) ===
@@ -97,6 +98,7 @@ function compararConObligacion(ocrData: any, obligacion: any) {
 export async function GET(req: NextRequest) {
   const authResult = requireRole(req, ['ADMIN', 'GESTOR', 'CONSULTOR'])
   if (authResult instanceof NextResponse) return authResult
+  const user = authResult
 
   try {
     const { searchParams } = new URL(req.url)
@@ -108,6 +110,12 @@ export async function GET(req: NextRequest) {
     if (estado) where.estado = estado
     if (conductorId) where.conductorId = conductorId
     if (contratoId) where.contratoId = contratoId
+
+    // === FILTRO POR VEHÍCULOS PERMITIDOS POR USUARIO ===
+    const vehiculosPermitidos = getVehiculosPermitidos(user.username || user.id)
+    if (vehiculosPermitidos !== null) {
+      where.contrato = { vehiculo: { placa: { in: vehiculosPermitidos } } }
+    }
 
     const pagos = await db.pagoVehiculo.findMany({
       where,

@@ -5,10 +5,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireRole } from '@/lib/auth-guard'
 import { db } from '@/lib/db'
+import { getVehiculosPermitidos } from '@/lib/permisos'
 
 export async function GET(req: NextRequest) {
   const authResult = requireRole(req, ['ADMIN', 'GESTOR', 'CONSULTOR'])
   if (authResult instanceof NextResponse) return authResult
+  const user = authResult
 
   try {
     const { searchParams } = new URL(req.url)
@@ -18,6 +20,12 @@ export async function GET(req: NextRequest) {
     const where: any = {}
     if (vehiculoId) where.vehiculoId = vehiculoId
     if (categoria) where.categoria = categoria
+
+    // === FILTRO POR VEHÍCULOS PERMITIDOS POR USUARIO ===
+    const vehiculosPermitidos = getVehiculosPermitidos(user.username || user.id)
+    if (vehiculosPermitidos !== null) {
+      where.vehiculo = { placa: { in: vehiculosPermitidos } }
+    }
 
     const gastos = await db.gastoVehiculo.findMany({
       where,
@@ -46,6 +54,18 @@ export async function POST(req: NextRequest) {
         { success: false, error: 'vehiculoId, fecha, concepto, monto son obligatorios' },
         { status: 400 }
       )
+    }
+
+    // === VERIFICAR VEHÍCULOS PERMITIDOS POR USUARIO ===
+    const vehPermitidosGasto = getVehiculosPermitidos(user.username || user.id)
+    if (vehPermitidosGasto !== null) {
+      const vehGasto = await db.vehiculo.findUnique({ where: { id: vehiculoId } })
+      if (!vehGasto || !vehPermitidosGasto.includes(vehGasto.placa.toUpperCase())) {
+        return NextResponse.json(
+          { success: false, error: 'No tienes permiso para registrar gastos a este vehículo' },
+          { status: 403 }
+        )
+      }
     }
 
     const gasto = await db.gastoVehiculo.create({

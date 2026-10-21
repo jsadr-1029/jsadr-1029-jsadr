@@ -169,6 +169,44 @@ const USUARIOS_BLOQUEADOS_A_PORTAL: Record<string, ViewKey> = {
 }
 
 // =====================================================
+// VEHÍCULOS PERMITIDOS POR USUARIO
+// -----------------------------------------------------
+// Algunos gestores solo deben poder ver y gestionar vehículos
+// específicos (por placa). El resto de vehículos del sistema
+// debe quedar oculto para ellos.
+// La clave puede ser username o cédula (en lowercase).
+// El valor es un array de placas (en uppercase).
+// Vacío o sin entrada = el usuario ve TODOS los vehículos.
+// =====================================================
+
+const USUARIOS_CON_VEHICULOS_PERMITIDOS: Record<string, string[]> = {
+  // Gestor Vehículos - SOLO puede ver el Ford Fiesta 2012 DLW357
+  '1017231419': ['DLW357'],
+  'gestor.vehiculos': ['DLW357'],
+}
+
+/**
+ * Devuelve la lista de placas de vehículos que el usuario puede ver.
+ * Si retorna NULL, el usuario puede ver TODOS los vehículos (sin restricción).
+ * Si retorna un array (aunque sea vacío), el usuario solo puede ver esos.
+ */
+export function getVehiculosPermitidos(username: string | undefined | null): string[] | null {
+  if (!username) return null
+  const u = username.toLowerCase().trim()
+  if (!(u in USUARIOS_CON_VEHICULOS_PERMITIDOS)) return null
+  return USUARIOS_CON_VEHICULOS_PERMITIDOS[u]
+}
+
+/**
+ * Verifica si un usuario puede ver un vehículo específico (por placa).
+ */
+export function puedeVerVehiculo(username: string | undefined | null, placa: string): boolean {
+  const permitidas = getVehiculosPermitidos(username)
+  if (permitidas === null) return true // sin restricción
+  return permitidas.includes(placa.toUpperCase())
+}
+
+// =====================================================
 // EXCLUSIONES DE VISTAS POR USUARIO
 // -----------------------------------------------------
 // Algunos usuarios GESTOR/CONSULTOR no deben tener acceso a ciertos

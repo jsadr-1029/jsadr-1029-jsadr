@@ -6,6 +6,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireRole } from '@/lib/auth-guard'
 import { db } from '@/lib/db'
+import { getVehiculosPermitidos } from '@/lib/permisos'
 
 // === Helper: generar fechas de vencimiento según modalidad ===
 // REGLA DE NEGOCIO: las liquidaciones son de LUNES a SÁBADO (excluye domingos)
@@ -103,6 +104,7 @@ async function generarObligaciones(
 export async function GET(req: NextRequest) {
   const authResult = requireRole(req, ['ADMIN', 'GESTOR', 'CONSULTOR'])
   if (authResult instanceof NextResponse) return authResult
+  const user = authResult
 
   try {
     const { searchParams } = new URL(req.url)
@@ -114,6 +116,12 @@ export async function GET(req: NextRequest) {
     if (estado) where.estado = estado
     if (conductorId) where.conductorId = conductorId
     if (vehiculoId) where.vehiculoId = vehiculoId
+
+    // === FILTRO POR VEHÍCULOS PERMITIDOS POR USUARIO ===
+    const vehiculosPermitidos = getVehiculosPermitidos(user.username || user.id)
+    if (vehiculosPermitidos !== null) {
+      where.vehiculo = { placa: { in: vehiculosPermitidos } }
+    }
 
     const contratos = await db.contratoVehiculo.findMany({
       where,
@@ -168,6 +176,16 @@ export async function POST(req: NextRequest) {
     if (!vehiculo) {
       return NextResponse.json({ success: false, error: 'Vehículo no encontrado' }, { status: 404 })
     }
+
+    // === VERIFICAR VEHÍCULOS PERMITIDOS POR USUARIO ===
+    const vehPermitidosContrato = getVehiculosPermitidos(user.username || user.id)
+    if (vehPermitidosContrato !== null && !vehPermitidosContrato.includes(vehiculo.placa.toUpperCase())) {
+      return NextResponse.json(
+        { success: false, error: 'No tienes permiso para crear contratos para este vehículo' },
+        { status: 403 }
+      )
+    }
+
     const conductor = await db.conductorVehiculo.findUnique({ where: { id: conductorId } })
     if (!conductor) {
       return NextResponse.json({ success: false, error: 'Conductor no encontrado' }, { status: 404 })
