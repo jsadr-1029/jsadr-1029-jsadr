@@ -66,9 +66,10 @@ export async function POST(req: NextRequest) {
     if (fechaNacimiento) data.fechaNacimiento = new Date(fechaNacimiento)
     if (licenciaVence) data.licenciaVence = new Date(licenciaVence)
 
-    // Si todas las fotos están, pasar a estado FIRMA
+    // Si todas las fotos están, pasar a estado COMPLETADA directamente
+    // (el flujo simplificado del login no requiere firma/OTP separados)
     if (fotosCompletas) {
-      data.estado = 'FIRMA'
+      data.estado = 'COMPLETADA'
     } else {
       data.estado = 'DOCUMENTOS'
     }
@@ -83,7 +84,7 @@ export async function POST(req: NextRequest) {
       estado: actualizada.estado,
       fotosCompletas,
       message: fotosCompletas
-        ? 'Documentos completos. Continúa con la firma electrónica.'
+        ? '¡Registro completado! Tu solicitud será revisada por un administrador.'
         : 'Documentos guardados parcialmente. Faltan fotos por cargar.',
     })
   } catch (error: any) {
