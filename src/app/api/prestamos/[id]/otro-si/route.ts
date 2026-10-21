@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { sanitizeError } from '@/lib/error-handler'
 import { requireRole } from '@/lib/auth-guard'
+import { buildAbsoluteUrl } from '@/lib/url'
 import {
   generarHtmlOtroSi,
   generarCodigoOtroSi,
@@ -255,9 +256,7 @@ export async function POST(
         },
       })
 
-      const baseUrl =
-        process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'
-      const linkFirma = `${baseUrl}/firma/${tokenCreado}`
+      const linkFirma = buildAbsoluteUrl(`/firma/${tokenCreado}`)
 
       // === Enviar OTP por correo ===
       let otpEnviado = false

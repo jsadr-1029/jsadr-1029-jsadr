@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { buildAbsoluteUrl } from '@/lib/url'
 import crypto from 'crypto'
 
 /**
@@ -110,9 +111,10 @@ export async function POST(req: NextRequest) {
       })
     }
 
-    // Construir URL absoluta
-    const origin = req.nextUrl.origin || process.env.NEXT_PUBLIC_APP_URL || 'https://jsadr.com.co'
-    const linkFirma = `${origin}/firma/${tokenFirma.token}`
+    // Construir URL absoluta usando helper centralizado
+    // (evita usar req.nextUrl.origin que en Vercel puede apuntar al dominio
+    // de deployment en vez del dominio canónico jsadr.com.co)
+    const linkFirma = buildAbsoluteUrl(`/firma/${tokenFirma.token}`)
 
     return NextResponse.json({
       success: true,
