@@ -162,6 +162,35 @@ const USUARIOS_BLOQUEADOS_A_PORTAL: Record<string, ViewKey> = {
   // así que no necesita bloqueo adicional aquí.
 }
 
+// =====================================================
+// EXCLUSIONES DE VISTAS POR USUARIO
+// -----------------------------------------------------
+// Algunos usuarios GESTOR/CONSULTOR no deben tener acceso a ciertos
+// módulos aunque su rol lo permita. Ejemplo: gestores que no deben
+// ver el módulo de Administración de Vehículos.
+// La clave puede ser username o cédula (en lowercase).
+// El valor es un array de ViewKey que se EXCLUYEN de su lista.
+// =====================================================
+
+const USUARIOS_CON_VISTAS_EXCLUIDAS: Record<string, ViewKey[]> = {
+  // Andrés Mazo - GESTOR - sin acceso a vehículos
+  '11127850388': ['vehiculos'],
+  'andres.mazo': ['vehiculos'],
+  // Oscar Ciro - GESTOR - sin acceso a vehículos
+  '703855144': ['vehiculos'],
+  'oscar.ciro': ['vehiculos'],
+}
+
+/**
+ * Devuelve la lista de vistas excluidas para un usuario específico
+ * (por username o cédula). Vacío si no tiene exclusiones.
+ */
+export function getVistasExcluidasUsuario(username: string | undefined | null): ViewKey[] {
+  if (!username) return []
+  const u = username.toLowerCase().trim()
+  return USUARIOS_CON_VISTAS_EXCLUIDAS[u] || []
+}
+
 /**
  * Verifica si un usuario específico (por username) está bloqueado a un
  * portal dedicado. Si lo está, solo puede acceder a ese portal.
@@ -174,7 +203,8 @@ export function getVistaBloqueadaUsuario(username: string | undefined | null): V
 
 /**
  * Verifica si un usuario específico puede acceder a una vista,
- * considerando además del rol el bloqueo por portal dedicado.
+ * considerando además del rol el bloqueo por portal dedicado
+ * y las exclusiones específicas por usuario.
  */
 export function puedeAccederUsuario(
   username: string | undefined | null,
@@ -186,12 +216,17 @@ export function puedeAccederUsuario(
     // Si el usuario está bloqueado a un portal, SOLO puede acceder a ese portal
     return view === bloqueada
   }
+  // Verificar exclusiones específicas por usuario (cédula o username)
+  const excluidas = getVistasExcluidasUsuario(username)
+  if (excluidas.includes(view as ViewKey)) {
+    return false
+  }
   return puedeAcceder(rol, view)
 }
 
 /**
  * Devuelve la lista de vistas permitidas para un usuario específico,
- * considerando el bloqueo por portal dedicado.
+ * considerando el bloqueo por portal dedicado y las exclusiones.
  */
 export function vistasPermitidasUsuario(
   username: string | undefined | null,
@@ -201,7 +236,10 @@ export function vistasPermitidasUsuario(
   if (bloqueada) {
     return [bloqueada]
   }
-  return vistasPermitidas(rol)
+  const todas = vistasPermitidas(rol)
+  const excluidas = getVistasExcluidasUsuario(username)
+  if (excluidas.length === 0) return todas
+  return todas.filter(v => !excluidas.includes(v))
 }
 
 /**
