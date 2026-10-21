@@ -46,9 +46,9 @@ type SimResult = {
   }>
 }
 
-const MONTO_MIN = 100000
+const MONTO_MIN = 50000
 const MONTO_MAX = 5000000
-const MONTO_STEP = 50000
+const MONTO_STEP = 10000
 const PLAZO_MIN = 1
 const PLAZO_MAX = 24
 const TARIFA_PLATAFORMA = 4900
