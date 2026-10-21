@@ -4705,3 +4705,85 @@ Stage Summary:
 - 📌 Cuando un conductor se registre desde el login, aparecerá en:
   Gestión de Vehículos → tab "Solicitudes" → con foto y documentos
 - 📌 Al aprobar, el conductor pasa automáticamente al tab "Conductores"
+
+---
+Task ID: 46-fix-pdf-completo-fotos-vehiculo-inventario-conductor
+Agent: Super Z (main)
+Task: El PDF completo de la ficha del vehículo debe permitir descargar: ficha técnica, inventario, datos del conductor asignado con foto, y fotos del vehículo.
+
+Work Log:
+
+PDF COMPLETO REESCRITO - /api/vehiculos/vehiculos/[id]/pdf-entrega:
+
+FIX PRINCIPAL - SOPORTE PARA IMÁGENES BASE64:
+- ANTES: fetchImage() solo funcionaba con URLs externas (http/https)
+  Las fotos tomadas con cámara nativa se guardan como base64 data URLs
+  (data:image/jpeg;base64,...) → el PDF no podía mostrarlas
+- AHORA: getImage() soporta tanto URLs externas como base64 data URLs
+  Detecta automáticamente el formato y extrae el buffer correctamente
+
+NUEVAS SECCIONES EN EL PDF:
+
+Sección 1: DATOS DEL VEHÍCULO (con foto)
+- Datos completos (placa, marca, modelo, año, color, km, VIN, motor, etc.)
+- Foto principal del vehículo (si tiene fotoUrl)
+
+Sección 2: INVENTARIO DE ENTREGA (con fotos de items)
+- Tabla con #, item, cantidad, estado, notas
+- NUEVO: cada item que tenga fotoUrl muestra su imagen debajo
+- Las fotos se muestran a 200x120px
+
+Sección 3: DOCUMENTOS DEL VEHÍCULO (con fotos)
+- Lista de documentos (SOAT, tecno, tarjeta, póliza, etc.)
+- Datos: tipo, número, emisor, fechas emisión/vencimiento
+- NUEVO: cada documento con archivoUrl muestra su imagen (foto o PDF)
+- Las fotos se muestran a máximo ancho-100 x 200px
+
+Sección 4: CONDUCTOR ASIGNADO (con foto) ← NUEVA
+- Foto circular del conductor (selfie) a la izquierda (120x150px)
+- Datos de contacto a la derecha de la foto:
+  * Nombre
+  * Cédula
+  * Teléfono
+  * Email
+  * Dirección y ciudad
+  * Licencia (categoría y número)
+  * Fecha de vencimiento de licencia
+- Si no tiene foto: solo muestra los datos en formato lista
+
+Sección 5: CONTRATO VIGENTE
+- Número, fechas, modalidad, tarifa, gracia, multa, depósito, estado
+
+Sección 6: HISTORIAL DE MANTENIMIENTOS
+- Fecha, tipo, kilometraje, trabajo, taller, proveedor, costo
+- Repuestos instalados
+- Próxima revisión
+
+Sección 7: FIRMAS DE ENTREGA
+- Líneas para firma de entregado por / recibido por
+- Fecha y cédula del conductor
+
+HELPER addImageToPDF():
+- Función reutilizable que recibe source (URL o base64)
+- Obtiene el buffer con getImage()
+- Agrega al PDF con doc.image() manejando errores
+- Retorna la altura usada para continuar el layout
+
+VERIFICACIÓN DE PERMISOS:
+- Agregado getVehiculosPermitidos() para respetar restricciones por usuario
+- El gestor 1017231419 solo puede descargar PDF de DLW357
+
+VERIFICACIÓN EN PRODUCCIÓN:
+- GET /api/vehiculos/vehiculos/[id]/pdf-entrega?tipo=completo
+  → HTTP 401 sin JWT (correcto, requiere autenticación)
+- El PDF se descarga correctamente desde el panel admin con sesión activa
+
+Stage Summary:
+- ✅ GitHub: commit 1c47c2f en origin/main
+- ✅ Vercel: deploy exitoso
+- ✅ Soporte para imágenes base64 (fotos de cámara nativa)
+- ✅ Fotos del vehículo en el PDF
+- ✅ Fotos de items de inventario en el PDF
+- ✅ Fotos de documentos del vehículo en el PDF
+- ✅ Datos del conductor con foto (selfie) en el PDF
+- ✅ Permisos por usuario respetados (vehículos permitidos)
