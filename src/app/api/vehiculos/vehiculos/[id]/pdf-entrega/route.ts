@@ -1,47 +1,58 @@
 // =====================================================
 // /api/vehiculos/vehiculos/[id]/pdf-entrega
 // Genera un PDF completo con:
-//  1. Ficha técnica del vehículo (datos, fotos)
-//  2. Inventario completo del vehículo
-//  3. Contrato vigente (si hay)
-//  4. Mantenimientos realizados
-//  5. Documentos (SOAT, tecno, etc.)
-//  6. Fotos del vehículo
-//
-// Query params:
-//  ?contratoId=xxx — incluye un contrato específico
-//  ?tipo=ficha — solo ficha técnica
-//  ?tipo=inventario — solo inventario
-//  ?tipo=completo (default) — todo
+//  1. Ficha técnica del vehículo (datos + foto)
+//  2. Inventario completo (con fotos de items)
+//  3. Documentos del vehículo (con fotos)
+//  4. Datos del conductor asignado (con foto/selfie)
+//  5. Contrato vigente
+//  6. Mantenimientos realizados
+//  7. Firmas de entrega
 // =====================================================
 import { NextRequest, NextResponse } from 'next/server'
 import { requireRole } from '@/lib/auth-guard'
+import { getVehiculosPermitidos } from '@/lib/permisos'
 import { db } from '@/lib/db'
 import PDFDocument from 'pdfkit'
-import fs from 'fs'
 import https from 'https'
 import http from 'http'
 
-function fetchImage(url: string): Promise<Buffer | null> {
-  return new Promise((resolve) => {
+// === Helper: obtener imagen desde URL o base64 ===
+async function getImage(source: string): Promise<Buffer | null> {
+  if (!source) return null
+
+  // Si es base64 data URL (data:image/jpeg;base64,...)
+  if (source.startsWith('data:')) {
     try {
-      const lib = url.startsWith('https') ? https : http
-      const req = lib.get(url, { timeout: 8000 }, (res) => {
-        if (res.statusCode !== 200) {
-          resolve(null)
-          return
-        }
-        const chunks: Buffer[] = []
-        res.on('data', c => chunks.push(c))
-        res.on('end', () => resolve(Buffer.concat(chunks)))
-        res.on('error', () => resolve(null))
-      })
-      req.on('error', () => resolve(null))
-      req.on('timeout', () => { req.destroy(); resolve(null) })
+      const base64Data = source.split(',')[1]
+      if (!base64Data) return null
+      return Buffer.from(base64Data, 'base64')
     } catch {
-      resolve(null)
+      return null
     }
-  })
+  }
+
+  // Si es URL externa (http/https)
+  if (source.startsWith('http')) {
+    return new Promise((resolve) => {
+      try {
+        const lib = source.startsWith('https') ? https : http
+        const req = lib.get(source, { timeout: 8000 }, (res) => {
+          if (res.statusCode !== 200) { resolve(null); return }
+          const chunks: Buffer[] = []
+          res.on('data', c => chunks.push(c))
+          res.on('end', () => resolve(Buffer.concat(chunks)))
+          res.on('error', () => resolve(null))
+        })
+        req.on('error', () => resolve(null))
+        req.on('timeout', () => { req.destroy(); resolve(null) })
+      } catch {
+        resolve(null)
+      }
+    })
+  }
+
+  return null
 }
 
 function fmtCOP(v: number | null | undefined): string {
@@ -55,12 +66,26 @@ function fmtFecha(f: Date | string | null | undefined): string {
   return d.toLocaleDateString('es-CO', { year: 'numeric', month: 'long', day: 'numeric' })
 }
 
+// === Helper: agregar imagen al PDF (con manejo de errores) ===
+async function addImageToPDF(doc: any, imgSource: string | null | undefined, x: number, y: number, maxWidth: number, maxHeight: number): Promise<number> {
+  if (!imgSource) return 0
+  const imgBuffer = await getImage(imgSource)
+  if (!imgBuffer) return 0
+  try {
+    doc.image(imgBuffer, x, y, { fit: [maxWidth, maxHeight], align: 'center' })
+    return maxHeight + 10
+  } catch {
+    return 0
+  }
+}
+
 export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const authResult = requireRole(req, ['ADMIN', 'GESTOR', 'CONSULTOR'])
   if (authResult instanceof NextResponse) return authResult
+  const user = authResult
 
   try {
     const { id } = await params
@@ -91,6 +116,15 @@ export async function GET(
       return NextResponse.json({ success: false, error: 'Vehículo no encontrado' }, { status: 404 })
     }
 
+    // === VERIFICAR VEHÍCULOS PERMITIDOS POR USUARIO ===
+    const vehiculosPermitidos = getVehiculosPermitidos(user.username || user.id)
+    if (vehiculosPermitidos !== null && !vehiculosPermitidos.includes(vehiculo.placa.toUpperCase())) {
+      return NextResponse.json(
+        { success: false, error: 'No tienes permiso para ver este vehículo' },
+        { status: 403 }
+      )
+    }
+
     // Determinar contrato a incluir
     let contrato: any = null
     if (contratoId) {
@@ -98,6 +132,8 @@ export async function GET(
     } else {
       contrato = vehiculo.contratos.find(c => c.estado === 'ACTIVO') || vehiculo.contratos[0]
     }
+
+    const conductor = contrato?.conductor || null
 
     // === Generar PDF ===
     const doc = new PDFDocument({
@@ -113,7 +149,7 @@ export async function GET(
     const buffers: Buffer[] = []
     doc.on('data', b => buffers.push(b))
 
-    const ancho = doc.page.width - 100 // márgenes
+    const ancho = doc.page.width - 100
 
     // === ENCABEZADO ===
     doc.fillColor('#1e40af').fontSize(20).font('Helvetica-Bold')
@@ -154,21 +190,20 @@ export async function GET(
 
     // Foto principal del vehículo
     if (vehiculo.fotoUrl) {
-      const imgBuffer = await fetchImage(vehiculo.fotoUrl)
-      if (imgBuffer) {
-        try {
-          doc.text('Foto del vehículo:', 50, y)
-          y += 18
-          doc.image(imgBuffer, 50, y, { fit: [ancho - 200, 250], align: 'center' })
-          y += 260
-        } catch {
-          doc.fillColor('#999').text('[Foto no disponible]', 50, y)
-          y += 20
-        }
+      if (y > doc.page.height - 300) { doc.addPage(); y = 50 }
+      doc.fillColor('#000').fontSize(10).font('Helvetica-Bold')
+      doc.text('Foto del vehículo:', 50, y)
+      y += 18
+      const imgHeight = await addImageToPDF(doc, vehiculo.fotoUrl, 50, y, ancho - 200, 250)
+      if (imgHeight > 0) {
+        y += imgHeight
+      } else {
+        doc.fillColor('#999').text('[Foto no disponible]', 50, y)
+        y += 20
       }
     }
 
-    // === 2. INVENTARIO ===
+    // === 2. INVENTARIO (con fotos) ===
     if (tipo === 'completo' || tipo === 'inventario') {
       if (y > doc.page.height - 200) { doc.addPage(); y = 50 }
       doc.fillColor('#1e40af').fontSize(14).font('Helvetica-Bold')
@@ -191,21 +226,31 @@ export async function GET(
         doc.moveTo(50, y).lineTo(doc.page.width - 50, y).stroke()
         y += 8
 
-        doc.font('Helvetica').fontSize(9)
-        vehiculo.inventario.forEach((item, idx) => {
+        for (let idx = 0; idx < vehiculo.inventario.length; idx++) {
+          const item = vehiculo.inventario[idx]
           if (y > doc.page.height - 60) { doc.addPage(); y = 50 }
+          doc.font('Helvetica').fontSize(9)
           doc.text((idx + 1).toString(), 50, y, { width: 30 })
           doc.text(item.nombre, 80, y, { width: 200 })
           doc.text(item.cantidad.toString(), 280, y, { width: 50, align: 'center' })
           doc.text(item.estado, 330, y, { width: 100 })
           doc.text(item.notas || '', 430, y, { width: 130 })
           y += 18
-        })
+
+          // Foto del item (si tiene)
+          if (item.fotoUrl) {
+            if (y > doc.page.height - 150) { doc.addPage(); y = 50 }
+            const itemImgHeight = await addImageToPDF(doc, item.fotoUrl, 80, y, 200, 120)
+            if (itemImgHeight > 0) {
+              y += itemImgHeight + 5
+            }
+          }
+        }
         y += 10
       }
     }
 
-    // === 3. DOCUMENTOS ===
+    // === 3. DOCUMENTOS DEL VEHÍCULO (con fotos) ===
     if (tipo === 'completo') {
       if (y > doc.page.height - 200) { doc.addPage(); y = 50 }
       doc.fillColor('#1e40af').fontSize(14).font('Helvetica-Bold')
@@ -237,25 +282,98 @@ export async function GET(
             doc.fillColor('#000').font('Helvetica')
             y += 14
           }
-          y += 6
+
+          // Foto del documento (si tiene)
+          if (d.archivoUrl) {
+            if (y > doc.page.height - 250) { doc.addPage(); y = 50 }
+            const docImgHeight = await addImageToPDF(doc, d.archivoUrl, 50, y, ancho - 100, 200)
+            if (docImgHeight > 0) {
+              y += docImgHeight + 10
+            }
+          }
+          y += 10
         }
       }
     }
 
-    // === 4. CONTRATO ===
+    // === 4. DATOS DEL CONDUCTOR ASIGNADO (con foto) ===
+    if (tipo === 'completo' && conductor) {
+      if (y > doc.page.height - 300) { doc.addPage(); y = 50 }
+      doc.fillColor('#1e40af').fontSize(14).font('Helvetica-Bold')
+      doc.text('4. CONDUCTOR ASIGNADO', 50, y)
+      y += 22
+
+      // Foto del conductor (selfie)
+      if (conductor.fotoUrl) {
+        const condImgHeight = await addImageToPDF(doc, conductor.fotoUrl, 50, y, 120, 150)
+        if (condImgHeight > 0) {
+          // Datos al lado de la foto
+          doc.fillColor('#000').fontSize(10).font('Helvetica-Bold')
+          doc.text('Nombre:', 200, y, { continued: true })
+          doc.font('Helvetica').text('  ' + (conductor.nombre || '—'))
+          doc.font('Helvetica-Bold').text('Cédula:', 200, y + 16, { continued: true })
+          doc.font('Helvetica').text('  ' + (conductor.cedula || '—'))
+          doc.font('Helvetica-Bold').text('Teléfono:', 200, y + 32, { continued: true })
+          doc.font('Helvetica').text('  ' + (conductor.telefono || '—'))
+          doc.font('Helvetica-Bold').text('Email:', 200, y + 48, { continued: true })
+          doc.font('Helvetica').text('  ' + (conductor.email || '—'))
+          doc.font('Helvetica-Bold').text('Dirección:', 200, y + 64, { continued: true })
+          doc.font('Helvetica').text('  ' + (conductor.direccion || '—') + ', ' + (conductor.ciudad || ''))
+          doc.font('Helvetica-Bold').text('Licencia:', 200, y + 80, { continued: true })
+          doc.font('Helvetica').text('  ' + (conductor.licenciaCategoria || '—') + ' ' + (conductor.licenciaNumero || ''))
+          doc.font('Helvetica-Bold').text('Lic. vence:', 200, y + 96, { continued: true })
+          doc.font('Helvetica').text('  ' + fmtFecha(conductor.licenciaVence))
+          y += Math.max(condImgHeight, 120) + 10
+        } else {
+          // Sin foto, solo datos
+          doc.fillColor('#000').fontSize(10).font('Helvetica')
+          const datosCond = [
+            ['Nombre', conductor.nombre || '—'],
+            ['Cédula', conductor.cedula || '—'],
+            ['Teléfono', conductor.telefono || '—'],
+            ['Email', conductor.email || '—'],
+            ['Dirección', `${conductor.direccion || '—'}, ${conductor.ciudad || '—'}`],
+            ['Licencia', `${conductor.licenciaCategoria || '—'} ${conductor.licenciaNumero || ''}`.trim()],
+            ['Lic. vence', fmtFecha(conductor.licenciaVence)],
+          ]
+          for (const [label, value] of datosCond) {
+            doc.font('Helvetica-Bold').text(label + ':', 50, y, { continued: true })
+            doc.font('Helvetica').text('  ' + value, { indent: 0 })
+            y += 16
+          }
+          y += 10
+        }
+      } else {
+        // Sin foto, solo datos
+        doc.fillColor('#000').fontSize(10).font('Helvetica')
+        const datosCond = [
+          ['Nombre', conductor.nombre || '—'],
+          ['Cédula', conductor.cedula || '—'],
+          ['Teléfono', conductor.telefono || '—'],
+          ['Email', conductor.email || '—'],
+          ['Dirección', `${conductor.direccion || '—'}, ${conductor.ciudad || '—'}`],
+          ['Licencia', `${conductor.licenciaCategoria || '—'} ${conductor.licenciaNumero || ''}`.trim()],
+          ['Lic. vence', fmtFecha(conductor.licenciaVence)],
+        ]
+        for (const [label, value] of datosCond) {
+          doc.font('Helvetica-Bold').text(label + ':', 50, y, { continued: true })
+          doc.font('Helvetica').text('  ' + value, { indent: 0 })
+          y += 16
+        }
+        y += 10
+      }
+    }
+
+    // === 5. CONTRATO ===
     if (tipo === 'completo' && contrato) {
       if (y > doc.page.height - 250) { doc.addPage(); y = 50 }
       doc.fillColor('#1e40af').fontSize(14).font('Helvetica-Bold')
-      doc.text('4. CONTRATO VIGENTE', 50, y)
+      doc.text('5. CONTRATO VIGENTE', 50, y)
       y += 22
 
       doc.fillColor('#000').fontSize(10).font('Helvetica')
       const datosContrato = [
         ['Número de contrato', contrato.numeroContrato],
-        ['Conductor', contrato.conductor?.nombre || '—'],
-        ['Cédula conductor', contrato.conductor?.cedula || '—'],
-        ['Teléfono conductor', contrato.conductor?.telefono || '—'],
-        ['Licencia conductor', `${contrato.conductor?.licenciaCategoria || ''} ${contrato.conductor?.licenciaNumero || ''}`.trim()],
         ['Fecha inicio', fmtFecha(contrato.fechaInicio)],
         ['Fecha fin', contrato.fechaFin ? fmtFecha(contrato.fechaFin) : 'Indefinida'],
         ['Modalidad de pago', contrato.modalidadPago],
@@ -267,17 +385,17 @@ export async function GET(
       ]
       for (const [label, value] of datosContrato) {
         doc.font('Helvetica-Bold').text(label + ':', 50, y, { continued: true })
-        doc.font('Helvetica').text('  ' + value)
+        doc.font('Helvetica').text('  ' + value, { indent: 0 })
         y += 16
       }
       y += 10
     }
 
-    // === 5. MANTENIMIENTOS ===
+    // === 6. MANTENIMIENTOS ===
     if (tipo === 'completo') {
       if (y > doc.page.height - 200) { doc.addPage(); y = 50 }
       doc.fillColor('#1e40af').fontSize(14).font('Helvetica-Bold')
-      doc.text('5. HISTORIAL DE MANTENIMIENTOS', 50, y)
+      doc.text('6. HISTORIAL DE MANTENIMIENTOS', 50, y)
       y += 22
 
       if (vehiculo.mantenimientos.length === 0) {
@@ -310,7 +428,7 @@ export async function GET(
       }
     }
 
-    // === 6. FIRMAS ===
+    // === 7. FIRMAS ===
     if (y > doc.page.height - 150) { doc.addPage(); y = 50 }
     y += 30
     doc.moveTo(50, y).lineTo(doc.page.width - 50, y).strokeColor('#1e40af').lineWidth(1).stroke()
@@ -320,7 +438,6 @@ export async function GET(
     doc.text('ENTREGA CONFORME', 50, y, { align: 'center', width: ancho })
     y += 40
 
-    // Líneas de firma
     const mitadX = doc.page.width / 2
     doc.moveTo(70, y).lineTo(mitadX - 30, y).stroke()
     doc.moveTo(mitadX + 30, y).lineTo(doc.page.width - 70, y).stroke()
@@ -332,11 +449,11 @@ export async function GET(
 
     doc.font('Helvetica-Oblique').fontSize(9).fillColor('#666')
     doc.text('Firma', 70, y, { width: mitadX - 100, align: 'center' })
-    doc.text(`Conductor: ${contrato?.conductor?.nombre || '_______'}`, mitadX + 30, y, { width: mitadX - 100, align: 'center' })
+    doc.text(`Conductor: ${conductor?.nombre || '_______'}`, mitadX + 30, y, { width: mitadX - 100, align: 'center' })
     y += 20
 
     doc.text(`Fecha: ${fmtFecha(new Date())}`, 70, y, { width: mitadX - 100, align: 'center' })
-    doc.text(`CC: ${contrato?.conductor?.cedula || '_______'}`, mitadX + 30, y, { width: mitadX - 100, align: 'center' })
+    doc.text(`CC: ${conductor?.cedula || '_______'}`, mitadX + 30, y, { width: mitadX - 100, align: 'center' })
 
     // === FOOTER en cada página ===
     const pages = doc.bufferedPageRange()
@@ -349,11 +466,10 @@ export async function GET(
       )
     }
 
-    // === IMPORTANTE: registrar listener 'end' ANTES de llamar a doc.end() ===
+    // === IMPORTANTE: registrar listeners ANTES de doc.end() ===
     const pdfBuffer = await new Promise<Buffer>((resolve, reject) => {
       doc.on('end', () => resolve(Buffer.concat(buffers)))
       doc.on('error', (err: any) => reject(err))
-      // Llamar a end() después de registrar los listeners
       doc.end()
     })
 
