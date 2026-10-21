@@ -4498,3 +4498,86 @@ Stage Summary:
 - ✅ Cámara nativa para 5 fotos (cédula frente/reverso, licencia frente/reverso, recibo)
 - ✅ Sin eliminar formulario de login existente
 - 📌 Acceso: https://jsadr.com.co/login → botón azul "Regístrate como conductor"
+
+---
+Task ID: 43-selfie-registro-conductor + perfil completo con foto
+Agent: Super Z (main)
+Task: En el registro de conductor desde login, agregar foto de identificación (selfie). El sistema debe mostrar el perfil completo del conductor con foto incluida.
+
+Work Log:
+
+1. SELFIE EN REGISTRO DE CONDUCTOR (login/page.tsx):
+   - Agregado campo fotoSelfie al formulario del modal
+   - 6 fotos obligatorias en el paso 2 (antes eran 5):
+     * Cédula frente
+     * Cédula reverso
+     * Licencia frente
+     * Licencia reverso
+     * Selfie (foto de identificación del conductor)
+     * Recibo de servicios públicos
+   - Validación actualizada: requiere las 6 fotos
+   - Resumen del paso 3 actualizado con selfie
+
+2. GUARDAR SELFIE COMO fotoUrl DEL CONDUCTOR:
+   - En /api/vehiculos/registro-conductor/admin/[id]/aprobar:
+     * Al crear ConductorVehiculo, se asigna fotoUrl = solicitud.fotoSelfie
+     * La selfie queda como foto de perfil del conductor
+     * También se mantiene en documentos JSON (todas las fotos)
+
+3. ENDPOINT ESTADO DEVUELVE PERFIL COMPLETO:
+   - /api/vehiculos/portal-conductor/estado ahora retorna más datos:
+     * email, direccion, ciudad (antes no se enviaban)
+     * licenciaCategoria (antes no se enviaba)
+     * fotoUrl (selfie del conductor)
+
+4. PORTAL CONDUCTOR - TAB PERFIL (nuevo):
+   - Navegación actualizada a 7 tabs: Inicio, Perfil, Pagos, Reservas, Cuentas, QR, Recibos
+   - Header muestra foto del conductor en avatar circular (si tiene)
+   - Si no tiene foto: muestra icono User como placeholder
+
+   Tab Perfil muestra:
+   - Card con gradiente indigo/blue/purple + foto circular grande
+   - Nombre y cédula del conductor
+   - Datos de contacto:
+     * Teléfono
+     * Email (si tiene)
+     * Dirección y ciudad (si tiene)
+   - Licencia de conducción:
+     * Número
+     * Categoría
+     * Fecha de vencimiento
+   - Vehículo asignado:
+     * Marca, modelo, año
+     * Placa, color
+     * Kilometraje actual
+   - Contrato vigente:
+     * Número
+     * Duración en días
+     * Tarifa y modalidad de pago
+     * Fecha de inicio
+
+5. CONDUCTORES SIN SELFIE:
+   - Condutores creados manualmente (como Sebastian) no tienen selfie
+   - El header y perfil muestran icono User como fallback
+   - Condutores registrados vía login tendrán selfie como foto de perfil
+   - Cuando el admin aprueba la solicitud, fotoUrl se llena con la selfie
+
+VERIFICACIÓN EN PRODUCCIÓN:
+- GET /login → HTTP 200 OK
+- GET /api/vehiculos/portal-conductor/estado (Sebastian):
+  * Nombre: Sebastian
+  * Cédula: 12147316499
+  * Email: — (Sebastian no tiene email registrado)
+  * Dirección: — (no registrada)
+  * Licencia: sin datos (fue creado manualmente)
+  * Foto URL: NO (placeholder — Sebastian fue creado manualmente sin selfie)
+- Conductores registrados vía login tendrán foto de perfil y datos completos
+
+Stage Summary:
+- ✅ GitHub: commit 1ea43a5 en origin/main
+- ✅ Vercel: deploy exitoso
+- ✅ Selfie agregada al registro de conductor (6 fotos total)
+- ✅ Selfie se guarda como fotoUrl del conductor al aprobar
+- ✅ Tab Perfil con foto circular + datos completos
+- ✅ Header muestra foto del conductor en avatar
+- ✅ Fallback con icono User si no tiene foto
