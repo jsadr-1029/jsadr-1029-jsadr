@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useToast } from '@/hooks/use-toast'
-import { Download, FileText, Package, Wrench, Calendar, Car, AlertTriangle, Plus, Trash2, FileCheck, Phone, MapPin } from 'lucide-react'
+import { Download, FileText, Package, Wrench, Calendar, Car, AlertTriangle, Plus, Trash2, FileCheck, Phone, MapPin, Upload, CheckCircle } from 'lucide-react'
 import { apiFetch, formatCOP, formatDate, EstadoBadge } from './helpers'
 
 const TIPOS_DOCUMENTO = ['SOAT', 'TECNOMECANICA', 'TARJETA_PROPIEDAD', 'SEGURO', 'POLIZA_TODO_RIESGO', 'CONTRATO', 'OTRO']
@@ -21,6 +21,35 @@ const COLORES_DOC: Record<string, string> = {
   VIGENTE: 'bg-green-100 text-green-800 border-green-300',
   POR_VENCER: 'bg-yellow-100 text-yellow-800 border-yellow-300',
   VENCIDO: 'bg-red-100 text-red-800 border-red-300',
+}
+
+// === Helper: comprimir imagen (cámara o archivo) a base64 ===
+// Reduce tamaño a maxWidth 1280px calidad 0.7 para no exceder body size del API
+function comprimirImagen(file: File, maxWidth: number = 1280, quality: number = 0.7): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = (e) => {
+      const img = new Image()
+      img.onload = () => {
+        const canvas = document.createElement('canvas')
+        let w = img.width, h = img.height
+        if (w > maxWidth) {
+          h = (h * maxWidth) / w
+          w = maxWidth
+        }
+        canvas.width = w
+        canvas.height = h
+        const ctx = canvas.getContext('2d')
+        if (!ctx) return reject(new Error('Canvas error'))
+        ctx.drawImage(img, 0, 0, w, h)
+        resolve(canvas.toDataURL('image/jpeg', quality))
+      }
+      img.onerror = reject
+      img.src = e.target?.result as string
+    }
+    reader.onerror = reject
+    reader.readAsDataURL(file)
+  })
 }
 
 export function FichaTecnicaVehiculo({ vehiculoId, onClose }: { vehiculoId: string; onClose?: () => void }) {
@@ -74,6 +103,42 @@ export function FichaTecnicaVehiculo({ vehiculoId, onClose }: { vehiculoId: stri
       toast({ title: 'PDF descargado', description: 'Documento generado correctamente' })
     } catch (e: any) {
       toast({ title: 'Error', description: e.message, variant: 'destructive' })
+    }
+  }
+
+  // === Manejo de fotos con cámara nativa ===
+  const handleItemPhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    try {
+      const base64 = await comprimirImagen(file)
+      setItemForm(prev => ({ ...prev, fotoUrl: base64 }))
+      toast({ title: 'Foto cargada', description: 'Imagen del item lista' })
+    } catch (err: any) {
+      toast({ title: 'Error al cargar imagen', description: err.message, variant: 'destructive' })
+    }
+  }
+
+  const handleDocFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    try {
+      // Si es PDF, leerlo como base64 directamente (sin comprimir)
+      if (file.type === 'application/pdf') {
+        const reader = new FileReader()
+        reader.onload = (ev) => {
+          setDocForm(prev => ({ ...prev, archivoUrl: ev.target?.result as string }))
+          toast({ title: 'PDF cargado', description: 'Documento listo' })
+        }
+        reader.readAsDataURL(file)
+      } else {
+        // Imagen: comprimir
+        const base64 = await comprimirImagen(file)
+        setDocForm(prev => ({ ...prev, archivoUrl: base64 }))
+        toast({ title: 'Foto cargada', description: 'Documento listo' })
+      }
+    } catch (err: any) {
+      toast({ title: 'Error al cargar archivo', description: err.message, variant: 'destructive' })
     }
   }
 
@@ -536,8 +601,27 @@ export function FichaTecnicaVehiculo({ vehiculoId, onClose }: { vehiculoId: stri
               </Select>
             </div>
             <div className="col-span-2">
-              <Label>URL foto</Label>
-              <Input value={itemForm.fotoUrl} onChange={e => setItemForm({ ...itemForm, fotoUrl: e.target.value })} placeholder="https://..." />
+              <Label>Foto del item (opcional)</Label>
+              <p className="text-xs text-muted-foreground mb-2">
+                Toma una foto del item o sube una imagen desde tu dispositivo.
+              </p>
+              <div className="flex items-center gap-2 flex-wrap">
+                <input
+                  type="file"
+                  accept="image/*"
+                  capture="environment"
+                  onChange={handleItemPhotoUpload}
+                  className="hidden"
+                  id="file-item-foto"
+                />
+                <Button type="button" variant="outline" size="sm" onClick={() => document.getElementById('file-item-foto')?.click()}>
+                  <Upload className="w-4 h-4 mr-1" /> Tomar foto / Subir imagen
+                </Button>
+                {itemForm.fotoUrl && <CheckCircle className="w-4 h-4 text-green-600" />}
+              </div>
+              {itemForm.fotoUrl && (
+                <img src={itemForm.fotoUrl} alt="Foto del item" className="mt-2 max-h-32 object-contain border rounded" />
+              )}
             </div>
             <div className="col-span-2">
               <Label>Notas</Label>
@@ -583,8 +667,32 @@ export function FichaTecnicaVehiculo({ vehiculoId, onClose }: { vehiculoId: stri
                 placeholder="Aseguradora, taller autorizado..." />
             </div>
             <div className="col-span-2">
-              <Label>URL archivo (foto/PDF)</Label>
-              <Input value={docForm.archivoUrl} onChange={e => setDocForm({ ...docForm, archivoUrl: e.target.value })} placeholder="https://..." />
+              <Label>Archivo del documento (foto o PDF)</Label>
+              <p className="text-xs text-muted-foreground mb-2">
+                Toma una foto del documento (SOAT, tecnomecánica, etc.) o sube un PDF.
+              </p>
+              <div className="flex items-center gap-2 flex-wrap">
+                <input
+                  type="file"
+                  accept="image/*,application/pdf"
+                  capture="environment"
+                  onChange={handleDocFileUpload}
+                  className="hidden"
+                  id="file-doc-archivo"
+                />
+                <Button type="button" variant="outline" size="sm" onClick={() => document.getElementById('file-doc-archivo')?.click()}>
+                  <Upload className="w-4 h-4 mr-1" /> Tomar foto / Subir archivo
+                </Button>
+                {docForm.archivoUrl && <CheckCircle className="w-4 h-4 text-green-600" />}
+              </div>
+              {docForm.archivoUrl && docForm.archivoUrl.startsWith('data:image') && (
+                <img src={docForm.archivoUrl} alt="Documento" className="mt-2 max-h-40 object-contain border rounded" />
+              )}
+              {docForm.archivoUrl && docForm.archivoUrl.startsWith('data:application/pdf') && (
+                <div className="mt-2 p-2 bg-blue-50 rounded text-xs text-blue-800 flex items-center gap-1">
+                  <FileCheck className="w-3 h-3" /> PDF cargado correctamente
+                </div>
+              )}
             </div>
             <div className="col-span-2">
               <Label>Notas</Label>
