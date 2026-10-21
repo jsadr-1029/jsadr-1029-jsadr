@@ -4581,3 +4581,59 @@ Stage Summary:
 - ✅ Tab Perfil con foto circular + datos completos
 - ✅ Header muestra foto del conductor en avatar
 - ✅ Fallback con icono User si no tiene foto
+
+---
+Task ID: 44-fix-registro-conductor-eliminar-token
+Agent: Super Z (main)
+Task: El conductor intenta registrarse desde el login pero el sistema le pide un token y no lo deja enviar la información. Eliminar el requisito de token.
+
+Work Log:
+
+PROBLEMA:
+El conductor intentaba registrarse desde el botón "Regístrate como conductor"
+en el login, completaba todos los datos y fotos, pero al hacer clic en
+"Enviar registro" no pasaba nada. El sistema pedía un token que el conductor
+no tenía.
+
+CAUSA RAÍZ:
+1. El endpoint /api/vehiculos/registro-conductor/documentos exigía token:
+   if (!token) return NextResponse.json({ error: 'Token requerido' }, { status: 400 })
+2. El frontend (login/page.tsx) tenía if (!token) return — si el token
+   se perdía o el paso 1 fallaba, simplemente no hacía nada (sin error visible)
+3. El flujo requería: paso 1 (iniciar → obtener token) → paso 2 (enviar
+   documentos con token). Si el token se perdía, el paso 2 era imposible.
+
+FIX:
+1. Endpoint /api/vehiculos/registro-conductor/documentos:
+   - Eliminado el if (!token) que bloqueaba
+   - Ahora busca la solicitud por cédula si no hay token:
+     * Si viene token → busca por tokenRegistro (comportamiento anterior)
+     * Si no viene token pero viene cedula → busca la última solicitud
+       pendiente de esa cédula (estado PENDIENTE o DOCUMENTOS)
+     * Si no encuentra ninguna → 404 con mensaje claro:
+       'No se encontró una solicitud de registro activa. Inicia el registro
+       nuevamente.'
+
+2. Frontend login/page.tsx (modal registro conductor):
+   - Eliminado el if (!token) return que bloqueaba sin mostrar error
+   - Ahora envía cedula junto con token en el body:
+     JSON.stringify({ ...form, token, cedula: form.cedula })
+   - Si el token se perdió, el backend lo encuentra por cédula
+   - Si hay error, se muestra al usuario en el Alert
+
+VERIFICACIÓN EN PRODUCCIÓN:
+- POST /iniciar (cedula=88888888) → success:true, token obtenido
+- POST /documentos SIN token, solo con cedula=88888888 → success:true
+  * Mensaje: 'Documentos completos. Continúa con la firma electrónica.'
+
+RESULTADO:
+- El conductor puede registrarse sin que se le pida token
+- El sistema encuentra su solicitud automáticamente por cédula
+- Si no hay solicitud previa, muestra mensaje claro
+
+Stage Summary:
+- ✅ GitHub: commit 6016d51 en origin/main
+- ✅ Vercel: deploy exitoso
+- ✅ Token eliminado del flujo de documentos
+- ✅ Búsqueda por cédula implementada
+- ✅ Verificado en producción: documentos enviados sin token
