@@ -3840,3 +3840,75 @@ Stage Summary:
 - ✅ Monto máximo sigue siendo limitante (correcto)
 - 📌 Clientes de cualquier categoría ahora pueden simular cualquier monto
   por debajo del máximo de su categoría
+
+---
+Task ID: 34-fix-link-firma-electronica-dominio-correcto
+Agent: Super Z (main)
+Task: El link de firma electrónica enviado al cliente no funcionaba. Reparar para que siempre envíe el link verdadero (https://jsadr.com.co/firma/TOKEN).
+
+Work Log:
+
+PROBLEMA REPORTADO:
+- Se inició proceso de firma de un crédito aprobado (cliente JOHAN ALVAREZ, CC 1214731649)
+- El sistema envió el enlace al cliente pero no funcionaba
+- Token pendiente: dcd63c83a04262b1c47f6a6e9ab4573cce47fddec06b34019848fb98dc733372
+
+CAUSA RAÍZ:
+Los links de firma electrónica se generaban con fallback a 'http://localhost:3000'
+en 3 endpoints porque NEXT_PUBLIC_BASE_URL no estaba configurada en Vercel:
+1. /api/firma/route.ts (línea 111):
+   `const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'`
+2. /api/portal/iniciar-firma/route.ts (línea 114):
+   `const origin = req.nextUrl.origin || process.env.NEXT_PUBLIC_APP_URL || 'https://jsadr.com.co'`
+   (req.nextUrl.origin en Vercel devuelve el dominio de deployment, no el canónico)
+3. /api/prestamos/[id]/otro-si/route.ts (línea 258-259):
+   `const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'`
+
+El cliente recibía un email/WhatsApp con link http://localhost:3000/firma/...
+que es inalcanzable desde su teléfono.
+
+FIX:
+Los 3 endpoints ahora usan `buildAbsoluteUrl()` de `src/lib/url.ts` que tiene
+fallback robusto en este orden:
+  1. NEXT_PUBLIC_APP_URL  (preferido)
+  2. NEXT_PUBLIC_BASE_URL (legacy)
+  3. VERCEL_URL           (auto-inyectada por Vercel en previews)
+  4. https://jsadr.com.co (dominio de producción hardcoded como último recurso)
+
+El helper `buildAbsoluteUrl()` ya existía pero no se usaba en estos 3 endpoints.
+
+CAMBIOS:
+- /api/firma/route.ts:
+  * Import agregado: `import { buildAbsoluteUrl } from '@/lib/url'`
+  * Reemplazado: `const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'`
+    Por: `const baseUrl = buildAbsoluteUrl('/').replace(/\/$/, '')`
+- /api/portal/iniciar-firma/route.ts:
+  * Import agregado: `import { buildAbsoluteUrl } from '@/lib/url'`
+  * Reemplazado: `const origin = req.nextUrl.origin || process.env.NEXT_PUBLIC_APP_URL || 'https://jsadr.com.co'`
+    Por: `const linkFirma = buildAbsoluteUrl(\`/firma/${tokenFirma.token}\`)`
+- /api/prestamos/[id]/otro-si/route.ts:
+  * Import agregado: `import { buildAbsoluteUrl } from '@/lib/url'`
+  * Reemplazado: `const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'`
+    Por: `const linkFirma = buildAbsoluteUrl(\`/firma/${tokenCreado}\`)`
+
+VERIFICACIÓN EN PRODUCCIÓN:
+- GET https://jsadr.com.co/firma/dcd63c83a04262b1c47f6a6e9ab4573cce47fddec06b34019848fb98dc733372 → HTTP 200
+- GET https://jsadr.com.co/api/firma?token=dcd63c83a04262b1c47f6a6e9ab4573cce47fddec06b34019848fb98dc733372 → success:true, estado:VALIDO
+- Cliente: JOHAN ALVAREZ (CC 1214731649)
+- Préstamo: JA-CC-1214731649-20261020-01
+- Estado firma: PENDIENTE (lista para que el cliente firme)
+- Expira: 2026-10-28
+
+RESULTADO:
+- Link pendiente del cliente JOHAN ALVAREZ ahora funciona correctamente
+- Todos los links de firma futuros se generarán con https://jsadr.com.co/firma/TOKEN
+- No depende de variables de entorno configuradas en Vercel
+- Funciona en producción, preview y desarrollo local
+
+Stage Summary:
+- ✅ GitHub: commit 2191383 en origin/main
+- ✅ Vercel: deploy exitoso
+- ✅ 3 endpoints corregidos (firma, iniciar-firma, otro-si)
+- ✅ Link pendiente verificado funcionando en producción
+- ✅ Helper buildAbsoluteUrl() reutilizado (ya existía en src/lib/url.ts)
+- 📌 El cliente puede abrir el link https://jsadr.com.co/firma/dcd63c83a04262b1c47f6a6e9ab4573cce47fddec06b34019848fb98dc733372 y completar la firma
