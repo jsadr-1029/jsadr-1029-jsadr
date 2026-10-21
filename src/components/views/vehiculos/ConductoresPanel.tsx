@@ -9,10 +9,34 @@ import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { useToast } from '@/hooks/use-toast'
-import { Plus, Edit, Search, Users } from 'lucide-react'
+import { Plus, Edit, Search, Users, Upload, CheckCircle } from 'lucide-react'
 import { apiFetch, formatDate, EstadoBadge } from './helpers'
 
 const CAT_LICENCIA = ['A1', 'A2', 'B1', 'B2', 'B3', 'C1', 'C2', 'C3']
+
+// Helper: comprimir imagen a base64
+function comprimirImagen(file: File, maxWidth = 1280, quality = 0.7): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = (e) => {
+      const img = new Image()
+      img.onload = () => {
+        const canvas = document.createElement('canvas')
+        let w = img.width, h = img.height
+        if (w > maxWidth) { h = (h * maxWidth) / w; w = maxWidth }
+        canvas.width = w; canvas.height = h
+        const ctx = canvas.getContext('2d')
+        if (!ctx) return reject(new Error('Canvas error'))
+        ctx.drawImage(img, 0, 0, w, h)
+        resolve(canvas.toDataURL('image/jpeg', quality))
+      }
+      img.onerror = reject
+      img.src = e.target?.result as string
+    }
+    reader.onerror = reject
+    reader.readAsDataURL(file)
+  })
+}
 
 export function ConductoresPanel({ onChanged }: { onChanged?: () => void }) {
   const { toast } = useToast()
@@ -44,6 +68,18 @@ export function ConductoresPanel({ onChanged }: { onChanged?: () => void }) {
       fotoUrl: '', notas: '',
     })
     setModalOpen(true)
+  }
+
+  const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    try {
+      const base64 = await comprimirImagen(file)
+      setForm(prev => ({ ...prev, fotoUrl: base64 }))
+      toast({ title: 'Foto cargada', description: 'Foto del conductor lista' })
+    } catch (err: any) {
+      toast({ title: 'Error al cargar imagen', description: err.message, variant: 'destructive' })
+    }
   }
 
   const abrirEditar = (c: any) => {
@@ -100,20 +136,41 @@ export function ConductoresPanel({ onChanged }: { onChanged?: () => void }) {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
           {conductores.map(c => (
-            <Card key={c.id} className="border shadow-sm">
-              <CardContent className="p-4">
-                <div className="flex justify-between items-start mb-2">
-                  <div>
-                    <div className="font-bold">{c.nombre}</div>
-                    <div className="text-xs text-muted-foreground">CC {c.cedula}</div>
+            <Card key={c.id} className="border shadow-sm overflow-hidden">
+              <CardContent className="p-0">
+                {/* Header con foto + datos básicos */}
+                <div className="flex gap-3 p-4">
+                  {/* Foto del conductor */}
+                  <div className="w-20 h-20 rounded-full overflow-hidden border-2 border-blue-200 flex-shrink-0 bg-gray-100">
+                    {c.fotoUrl ? (
+                      <img src={c.fotoUrl} alt={c.nombre} className="w-full h-full object-cover" />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center">
+                        <Users className="w-8 h-8 text-gray-400" />
+                      </div>
+                    )}
                   </div>
-                  {c.contratoActivo && <EstadoBadge estado="ACTIVO" />}
+                  {/* Datos del conductor */}
+                  <div className="flex-1 min-w-0">
+                    <div className="font-bold truncate">{c.nombre}</div>
+                    <div className="text-xs text-muted-foreground">CC {c.cedula}</div>
+                    {c.contratoActivo && (
+                      <div className="mt-1"><EstadoBadge estado="ACTIVO" /></div>
+                    )}
+                  </div>
                 </div>
-                <div className="space-y-1 text-sm">
+                {/* Datos adicionales */}
+                <div className="px-4 pb-2 space-y-1 text-sm">
                   <div className="flex justify-between"><span className="text-muted-foreground">Teléfono:</span><span>{c.telefono}</span></div>
+                  {c.email && (
+                    <div className="flex justify-between"><span className="text-muted-foreground">Email:</span><span className="truncate ml-2">{c.email}</span></div>
+                  )}
                   <div className="flex justify-between"><span className="text-muted-foreground">Licencia:</span><span>{c.licenciaCategoria || '—'} · {c.licenciaNumero}</span></div>
                   {c.licenciaVence && (
                     <div className="flex justify-between"><span className="text-muted-foreground">Lic. vence:</span><span>{formatDate(c.licenciaVence)}</span></div>
+                  )}
+                  {c.ciudad && (
+                    <div className="flex justify-between"><span className="text-muted-foreground">Ciudad:</span><span>{c.ciudad}</span></div>
                   )}
                   {c.contratoActivo && (
                     <div className="mt-2 p-1.5 rounded bg-green-50 text-green-800 text-xs">
@@ -121,7 +178,8 @@ export function ConductoresPanel({ onChanged }: { onChanged?: () => void }) {
                     </div>
                   )}
                 </div>
-                <div className="mt-3">
+                {/* Acciones */}
+                <div className="p-4 pt-2">
                   <Button size="sm" variant="outline" onClick={() => abrirEditar(c)}>
                     <Edit className="w-3 h-3 mr-1" /> Editar
                   </Button>
@@ -180,8 +238,27 @@ export function ConductoresPanel({ onChanged }: { onChanged?: () => void }) {
               <Input type="date" value={form.licenciaVence} onChange={e => setForm({ ...form, licenciaVence: e.target.value })} />
             </div>
             <div className="col-span-2">
-              <Label>URL foto</Label>
-              <Input value={form.fotoUrl} onChange={e => setForm({ ...form, fotoUrl: e.target.value })} placeholder="https://..." />
+              <Label>Foto del conductor</Label>
+              <p className="text-xs text-muted-foreground mb-2">
+                Toma una foto del conductor o sube una imagen.
+              </p>
+              <div className="flex items-center gap-2 flex-wrap">
+                <input
+                  type="file"
+                  accept="image/*"
+                  capture="environment"
+                  onChange={handlePhotoUpload}
+                  className="hidden"
+                  id="file-conductor-foto"
+                />
+                <Button type="button" variant="outline" size="sm" onClick={() => document.getElementById('file-conductor-foto')?.click()}>
+                  <Upload className="w-4 h-4 mr-1" /> Tomar foto / Subir imagen
+                </Button>
+                {form.fotoUrl && <CheckCircle className="w-4 h-4 text-green-600" />}
+              </div>
+              {form.fotoUrl && (
+                <img src={form.fotoUrl} alt="Foto del conductor" className="mt-2 w-24 h-24 rounded-full object-cover border-2 border-blue-200" />
+              )}
             </div>
             <div className="col-span-2">
               <Label>Notas</Label>
