@@ -769,7 +769,7 @@ export default function PaginaFirma({ params }: { params: Promise<{ token: strin
                       />
                       <p className="text-xs text-muted-foreground flex items-center gap-1">
                         <Clock className="w-3 h-3" />
-                        El código expira en 5 minutos
+                        El código expira en 15 minutos
                       </p>
                     </div>
 

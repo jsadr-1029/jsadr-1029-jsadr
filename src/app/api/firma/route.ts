@@ -341,7 +341,7 @@ Tu código de verificación para completar la firma electrónica es:
 
   >>  ${otp}  <<
 
-Este código expira en 5 minutos.
+Este código expira en 15 minutos.
 No compartas este código con nadie.
 
 Saludos,
@@ -355,7 +355,7 @@ Sistema de Gestión de Préstamos`
   <div style="background: #fef3c7; border: 2px dashed #f59e0b; padding: 20px; text-align: center; margin: 20px 0; border-radius: 8px;">
     <div style="font-size: 36px; font-weight: bold; letter-spacing: 8px; color: #1e40af; font-family: 'Courier New', monospace;">${otp}</div>
   </div>
-  <p style="color: #6b7280; font-size: 12px;">⏰ Expira en 5 minutos<br>
+  <p style="color: #6b7280; font-size: 12px;">⏰ Expira en 15 minutos<br>
   ⚠️ No compartas este código con nadie.</p>
 </div>`
 
@@ -386,6 +386,8 @@ Sistema de Gestión de Préstamos`
   })
 
   // Actualizar firma con OTP HASHEADO (no texto plano)
+  // IMPORTANTE: cada vez que se reenvía el OTP (reenviar código), se reinician
+  // los intentos fallidos a 0 — el cliente tiene otra oportunidad limpia.
   await db.firmaElectronica.update({
     where: { id: firmaId },
     data: {
@@ -393,6 +395,9 @@ Sistema de Gestión de Préstamos`
       otpCodigo: hashOtp(otp),  // SHA-256 hash
       otpCanal: canalFinal,
       otpFechaEnvio: new Date(),
+      otpValidado: false,
+      otpFechaValidacion: null,
+      intentosOTP: 0,  // Reiniciar intentos al reenviar OTP
       estadoFirma: 'OTP_ENVIADO',
     },
   })
@@ -499,14 +504,18 @@ async function validarOTP(body: any) {
     return NextResponse.json({ success: false, error: 'Firma no encontrada' }, { status: 404 })
   }
 
-  // Verificar expiración (5 minutos)
+  // Verificar expiración (15 minutos — tiempo amplio para que el cliente
+  // pueda leer el correo/WhatsApp y escribir el código sin prisa)
   if (!firma.otpFechaEnvio) {
     return NextResponse.json({ success: false, error: 'No se ha enviado el código OTP todavía' }, { status: 400 })
   }
   const expiracion = new Date(firma.otpFechaEnvio.getTime())
-  expiracion.setMinutes(expiracion.getMinutes() + 5)
+  expiracion.setMinutes(expiracion.getMinutes() + 15)
   if (new Date() > expiracion) {
-    return NextResponse.json({ success: false, error: 'El código OTP ha expirado. Solicita uno nuevo.' }, { status: 400 })
+    return NextResponse.json({
+      success: false,
+      error: 'El código OTP ha expirado (venció después de 15 minutos). Solicita uno nuevo con el botón "Reenviar código".',
+    }, { status: 400 })
   }
 
   // Incrementar intentos
