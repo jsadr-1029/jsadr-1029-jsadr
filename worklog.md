@@ -3912,3 +3912,70 @@ Stage Summary:
 - ✅ Link pendiente verificado funcionando en producción
 - ✅ Helper buildAbsoluteUrl() reutilizado (ya existía en src/lib/url.ts)
 - 📌 El cliente puede abrir el link https://jsadr.com.co/firma/dcd63c83a04262b1c47f6a6e9ab4573cce47fddec06b34019848fb98dc733372 y completar la firma
+
+---
+Task ID: 35-gestores-andres-oscar-sin-vehiculos
+Agent: Super Z (main)
+Task: Crear dos perfiles de gestores: Andrés Mazo (CC 11127850388) y Oscar Ciro (CC 703855144) con acceso de GESTOR pero SIN acceso al módulo de Gestión de Vehículos.
+
+Work Log:
+
+NUEVOS USUARIOS GESTORES CREADOS:
+1. Andrés Mazo
+   - Cédula: 11127850388
+   - Username: andres.mazo
+   - Email: andres.mazo@jsadr.com.co
+   - Password inicial: 11127850388 (igual a cédula)
+   - Rol: GESTOR
+   - Activo: true
+
+2. Oscar Ciro
+   - Cédula: 703855144
+   - Username: oscar.ciro
+   - Email: oscar.ciro@jsadr.com.co
+   - Password inicial: 703855144 (igual a cédula)
+   - Rol: GESTOR
+   - Activo: true
+
+SISTEMA DE EXCLUSIONES POR USUARIO (nuevo):
+- Creada matriz `USUARIOS_CON_VISTAS_EXCLUIDAS` en src/lib/permisos.ts
+- Clave: cédula o username (lowercase)
+- Valor: array de ViewKey que se EXCLUYEN de la lista permitida
+- Función getVistasExcluidasUsuario(username) devuelve la lista
+- puedeAccederUsuario() ahora verifica exclusiones antes del rol
+- vistasPermitidasUsuario() ahora filtra las excluidas
+
+EXCLUSIONES CONFIGURADAS:
+- '11127850388' (Andrés Mazo): ['vehiculos']
+- 'andres.mazo': ['vehiculos']
+- '703855144' (Oscar Ciro): ['vehiculos']
+- 'oscar.ciro': ['vehiculos']
+
+RESULTADO:
+- Andrés y Oscar pueden acceder a TODOS los módulos de GESTOR:
+  dashboard, clientes, préstamos, pagos, jurídico, cajas, simulador,
+  campañas, portal, comunicaciones, buzon-solicitudes, notificaciones,
+  exportar, manual, portal-admin
+- NO ven "Gestión de Vehículos" en el sidebar
+- NO pueden acceder a /?view=vehiculos (la vista queda bloqueada)
+- Las APIs de /api/vehiculos/* siguen requiriendo rol ADMIN/GESTOR
+  pero el frontend no les muestra el módulo
+
+VERIFICACIÓN EN PRODUCCIÓN:
+- POST /api/portal/login cedula=11127850388 → success:true, tipo:USUARIO, rol:GESTOR, nombre:Andrés Mazo
+- POST /api/portal/login cedula=703855144 → success:true, tipo:USUARIO, rol:GESTOR, nombre:Oscar Ciro
+
+CÓMO INGRESAN:
+- https://jsadr.com.co/login → cédula 11127850388 (Andrés) o 703855144 (Oscar)
+- El sistema detecta tipo=USUARIO y redirige al panel admin
+- Solo verán los módulos permitidos para GESTOR excepto 'vehiculos'
+
+Stage Summary:
+- ✅ GitHub: commit c128678 en origin/main
+- ✅ Vercel: deploy exitoso
+- ✅ Usuarios gestores creados en Neon
+- ✅ Exclusión de módulo 'vehiculos' configurada en permisos.ts
+- ✅ Login verificado en producción para ambos usuarios
+- 📌 Acceso: https://jsadr.com.co/login
+  * Andrés: cédula 11127850388
+  * Oscar: cédula 703855144
