@@ -770,6 +770,7 @@ function RegistroConductorModal({ onClose }: { onClose: () => void }) {
     fotoCedulaReverso: '',
     fotoLicenciaFrente: '',
     fotoLicenciaReverso: '',
+    fotoSelfie: '',
     fotoReciboServicios: '',
   })
 
@@ -817,8 +818,8 @@ function RegistroConductorModal({ onClose }: { onClose: () => void }) {
 
   const submitFotos = async () => {
     if (!token) return
-    if (!form.fotoCedulaFrente || !form.fotoCedulaReverso || !form.fotoLicenciaFrente || !form.fotoLicenciaReverso || !form.fotoReciboServicios) {
-      setError('Debes cargar las 5 fotos obligatorias')
+    if (!form.fotoCedulaFrente || !form.fotoCedulaReverso || !form.fotoLicenciaFrente || !form.fotoLicenciaReverso || !form.fotoSelfie || !form.fotoReciboServicios) {
+      setError('Debes cargar las 6 fotos obligatorias')
       return
     }
     setLoading(true)
@@ -992,6 +993,7 @@ function RegistroConductorModal({ onClose }: { onClose: () => void }) {
               <FotoField campo="fotoCedulaReverso" label="Cédula - Reverso" descripcion="Foto del reverso de la cédula" />
               <FotoField campo="fotoLicenciaFrente" label="Licencia - Frente" descripcion="Foto del frente de la licencia de conducción" />
               <FotoField campo="fotoLicenciaReverso" label="Licencia - Reverso" descripcion="Foto del reverso de la licencia" />
+              <FotoField campo="fotoSelfie" label="Foto de identificación (selfie)" descripcion="Tómate una foto clara del rostro. Debe identificarte como conductor." />
               <FotoField campo="fotoReciboServicios" label="Recibo de servicios públicos" descripcion="Donde se evidencie tu dirección de residencia" />
               <div className="flex gap-2">
                 <Button variant="outline" onClick={() => setStep(1)} className="bg-slate-800/50 border-slate-700 text-slate-200">
@@ -1019,6 +1021,7 @@ function RegistroConductorModal({ onClose }: { onClose: () => void }) {
                 <div>✓ Datos personales guardados</div>
                 <div>✓ Cédula (frente y reverso)</div>
                 <div>✓ Licencia de conducción (frente y reverso)</div>
+                <div>✓ Foto de identificación (selfie)</div>
                 <div>✓ Recibo de servicios públicos</div>
               </div>
               <Button onClick={onClose} className="mt-4 bg-gradient-to-r from-blue-500 to-indigo-500">

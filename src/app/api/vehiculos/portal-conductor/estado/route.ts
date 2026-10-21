@@ -191,8 +191,13 @@ export async function GET(req: NextRequest) {
           nombre: conductor.nombre,
           cedula: conductor.cedula,
           telefono: conductor.telefono,
+          email: conductor.email,
+          direccion: conductor.direccion,
+          ciudad: conductor.ciudad,
           licenciaNumero: conductor.licenciaNumero,
+          licenciaCategoria: conductor.licenciaCategoria,
           licenciaVence: conductor.licenciaVence,
+          fotoUrl: conductor.fotoUrl,
         },
         contrato: {
           id: contrato.id,

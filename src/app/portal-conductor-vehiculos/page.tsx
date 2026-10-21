@@ -15,7 +15,7 @@ import {
 } from 'lucide-react'
 import { formatCOP, formatDate, EstadoBadge } from '@/components/views/vehiculos/helpers'
 
-type Tab = 'inicio' | 'pagos' | 'reservas' | 'cuentas' | 'qr' | 'recibos'
+type Tab = 'inicio' | 'perfil' | 'pagos' | 'reservas' | 'cuentas' | 'qr' | 'recibos'
 
 export default function PortalConductorVehiculosPage() {
   const [token, setToken] = useState<string | null>(null)
@@ -421,8 +421,12 @@ export default function PortalConductorVehiculosPage() {
         <div className="max-w-3xl mx-auto">
           <div className="flex justify-between items-start mb-3">
             <div className="flex items-center gap-3">
-              <div className="w-12 h-12 bg-white/20 backdrop-blur rounded-xl flex items-center justify-center">
-                <User className="w-6 h-6" />
+              <div className="w-12 h-12 bg-white/20 backdrop-blur rounded-xl flex items-center justify-center overflow-hidden">
+                {cond?.fotoUrl ? (
+                  <img src={cond.fotoUrl} alt={cond?.nombre} className="w-full h-full object-cover" />
+                ) : (
+                  <User className="w-6 h-6" />
+                )}
               </div>
               <div>
                 <div className="text-xs opacity-80">Bienvenido,</div>
@@ -456,9 +460,10 @@ export default function PortalConductorVehiculosPage() {
 
       <div className="max-w-3xl mx-auto p-4 space-y-4">
         {/* Tabs navegación */}
-        <div className="grid grid-cols-6 gap-1 p-1 bg-white rounded-2xl shadow-sm border">
+        <div className="grid grid-cols-7 gap-1 p-1 bg-white rounded-2xl shadow-sm border">
           {[
             { key: 'inicio', label: 'Inicio', icon: Sparkles },
+            { key: 'perfil', label: 'Perfil', icon: User },
             { key: 'pagos', label: 'Pagos', icon: CreditCard },
             { key: 'reservas', label: 'Reservas', icon: Calendar },
             { key: 'cuentas', label: 'Cuentas', icon: Wallet },
@@ -619,6 +624,121 @@ export default function PortalConductorVehiculosPage() {
               <CreditCard className="w-5 h-5 mr-2" /> Ir a pagar
               <ChevronRight className="w-5 h-5 ml-1" />
             </Button>
+          </div>
+        )}
+
+        {/* ====== TAB: PERFIL ====== */}
+        {tab === 'perfil' && (
+          <div className="space-y-4">
+            {/* Card principal con foto */}
+            <Card className="border-0 shadow-md overflow-hidden">
+              <div className="bg-gradient-to-br from-indigo-600 via-blue-700 to-purple-800 p-6 text-white text-center">
+                <div className="w-28 h-28 mx-auto rounded-full overflow-hidden border-4 border-white/30 shadow-lg">
+                  {cond?.fotoUrl ? (
+                    <img src={cond.fotoUrl} alt={cond?.nombre} className="w-full h-full object-cover" />
+                  ) : (
+                    <div className="w-full h-full bg-white/20 flex items-center justify-center">
+                      <User className="w-12 h-12" />
+                    </div>
+                  )}
+                </div>
+                <h2 className="text-xl font-bold mt-3">{cond?.nombre}</h2>
+                <p className="text-sm opacity-80">CC {cond?.cedula}</p>
+              </div>
+              <CardContent className="p-4 space-y-3">
+                {/* Datos de contacto */}
+                <div className="space-y-2 text-sm">
+                  <div className="flex items-center gap-2 p-2 rounded-lg bg-gray-50">
+                    <Phone className="w-4 h-4 text-blue-600" />
+                    <span className="text-muted-foreground">Teléfono:</span>
+                    <strong>{cond?.telefono || '—'}</strong>
+                  </div>
+                  {cond?.email && (
+                    <div className="flex items-center gap-2 p-2 rounded-lg bg-gray-50">
+                      <Mail className="w-4 h-4 text-blue-600" />
+                      <span className="text-muted-foreground">Email:</span>
+                      <strong className="truncate">{cond.email}</strong>
+                    </div>
+                  )}
+                  {(cond?.direccion || cond?.ciudad) && (
+                    <div className="flex items-center gap-2 p-2 rounded-lg bg-gray-50">
+                      <MapPin className="w-4 h-4 text-blue-600" />
+                      <span className="text-muted-foreground">Dirección:</span>
+                      <strong>{cond.direccion}{cond.direccion && cond.ciudad ? ', ' : ''}{cond.ciudad}</strong>
+                    </div>
+                  )}
+                </div>
+
+                {/* Licencia */}
+                <div className="border-t pt-3">
+                  <h3 className="font-semibold text-sm mb-2 flex items-center gap-2">
+                    <FileText className="w-4 h-4 text-blue-600" /> Licencia de conducción
+                  </h3>
+                  <div className="grid grid-cols-3 gap-2 text-sm">
+                    <div className="p-2 rounded-lg bg-gray-50">
+                      <div className="text-xs text-muted-foreground">Número</div>
+                      <div className="font-medium">{cond?.licenciaNumero || '—'}</div>
+                    </div>
+                    <div className="p-2 rounded-lg bg-gray-50">
+                      <div className="text-xs text-muted-foreground">Categoría</div>
+                      <div className="font-medium">{cond?.licenciaCategoria || '—'}</div>
+                    </div>
+                    <div className="p-2 rounded-lg bg-gray-50">
+                      <div className="text-xs text-muted-foreground">Vence</div>
+                      <div className="font-medium">{cond?.licenciaVence ? formatDate(cond.licenciaVence) : '—'}</div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Vehículo asignado */}
+                {v && (
+                  <div className="border-t pt-3">
+                    <h3 className="font-semibold text-sm mb-2 flex items-center gap-2">
+                      <Car className="w-4 h-4 text-blue-600" /> Vehículo asignado
+                    </h3>
+                    <div className="p-3 rounded-lg bg-gradient-to-br from-blue-50 to-indigo-50 border border-blue-200">
+                      <div className="flex items-center gap-3">
+                        <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center">
+                          <Car className="w-6 h-6 text-white" />
+                        </div>
+                        <div>
+                          <div className="font-bold">{v.marca} {v.modelo} {v.anio || ''}</div>
+                          <div className="text-xs text-muted-foreground">Placa: {v.placa} · {v.color || '—'}</div>
+                          <div className="text-xs text-muted-foreground">Km: {(v.kilometraje || 0).toLocaleString('es-CO')}</div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Contrato */}
+                {c && (
+                  <div className="border-t pt-3">
+                    <h3 className="font-semibold text-sm mb-2 flex items-center gap-2">
+                      <FileText className="w-4 h-4 text-blue-600" /> Contrato vigente
+                    </h3>
+                    <div className="grid grid-cols-2 gap-2 text-sm">
+                      <div className="p-2 rounded-lg bg-gray-50">
+                        <div className="text-xs text-muted-foreground">Número</div>
+                        <div className="font-medium">{c.numero}</div>
+                      </div>
+                      <div className="p-2 rounded-lg bg-gray-50">
+                        <div className="text-xs text-muted-foreground">Duración</div>
+                        <div className="font-medium">{c.duracionDias} días</div>
+                      </div>
+                      <div className="p-2 rounded-lg bg-gray-50">
+                        <div className="text-xs text-muted-foreground">Tarifa</div>
+                        <div className="font-medium text-blue-700">{formatCOP(c.tarifa)} / {c.modalidadPago}</div>
+                      </div>
+                      <div className="p-2 rounded-lg bg-gray-50">
+                        <div className="text-xs text-muted-foreground">Inicio</div>
+                        <div className="font-medium">{formatDate(c.fechaInicio)}</div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
           </div>
         )}
 

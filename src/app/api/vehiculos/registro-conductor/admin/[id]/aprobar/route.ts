@@ -78,6 +78,8 @@ export async function POST(
           licenciaNumero: solicitud.licenciaNumero || '',
           licenciaCategoria: solicitud.licenciaCategoria,
           licenciaVence: solicitud.licenciaVence,
+          // Foto de perfil del conductor (selfie tomada en el registro)
+          fotoUrl: solicitud.fotoSelfie || null,
           // Documentos como JSON
           documentos: JSON.stringify({
             fotoCedulaFrente: solicitud.fotoCedulaFrente,
