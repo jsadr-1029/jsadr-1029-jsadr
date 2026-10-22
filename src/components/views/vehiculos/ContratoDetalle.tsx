@@ -77,6 +77,48 @@ export function ContratoDetalle({ contrato, onChanged }: { contrato: any; onChan
     }
   }
 
+  // === Descargar contrato legal (CAV-001) ===
+  const descargarContratoLegal = async () => {
+    try {
+      // Primero verificar si ya existe un documento legal para este contrato
+      const r = await apiFetch(`/api/vehiculos/contratos/${contrato.id}/documento-legal/generar`, {
+        method: 'GET',
+      })
+      if (r.success && r.data && r.data.length > 0) {
+        // Ya existe, descargar
+        const doc = r.data[0]
+        // Buscar el token (conductor o propietario)
+        const token = doc.conductorToken || doc.propietarioToken
+        if (token) {
+          window.open(`/api/vehiculos/contrato-legal/descargar?token=${token}`, '_blank')
+          return
+        }
+      }
+      // Si no existe, generar uno nuevo primero
+      const rGen = await apiFetch(`/api/vehiculos/contratos/${contrato.id}/documento-legal/generar`, {
+        method: 'POST',
+        body: JSON.stringify({}),
+      })
+      if (rGen.success) {
+        toast({
+          title: 'Contrato generado',
+          description: 'Se ha creado el contrato. Ahora puedes descargarlo.',
+        })
+        // Descargar el contrato recién creado
+        const token = rGen.data?.linkFirmaConductor
+          ? rGen.data.linkFirmaConductor.split('/').pop()
+          : null
+        if (token) {
+          window.open(`/api/vehiculos/contrato-legal/descargar?token=${token}`, '_blank')
+        }
+      } else {
+        toast({ title: 'Error', description: rGen.error, variant: 'destructive' })
+      }
+    } catch (e: any) {
+      toast({ title: 'Error', description: e.message, variant: 'destructive' })
+    }
+  }
+
   if (!contrato) return null
 
   const totales = contrato.totales || {}
@@ -205,6 +247,9 @@ export function ContratoDetalle({ contrato, onChanged }: { contrato: any; onChan
         <Button onClick={generarContratoLegal} disabled={generandoContrato} size="sm" className="bg-gradient-to-r from-purple-500 to-indigo-600">
           <PenTool className="w-4 h-4 mr-1" />
           {generandoContrato ? 'Generando...' : 'Firma electrónica contrato'}
+        </Button>
+        <Button onClick={descargarContratoLegal} variant="outline" size="sm" className="border-blue-500 text-blue-700">
+          <FileText className="w-4 h-4 mr-1" /> Descargar contrato
         </Button>
       </div>
 

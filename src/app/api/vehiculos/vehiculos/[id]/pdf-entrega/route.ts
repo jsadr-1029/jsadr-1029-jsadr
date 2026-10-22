@@ -18,7 +18,9 @@ import https from 'https'
 import http from 'http'
 
 // === Helper: obtener imagen desde URL o base64 ===
-// Limita imágenes a 80KB para evitar quedarse sin memoria en Vercel serverless
+// Redimensiona imágenes grandes para evitar quedarse sin memoria en Vercel serverless
+import { createCanvas, loadImage } from 'canvas'
+
 async function getImage(source: string): Promise<Buffer | null> {
   if (!source) return null
 
@@ -27,10 +29,26 @@ async function getImage(source: string): Promise<Buffer | null> {
     try {
       const base64Data = source.split(',')[1]
       if (!base64Data) return null
-      const buf = Buffer.from(base64Data, 'base64')
-      // Si la imagen es mayor a 80KB, no la incluimos (demasiado pesada para el PDF)
-      if (buf.length > 80000) return null
-      return buf
+      const originalBuf = Buffer.from(base64Data, 'base64')
+      
+      // Si la imagen es menor a 80KB, usarla directamente
+      if (originalBuf.length <= 80000) return originalBuf
+      
+      // Si es mayor a 80KB, redimensionar para reducir tamaño
+      try {
+        const img = await loadImage(originalBuf)
+        const maxDim = 400 // máximo 400px de ancho para el PDF
+        let w = img.width, h = img.height
+        if (w > maxDim) { h = Math.round(h * maxDim / w); w = maxDim }
+        const canvas = createCanvas(w, h)
+        const ctx = canvas.getContext('2d')
+        ctx.drawImage(img, 0, 0, w, h)
+        const resizedBuf = canvas.toBuffer('image/jpeg', { quality: 0.5 })
+        return resizedBuf
+      } catch (resizeErr) {
+        // Si no se puede redimensionar, no incluir la imagen
+        return null
+      }
     } catch {
       return null
     }

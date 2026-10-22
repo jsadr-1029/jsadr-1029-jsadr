@@ -63,6 +63,7 @@
     "@types/react-dom": "^19",
     "bcryptjs": "^3.0.3",
     "bun-types": "^1.3.4",
+    "canvas": "^3.2.3",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "cmdk": "^1.1.1",
@@ -108,5 +109,8 @@
     "z-ai-web-dev-sdk": "^0.0.18",
     "zod": "^4.0.2",
     "zustand": "^5.0.6"
+  },
+  "allowScripts": {
+    "canvas@3.2.3": true
   }
 }
