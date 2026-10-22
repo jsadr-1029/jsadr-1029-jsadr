@@ -78,44 +78,54 @@ export function ContratoDetalle({ contrato, onChanged }: { contrato: any; onChan
   }
 
   // === Descargar contrato legal (CAV-001) ===
+  const [contratoToken, setContratoToken] = useState<string | null>(null)
+  const [vistaPreviaOpen, setVistaPreviaOpen] = useState(false)
+
+  const obtenerTokenContrato = async (): Promise<string | null> => {
+    // Primero verificar si ya existe un documento legal
+    const r = await apiFetch(`/api/vehiculos/contratos/${contrato.id}/documento-legal/generar`, {
+      method: 'GET',
+    })
+    if (r.success && r.data && r.data.length > 0) {
+      const doc = r.data[0]
+      const token = doc.conductorToken || doc.propietarioToken
+      if (token) return token
+    }
+    // Si no existe, generar uno nuevo
+    const rGen = await apiFetch(`/api/vehiculos/contratos/${contrato.id}/documento-legal/generar`, {
+      method: 'POST',
+      body: JSON.stringify({}),
+    })
+    if (rGen.success) {
+      toast({ title: 'Contrato generado', description: 'Se ha creado el contrato legal.' })
+      // Extraer token del linkFirmaConductor
+      const link = rGen.data?.linkFirmaConductor || ''
+      const token = link.split('/').pop() || null
+      return token
+    } else {
+      toast({ title: 'Error', description: rGen.error, variant: 'destructive' })
+      return null
+    }
+  }
+
   const descargarContratoLegal = async () => {
-    try {
-      // Primero verificar si ya existe un documento legal para este contrato
-      const r = await apiFetch(`/api/vehiculos/contratos/${contrato.id}/documento-legal/generar`, {
-        method: 'GET',
-      })
-      if (r.success && r.data && r.data.length > 0) {
-        // Ya existe, descargar
-        const doc = r.data[0]
-        // Buscar el token (conductor o propietario)
-        const token = doc.conductorToken || doc.propietarioToken
-        if (token) {
-          window.open(`/api/vehiculos/contrato-legal/descargar?token=${token}`, '_blank')
-          return
-        }
-      }
-      // Si no existe, generar uno nuevo primero
-      const rGen = await apiFetch(`/api/vehiculos/contratos/${contrato.id}/documento-legal/generar`, {
-        method: 'POST',
-        body: JSON.stringify({}),
-      })
-      if (rGen.success) {
-        toast({
-          title: 'Contrato generado',
-          description: 'Se ha creado el contrato. Ahora puedes descargarlo.',
-        })
-        // Descargar el contrato recién creado
-        const token = rGen.data?.linkFirmaConductor
-          ? rGen.data.linkFirmaConductor.split('/').pop()
-          : null
-        if (token) {
-          window.open(`/api/vehiculos/contrato-legal/descargar?token=${token}`, '_blank')
-        }
-      } else {
-        toast({ title: 'Error', description: rGen.error, variant: 'destructive' })
-      }
-    } catch (e: any) {
-      toast({ title: 'Error', description: e.message, variant: 'destructive' })
+    const token = await obtenerTokenContrato()
+    if (token) {
+      // Descargar directamente
+      const link = document.createElement('a')
+      link.href = `/api/vehiculos/contrato-legal/descargar?token=${token}`
+      link.download = `Contrato_${contrato.numeroContrato}.pdf`
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+    }
+  }
+
+  const verVistaPrevia = async () => {
+    const token = await obtenerTokenContrato()
+    if (token) {
+      setContratoToken(token)
+      setVistaPreviaOpen(true)
     }
   }
 
@@ -249,7 +259,10 @@ export function ContratoDetalle({ contrato, onChanged }: { contrato: any; onChan
           {generandoContrato ? 'Generando...' : 'Firma electrónica contrato'}
         </Button>
         <Button onClick={descargarContratoLegal} variant="outline" size="sm" className="border-blue-500 text-blue-700">
-          <FileText className="w-4 h-4 mr-1" /> Descargar contrato
+          <Download className="w-4 h-4 mr-1" /> Descargar contrato
+        </Button>
+        <Button onClick={verVistaPrevia} variant="outline" size="sm" className="border-green-500 text-green-700">
+          <FileText className="w-4 h-4 mr-1" /> Vista previa
         </Button>
       </div>
 
@@ -435,6 +448,36 @@ export function ContratoDetalle({ contrato, onChanged }: { contrato: any; onChan
               </DialogFooter>
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal vista previa del contrato */}
+      <Dialog open={vistaPreviaOpen} onOpenChange={setVistaPreviaOpen}>
+        <DialogContent className="max-w-4xl max-h-[95vh] p-0">
+          <DialogHeader className="p-4 border-b">
+            <DialogTitle className="flex items-center justify-between">
+              <span>Vista previa del contrato {contrato.numeroContrato}</span>
+              {contratoToken && (
+                <a
+                  href={`/api/vehiculos/contrato-legal/descargar?token=${contratoToken}`}
+                  download={`Contrato_${contrato.numeroContrato}.pdf`}
+                >
+                  <Button size="sm" className="bg-blue-600 hover:bg-blue-700">
+                    <Download className="w-4 h-4 mr-1" /> Descargar PDF
+                  </Button>
+                </a>
+              )}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="p-0 h-[80vh]">
+            {contratoToken && (
+              <iframe
+                src={`/api/vehiculos/contrato-legal/descargar?token=${contratoToken}`}
+                className="w-full h-full border-0"
+                title="Vista previa del contrato"
+              />
+            )}
+          </div>
         </DialogContent>
       </Dialog>
     </div>

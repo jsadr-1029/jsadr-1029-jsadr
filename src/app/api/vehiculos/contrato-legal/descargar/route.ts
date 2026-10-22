@@ -203,12 +203,16 @@ export async function GET(req: NextRequest) {
     capitulo('ANEXO 4. CONTROL DE VENCIMIENTO Y TERMINACIÓN')
     tablaSimple(['CONTROL', 'INFORMACIÓN'], [['Inicio', fmtFechaCorta(d.terminos.fechaInicio)], ['Terminación', d.terminos.fechaFin ? fmtFechaCorta(d.terminos.fechaFin) : 'Indefinida'], ['Modalidad', d.terminos.modalidadPago], ['Estado', 'Pendiente']], [180, ancho - 180])
 
-    // Footer
-    const pages = doc.bufferedPageRange()
-    for (let i = 0; i < pages.count; i++) {
-      doc.switchToPage(i)
-      doc.fillColor('#999').fontSize(7).font('Helvetica')
-      doc.text(`Contrato ${d.numeroContrato} - Placa ${d.vehiculo.placa} - Página ${i + 1} de ${pages.count}`, 50, doc.page.height - 25, { align: 'center', width: ancho })
+    // Footer — FIX: usar range.start para evitar switchToPage out of bounds
+    try {
+      const range = doc.bufferedPageRange()
+      for (let i = range.start; i < range.start + range.count; i++) {
+        doc.switchToPage(i)
+        doc.fillColor('#999').fontSize(7).font('Helvetica')
+        doc.text(`Contrato ${d.numeroContrato} - Placa ${d.vehiculo.placa} - Página ${i - range.start + 1} de ${range.count}`, 50, doc.page.height - 25, { align: 'center', width: ancho })
+      }
+    } catch (e) {
+      console.error('[contrato-legal/descargar] Error en footer:', e)
     }
 
     const pdfBuffer = await new Promise<Buffer>((resolve, reject) => {
