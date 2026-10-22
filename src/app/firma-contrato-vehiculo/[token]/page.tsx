@@ -114,9 +114,8 @@ export default function PaginaFirmaContrato({ params }: { params: Promise<{ toke
       return
     }
     setLoading(true)
-    const endpoint = data.esConductor ? 'firma-conductor' : 'firma-propietario'
     try {
-      const res = await fetch(`/api/vehiculos/contratos/dummy/documento-legal/${endpoint}`, {
+      const res = await fetch('/api/vehiculos/contrato-legal/firma', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ token, accion: 'fotos', fotoCedulaFrente, fotoCedulaReverso, fotoSelfie }),
@@ -178,10 +177,9 @@ export default function PaginaFirmaContrato({ params }: { params: Promise<{ toke
   const guardarFirma = async () => {
     if (!hasSigned) { toast({ title: 'Dibuja tu firma', variant: 'destructive' }); return }
     setLoading(true)
-    const endpoint = data.esConductor ? 'firma-conductor' : 'firma-propietario'
     const firmaBase64 = canvasRef.current?.toDataURL('image/png') || ''
     try {
-      const res = await fetch(`/api/vehiculos/contratos/dummy/documento-legal/${endpoint}`, {
+      const res = await fetch('/api/vehiculos/contrato-legal/firma', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ token, accion: 'firma', firmaManuscrita: firmaBase64 }),
@@ -194,9 +192,8 @@ export default function PaginaFirmaContrato({ params }: { params: Promise<{ toke
 
   const enviarOtp = async () => {
     setLoading(true)
-    const endpoint = data.esConductor ? 'firma-conductor' : 'firma-propietario'
     try {
-      const res = await fetch(`/api/vehiculos/contratos/dummy/documento-legal/${endpoint}`, {
+      const res = await fetch('/api/vehiculos/contrato-legal/firma', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ token, accion: 'otp' }),
@@ -211,9 +208,8 @@ export default function PaginaFirmaContrato({ params }: { params: Promise<{ toke
   const verificarOtp = async () => {
     if (!otpIngresado) { toast({ title: 'Ingresa el código', variant: 'destructive' }); return }
     setLoading(true)
-    const endpoint = data.esConductor ? 'firma-conductor' : 'firma-propietario'
     try {
-      const res = await fetch(`/api/vehiculos/contratos/dummy/documento-legal/${endpoint}`, {
+      const res = await fetch('/api/vehiculos/contrato-legal/firma', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ token, accion: 'verificar-otp', otpIngresado }),
@@ -227,9 +223,8 @@ export default function PaginaFirmaContrato({ params }: { params: Promise<{ toke
 
   const completarFirma = async () => {
     setLoading(true)
-    const endpoint = data.esConductor ? 'firma-conductor' : 'firma-propietario'
     try {
-      const res = await fetch(`/api/vehiculos/contratos/dummy/documento-legal/${endpoint}`, {
+      const res = await fetch('/api/vehiculos/contrato-legal/firma', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ token, accion: 'completar' }),
