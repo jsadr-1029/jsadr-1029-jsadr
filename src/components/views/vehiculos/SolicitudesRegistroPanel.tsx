@@ -45,8 +45,14 @@ export function SolicitudesRegistroPanel({ onChanged }: { onChanged?: () => void
 
   useEffect(() => { cargar() }, [])
 
-  const verDetalle = (s: any) => {
-    setDetalle(s)
+  const verDetalle = async (s: any) => {
+    // Cargar detalle completo con fotos desde el endpoint
+    const r = await apiFetch(`/api/vehiculos/registro-conductor/admin/lista?id=${s.id}`)
+    if (r.success && r.data) {
+      setDetalle(r.data)
+    } else {
+      setDetalle(s) // fallback a datos de la lista
+    }
     setDetalleOpen(true)
   }
 

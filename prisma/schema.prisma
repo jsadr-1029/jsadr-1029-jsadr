@@ -2088,6 +2088,8 @@ model ConductorVehiculo {
   recibos         ReciboPagoVehiculo[]
   // Extensión 6: reservas de viajes
   reservas        ReservaVehiculo[]
+  // Extensión 8: documentos del conductor (fotos)
+  documentosConductor DocumentoConductor[]
 
   @@index([cedula])
   @@index([activo])
@@ -2872,4 +2874,26 @@ model ContratoDocumentoVehiculo {
   @@index([estado])
   @@index([conductorToken])
   @@index([propietarioToken])
+}
+
+// =====================================================
+// === EXTENSIÓN 8: DOCUMENTOS DEL CONDUCTOR ===
+// Almacena las fotos (cédula, licencia, selfie, recibo) de cada
+// conductor aprobado. Se llena automáticamente al aprobar una
+// solicitud de registro.
+// =====================================================
+
+model DocumentoConductor {
+  id              String   @id @default(cuid())
+  conductorId    String
+  tipo            String   // CEDULA_FRENTE | CEDULA_REVERSO | LICENCIA_FRENTE | LICENCIA_REVERSO | SELFIE | RECIBO_SERVICIOS
+  fotoUrl         String   // base64 o URL
+  descripcion     String?
+  creadoPor       String?
+  createdAt       DateTime @default(now())
+
+  conductor       ConductorVehiculo @relation(fields: [conductorId], references: [id])
+
+  @@index([conductorId])
+  @@index([tipo])
 }

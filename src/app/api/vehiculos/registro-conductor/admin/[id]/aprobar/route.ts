@@ -100,6 +100,29 @@ export async function POST(
         },
       })
 
+      // === Guardar documentos del conductor (fotos) en DocumentoConductor ===
+      const fotos = [
+        { tipo: 'CEDULA_FRENTE', url: solicitud.fotoCedulaFrente, desc: 'Cédula - Frente' },
+        { tipo: 'CEDULA_REVERSO', url: solicitud.fotoCedulaReverso, desc: 'Cédula - Reverso' },
+        { tipo: 'LICENCIA_FRENTE', url: solicitud.fotoLicenciaFrente, desc: 'Licencia - Frente' },
+        { tipo: 'LICENCIA_REVERSO', url: solicitud.fotoLicenciaReverso, desc: 'Licencia - Reverso' },
+        { tipo: 'SELFIE', url: solicitud.fotoSelfie, desc: 'Selfie de identificación' },
+        { tipo: 'RECIBO_SERVICIOS', url: solicitud.fotoReciboServicios, desc: 'Recibo de servicios públicos' },
+      ]
+      for (const foto of fotos) {
+        if (foto.url) {
+          await tx.documentoConductor.create({
+            data: {
+              conductorId: conductor.id,
+              tipo: foto.tipo,
+              fotoUrl: foto.url,
+              descripcion: foto.desc,
+              creadoPor: user.id,
+            },
+          })
+        }
+      }
+
       // Generar número de contrato
       const fechaStr = new Date().toISOString().slice(0, 10).replace(/-/g, '')
       const contratosHoy = await tx.contratoVehiculo.count({
