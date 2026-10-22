@@ -51,23 +51,44 @@ export async function POST(req: NextRequest) {
       const diasRetrasoCrudo = diasEntre(oblig.fechaVencimiento, ahora)
       const diasRetraso = Math.max(0, diasRetrasoCrudo - diasGracia)
 
-      // Multa = días de retraso × multaDiaria
-      let multa = diasRetraso * multaDiaria
-
-      // === REGLA: Si la semana ya venció (pasó el sábado) sin pagar completa,
-      // se aplica multa adicional de $50.000 a la última obligación de esa semana ===
+      // === Lógica de multa según modalidad ===
+      let multa = 0
       const dia = oblig.fechaVencimiento.getDay() // 0=Dom, 6=Sab
-      if (dia === 6 && diasRetraso > 0) {
-        // Es sábado y ya venció → aplicar multa de $50.000 (una sola vez por semana)
-        const lunes = new Date(oblig.fechaVencimiento)
-        lunes.setDate(lunes.getDate() - 5)
-        const diffMs = lunes.getTime() - contrato.fechaInicio.getTime()
-        const diffDias = Math.floor(diffMs / (1000 * 60 * 60 * 24))
-        const semanaNum = Math.floor(diffDias / 7) + 1
-        const key = `${contrato.id}-${semanaNum}`
-        if (!semanasAtrasadasAplicadas.has(key)) {
-          semanasAtrasadasAplicadas.add(key)
-          multa += 50000 // multa fija $50.000 por semana atrasada
+
+      if (contrato.modalidadPago === 'SEMANAL') {
+        // Para modalidad SEMANAL: la multa es fija de $50.000 por cada semana atrasada
+        // Se aplica cuando pasa el sábado de vencimiento sin pagar
+        // La multa se cobra a partir del domingo siguiente al sábado de vencimiento
+        if (diasRetraso > 0) {
+          // Calcular número de semana relativa al inicio del contrato
+          const lunes = new Date(oblig.fechaVencimiento)
+          lunes.setDate(lunes.getDate() - ((dia + 6) % 7)) // retroceder al lunes
+          const diffMs = lunes.getTime() - contrato.fechaInicio.getTime()
+          const diffDias = Math.floor(diffMs / (1000 * 60 * 60 * 24))
+          const semanaNum = Math.floor(diffDias / 7) + 1
+          const key = `${contrato.id}-${semanaNum}`
+          if (!semanasAtrasadasAplicadas.has(key)) {
+            semanasAtrasadasAplicadas.add(key)
+            multa = 50000 // multa fija $50.000 por semana atrasada
+          }
+        }
+      } else {
+        // Para modalidad DIARIA y otras: multa = días de retraso × multaDiaria
+        multa = diasRetraso * multaDiaria
+
+        // === REGLA: Si la semana ya venció (pasó el sábado) sin pagar completa,
+        // se aplica multa adicional de $50.000 (para contratos diarios) ===
+        if (dia === 6 && diasRetraso > 0) {
+          const lunes = new Date(oblig.fechaVencimiento)
+          lunes.setDate(lunes.getDate() - 5)
+          const diffMs = lunes.getTime() - contrato.fechaInicio.getTime()
+          const diffDias = Math.floor(diffMs / (1000 * 60 * 60 * 24))
+          const semanaNum = Math.floor(diffDias / 7) + 1
+          const key = `${contrato.id}-${semanaNum}`
+          if (!semanasAtrasadasAplicadas.has(key)) {
+            semanasAtrasadasAplicadas.add(key)
+            multa += 50000 // multa fija $50.000 por semana atrasada
+          }
         }
       }
 

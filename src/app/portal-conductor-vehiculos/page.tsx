@@ -543,16 +543,16 @@ export default function PortalConductorVehiculosPage() {
                     <div className="font-bold">{c?.numero}</div>
                   </div>
                   <div>
-                    <div className="text-xs text-muted-foreground">Duración</div>
-                    <div className="font-medium">{c?.duracionDias} días</div>
-                  </div>
-                  <div>
                     <div className="text-xs text-muted-foreground">Tarifa</div>
                     <div className="font-bold text-blue-700">{formatCOP(c?.tarifa)} / {c?.modalidadPago}</div>
                   </div>
                   <div>
-                    <div className="text-xs text-muted-foreground">Desde</div>
+                    <div className="text-xs text-muted-foreground">Fecha de inicio</div>
                     <div className="font-medium">{formatDate(c?.fechaInicio)}</div>
+                  </div>
+                  <div>
+                    <div className="text-xs text-muted-foreground">Fecha de terminación</div>
+                    <div className="font-medium">{c?.tieneFechaFin ? formatDate(c?.fechaFin) : 'Indefinida'}</div>
                   </div>
                   <div>
                     <div className="text-xs text-muted-foreground">Días de gracia</div>
@@ -562,6 +562,39 @@ export default function PortalConductorVehiculosPage() {
                     <div className="text-xs text-muted-foreground">Multa diaria</div>
                     <div className="font-medium text-red-700">{formatCOP(c?.multaDiaria)}</div>
                   </div>
+                </div>
+
+                {/* Contador de días del contrato */}
+                <div className="mt-3 p-3 bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl border border-blue-200">
+                  <div className="text-xs font-semibold text-blue-900 mb-2">📅 Contador del contrato</div>
+                  <div className="grid grid-cols-3 gap-2 text-center">
+                    <div>
+                      <div className="text-2xl font-bold text-blue-700">{c?.diasTranscurridos ?? 0}</div>
+                      <div className="text-[10px] text-muted-foreground">Días transcurridos</div>
+                    </div>
+                    <div>
+                      <div className="text-2xl font-bold text-orange-600">{c?.tieneFechaFin ? (c?.diasRestantes ?? 0) : '∞'}</div>
+                      <div className="text-[10px] text-muted-foreground">Días restantes</div>
+                    </div>
+                    <div>
+                      <div className="text-2xl font-bold text-green-700">{c?.tieneFechaFin ? (c?.diasTranscurridos ?? 0) + (c?.diasRestantes ?? 0) : '∞'}</div>
+                      <div className="text-[10px] text-muted-foreground">Duración total</div>
+                    </div>
+                  </div>
+                  {/* Barra de progreso */}
+                  {c?.tieneFechaFin && (c?.diasTranscurridos ?? 0) + (c?.diasRestantes ?? 0) > 0 && (
+                    <div className="mt-2">
+                      <div className="w-full h-2 bg-gray-200 rounded-full overflow-hidden">
+                        <div
+                          className="h-full bg-gradient-to-r from-blue-500 to-indigo-500 rounded-full transition-all"
+                          style={{ width: `${Math.min(100, ((c?.diasTranscurridos ?? 0) / ((c?.diasTranscurridos ?? 0) + (c?.diasRestantes ?? 0))) * 100)}%` }}
+                        />
+                      </div>
+                      <div className="text-[10px] text-muted-foreground mt-1 text-center">
+                        {Math.round(((c?.diasTranscurridos ?? 0) / ((c?.diasTranscurridos ?? 0) + (c?.diasRestantes ?? 0))) * 100)}% completado
+                      </div>
+                    </div>
+                  )}
                 </div>
               </CardContent>
             </Card>

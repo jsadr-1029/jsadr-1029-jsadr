@@ -210,7 +210,13 @@ export async function GET(req: NextRequest) {
           multaDiaria: contrato.multaDiaria,
           deposito: contrato.deposito,
           estado: contrato.estado,
+          // Contador de días del contrato
           duracionDias: Math.ceil((ahora.getTime() - contrato.fechaInicio.getTime()) / (1000 * 60 * 60 * 24)),
+          diasTranscurridos: Math.max(0, Math.ceil((ahora.getTime() - contrato.fechaInicio.getTime()) / (1000 * 60 * 60 * 24))),
+          diasRestantes: contrato.fechaFin
+            ? Math.max(0, Math.ceil((contrato.fechaFin.getTime() - ahora.getTime()) / (1000 * 60 * 60 * 24)))
+            : null, // null = indefinido
+          tieneFechaFin: !!contrato.fechaFin,
         },
         vehiculo: {
           placa: contrato.vehiculo.placa,
