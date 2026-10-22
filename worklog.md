@@ -4944,3 +4944,57 @@ Stage Summary:
 - ✅ Datos de verificación (IP, OTP, fecha)
 - ✅ Botón de descarga cuando contrato está completado
 - ✅ Endpoints verificados en producción
+
+---
+Task ID: 49-multa-semanal-1037125498 + contador contrato
+Agent: Super Z (main)
+Task: Configurar multa semanal de $50.000 para conductor 1037125498 (pagar sábado, multa desde domingo). Agregar contador de días del contrato (inicio, fin, transcurridos, restantes) visible en admin y portal conductor.
+
+Work Log:
+
+1. MULTA SEMANAL PARA MODALIDAD SEMANAL:
+   - recalcular-mora ahora diferencia por modalidad de pago:
+     * SEMANAL: multa fija de $50.000 por cada semana atrasada
+       - NO se multiplica por días de retraso
+       - Se aplica cuando pasa el sábado de vencimiento sin pagar
+       - Se cobra a partir del domingo siguiente al sábado de vencimiento
+       - Una sola multa de $50.000 por semana (usa Set para evitar duplicados)
+     * DIARIA y otras: comportamiento anterior (multa diaria × días + $50.000 semanal)
+
+2. OBLIGACIONES GENERADAS:
+   - 12 obligaciones semanales para contrato CONTR-20261022-001
+   - Todas con vencimiento en sábado (31/oct, 7/nov, 14/nov, ...)
+   - Tarifa: $80.000/semana
+   - Multa semanal: $50.000 si no paga antes del sábado
+
+3. CONTADOR DE DÍAS DEL CONTRATO:
+   - API /api/vehiculos/portal-conductor/estado ahora devuelve:
+     * diasTranscurridos: días desde fechaInicio hasta hoy
+     * diasRestantes: días desde hoy hasta fechaFin (null si indefinido)
+     * tieneFechaFin: boolean
+   - Portal conductor tab Inicio muestra:
+     * Card 'Contador del contrato' con gradiente azul
+     * 3 métricas grandes: días transcurridos, días restantes, duración total
+     * Barra de progreso visual (% completado)
+     * Si no tiene fecha fin: muestra '∞' en restantes y total
+   - También muestra fecha de inicio y fecha de terminación explícitamente
+
+VERIFICACIÓN EN PRODUCCIÓN:
+- Login cedula 1037125498 → success, tipo CONDUCTOR_VEHICULO
+- Estado del conductor:
+  * Nombre: Yoiman Smith Franco Valderrama
+  * Contrato: CONTR-20261022-001, SEMANAL, $80.000
+  * Fecha inicio: 2026-10-22
+  * Fecha fin: None (indefinido)
+  * Días transcurridos: 1
+  * Días restantes: None (mostrará ∞)
+  * Tiene fecha fin: False
+
+Stage Summary:
+- ✅ GitHub: commit 64be0c5 en origin/main
+- ✅ Vercel: deploy exitoso
+- ✅ Multa semanal $50.000 para contratos SEMANAL (no diaria)
+- ✅ 12 obligaciones semanales generadas para 1037125498
+- ✅ Contador de días visible en portal conductor
+- ✅ Fecha inicio, fecha fin, días transcurridos, días restantes
+- ✅ Barra de progreso visual
