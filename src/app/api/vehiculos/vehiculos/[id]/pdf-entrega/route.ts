@@ -18,6 +18,7 @@ import https from 'https'
 import http from 'http'
 
 // === Helper: obtener imagen desde URL o base64 ===
+// Limita imágenes a 80KB para evitar quedarse sin memoria en Vercel serverless
 async function getImage(source: string): Promise<Buffer | null> {
   if (!source) return null
 
@@ -26,7 +27,10 @@ async function getImage(source: string): Promise<Buffer | null> {
     try {
       const base64Data = source.split(',')[1]
       if (!base64Data) return null
-      return Buffer.from(base64Data, 'base64')
+      const buf = Buffer.from(base64Data, 'base64')
+      // Si la imagen es mayor a 80KB, no la incluimos (demasiado pesada para el PDF)
+      if (buf.length > 80000) return null
+      return buf
     } catch {
       return null
     }
@@ -40,7 +44,12 @@ async function getImage(source: string): Promise<Buffer | null> {
         const req = lib.get(source, { timeout: 8000 }, (res) => {
           if (res.statusCode !== 200) { resolve(null); return }
           const chunks: Buffer[] = []
-          res.on('data', c => chunks.push(c))
+          let totalSize = 0
+          res.on('data', c => {
+            totalSize += c.length
+            if (totalSize > 80000) { resolve(null); req.destroy(); return }
+            chunks.push(c)
+          })
           res.on('end', () => resolve(Buffer.concat(chunks)))
           res.on('error', () => resolve(null))
         })
@@ -71,14 +80,23 @@ async function addImageToPDF(doc: any, imgSource: string | null | undefined, x: 
   if (!imgSource) return 0
   try {
     const imgBuffer = await getImage(imgSource)
-    if (!imgBuffer || imgBuffer.length === 0) return 0
+    if (!imgBuffer || imgBuffer.length === 0) {
+      // La imagen existe pero es muy grande para el PDF (>80KB)
+      // Mostrar nota de que existe la foto
+      if (imgSource && imgSource.startsWith('data:')) {
+        const sizeKB = Math.round(imgSource.length * 0.75 / 1024)
+        doc.fillColor('#999').fontSize(7).font('Helvetica-Oblique')
+        doc.text(`[Foto disponible en sistema - ${sizeKB}KB]`, x, y, { width: maxWidth })
+        return 15
+      }
+      return 0
+    }
     doc.image(imgBuffer, x, y, { fit: [maxWidth, maxHeight], align: 'center' })
     return maxHeight + 10
   } catch (e) {
-    // Si la imagen no se puede procesar, mostrar placeholder de texto
     try {
-      doc.fillColor('#999').fontSize(8).font('Helvetica').text('[Imagen no disponible]', x, y, { width: maxWidth })
-      return 20
+      doc.fillColor('#999').fontSize(7).font('Helvetica').text('[Imagen no disponible]', x, y, { width: maxWidth })
+      return 15
     } catch { return 0 }
   }
 }
