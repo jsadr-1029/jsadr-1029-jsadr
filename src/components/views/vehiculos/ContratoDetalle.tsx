@@ -9,7 +9,7 @@ import { Badge } from '@/components/ui/badge'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog'
 import { useToast } from '@/hooks/use-toast'
-import { CreditCard, CheckCircle, XCircle, AlertTriangle, FileText, Zap } from 'lucide-react'
+import { CreditCard, CheckCircle, XCircle, AlertTriangle, FileText, Zap, Download, PenTool } from 'lucide-react'
 import { apiFetch, formatCOP, formatDate, formatDateTime, EstadoBadge, ESTADOS_PAGO } from './helpers'
 import { useState } from 'react'
 
@@ -21,6 +21,61 @@ export function ContratoDetalle({ contrato, onChanged }: { contrato: any; onChan
   const [motivoRechazo, setMotivoRechazo] = useState('')
   const [recalcMoraLoading, setRecalcMoraLoading] = useState(false)
   const [fotoComprobante, setFotoComprobante] = useState<string | null>(null)
+  const [generandoContrato, setGenerandoContrato] = useState(false)
+
+  // === Generar contrato legal con firma electrónica ===
+  const generarContratoLegal = async () => {
+    setGenerandoContrato(true)
+    try {
+      const r = await apiFetch(`/api/vehiculos/contratos/${contrato.id}/documento-legal/generar`, {
+        method: 'POST',
+        body: JSON.stringify({}),
+      })
+      if (r.success) {
+        toast({
+          title: 'Contrato legal generado',
+          description: r.message || `Contrato ${r.data?.numeroContrato} creado. Link enviado al conductor.`,
+        })
+        onChanged?.()
+      } else {
+        toast({ title: 'Error', description: r.error, variant: 'destructive' })
+      }
+    } catch (e: any) {
+      toast({ title: 'Error', description: e.message, variant: 'destructive' })
+    }
+    setGenerandoContrato(false)
+  }
+
+  // === Descargar PDF de entrega del vehículo ===
+  const descargarPDFEntrega = async (tipo: string) => {
+    try {
+      let token: string | null = null
+      const userStr = localStorage.getItem('user')
+      if (userStr) {
+        try { token = JSON.parse(userStr).token || JSON.parse(userStr).accessToken } catch {}
+      }
+      const res = await fetch(`/api/vehiculos/vehiculos/${contrato.vehiculoId}/pdf-entrega?tipo=${tipo}&contratoId=${contrato.id}`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: `HTTP ${res.status}` }))
+        toast({ title: 'Error al generar PDF', description: err.error, variant: 'destructive' })
+        return
+      }
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `${tipo === 'completo' ? 'Ficha_Completa' : 'Inventario'}_${contrato.vehiculo?.placa || 'vehiculo'}.pdf`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+      toast({ title: 'PDF descargado' })
+    } catch (e: any) {
+      toast({ title: 'Error', description: e.message, variant: 'destructive' })
+    }
+  }
 
   if (!contrato) return null
 
@@ -136,10 +191,22 @@ export function ContratoDetalle({ contrato, onChanged }: { contrato: any; onChan
       </div>
 
       {/* Botón recalcular mora */}
-      <Button onClick={recalcularMora} disabled={recalcMoraLoading} variant="outline" size="sm">
-        <Zap className="w-4 h-4 mr-1" />
-        {recalcMoraLoading ? 'Recalculando...' : 'Recalcular mora'}
-      </Button>
+      <div className="flex gap-2 flex-wrap">
+        <Button onClick={recalcularMora} disabled={recalcMoraLoading} variant="outline" size="sm">
+          <Zap className="w-4 h-4 mr-1" />
+          {recalcMoraLoading ? 'Recalculando...' : 'Recalcular mora'}
+        </Button>
+        <Button onClick={() => descargarPDFEntrega('completo')} variant="outline" size="sm">
+          <Download className="w-4 h-4 mr-1" /> PDF ficha completa
+        </Button>
+        <Button onClick={() => descargarPDFEntrega('inventario')} variant="outline" size="sm">
+          <Download className="w-4 h-4 mr-1" /> PDF inventario
+        </Button>
+        <Button onClick={generarContratoLegal} disabled={generandoContrato} size="sm" className="bg-gradient-to-r from-purple-500 to-indigo-600">
+          <PenTool className="w-4 h-4 mr-1" />
+          {generandoContrato ? 'Generando...' : 'Firma electrónica contrato'}
+        </Button>
+      </div>
 
       {/* Obligaciones */}
       <div>

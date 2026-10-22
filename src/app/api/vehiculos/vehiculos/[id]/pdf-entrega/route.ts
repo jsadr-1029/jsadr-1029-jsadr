@@ -478,14 +478,20 @@ export async function GET(
     doc.text(`CC: ${conductor?.cedula || '_______'}`, mitadX + 30, y, { width: mitadX - 100, align: 'center' })
 
     // === FOOTER en cada página ===
-    const pages = doc.bufferedPageRange()
-    for (let i = 0; i < pages.count; i++) {
-      doc.switchToPage(i)
-      doc.fillColor('#999').fontSize(8).font('Helvetica')
-      doc.text(
-        `Documento generado por Sistema de Gestión de Vehículos - ${vehiculo.placa} - Página ${i + 1} de ${pages.count}`,
-        50, doc.page.height - 30, { align: 'center', width: ancho }
-      )
+    // FIX: bufferedPageRange() puede no empezar en 0, usar el rango correcto
+    try {
+      const range = doc.bufferedPageRange()
+      for (let i = range.start; i < range.start + range.count; i++) {
+        doc.switchToPage(i)
+        doc.fillColor('#999').fontSize(8).font('Helvetica')
+        doc.text(
+          `Documento generado por Sistema de Gestión de Vehículos - ${vehiculo.placa} - Página ${i - range.start + 1} de ${range.count}`,
+          50, doc.page.height - 30, { align: 'center', width: ancho }
+        )
+      }
+    } catch (e) {
+      // Si switchToPage falla, simplemente continuar sin footer
+      console.error('[pdf-entrega] Error en footer:', e)
     }
 
     // === IMPORTANTE: registrar listeners ANTES de doc.end() ===
