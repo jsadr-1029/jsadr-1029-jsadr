@@ -109,9 +109,15 @@ export async function GET(req: NextRequest) {
     }))
 
     // Saldos
-    const totalPendiente = contrato.obligaciones.reduce((s, o) => s + (o.montoPendiente || 0), 0)
-    const totalMultas = contrato.obligaciones.reduce((s, o) => s + (o.multa || 0), 0)
+    // Solo contar como pendiente la semana ACTUAL (la que vence este sábado o ya venció)
+    // Las semanas futuras NO se cuentan como pendiente — el conductor solo debe la semana actual
+    const obligacionActual = contrato.obligaciones.find(o => o.estado !== 'PAGADA' && o.fechaVencimiento >= new Date(ahora.getTime() - 7 * 24 * 60 * 60 * 1000))
+    const obligacionesVencidas = contrato.obligaciones.filter(o => o.estado !== 'PAGADA' && o.fechaVencimiento < ahora)
+    const totalPendiente = (obligacionActual?.montoPendiente || 0) + obligacionesVencidas.reduce((s, o) => s + (o.montoPendiente || 0), 0)
+    const totalMultas = (obligacionActual?.multa || 0) + obligacionesVencidas.reduce((s, o) => s + (o.multa || 0), 0)
     const totalPagado = contrato.pagos.reduce((s, p) => s + (p.monto || 0), 0)
+    // Total del contrato (todas las semanas) — solo informativo
+    const totalContrato = contrato.obligaciones.reduce((s, o) => s + (o.monto || 0), 0)
 
     // Próximas revisiones (SOAT, tecnomecánica, mantenimiento)
     const proximasRevisiones: any[] = []
@@ -232,6 +238,7 @@ export async function GET(req: NextRequest) {
           totalPendiente,
           totalMultas,
           totalPagado,
+          totalContrato,
         },
         proximosVencimientos: proximosVencimientos.slice(0, 5),
         proximasRevisiones,

@@ -12,6 +12,7 @@ import {
   Car, LogOut, CreditCard, Calendar, Wrench, AlertTriangle, CheckCircle, Clock,
   QrCode, Download, Star, Phone, Mail, User, MapPin, FileText, Wallet,
   ChevronRight, Sparkles, Bell, TrendingUp, Settings, Plus, Upload,
+  Sun, Moon,
 } from 'lucide-react'
 import { formatCOP, formatDate, EstadoBadge } from '@/components/views/vehiculos/helpers'
 
@@ -25,6 +26,24 @@ export default function PortalConductorVehiculosPage() {
   const [data, setData] = useState<any>(null)
   const [loadingData, setLoadingData] = useState(false)
   const [tab, setTab] = useState<Tab>('inicio')
+  const [darkMode, setDarkMode] = useState(false)
+
+  // Cargar preferencia de modo oscuro del localStorage
+  useEffect(() => {
+    const saved = localStorage.getItem('portalConductorDarkMode')
+    if (saved === 'true') setDarkMode(true)
+  }, [])
+
+  // Aplicar modo oscuro al documento
+  useEffect(() => {
+    if (darkMode) {
+      document.documentElement.classList.add('dark')
+      localStorage.setItem('portalConductorDarkMode', 'true')
+    } else {
+      document.documentElement.classList.remove('dark')
+      localStorage.setItem('portalConductorDarkMode', 'false')
+    }
+  }, [darkMode])
 
   // Pago
   const [pagoModal, setPagoModal] = useState(false)
@@ -330,7 +349,17 @@ export default function PortalConductorVehiculosPage() {
   // ====== LOGIN SCREEN ======
   if (!token) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-indigo-600 via-blue-700 to-purple-800 flex items-center justify-center p-4">
+      <div className="min-h-screen bg-gradient-to-br from-indigo-600 via-blue-700 to-purple-800 flex items-center justify-center p-4 relative">
+        <div className="absolute top-4 right-4 z-20">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setDarkMode(!darkMode)}
+            className="text-white hover:bg-white/20"
+          >
+            {darkMode ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+          </Button>
+        </div>
         <div className="absolute inset-0 overflow-hidden">
           <div className="absolute -top-40 -right-40 w-80 h-80 bg-white/10 rounded-full blur-3xl" />
           <div className="absolute -bottom-40 -left-40 w-80 h-80 bg-white/10 rounded-full blur-3xl" />
@@ -415,7 +444,7 @@ export default function PortalConductorVehiculosPage() {
   const saldos = data?.saldos || {}
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100 pb-24">
+    <div className={`min-h-screen pb-24 transition-colors duration-300 ${darkMode ? 'bg-slate-900' : 'bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100'}`}>
       {/* Header con gradiente */}
       <div className="bg-gradient-to-br from-indigo-600 via-blue-700 to-purple-800 text-white p-5 shadow-xl">
         <div className="max-w-3xl mx-auto">
@@ -434,9 +463,20 @@ export default function PortalConductorVehiculosPage() {
                 <div className="text-xs opacity-80">CC {cond?.cedula}</div>
               </div>
             </div>
-            <Button variant="ghost" size="sm" onClick={logout} className="text-white hover:bg-white/20">
-              <LogOut className="w-4 h-4" /> Salir
-            </Button>
+            <div className="flex items-center gap-1">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setDarkMode(!darkMode)}
+                className="text-white hover:bg-white/20"
+                title={darkMode ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'}
+              >
+                {darkMode ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+              </Button>
+              <Button variant="ghost" size="sm" onClick={logout} className="text-white hover:bg-white/20">
+                <LogOut className="w-4 h-4" /> Salir
+              </Button>
+            </div>
           </div>
           {/* Vehículo destacado */}
           <div className="bg-white/10 backdrop-blur rounded-2xl p-4 border border-white/20">
@@ -1353,6 +1393,41 @@ export default function PortalConductorVehiculosPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Estilos para modo oscuro del portal del conductor */}
+      <style jsx global>{`
+        .dark [class*="bg-white"] {
+          background-color: rgb(30 41 59) !important;
+          color: rgb(226 232 240) !important;
+        }
+        .dark [class*="bg-gray-50"] {
+          background-color: rgb(51 65 85) !important;
+          color: rgb(203 213 225) !important;
+        }
+        .dark [class*="text-muted-foreground"] {
+          color: rgb(148 163 184) !important;
+        }
+        .dark [class*="text-gray-600"] {
+          color: rgb(148 163 184) !important;
+        }
+        .dark [class*="text-gray-900"] {
+          color: rgb(241 245 249) !important;
+        }
+        .dark [class*="border-gray-200"] {
+          border-color: rgb(51 65 85) !important;
+        }
+        .dark [class*="bg-slate-800"] {
+          background-color: rgb(51 65 85) !important;
+        }
+        .dark input {
+          background-color: rgb(30 41 59) !important;
+          color: rgb(226 232 240) !important;
+          border-color: rgb(71 85 105) !important;
+        }
+        .dark input::placeholder {
+          color: rgb(100 116 139) !important;
+        }
+      `}</style>
     </div>
   )
 }
