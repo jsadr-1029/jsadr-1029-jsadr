@@ -2133,6 +2133,8 @@ model ContratoVehiculo {
   recibos         ReciboPagoVehiculo[]
   // Extensión 6: reservas de viajes
   reservas        ReservaVehiculo[]
+  // Extensión 7: contratos legales con firma electrónica dual
+  documentosContrato ContratoDocumentoVehiculo[]
 
   @@index([vehiculoId])
   @@index([conductorId])
@@ -2768,4 +2770,106 @@ model ReservaVehiculo {
   @@index([conductorId])
   @@index([vehiculoId])
   @@index([estado, fechaInicio])
+}
+
+// =====================================================
+// === EXTENSIÓN 7: CONTRATO LEGAL DE ARRENDAMIENTO ===
+// Contrato formal con firma electrónica dual (conductor + propietario)
+// Cumple con requisitos legales para presentación ante juzgados:
+// - Foto cédula conductor (frente/reverso)
+// - Selfie sosteniendo cédula
+// - Firma manuscrita
+// - OTP validado por correo
+// - Firmado por ambas partes (conductor primero, luego propietario)
+// - PDF descargable con todas las firmas y documentos
+// =====================================================
+
+model ContratoDocumentoVehiculo {
+  id                  String   @id @default(cuid())
+  numeroContrato      String   @unique // CTR-YYYYMMDD-XXXXXX
+  contratoVehiculoId  String   // relación con ContratoVehiculo
+
+  // === Datos del vehículo (snapshot) ===
+  vehiculoPlaca       String
+  vehiculoMarca       String
+  vehiculoModelo      String
+  vehiculoAnio        Int?
+  vehiculoColor       String?
+  vehiculoKilometraje Int?
+  vehiculoVin         String?
+  vehiculoMotor       String?
+
+  // === Datos del propietario (snapshot) ===
+  propietarioNombre   String
+  propietarioCedula   String
+  propietarioTelefono String?
+  propietarioEmail    String?
+  propietarioDireccion String?
+
+  // === Datos del conductor (snapshot) ===
+  conductorNombre     String
+  conductorCedula     String
+  conductorTelefono   String
+  conductorEmail      String?
+  conductorDireccion  String?
+  conductorLicencia   String?
+  conductorLicenciaCat String?
+
+  // === Términos del contrato ===
+  modalidadPago       String
+  tarifa              Float
+  diasGracia          Int      @default(0)
+  multaDiaria         Float    @default(0)
+  deposito            Float    @default(0)
+  fechaInicio         DateTime
+  fechaFin            DateTime?
+  cantidadCuotas     Int
+  descripcionVehiculo String?  // descripción detallada del estado del vehículo
+
+  // === Estado del proceso de firma ===
+  estado              String   @default("BORRADOR")
+  // BORRADOR → ENVIADO_CONDUCTOR → FIRMADO_CONDUCTOR → ENVIADO_PROPIETARIO → COMPLETADO → CANCELADO
+
+  // === Firma del CONDUCTOR (primero) ===
+  conductorToken      String?  @unique
+  conductorTokenExpira DateTime?
+  conductorFotoCedulaFrente  String?
+  conductorFotoCedulaReverso String?
+  conductorFotoSelfie        String?  // selfie sosteniendo cédula
+  conductorFirmaManuscrita   String?  // base64 PNG
+  conductorOtpHash           String?
+  conductorOtpExpira         DateTime?
+  conductorOtpValidado       Boolean  @default(false)
+  conductorFechaFirma        DateTime?
+  conductorIp                String?
+  conductorUserAgent        String?
+
+  // === Firma del PROPIETARIO (segundo) ===
+  propietarioToken    String?  @unique
+  propietarioTokenExpira DateTime?
+  propietarioFotoCedulaFrente  String?
+  propietarioFotoCedulaReverso String?
+  propietarioFotoSelfie        String?
+  propietarioFirmaManuscrita   String?
+  propietarioOtpHash           String?
+  propietarioOtpExpira         DateTime?
+  propietarioOtpValidado       Boolean  @default(false)
+  propietarioFechaFirma        DateTime?
+  propietarioIp                String?
+  propietarioUserAgent        String?
+
+  // === PDF final con todas las firmas ===
+  pdfFinalUrl         String?  // URL del PDF firmado (base64 o externo)
+
+  // === Auditoría ===
+  creadoPor           String?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  contratoVehiculo    ContratoVehiculo @relation(fields: [contratoVehiculoId], references: [id])
+
+  @@index([contratoVehiculoId])
+  @@index([estado])
+  @@index([conductorToken])
+  @@index([propietarioToken])
 }

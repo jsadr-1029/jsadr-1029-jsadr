@@ -82,6 +82,7 @@ function isPublicEndpoint(pathname: string): boolean {
     pathname.startsWith('/api/vehiculos/registro-conductor/firma') || // firma electrónica (token en body)
     pathname.startsWith('/api/vehiculos/registro-conductor/otp') || // solicitar OTP (token en body)
     pathname.startsWith('/api/vehiculos/registro-conductor/verificar-otp') || // verificar OTP (token en body)
+    pathname.startsWith('/api/vehiculos/contrato-legal/') || // firma de contrato legal (token en query/body)
     pathname.startsWith('/api/chat/iniciar') || // inicio de chat con cédula+teléfono (sin token previo)
     pathname.startsWith('/api/chat/otp') || // solicitud/verificación OTP del chat
     pathname === '/api/simulador' || // simulador público
