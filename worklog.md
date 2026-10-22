@@ -4787,3 +4787,94 @@ Stage Summary:
 - ✅ Fotos de documentos del vehículo en el PDF
 - ✅ Datos del conductor con foto (selfie) en el PDF
 - ✅ Permisos por usuario respetados (vehículos permitidos)
+
+---
+Task ID: 47-contrato-legal-firma-electronica-dual
+Agent: Super Z (main)
+Task: Crear sistema de contrato legal de arrendamiento con firma electrónica dual (conductor primero, luego propietario). Incluye fotos de cédula, selfie, firma manuscrita, OTP por correo. Debe ser legalmente válido.
+
+Work Log:
+
+MODELO PRISMA ContratoDocumentoVehiculo:
+- Snapshot completo: vehículo, propietario, conductor, términos del contrato
+- Estado: BORRADOR → ENVIADO_CONDUCTOR → FIRMADO_CONDUCTOR → ENVIADO_PROPIETARIO → COMPLETADO
+- Firma conductor: fotoCedulaFrente, fotoCedulaReverso, fotoSelfie, firmaManuscrita, otpHash, otpValidado, fechaFirma, ip, userAgent
+- Firma propietario: mismos campos
+- Tokens separados para conductor y propietario (7 días expiración)
+- Número único: CTR-YYYYMMDD-XXXXXX
+
+API ENDPOINTS:
+1. POST /api/vehiculos/contratos/[id]/documento-legal/generar
+   - Crea documento con datos precargados automáticamente
+   - Snapshot del vehículo (placa, marca, modelo, año, color, km, VIN, motor)
+   - Snapshot del conductor (nombre, cédula, teléfono, email, licencia)
+   - Datos del propietario (configurables, default: Jsadr Arrendamientos SAS)
+   - Genera tokens para conductor y propietario
+   - Envía email al conductor con link de firma
+   - GET lista documentos legales del contrato
+
+2. GET /api/vehiculos/contrato-legal/estado?token=XXX (público)
+   - Devuelve estado del documento por token
+   - Determina si el firmante es conductor o propietario
+   - Verifica expiración y flujo (conductor primero)
+   - Devuelve datos del vehículo, conductor, propietario y términos
+
+3. POST /api/vehiculos/contrato-legal/firma (público)
+   - Maneja todo el flujo con accion:
+     * fotos: guarda cédula frente/reverso + selfie
+     * firma: guarda firma manuscrita (base64 PNG)
+     * otp: genera OTP 6 dígitos, envía por email (15 min)
+     * verificar-otp: valida con hash SHA-256
+     * completar: marca firma completada
+       - Conductor: estado → FIRMADO_CONDUCTOR + email al propietario
+       - Propietario: estado → COMPLETADO + auditoría
+
+PÁGINA /firma-contrato-vehiculo/[token]:
+- 3 pasos con stepper visual:
+  Paso 1 - Fotos: cámara nativa para 3 fotos (cédula frente, reverso, selfie con cédula)
+  Paso 2 - Firma: canvas dibujable (mouse/touch) para firma manuscrita
+  Paso 3 - OTP: solicitar código → ingresar → verificar → completar
+- Resumen del contrato (vehículo, conductor, propietario, términos)
+- Pantalla de confirmación al completar
+- Badge que indica si firma como CONDUCTOR o PROPIETARIO
+- Compatible con móvil (cámara) y desktop
+
+FLUJO COMPLETO:
+1. Admin genera contrato desde panel → datos precargados automáticamente
+2. Sistema envía email al conductor con link de firma
+3. Conductor abre link → sube fotos (cédula + selfie) → dibuja firma → valida OTP
+4. Sistema envía email al propietario con link de firma
+5. Propietario abre link → sube fotos → dibuja firma → valida OTP
+6. Contrato COMPLETADO con ambas firmas electrónicas
+7. Auditoría registra IP, fecha y User-Agent de cada firma
+
+VALIDEZ LEGAL:
+- Fotos de cédula (frente y reverso) de AMBOS firmantes
+- Selfie sosteniendo cédula de AMBOS
+- Firma manuscrita digitalizada de AMBOS
+- Código OTP validado por correo electrónico de AMBOS
+- Registro de IP y User-Agent de cada firma
+- Fecha y hora exacta de cada firma
+- Auditoría inmutable del proceso completo
+- Snapshot de todos los datos del contrato (no cambian)
+
+PROXY:
+- /api/vehiculos/contrato-legal/ agregado a isPublicEndpoint (sin JWT)
+
+VERIFICACIÓN EN PRODUCCIÓN:
+- GET /firma-contrato-vehiculo/test → HTTP 200
+- GET /api/vehiculos/contrato-legal/estado?token=test → 404 Token inválido (correcto)
+- Deploy exitoso (automático por GitHub)
+
+Stage Summary:
+- ✅ GitHub: commit e4659ab en origin/main
+- ✅ Vercel: deploy exitoso
+- ✅ Modelo ContratoDocumentoVehiculo creado y migrado
+- ✅ API de generación con datos precargados
+- ✅ API pública de estado y firma
+- ✅ Página de firma con 3 pasos (fotos, firma, OTP)
+- ✅ Flujo dual: conductor primero, luego propietario
+- ✅ Emails automáticos a conductor y propietario
+- ✅ Validez legal: fotos, firma, OTP, IP, auditoría
+- 📌 Pendiente: integrar botón "Generar contrato legal" en ContratoDetalle
+- 📌 Pendiente: recibir plantilla del contrato del usuario para el PDF
