@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { useToast } from '@/hooks/use-toast'
-import { Car, Upload, CheckCircle, PenTool, ShieldCheck, AlertTriangle, FileText, User, ArrowRight, ArrowLeft, Loader2 } from 'lucide-react'
+import { Car, Upload, CheckCircle, PenTool, ShieldCheck, AlertTriangle, FileText, User, ArrowRight, ArrowLeft, Loader2, Download } from 'lucide-react'
 
 type Step = 'cargando' | 'error' | 'fotos' | 'firma' | 'otp' | 'completado'
 
@@ -259,6 +259,7 @@ export default function PaginaFirmaContrato({ params }: { params: Promise<{ toke
 
   if (step === 'completado') {
     const nombreFirmante = data?.esConductor ? data.conductor.nombre : data?.propietario?.nombre
+    const contratoCompleto = data?.estado === 'COMPLETADO'
     return <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-green-50 to-emerald-100 p-4">
       <Card className="max-w-md w-full shadow-xl">
         <CardContent className="py-8 text-center">
@@ -276,6 +277,13 @@ export default function PaginaFirmaContrato({ params }: { params: Promise<{ toke
             <div>✓ Código OTP verificado</div>
             <div>✓ Firma registrada con IP y fecha</div>
           </div>
+          {contratoCompleto && (
+            <a href={`/api/vehiculos/contrato-legal/descargar?token=${token}`} target="_blank" rel="noopener noreferrer">
+              <Button className="mt-4 w-full bg-gradient-to-r from-blue-500 to-indigo-500">
+                <Download className="w-4 h-4 mr-2" /> Descargar contrato PDF
+              </Button>
+            </a>
+          )}
         </CardContent>
       </Card>
     </div>
