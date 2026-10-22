@@ -4878,3 +4878,69 @@ Stage Summary:
 - ✅ Validez legal: fotos, firma, OTP, IP, auditoría
 - 📌 Pendiente: integrar botón "Generar contrato legal" en ContratoDetalle
 - 📌 Pendiente: recibir plantilla del contrato del usuario para el PDF
+
+---
+Task ID: 48-contrato-legal-pdf-completo-plantilla-CAV-001
+Agent: Super Z (main)
+Task: Implementar el PDF completo del contrato legal con la plantilla CAV-001 v2.0 que el usuario envió en dos partes. Incluir todos los capítulos I-XII y anexos 1-4, con datos precargados, fotos de cédula, selfie, firmas manuscritas y datos de verificación.
+
+Work Log:
+
+PDF COMPLETO DEL CONTRATO LEGAL — Plantilla CAV-001 v2.0:
+
+ENDPOINT: GET /api/vehiculos/contrato-legal/descargar?token=XXX
+- Genera PDF en tiempo real con PDFKit
+- Soporta imágenes base64 (fotos de cámara nativa)
+- Disponible público (sin JWT) — token en query
+
+CONTENIDO DEL PDF:
+1. Encabezado: CONTRATO DE ARRENDAMIENTO DE VEHÍCULO AUTOMOTOR
+2. Tabla de identificación (contrato, placa, arrendador, arrendatario, fechas, canon)
+3. Capítulo I: Identificación y capacidad (cláusulas 1-3)
+4. Capítulo II: Objeto, identificación y destinación (cláusulas 4-8)
+5. Capítulo III: Precio, pagos y garantías (cláusulas 9-12)
+6. Capítulo IV: Obligaciones y restricciones (cláusulas 13-16)
+7. Capítulo V: Mantenimiento, gastos y daños (cláusulas 17-20)
+8. Capítulo VI: Seguros, accidentes e inmovilización (cláusulas 21-23)
+9. Capítulo VII: Comparendos y fotodetecciones (cláusulas 24-27)
+10. Capítulo VIII: Inspección, localización y datos (cláusulas 28-30)
+11. Capítulo IX: Terminación y restitución (cláusulas 31-34)
+12. Capítulo X: Incumplimiento y cobro (cláusulas 35-38)
+13. Capítulo XI: Comunicaciones y disposiciones finales (cláusulas 39-42)
+14. Capítulo XII: Aceptación y firma
+15. Firma del conductor: 3 fotos + firma manuscrita + datos verificación
+16. Firma del propietario: 3 fotos + firma manuscrita + datos verificación
+17. Anexo 1: Acta de entrega e inventario
+18. Anexo 2: Registro de conductores autorizados
+19. Anexo 3: Registro de pagos e incidencias
+20. Anexo 4: Control de vencimiento y terminación
+21. Footer con número de página en cada hoja
+
+DATOS PRECARGADOS AUTOMÁTICAMENTE:
+- Vehículo: placa, marca, modelo, año, color, kilometraje, VIN, motor
+- Propietario: nombre, cédula, teléfono, email, dirección
+- Conductor: nombre, cédula, teléfono, email, dirección, licencia
+- Términos: tarifa, modalidad, días gracia, multa, depósito, fechas
+
+BOTÓN DE DESCARGA:
+- En la página /firma-contrato-vehiculo/[token]
+- Visible cuando el contrato está COMPLETADO (ambas partes firmaron)
+- Botón "Descargar contrato PDF" con gradiente azul
+- Abre el PDF en nueva pestaña
+
+VERIFICACIÓN EN PRODUCCIÓN:
+- GET /firma-contrato-vehiculo/test → HTTP 200
+- GET /api/vehiculos/contrato-legal/descargar?token=test → 404 Token inválido (correcto)
+- GET /api/vehiculos/contrato-legal/estado?token=test → 404 Token inválido (correcto)
+- Deploy exitoso
+
+Stage Summary:
+- ✅ GitHub: commit 7028a28 en origin/main
+- ✅ Vercel: deploy exitoso
+- ✅ PDF completo con plantilla CAV-001 (42 cláusulas + 4 anexos)
+- ✅ Datos precargados automáticamente
+- ✅ Fotos de cédula y selfie embebidas
+- ✅ Firmas manuscritas digitales de ambos
+- ✅ Datos de verificación (IP, OTP, fecha)
+- ✅ Botón de descarga cuando contrato está completado
+- ✅ Endpoints verificados en producción
