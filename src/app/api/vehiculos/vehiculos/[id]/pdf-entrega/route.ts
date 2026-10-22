@@ -66,16 +66,20 @@ function fmtFecha(f: Date | string | null | undefined): string {
   return d.toLocaleDateString('es-CO', { year: 'numeric', month: 'long', day: 'numeric' })
 }
 
-// === Helper: agregar imagen al PDF (con manejo de errores) ===
+// === Helper: agregar imagen al PDF (con manejo de errores robusto) ===
 async function addImageToPDF(doc: any, imgSource: string | null | undefined, x: number, y: number, maxWidth: number, maxHeight: number): Promise<number> {
   if (!imgSource) return 0
-  const imgBuffer = await getImage(imgSource)
-  if (!imgBuffer) return 0
   try {
+    const imgBuffer = await getImage(imgSource)
+    if (!imgBuffer || imgBuffer.length === 0) return 0
     doc.image(imgBuffer, x, y, { fit: [maxWidth, maxHeight], align: 'center' })
     return maxHeight + 10
-  } catch {
-    return 0
+  } catch (e) {
+    // Si la imagen no se puede procesar, mostrar placeholder de texto
+    try {
+      doc.fillColor('#999').fontSize(8).font('Helvetica').text('[Imagen no disponible]', x, y, { width: maxWidth })
+      return 20
+    } catch { return 0 }
   }
 }
 

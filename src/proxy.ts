@@ -182,7 +182,8 @@ function getRateLimitForPath(pathname: string): { max: number; key: string } | n
     pathname.startsWith('/api/export') ||
     pathname.startsWith('/api/paz-y-salvo') ||
     pathname.startsWith('/api/estado-cuenta') ||
-    pathname.startsWith('/api/documentos')
+    pathname.startsWith('/api/documentos') ||
+    (pathname.startsWith('/api/vehiculos/vehiculos/') && pathname.includes('pdf-entrega'))
   ) {
     return { max: RATE_LIMIT_EXPORT, key: `export:${pathname}` }
   }
