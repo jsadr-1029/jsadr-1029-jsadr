@@ -257,6 +257,9 @@ export async function GET(req: NextRequest) {
     // ensureSpace(needed): si no hay 'needed' px disponibles antes del margen
     // inferior, salta a una nueva página. Solo cuando es estrictamente necesario,
     // para evitar hojas en blanco por saltos prematuros.
+    // IMPORTANTE: needed debe ser la altura REAL que se va a dibujar inmediatamente
+    // después, no una sobreestimación. Si se sobreestima, se pueden generar páginas
+    // casi vacías o con saltos prematuros.
     function ensureSpace(needed: number) {
       const available = PAGE_HEIGHT - MARGIN_BOTTOM - y
       if (available < needed) {
@@ -616,12 +619,13 @@ export async function GET(req: NextRequest) {
     y += doc.heightOfString(txtCiudad, { width: ancho }) + 8
 
     // === FIRMA ELECTRÓNICA DEL CONDUCTOR ===
-    ensureSpace(280) // banner + 3 fotos + firma + tabla verificación
+    ensureSpace(140) // banner + título + 3 fotos (no la sección completa)
     doc.fillColor('#fff').rect(50, y, ancho, 18).fill('#1e3a8a')
     doc.fillColor('#fff').fontSize(10).font('Helvetica-Bold'); doc.text('FIRMA ELECTRÓNICA — EL ARRENDATARIO (CONDUCTOR)', 55, y + 4); y += 22
 
     // Documentos de identidad y selfie
     doc.fillColor('#1e3a8a').fontSize(8).font('Helvetica-Bold'); doc.text('Documentos de verificación:', 50, y); y += 12
+    ensureSpace(120) // 3 fotos de 90px + etiqueta
     const colW = Math.floor((ancho - 20) / 3)
     const labels = ['Cédula (frente)', 'Cédula (reverso)', 'Selfie con cédula']
     const imgs = [d.firmaConductor.fotoCedulaFrente, d.firmaConductor.fotoCedulaReverso, d.firmaConductor.fotoSelfie]
@@ -636,6 +640,7 @@ export async function GET(req: NextRequest) {
     y += 10 + 90 + 14
 
     // Firma manuscrita
+    ensureSpace(100) // etiqueta + firma + línea
     doc.fillColor('#1e3a8a').fontSize(8).font('Helvetica-Bold'); doc.text('Firma manuscrita digitalizada:', 50, y); y += 12
     const fh = await addImage(doc, d.firmaConductor.firmaManuscrita, 50, y, 280, 70)
     if (fh === 0) {
@@ -647,6 +652,7 @@ export async function GET(req: NextRequest) {
     y += 80
 
     // Datos de verificación electrónica
+    ensureSpace(60) // título + primera fila
     doc.fillColor('#1e3a8a').fontSize(8).font('Helvetica-Bold'); doc.text('Datos de verificación de la firma electrónica:', 50, y); y += 12
     const otpConductor = d.firmaConductor.otpHash ? d.firmaConductor.otpHash.substring(0, 16) + '...' : '—'
     tablaSimple(['CAMPO', 'VALOR'], [
@@ -663,11 +669,12 @@ export async function GET(req: NextRequest) {
     y += 8
 
     // === FIRMA ELECTRÓNICA DEL PROPIETARIO ===
-    ensureSpace(280)
+    ensureSpace(140) // banner + título
     doc.fillColor('#fff').rect(50, y, ancho, 18).fill('#1e3a8a')
     doc.fillColor('#fff').fontSize(10).font('Helvetica-Bold'); doc.text('FIRMA ELECTRÓNICA — EL ARRENDADOR (PROPIETARIO)', 55, y + 4); y += 22
 
     doc.fillColor('#1e3a8a').fontSize(8).font('Helvetica-Bold'); doc.text('Documentos de verificación:', 50, y); y += 12
+    ensureSpace(120) // 3 fotos
     const labelsP = ['Cédula (frente)', 'Cédula (reverso)', 'Selfie con cédula']
     const imgsP = [d.firmaPropietario.fotoCedulaFrente, d.firmaPropietario.fotoCedulaReverso, d.firmaPropietario.fotoSelfie]
     let imgBlockHP = 0
@@ -680,6 +687,7 @@ export async function GET(req: NextRequest) {
     }
     y += 10 + 90 + 14
 
+    ensureSpace(100)
     doc.fillColor('#1e3a8a').fontSize(8).font('Helvetica-Bold'); doc.text('Firma manuscrita digitalizada:', 50, y); y += 12
     const fhp = await addImage(doc, d.firmaPropietario.firmaManuscrita, 50, y, 280, 70)
     if (fhp === 0) {
@@ -689,6 +697,7 @@ export async function GET(req: NextRequest) {
     doc.moveTo(50, y + 75).lineTo(330, y + 75).stroke('#000')
     y += 80
 
+    ensureSpace(60)
     doc.fillColor('#1e3a8a').fontSize(8).font('Helvetica-Bold'); doc.text('Datos de verificación de la firma electrónica:', 50, y); y += 12
     const otpPropietario = d.firmaPropietario.otpHash ? d.firmaPropietario.otpHash.substring(0, 16) + '...' : '—'
     tablaSimple(['CAMPO', 'VALOR'], [
@@ -1087,7 +1096,6 @@ export async function GET(req: NextRequest) {
 
     // Generar el código QR con los datos de verificación
     try {
-      ensureSpace(220)
       const qrData = JSON.stringify({
         contrato: d.numeroContrato,
         placa: d.vehiculo.placa,
@@ -1110,6 +1118,7 @@ export async function GET(req: NextRequest) {
       })
 
       // === Sello visual con QR ===
+      // Asegurar espacio para el sello completo (200px de alto + padding)
       ensureSpace(220)
       const selloX = 50
       const selloY = y
@@ -1164,6 +1173,8 @@ export async function GET(req: NextRequest) {
     }
 
     // Footer legal con numeración de páginas — estilo documento legal
+    // Se dibuja en CADA página al final del documento usando bufferedPageRange.
+    // PDFKit permite volver a una página anterior con switchToPage y agregar contenido.
     try {
       const range = doc.bufferedPageRange()
       const totalPaginas = range.count
@@ -1171,21 +1182,25 @@ export async function GET(req: NextRequest) {
       for (let i = range.start; i < range.start + range.count; i++) {
         doc.switchToPage(i)
         const numPagina = i - range.start + 1
-        // Línea separadora del footer
-        doc.moveTo(50, doc.page.height - 40).lineTo(doc.page.width - 50, doc.page.height - 40).strokeColor('#1e3a8a').lineWidth(0.5).stroke()
+        const pageH = doc.page.height
+        const pageW = doc.page.width
+        // Línea separadora del footer (azul)
+        doc.save()
+        doc.moveTo(50, pageH - 40).lineTo(pageW - 50, pageH - 40).strokeColor('#1e3a8a').lineWidth(0.5).stroke()
+        doc.restore()
         // Lado izquierdo: identificación del documento
         doc.fillColor('#1e3a8a').fontSize(7).font('Helvetica-Bold')
-        doc.text(`CONTRATO ${d.numeroContrato}`, 50, doc.page.height - 35, { width: 250, align: 'left' })
+        doc.text(`CONTRATO ${d.numeroContrato}`, 50, pageH - 35, { width: 250, align: 'left' })
         doc.fillColor('#666').fontSize(6).font('Helvetica')
-        doc.text(`Vehículo placa ${d.vehiculo.placa} · CAV-001 v2.0`, 50, doc.page.height - 27, { width: 250, align: 'left' })
+        doc.text(`Vehículo placa ${d.vehiculo.placa} · CAV-001 v2.0`, 50, pageH - 27, { width: 250, align: 'left' })
         // Centro: sello de autenticidad (resumen)
         doc.fillColor('#92400e').fontSize(6).font('Helvetica-Oblique')
-        doc.text('Documento legal firmado electrónicamente · Ley 527 de 1999', 50, doc.page.height - 19, { width: ancho, align: 'center' })
+        doc.text('Documento legal firmado electrónicamente · Ley 527 de 1999', 50, pageH - 19, { width: pageW - 100, align: 'center' })
         // Lado derecho: paginación "Página X de Y" (formato documento legal)
-        doc.fillColor('#1e3a8a').fontSize(8).font('Helvetica-Bold')
-        doc.text(`Página ${numPagina} de ${totalPaginas}`, doc.page.width - 200, doc.page.height - 35, { width: 150, align: 'right' })
+        doc.fillColor('#1e3a8a').fontSize(9).font('Helvetica-Bold')
+        doc.text(`Página ${numPagina} de ${totalPaginas}`, pageW - 200, pageH - 35, { width: 150, align: 'right' })
         doc.fillColor('#666').fontSize(6).font('Helvetica')
-        doc.text(`Generado: ${fechaGeneracion}`, doc.page.width - 200, doc.page.height - 27, { width: 150, align: 'right' })
+        doc.text(`Generado: ${fechaGeneracion}`, pageW - 200, pageH - 27, { width: 150, align: 'right' })
       }
     } catch (e) {
       console.error('[contrato-legal/descargar] Error en footer:', e)
