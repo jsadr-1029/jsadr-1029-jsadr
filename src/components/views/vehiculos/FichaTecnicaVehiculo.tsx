@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useToast } from '@/hooks/use-toast'
-import { Download, FileText, Package, Wrench, Calendar, Car, AlertTriangle, Plus, Trash2, FileCheck, Phone, MapPin, Upload, CheckCircle } from 'lucide-react'
+import { Download, FileText, Package, Wrench, Calendar, Car, AlertTriangle, Plus, Trash2, FileCheck, Phone, MapPin, Upload, CheckCircle, Pencil } from 'lucide-react'
 import { apiFetch, formatCOP, formatDate, EstadoBadge } from './helpers'
 
 const TIPOS_DOCUMENTO = ['SOAT', 'TECNOMECANICA', 'TARJETA_PROPIEDAD', 'SEGURO', 'POLIZA_TODO_RIESGO', 'CONTRATO', 'OTRO']
@@ -65,6 +65,13 @@ export function FichaTecnicaVehiculo({ vehiculoId, onClose }: { vehiculoId: stri
   const [docForm, setDocForm] = useState<any>({
     tipo: 'SOAT', numero: '', fechaEmision: '', fechaVencimiento: '',
     entidadEmisora: '', archivoUrl: '', archivosExtra: [], notas: '',
+  })
+  // Estado para edición de documentos existentes (cuando se vencen o se reemplazan)
+  const [editDocModal, setEditDocModal] = useState(false)
+  const [editDocId, setEditDocId] = useState<string | null>(null)
+  const [editDocForm, setEditDocForm] = useState<any>({
+    tipo: '', numero: '', fechaEmision: '', fechaVencimiento: '',
+    entidadEmisora: '', archivoUrl: '', archivosExtra: [], estado: 'VIGENTE', notas: '',
   })
 
   const cargar = async () => {
@@ -223,6 +230,117 @@ export function FichaTecnicaVehiculo({ vehiculoId, onClose }: { vehiculoId: stri
       toast({ title: 'Documento agregado' })
       setDocModal(false)
       setDocForm({ tipo: 'SOAT', numero: '', fechaEmision: '', fechaVencimiento: '', entidadEmisora: '', archivoUrl: '', archivosExtra: [], notas: '' })
+      cargar()
+    } else {
+      toast({ title: 'Error', description: r.error, variant: 'destructive' })
+    }
+  }
+
+  // === Editar documento existente (cuando se vence o se reemplaza) ===
+  const abrirEdicionDoc = (doc: any) => {
+    setEditDocId(doc.id)
+    let archivosExtraInit: string[] = []
+    try {
+      if (doc.archivosExtra) archivosExtraInit = JSON.parse(doc.archivosExtra)
+    } catch {}
+    setEditDocForm({
+      tipo: doc.tipo || '',
+      numero: doc.numero || '',
+      fechaEmision: doc.fechaEmision ? doc.fechaEmision.split('T')[0] : '',
+      fechaVencimiento: doc.fechaVencimiento ? doc.fechaVencimiento.split('T')[0] : '',
+      entidadEmisora: doc.entidadEmisora || '',
+      archivoUrl: doc.archivoUrl || '',
+      archivosExtra: archivosExtraInit,
+      estado: doc.estado || 'VIGENTE',
+      notas: doc.notas || '',
+    })
+    setEditDocModal(true)
+  }
+
+  const handleEditDocMainUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    try {
+      let url: string
+      if (file.type === 'application/pdf') {
+        const reader = new FileReader()
+        url = await new Promise<string>((resolve) => {
+          reader.onload = (ev) => resolve(ev.target?.result as string)
+          reader.readAsDataURL(file)
+        })
+      } else {
+        url = await comprimirImagen(file)
+      }
+      setEditDocForm((prev: any) => ({ ...prev, archivoUrl: url }))
+      toast({ title: 'Foto principal actualizada' })
+    } catch (err: any) {
+      toast({ title: 'Error', description: err.message, variant: 'destructive' })
+    }
+    e.target.value = ''
+  }
+
+  const handleEditDocExtraUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    try {
+      let url: string
+      if (file.type === 'application/pdf') {
+        const reader = new FileReader()
+        url = await new Promise<string>((resolve) => {
+          reader.onload = (ev) => resolve(ev.target?.result as string)
+          reader.readAsDataURL(file)
+        })
+      } else {
+        url = await comprimirImagen(file)
+      }
+      setEditDocForm((prev: any) => ({
+        ...prev,
+        archivosExtra: [...(prev.archivosExtra || []), url],
+      }))
+      toast({ title: 'Foto adicional agregada' })
+    } catch (err: any) {
+      toast({ title: 'Error', description: err.message, variant: 'destructive' })
+    }
+    e.target.value = ''
+  }
+
+  const removeEditExtraFile = (idx: number) => {
+    setEditDocForm((prev: any) => ({
+      ...prev,
+      archivosExtra: (prev.archivosExtra || []).filter((_: any, i: number) => i !== idx),
+    }))
+  }
+
+  const guardarEdicionDoc = async () => {
+    if (!editDocId) return
+    const r = await apiFetch(`/api/vehiculos/vehiculos/${vehiculoId}/documentos/${editDocId}`, {
+      method: 'PATCH',
+      body: JSON.stringify({
+        numero: editDocForm.numero,
+        fechaEmision: editDocForm.fechaEmision || null,
+        fechaVencimiento: editDocForm.fechaVencimiento || null,
+        entidadEmisora: editDocForm.entidadEmisora,
+        archivoUrl: editDocForm.archivoUrl,
+        archivosExtra: editDocForm.archivosExtra || [],
+        estado: editDocForm.estado,
+        notas: editDocForm.notas,
+      }),
+    })
+    if (r.success) {
+      toast({ title: 'Documento actualizado', description: 'Los cambios se guardaron correctamente' })
+      setEditDocModal(false)
+      setEditDocId(null)
+      cargar()
+    } else {
+      toast({ title: 'Error', description: r.error, variant: 'destructive' })
+    }
+  }
+
+  const eliminarDoc = async (docId: string, tipo: string) => {
+    if (!confirm(`¿Eliminar el documento ${tipo}? Esta acción no se puede deshacer.`)) return
+    const r = await apiFetch(`/api/vehiculos/vehiculos/${vehiculoId}/documentos/${docId}`, { method: 'DELETE' })
+    if (r.success) {
+      toast({ title: 'Documento eliminado' })
       cargar()
     } else {
       toast({ title: 'Error', description: r.error, variant: 'destructive' })
@@ -424,11 +542,21 @@ export function FichaTecnicaVehiculo({ vehiculoId, onClose }: { vehiculoId: stri
                 <Card key={d.id}><CardContent className="p-3">
                   <div className="flex justify-between items-start">
                     <div className="flex-1">
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <span className="font-medium">{d.tipo}</span>
                         <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium border ${COLORES_DOC[d.estado] || COLORES_DOC.VIGENTE}`}>
                           {d.estado}
                         </span>
+                        {d.diasParaVencer !== null && d.diasParaVencer !== undefined && d.diasParaVencer < 0 && (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-800 border border-red-300">
+                            VENCIDO
+                          </span>
+                        )}
+                        {d.diasParaVencer !== null && d.diasParaVencer !== undefined && d.diasParaVencer >= 0 && d.diasParaVencer < 15 && (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-yellow-100 text-yellow-800 border border-yellow-300">
+                            POR VENCER
+                          </span>
+                        )}
                       </div>
                       {d.numero && <div className="text-xs text-muted-foreground mt-1">N° {d.numero}</div>}
                       {d.entidadEmisora && <div className="text-xs">{d.entidadEmisora}</div>}
@@ -453,6 +581,26 @@ export function FichaTecnicaVehiculo({ vehiculoId, onClose }: { vehiculoId: stri
                           </pre>
                         </details>
                       )}
+                    </div>
+                    {/* Botones de acción: editar y eliminar */}
+                    <div className="flex flex-col gap-1 ml-2">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => abrirEdicionDoc(d)}
+                        title="Actualizar documento (cuando se vence o se reemplaza)"
+                      >
+                        <Pencil className="w-3 h-3" />
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => eliminarDoc(d.id, d.tipo)}
+                        className="text-red-600 hover:bg-red-50"
+                        title="Eliminar documento"
+                      >
+                        <Trash2 className="w-3 h-3" />
+                      </Button>
                     </div>
                   </div>
                   {/* Galería de fotos del documento (foto principal + extras) */}
@@ -833,6 +981,145 @@ export function FichaTecnicaVehiculo({ vehiculoId, onClose }: { vehiculoId: stri
           <DialogFooter>
             <Button variant="outline" onClick={() => setDocModal(false)}>Cancelar</Button>
             <Button onClick={guardarDoc}>Agregar</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* === Modal editar documento existente === */}
+      <Dialog open={editDocModal} onOpenChange={setEditDocModal}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Actualizar documento</DialogTitle>
+            <p className="text-xs text-muted-foreground">
+              Usa este formulario cuando el documento se haya vencido o reemplazado por uno nuevo.
+              Puedes actualizar la foto, las fechas, el número de póliza/certificado, las notas, etc.
+            </p>
+          </DialogHeader>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <Label>Tipo</Label>
+              <Select value={editDocForm.tipo} onValueChange={v => setEditDocForm({ ...editDocForm, tipo: v })}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {TIPOS_DOCUMENTO.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label>Número / Póliza</Label>
+              <Input value={editDocForm.numero} onChange={e => setEditDocForm({ ...editDocForm, numero: e.target.value })} />
+            </div>
+            <div>
+              <Label>Fecha emisión</Label>
+              <Input type="date" value={editDocForm.fechaEmision} onChange={e => setEditDocForm({ ...editDocForm, fechaEmision: e.target.value })} />
+            </div>
+            <div>
+              <Label>Fecha vencimiento</Label>
+              <Input type="date" value={editDocForm.fechaVencimiento} onChange={e => setEditDocForm({ ...editDocForm, fechaVencimiento: e.target.value })} />
+            </div>
+            <div>
+              <Label>Estado</Label>
+              <Select value={editDocForm.estado} onValueChange={v => setEditDocForm({ ...editDocForm, estado: v })}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="VIGENTE">VIGENTE</SelectItem>
+                  <SelectItem value="POR_VENCER">POR_VENCER</SelectItem>
+                  <SelectItem value="VENCIDO">VENCIDO</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label>Entidad emisora</Label>
+              <Input value={editDocForm.entidadEmisora} onChange={e => setEditDocForm({ ...editDocForm, entidadEmisora: e.target.value })}
+                placeholder="Aseguradora, taller autorizado, CDA..." />
+            </div>
+            <div className="col-span-2">
+              <Label>Foto principal del documento (frente)</Label>
+              <p className="text-xs text-muted-foreground mb-2">
+                Sube la nueva foto del documento cuando lo reemplaces por uno nuevo.
+              </p>
+              <div className="flex items-center gap-2 flex-wrap">
+                <input
+                  type="file"
+                  accept="image/*,application/pdf"
+                  capture="environment"
+                  onChange={handleEditDocMainUpload}
+                  className="hidden"
+                  id="file-edit-doc-archivo"
+                />
+                <Button type="button" variant="outline" size="sm" onClick={() => document.getElementById('file-edit-doc-archivo')?.click()}>
+                  <Upload className="w-4 h-4 mr-1" /> Reemplazar foto principal
+                </Button>
+                {editDocForm.archivoUrl && <CheckCircle className="w-4 h-4 text-green-600" />}
+              </div>
+              {editDocForm.archivoUrl && (
+                editDocForm.archivoUrl.startsWith('data:image') || editDocForm.archivoUrl.startsWith('/') || editDocForm.archivoUrl.startsWith('http') ? (
+                  <img src={editDocForm.archivoUrl} alt="Foto principal" className="mt-2 max-h-32 object-contain border rounded" />
+                ) : editDocForm.archivoUrl.startsWith('data:application/pdf') ? (
+                  <div className="mt-2 p-2 bg-blue-50 rounded text-xs text-blue-800 flex items-center gap-1">
+                    <FileCheck className="w-3 h-3" /> PDF cargado
+                  </div>
+                ) : null
+              )}
+            </div>
+            <div className="col-span-2">
+              <Label>Fotos adicionales (reverso, detalles)</Label>
+              <p className="text-xs text-muted-foreground mb-2">
+                Puedes agregar o quitar fotos adicionales del documento.
+              </p>
+              <div className="flex items-center gap-2 flex-wrap">
+                <input
+                  type="file"
+                  accept="image/*,application/pdf"
+                  capture="environment"
+                  onChange={handleEditDocExtraUpload}
+                  className="hidden"
+                  id="file-edit-doc-extra"
+                />
+                <Button type="button" variant="outline" size="sm" onClick={() => document.getElementById('file-edit-doc-extra')?.click()}>
+                  <Upload className="w-4 h-4 mr-1" /> Agregar foto adicional
+                </Button>
+                {(editDocForm.archivosExtra?.length || 0) > 0 && (
+                  <span className="text-xs text-green-700 font-medium">
+                    {editDocForm.archivosExtra.length} foto(s) adicional(es)
+                  </span>
+                )}
+              </div>
+              {(editDocForm.archivosExtra?.length || 0) > 0 && (
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {editDocForm.archivosExtra.map((url: string, idx: number) => (
+                    <div key={idx} className="relative">
+                      {url.startsWith('data:image') || url.startsWith('/') || url.startsWith('http') ? (
+                        <img src={url} alt={`Extra ${idx + 1}`} className="w-20 h-20 object-cover border rounded" />
+                      ) : (
+                        <div className="w-20 h-20 flex items-center justify-center bg-blue-50 rounded border">
+                          <FileCheck className="w-5 h-5 text-blue-600" />
+                        </div>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => removeEditExtraFile(idx)}
+                        className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full w-4 h-4 flex items-center justify-center text-[10px] hover:bg-red-600"
+                        title="Quitar"
+                      >×</button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+            <div className="col-span-2">
+              <Label>Notas / detalles del certificado</Label>
+              <Textarea
+                value={editDocForm.notas}
+                onChange={e => setEditDocForm({ ...editDocForm, notas: e.target.value })}
+                rows={6}
+                placeholder="Datos del certificado, coberturas, tomador, etc."
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditDocModal(false)}>Cancelar</Button>
+            <Button onClick={guardarEdicionDoc}>Guardar cambios</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

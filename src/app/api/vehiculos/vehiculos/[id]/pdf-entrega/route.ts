@@ -3,7 +3,7 @@
 // Genera un PDF completo con:
 //  1. Ficha técnica del vehículo (datos + foto)
 //  2. Inventario completo (con fotos de items)
-//  3. Documentos del vehículo (con fotos)
+//  3. Documentos del vehículo (con fotos, incluyendo archivosExtra)
 //  4. Datos del conductor asignado (con foto/selfie)
 //  5. Contrato vigente
 //  6. Mantenimientos realizados
@@ -16,8 +16,10 @@ import { db } from '@/lib/db'
 import PDFDocument from 'pdfkit'
 import https from 'https'
 import http from 'http'
+import fs from 'fs'
+import path from 'path'
 
-// === Helper: obtener imagen desde URL o base64 ===
+// === Helper: obtener imagen desde URL, base64, ruta relativa o ruta pública local ===
 // Redimensiona imágenes grandes para evitar quedarse sin memoria en Vercel serverless
 import { createCanvas, loadImage } from 'canvas'
 
@@ -30,10 +32,10 @@ async function getImage(source: string): Promise<Buffer | null> {
       const base64Data = source.split(',')[1]
       if (!base64Data) return null
       const originalBuf = Buffer.from(base64Data, 'base64')
-      
+
       // Si la imagen es menor a 80KB, usarla directamente
       if (originalBuf.length <= 80000) return originalBuf
-      
+
       // Si es mayor a 80KB, redimensionar para reducir tamaño
       try {
         const img = await loadImage(originalBuf)
@@ -49,6 +51,58 @@ async function getImage(source: string): Promise<Buffer | null> {
         // Si no se puede redimensionar, no incluir la imagen
         return null
       }
+    } catch {
+      return null
+    }
+  }
+
+  // Si es ruta relativa (/vehiculos/documentos/...), resolver como:
+  //   1. archivo público local en `public${source}` (cuando corre en dev/server con filesystem)
+  //   2. si no existe, descargar desde el dominio de producción https://jsadr.com.co${source}
+  if (source.startsWith('/') && !source.startsWith('//')) {
+    // Intentar lectura local primero (funciona en dev y en Vercel standalone output)
+    try {
+      const localPath = path.join(process.cwd(), 'public', source)
+      if (fs.existsSync(localPath)) {
+        const buf = fs.readFileSync(localPath)
+        if (buf.length > 200000) {
+          // Si es muy grande, redimensionar
+          try {
+            const img = await loadImage(buf)
+            const maxDim = 500
+            let w = img.width, h = img.height
+            if (w > maxDim) { h = Math.round(h * maxDim / w); w = maxDim }
+            const canvas = createCanvas(w, h)
+            const ctx = canvas.getContext('2d')
+            ctx.drawImage(img, 0, 0, w, h)
+            return canvas.toBuffer('image/jpeg', { quality: 0.6 })
+          } catch {
+            return null
+          }
+        }
+        return buf
+      }
+    } catch {}
+
+    // Si no existe localmente, descargar desde producción
+    const prodUrl = `https://jsadr.com.co${source}`
+    try {
+      return await new Promise<Buffer | null>((resolve) => {
+        const req = https.get(prodUrl, { timeout: 8000 }, (res) => {
+          if (res.statusCode !== 200) { resolve(null); return }
+          const chunks: Buffer[] = []
+          let totalSize = 0
+          res.on('data', c => {
+            totalSize += c.length
+            if (totalSize > 200000) { resolve(null); req.destroy(); return }
+            chunks.push(c)
+          })
+          res.on('end', () => resolve(Buffer.concat(chunks)))
+          res.on('error', () => resolve(null))
+        })
+        req.on('error', () => resolve(null))
+        req.on('timeout', () => { req.destroy(); resolve(null) })
+      })
     } catch {
       return null
     }
@@ -323,12 +377,56 @@ export async function GET(
             y += 14
           }
 
-          // Foto del documento (si tiene)
-          if (d.archivoUrl) {
-            if (y > doc.page.height - 250) { doc.addPage(); y = 50 }
-            const docImgHeight = await addImageToPDF(doc, d.archivoUrl, 50, y, ancho - 100, 200)
-            if (docImgHeight > 0) {
-              y += docImgHeight + 10
+          // === Recopilar TODAS las fotos del documento: principal + extras ===
+          let archivosExtra: string[] = []
+          try {
+            if (d.archivosExtra) archivosExtra = JSON.parse(d.archivosExtra)
+          } catch {}
+          const todasLasFotos = [
+            ...(d.archivoUrl ? [d.archivoUrl] : []),
+            ...archivosExtra,
+          ]
+
+          // Fotos del documento (galería: foto principal + extras)
+          if (todasLasFotos.length > 0) {
+            // Calcular layout en grid: 2 fotos por fila, cada una ~250px de ancho
+            const fotoW = Math.min(250, (ancho - 30) / 2) // 2 fotos por fila con gap
+            const fotoH = 150
+            const gap = 10
+            let colIdx = 0
+            for (let i = 0; i < todasLasFotos.length; i++) {
+              const url = todasLasFotos[i]
+              // Si es nueva fila, verificar espacio y agregar página si necesario
+              if (colIdx === 0) {
+                if (y > doc.page.height - (fotoH + 30)) { doc.addPage(); y = 50 }
+              }
+              const x = 50 + colIdx * (fotoW + gap)
+              // Etiqueta
+              doc.fillColor('#1e3a8a').fontSize(8).font('Helvetica-Bold')
+              const label = i === 0 ? 'Foto principal' : i === 1 ? 'Foto adicional 1' : `Foto adicional ${i}`
+              doc.text(label, x, y, { width: fotoW })
+              // Imagen
+              const imgY = y + 12
+              const docImgHeight = await addImageToPDF(doc, url, x, imgY, fotoW, fotoH)
+              if (docImgHeight > 0) {
+                // Marco
+                doc.rect(x, imgY, fotoW, fotoH).stroke('#ccc')
+              } else {
+                doc.rect(x, imgY, fotoW, fotoH).stroke('#fbbf24')
+                doc.fillColor('#92400e').fontSize(8).font('Helvetica-Oblique')
+                doc.text('[Foto no disponible]', x + 10, imgY + fotoH / 2, { width: fotoW - 20, align: 'center' })
+                doc.fillColor('#000')
+              }
+              colIdx++
+              // Si ya complete una fila de 2, bajar
+              if (colIdx >= 2) {
+                colIdx = 0
+                y += fotoH + 25
+              }
+            }
+            // Si quedaron fotos en la última fila parcial, avanzar y
+            if (colIdx > 0) {
+              y += fotoH + 25
             }
           }
           y += 10
