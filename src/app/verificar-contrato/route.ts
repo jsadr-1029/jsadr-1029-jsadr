@@ -10,7 +10,7 @@ import crypto from 'crypto'
 
 export const dynamic = 'force-dynamic'
 
-async function GET(req: NextRequest) {
+export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url)
   const hash = searchParams.get('hash')?.toUpperCase().trim()
   const contrato = searchParams.get('contrato')?.trim()
@@ -84,7 +84,9 @@ async function GET(req: NextRequest) {
   })
 }
 
-export { GET as POST }
+export async function POST(req: NextRequest) {
+  return GET(req)
+}
 
 function renderHTML(title: string, body: string, type: 'success' | 'error' | 'warning' = 'success') {
   const color = type === 'success' ? '#16a34a' : type === 'warning' ? '#ca8a04' : '#dc2626'
