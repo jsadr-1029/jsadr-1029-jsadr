@@ -5062,3 +5062,76 @@ Stage Summary:
 - ✅ Firmas electronicas con TODOS los datos: 3 fotos + firma manuscrita + IP + UA + OTP + hash + fecha/hora
 - ✅ Acta de devolucion incluida para diligenciar al finalizar el contrato
 - ✅ Cumplimiento legal: Ley 527/1999 y Decreto 1074/2015 (firma electronica en Colombia)
+
+---
+Task ID: 51-cuenta-bancolombia-cedula-propietario
+Agent: Super Z (main)
+Task: Especificar en el contrato que los pagos se realizan a la cuenta de ahorros Bancolombia 42061620839 titular Johan Sebastian Alvarez Del Rio, y corregir la cedula del arrendador (1214731649) que estaba errada en algunas partes.
+
+Work Log:
+
+1. CUENTA DE PAGO OBLIGATORIA - BANCOLOMBIA:
+   Se agregó la información de la cuenta en TRES lugares del PDF:
+
+   a) CLÁUSULA 9 (Canon de arrendamiento) - tabla ampliada:
+      - Banco receptor: Bancolombia
+      - Tipo de cuenta: Cuenta de Ahorros
+      - Número de cuenta: 42061620839
+      - Titular de la cuenta: Johan Sebastian Alvarez Del Rio
+      - C.C. del titular: 1214731649
+
+   b) CLÁUSULA 10 (renombrada a 'CUENTA DE PAGO Y REGISTRO DE PAGOS'):
+      - Texto legal que EXIGE todos los pagos a esta cuenta específica
+      - Tabla con todos los datos de la cuenta
+      - Concepto sugerido: '<numeroContrato> - Canon arrendamiento'
+      - Clarifica que NO se aceptan pagos en efectivo, a terceros o
+        a cuentas distintas, salvo autorización escrita del arrendador
+      - Obligación del conductor de conservar y enviar comprobante
+
+   c) ANEXO 3 (Registro de pagos):
+      - Tabla 'CUENTA DE PAGO OBLIGATORIA' con todos los datos
+      - Recordatorio: 'Pagos solo de lunes a sábado (no domingos).
+        Vence el sábado de cada semana.'
+
+2. SANITY CHECK CÉDULA DEL PROPIETARIO:
+   La cédula correcta de Johan Sebastian Alvarez Del Rio es 1214731649
+   (10 dígitos). Algunos registros tenían 12147316499 (11 dígitos = la
+   cédula del conductor Sebastian, no del propietario).
+
+   a) EN descargar/route.ts:
+      - Antes de renderizar el PDF, verifica propietarioCedula
+      - Si NO es exactamente '1214731649', la fuerza a ese valor
+      - Si propietarioNombre está vacío o es 'Sebastian', lo corrige a
+        'Johan Sebastian Alvarez Del Rio'
+      - Log de advertencia en consola cuando se corrige
+
+   b) EN generar/route.ts:
+      - Antes de crear nuevo documento, si propietarioCedula viene del body
+        y no es '1214731649', la corrige
+      - Si propietarioNombre es null o 'Sebastian', lo corrige
+      - Garantiza que NUEVOS contratos siempre se creen con cédula correcta
+
+3. CONSTANTES DEFINIDAS:
+   En descargar/route.ts:
+   - CUENTA_PAGO_BANCO = 'Bancolombia'
+   - CUENTA_PAGO_TIPO = 'Cuenta de Ahorros'
+   - CUENTA_PAGO_NUMERO = '42061620839'
+   - CUENTA_PAGO_TITULAR = 'Johan Sebastian Alvarez Del Rio'
+   - CUENTA_PAGO_TITULAR_CC = '1214731649'
+
+4. SCRIPT DE CORRECCIÓN DE DB:
+   scripts/fix-cedula-propietario-neon.cjs
+   - Lista todos los ContratoDocumentoVehiculo
+   - Identifica los que tienen cédula incorrecta
+   - Los actualiza a 'Johan Sebastian Alvarez Del Rio' / '1214731649'
+   - Listo para correr manualmente cuando se tenga acceso a Neon URL
+
+Stage Summary:
+- ✅ GitHub: commit d409575 en origin/main
+- ✅ Vercel: deploy automático activado
+- ✅ Cuenta Bancolombia 42061620839 aparece en Cláusula 9, Cláusula 10 y Anexo 3
+- ✅ Cláusula 10 renombrada y ampliada con obligatoriedad legal de la cuenta
+- ✅ Cédula del propietario SIEMPRE se muestra como 1214731649 en el PDF
+- ✅ Sanity check en descargar y en generar (cubren DB errónea + nuevos contratos)
+- ✅ Script de corrección de DB Neon creado para uso futuro
+- ✅ TypeScript compila sin errores
