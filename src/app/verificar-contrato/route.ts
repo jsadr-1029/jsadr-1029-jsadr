@@ -67,12 +67,17 @@ export async function GET(req: NextRequest) {
     })
   }
 
+  // Aplicar saneamiento para mostrar los datos correctos del arrendador
+  // (igual que en el PDF): Johan Sebastian Alvarez Del Rio, CC 1214731649
+  const propNombreMostrar = 'Johan Sebastian Alvarez Del Rio'
+  const propCedulaMostrar = '1214731649'
+
   const html = renderHTML('✓ Contrato verificado', `
     <p>El contrato <strong>${encontrado.numeroContrato}</strong> ha sido verificado exitosamente en el sistema de Jsadr.</p>
     <table class="info-table">
       <tr><td>Número de contrato</td><td><strong>${encontrado.numeroContrato}</strong></td></tr>
       <tr><td>Vehículo</td><td>${encontrado.vehiculoMarca} ${encontrado.vehiculoModelo} - Placa <strong>${encontrado.vehiculoPlaca}</strong></td></tr>
-      <tr><td>Arrendador</td><td>${encontrado.propietarioNombre} (CC ${encontrado.propietarioCedula})</td></tr>
+      <tr><td>Arrendador</td><td>${propNombreMostrar} (CC ${propCedulaMostrar})</td></tr>
       <tr><td>Arrendatario</td><td>${encontrado.conductorNombre} (CC ${encontrado.conductorCedula})</td></tr>
       <tr><td>Fecha de inicio</td><td>${encontrado.fechaInicio?.toLocaleDateString('es-CO') || '—'}</td></tr>
       <tr><td>Fecha de terminación</td><td>${encontrado.fechaFin?.toLocaleDateString('es-CO') || 'Indefinida'}</td></tr>
