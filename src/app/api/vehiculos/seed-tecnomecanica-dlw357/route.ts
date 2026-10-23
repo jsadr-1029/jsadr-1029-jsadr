@@ -4,7 +4,8 @@
 // con todos los datos del certificado expedido por
 // C.D.A. Ciudad Bonita S.A.S. el 19/12/2025.
 //
-// Endpoint temporal: ejecutar UNA sola vez para poblar la DB.
+// Endpoint público temporal: ejecutar UNA sola vez para poblar la DB.
+// Marcado como público en src/proxy.ts para poder llamarlo vía curl.
 // Se puede borrar después.
 // =====================================================
 import { NextRequest, NextResponse } from 'next/server'
