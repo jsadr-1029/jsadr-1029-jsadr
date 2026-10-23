@@ -32,11 +32,17 @@ export async function GET(req: NextRequest) {
   // Buscar documento cuyo hash coincida
   let encontrado: any = null
   for (const doc of documentos) {
-    // Reconstruir el hash igual que en descargar/route.ts
+    // Aplicar el mismo sanity check que en descargar/route.ts:
+    // forzar la cédula del propietario a '1214731649' (Johan Sebastian Alvarez Del Rio)
+    // Esto es necesario porque en la DB puede haber cédulas erradas, pero el PDF
+    // siempre muestra la cédula correcta, así que el hash se calcula con ese valor.
+    const propCedulaFinal = '1214731649'
+
+    // Reconstruir el hash IGUAL que en descargar/route.ts
     const datosFirma = [
       doc.numeroContrato,
       doc.vehiculoPlaca,
-      doc.propietarioCedula,
+      propCedulaFinal,  // ← cédula saneada (igual que en el PDF)
       doc.conductorCedula,
       doc.fechaInicio?.toISOString() || '',
       doc.fechaFin?.toISOString() || '',
