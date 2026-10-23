@@ -4998,3 +4998,67 @@ Stage Summary:
 - ✅ Contador de días visible en portal conductor
 - ✅ Fecha inicio, fecha fin, días transcurridos, días restantes
 - ✅ Barra de progreso visual
+
+---
+Task ID: 50-inventario-contrato-firmas
+Agent: Super Z (main)
+Task: Integrar el inventario completo del vehiculo al PDF del contrato legal, manteniendo las firmas electronicas con todos sus detalles de verificacion.
+
+Work Log:
+
+1. CONSULTA DE INVENTARIO DESDE DB:
+   - Modificada la query prisma en /api/vehiculos/contrato-legal/descargar
+   - Se hace include de contratoVehiculo para obtener vehiculoId
+   - Se consulta InventarioVehiculo.findMany con where vehiculoId
+   - Ordenado por createdAt (orden de alta en sistema)
+
+2. ANEXO 1 AMPLIADO (Acta de entrega + inventario + devolucion):
+   - Datos del vehiculo: marca, modelo, anio, placa, color, VIN, motor, kilometraje, combustible
+   - Tabla de INVENTARIO FISICO con 7 columnas:
+     * # | ITEM | DESCRIPCION | CANT. | ESTADO ENTREGA | ESTADO DEVOLUCION | OBSERVACIONES
+   - Si hay items en DB: filas reales con nombre, descripcion, cantidad, estado (NUEVO/BUENO/REGULAR/MALO)
+   - Si no hay items: 10 filas vacias numeradas para diligenciar a mano
+   - Tabla de ESTADO GENERAL con 15 componentes:
+     * Carroceria, parabrisas, espejos, llantas, repuesto, gato, interior,
+       tablero, AC, audio, cinturones, airbags, luces, frenos, documentos
+   - Constancia de entrega con doble casilla para firma del conductor y propietario
+   - ACTA DE DEVOLUCION al final con campos en blanco (fecha, km, estado, faltantes)
+
+3. FIRMAS ELECTRONICAS AMPLIADAS:
+   - Capitulo XII renombrado: 'ACEPTACION Y FIRMA ELECTRONICA'
+   - Referencia legal: Ley 527 de 1999 + Decreto 1074 de 2015 (firma electronica valida)
+   - Para CADA firma (conductor y propietario):
+     * Banner azul 'FIRMA ELECTRONICA - EL ARRENDATARIO/ARRENDADOR'
+     * 3 miniaturas en cuadricula: cedula frente, cedula reverso, selfie con cedula
+     * Marco visual con borde #ccc alrededor de cada foto
+     * Firma manuscrita digitalizada con linea de firma debajo
+     * Marco con leyenda '[Firma no registrada]' si falta
+     * Tabla 'Datos de verificacion de la firma electronica':
+       - Nombre completo del firmante
+       - Documento de identidad (C.C.)
+       - Fecha Y HORA de firma (con timestamp completo)
+       - Direccion IP de origen
+       - Dispositivo / User-Agent (navegador y SO del firmante)
+       - Validacion OTP por correo (VERIFICADA / No verificada)
+       - Hash OTP truncado a 16 chars (auditoria criptografica)
+       - Metodo de firma: 'OTP + biometria (cedula y selfie)'
+
+4. ESTRUCTURA FINAL DEL PDF:
+   - Encabezado + identificacion del contrato
+   - Capitulos I-XI (clausulas 1-42)
+   - Capitulo XII: Firmas electronicas con todos los detalles
+   - Anexo 1: Acta de entrega + inventario completo + estado general + firmas de entrega + acta de devolucion
+   - Anexo 2: Conductores autorizados
+   - Anexo 3: Registro de pagos
+   - Anexo 4: Control de vencimiento
+   - Footer con numero de contrato, placa y paginacion en cada hoja
+
+Stage Summary:
+- ✅ GitHub: commit 70d43fd en origin/main
+- ✅ Vercel: deploy automatico activado
+- ✅ Inventario del vehiculo integrado al PDF (tabla detallada con 7 columnas)
+- ✅ Si el vehiculo no tiene inventario cargado, muestra 10 filas vacias para diligenciar manualmente
+- ✅ Estado general con 15 componentes del vehiculo
+- ✅ Firmas electronicas con TODOS los datos: 3 fotos + firma manuscrita + IP + UA + OTP + hash + fecha/hora
+- ✅ Acta de devolucion incluida para diligenciar al finalizar el contrato
+- ✅ Cumplimiento legal: Ley 527/1999 y Decreto 1074/2015 (firma electronica en Colombia)
