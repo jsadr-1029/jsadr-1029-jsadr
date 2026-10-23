@@ -454,29 +454,40 @@ export function FichaTecnicaVehiculo({ vehiculoId, onClose }: { vehiculoId: stri
                         </details>
                       )}
                     </div>
-                    {todasLasFotos.length > 0 && (
-                      <div className="flex flex-col gap-1 ml-2">
-                        {todasLasFotos.map((url: string, idx: number) => (
-                          <a key={idx} href={url} target="_blank" rel="noopener noreferrer" title={`Abrir foto ${idx + 1}`}>
-                            {url.startsWith('data:image') || url.startsWith('http') || url.startsWith('/') ? (
-                              <img
-                                src={url}
-                                alt={`Foto ${idx + 1}`}
-                                className="w-16 h-16 object-cover rounded border hover:scale-105 transition-transform cursor-pointer"
-                              />
-                            ) : url.startsWith('data:application/pdf') ? (
-                              <Button size="sm" variant="outline" className="w-16 h-16 flex flex-col items-center justify-center p-0">
-                                <FileCheck className="w-4 h-4" />
-                                <span className="text-[9px]">PDF {idx + 1}</span>
-                              </Button>
-                            ) : (
-                              <Button size="sm" variant="outline"><FileCheck className="w-3 h-3" /></Button>
-                            )}
-                          </a>
-                        ))}
-                      </div>
-                    )}
                   </div>
+                  {/* Galería de fotos del documento (foto principal + extras) */}
+                  {todasLasFotos.length > 0 && (
+                    <div className="mt-3 flex flex-wrap gap-2 pt-2 border-t border-dashed">
+                      {todasLasFotos.map((url: string, idx: number) => (
+                        <a
+                          key={idx}
+                          href={url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          title={`Abrir foto ${idx + 1} en grande`}
+                          className="relative group block"
+                        >
+                          {url.startsWith('data:image') || url.startsWith('http') || url.startsWith('/') ? (
+                            <img
+                              src={url}
+                              alt={`Foto ${idx + 1}`}
+                              className="w-24 h-24 object-cover rounded-md border-2 border-slate-200 group-hover:border-blue-500 group-hover:scale-105 transition-all cursor-pointer"
+                            />
+                          ) : url.startsWith('data:application/pdf') ? (
+                            <div className="w-24 h-24 flex flex-col items-center justify-center bg-blue-50 rounded-md border-2 border-blue-200">
+                              <FileCheck className="w-6 h-6 text-blue-600" />
+                              <span className="text-[9px] text-blue-700 mt-1">PDF {idx + 1}</span>
+                            </div>
+                          ) : (
+                            <Button size="sm" variant="outline"><FileCheck className="w-3 h-3" /></Button>
+                          )}
+                          <span className="absolute bottom-0 left-0 right-0 bg-black/60 text-white text-[9px] px-1 py-0.5 rounded-b-md text-center">
+                            {idx === 0 ? 'Frente' : idx === 1 ? 'Reverso' : `Foto ${idx + 1}`}
+                          </span>
+                        </a>
+                      ))}
+                    </div>
+                  )}
                 </CardContent></Card>
                 )
               })}
