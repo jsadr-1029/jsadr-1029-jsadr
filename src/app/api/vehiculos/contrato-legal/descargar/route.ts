@@ -178,16 +178,16 @@ export async function GET(req: NextRequest) {
 
     // Helpers
     // Calcula la altura necesaria para una celda de texto con wrapping
-    function calcularAlturaTexto(texto: string, maxWidth: number, fontSize: number): number {
+    function calcularAlturaTexto(texto: string, maxWidth: number, fontSize: number, font: 'Helvetica' | 'Helvetica-Bold' = 'Helvetica', align: 'left' | 'center' | 'right' | 'justify' = 'left'): number {
       if (!texto) return 14
-      doc.fontSize(fontSize).font('Helvetica')
-      const h = doc.heightOfString(texto, { width: maxWidth })
+      doc.fontSize(fontSize).font(font)
+      const h = doc.heightOfString(texto, { width: maxWidth, align })
       return Math.max(h + 6, 14) // mínimo 14px
     }
 
     function tablaSimple(titulos: string[], filas: (string | null)[][], colWidths: number[]) {
-      // Calcular altura de la cabecera
-      const headerH = 16
+      // Calcular altura de la cabecera (puede tener wrapping)
+      const headerH = calcularAlturaTexto(titulos.join(' '), Math.min(...colWidths) - 4, 7, 'Helvetica-Bold', 'center')
       // Primero asegurar espacio para la cabecera + primera fila
       ensureSpace(headerH + 20)
       let x = 50
@@ -220,36 +220,51 @@ export async function GET(req: NextRequest) {
       }
       y += 10
     }
+
     function clausula(titulo: string, contenido: string) {
-      // Calcular altura real del contenido
-      const titleH = titulo ? 14 : 0
+      // Calcular altura real del título y del contenido (pueden tener wrapping)
+      let titleH = 0
+      if (titulo) {
+        doc.fillColor('#1e3a8a').fontSize(10).font('Helvetica-Bold')
+        titleH = doc.heightOfString(titulo, { width: ancho }) + 4
+      }
+      doc.fillColor('#000').fontSize(8).font('Helvetica')
       const contentH = doc.heightOfString(contenido, { width: ancho, align: 'justify' })
       const needed = titleH + contentH + 12
+      // Si el contenido es muy grande, asegurar al menos el título + primera parte
       ensureSpace(Math.min(needed, 100))
       if (titulo) {
         doc.fillColor('#1e3a8a').fontSize(10).font('Helvetica-Bold')
         doc.text(titulo, 50, y, { width: ancho })
-        y += 14
+        y += titleH
       }
       doc.fillColor('#000').fontSize(8).font('Helvetica')
       doc.text(contenido, 50, y, { width: ancho, align: 'justify' })
       y += contentH + 8
     }
+
     function capitulo(titulo: string) {
-      // Un capítulo necesita: padding superior (8) + título (20) = 28 px mínimo
-      ensureSpace(50)
+      // Calcular altura real del título (puede tener wrapping si es largo)
+      doc.fillColor('#1e3a8a').fontSize(12).font('Helvetica-Bold')
+      const titleH = doc.heightOfString(titulo, { width: ancho }) + 12
+      ensureSpace(Math.max(titleH, 50))
       y += 8
       doc.fillColor('#1e3a8a').fontSize(12).font('Helvetica-Bold')
       doc.text(titulo, 50, y, { width: ancho })
-      y += 22
+      y += titleH
     }
 
     // === ENCABEZADO ===
     doc.fillColor('#1e3a8a').fontSize(16).font('Helvetica-Bold')
-    doc.text('CONTRATO DE ARRENDAMIENTO DE VEHÍCULO AUTOMOTOR', 50, y, { align: 'center', width: ancho }); y += 20
-    doc.fontSize(10).font('Helvetica'); doc.text('Uso, administración, obligaciones, garantías, control y restitución', 50, y, { align: 'center', width: ancho }); y += 15
-    doc.fillColor('#666').fontSize(9); doc.text('DOCUMENTO CONTRACTUAL PRIVADO', 50, y, { align: 'center', width: ancho }); y += 12
-    doc.text(`Código documental: CAV-001  |  Versión: 2.0  |  Lugar: Medellín  |  Fecha: ${fmtFechaCorta(new Date())}`, 50, y, { align: 'center', width: ancho }); y += 20
+    doc.text('CONTRATO DE ARRENDAMIENTO DE VEHÍCULO AUTOMOTOR', 50, y, { align: 'center', width: ancho })
+    y += doc.heightOfString('CONTRATO DE ARRENDAMIENTO DE VEHÍCULO AUTOMOTOR', { width: ancho, align: 'center' }) + 4
+    doc.fontSize(10).font('Helvetica'); doc.text('Uso, administración, obligaciones, garantías, control y restitución', 50, y, { align: 'center', width: ancho })
+    y += doc.heightOfString('Uso, administración, obligaciones, garantías, control y restitución', { width: ancho, align: 'center' }) + 4
+    doc.fillColor('#666').fontSize(9); doc.text('DOCUMENTO CONTRACTUAL PRIVADO', 50, y, { align: 'center', width: ancho })
+    y += doc.heightOfString('DOCUMENTO CONTRACTUAL PRIVADO', { width: ancho, align: 'center' }) + 4
+    const txtCodigo = `Código documental: CAV-001  |  Versión: 2.0  |  Lugar: Medellín  |  Fecha: ${fmtFechaCorta(new Date())}`
+    doc.text(txtCodigo, 50, y, { align: 'center', width: ancho })
+    y += doc.heightOfString(txtCodigo, { width: ancho, align: 'center' }) + 8
 
     // === TABLA IDENTIFICACIÓN ===
     tablaSimple(['IDENTIFICACIÓN DEL CONTRATO', 'INFORMACIÓN'], [
@@ -314,7 +329,7 @@ export async function GET(req: NextRequest) {
 
     clausula('CLÁUSULA 5. OBJETO', `EL ARRENDADOR concede a EL ARRENDATARIO el uso temporal del vehículo individualizado en la cláusula anterior, a cambio del canon acordado y bajo las condiciones establecidas en este documento.\n\nEL ARRENDATARIO recibe el derecho de uso dentro de los límites pactados, sin adquirir la propiedad del vehículo ni facultad para venderlo, gravarlo, subarrendarlo, cederlo o disponer de él como dueño.\n\nLa entrega del vehículo se acreditará mediante el acta de entrega correspondiente.`)
 
-    clausula('CLÁUSULA 6. DESTINACIÓN AUTORIZADA', `EL ARRENDATARIO se obliga a destinar el vehículo exclusivamente para uso personal y particular, conforme a su naturaleza y a las disposiciones legales vigentes.\n\nEn consecuencia, queda prohibido utilizarlo para actividades comerciales, transporte remunerado de pasajeros o mercancías, o cualquier otra finalidad diferente de la aquí autorizada, salvo autorización previa, expresa y escrita de EL ARRENDADOR, siempre que el uso autorizado sea legalmente procedente.\n\nEl incumplimiento de esta obligación constituirá incumplimiento contractual y facultará a EL ARRENDADOR para ejercer los mecanismos contractuales y legales que correspondan.`)
+    clausula('CLÁUSULA 6. DESTINACIÓN AUTORIZADA', `EL ARRENDATARIO se obliga a destinar el vehículo exclusivamente para uso personal y particular, conforme a su naturaleza y a las disposiciones legales vigentes.\n\nEn consecuencia, queda prohibido utilizarlo para actividades comerciales, transporte remunerado de pasajeros o mercancías, o cualquier otra finalidad diferente de la aquí autorizada, salvo autorización previa, expresa y escrita de EL ARRENDADOR, siempre que el uso autorizado sea legalmente procedente.\n\nQueda expresamente prohibido emplear el vehículo para cualquier uso ilegal, transporte de contrabando, sustancias ilícitas, mercancías no declaradas, o cualquier actividad que afecte o pueda generar conflicto conforme al marco legal colombiano. EL ARRENDATARIO asume única y exclusivamente la responsabilidad por el incumplimiento de esta prohibición, incluyendo las consecuencias civiles, administrativas y penales que se deriven.\n\nEl incumplimiento de esta obligación constituirá incumplimiento contractual grave, facultará a EL ARRENDADOR para ejercer los mecanismos contractuales y legales que correspondan, y podrá generar la terminación inmediata del presente contrato y la restitución inmediata del vehículo, sin perjuicio de las demás acciones legales aplicables.`)
 
     clausula('CLÁUSULA 7. PLAZO, ENTREGA MATERIAL, RENOVACIÓN Y ABANDONO', `El plazo del presente contrato, las condiciones de entrega, renovación y abandono se regulan de la siguiente manera:`)
     tablaSimple(['CONDICIÓN', 'INFORMACIÓN'], [
@@ -479,7 +494,9 @@ export async function GET(req: NextRequest) {
 
     ensureSpace(60)
     doc.fillColor('#000').fontSize(9).font('Helvetica-Bold')
-    doc.text(`Ciudad: Medellín    Fecha de suscripción: ${fmtFechaCorta(new Date())}`, 50, y, { width: ancho }); y += 25
+    const txtCiudad = `Ciudad: Medellín    Fecha de suscripción: ${fmtFechaCorta(new Date())}`
+    doc.text(txtCiudad, 50, y, { width: ancho })
+    y += doc.heightOfString(txtCiudad, { width: ancho }) + 8
 
     // === FIRMA ELECTRÓNICA DEL CONDUCTOR ===
     ensureSpace(280) // banner + 3 fotos + firma + tabla verificación
@@ -590,9 +607,12 @@ export async function GET(req: NextRequest) {
     // === INVENTARIO DETALLADO ===
     ensureSpace(80)
     doc.fillColor('#1e3a8a').fontSize(11).font('Helvetica-Bold')
-    doc.text('INVENTARIO FÍSICO DEL VEHÍCULO', 50, y, { width: ancho }); y += 18
+    doc.text('INVENTARIO FÍSICO DEL VEHÍCULO', 50, y, { width: ancho })
+    y += doc.heightOfString('INVENTARIO FÍSICO DEL VEHÍCULO', { width: ancho }) + 6
     doc.fillColor('#666').fontSize(8).font('Helvetica-Oblique')
-    doc.text(`Total de ítems registrados: ${d.inventario.length}`, 50, y, { width: ancho }); y += 12
+    const txtTotal = `Total de ítems registrados: ${d.inventario.length}`
+    doc.text(txtTotal, 50, y, { width: ancho })
+    y += doc.heightOfString(txtTotal, { width: ancho }) + 4
 
     // Cabecera del inventario con columnas: N° / Item / Descripción / Cant. / Estado Entrega / Estado Devolución / Obs.
     const invColW = [25, 110, 150, 35, 65, 65, ancho - 460]
@@ -660,7 +680,8 @@ export async function GET(req: NextRequest) {
     // Estado general del vehículo (exterior, interior, llantas, etc.)
     ensureSpace(180)
     doc.fillColor('#1e3a8a').fontSize(10).font('Helvetica-Bold')
-    doc.text('ESTADO GENERAL DEL VEHÍCULO AL ENTREGAR', 50, y, { width: ancho }); y += 16
+    doc.text('ESTADO GENERAL DEL VEHÍCULO AL ENTREGAR', 50, y, { width: ancho })
+    y += doc.heightOfString('ESTADO GENERAL DEL VEHÍCULO AL ENTREGAR', { width: ancho }) + 6
     tablaSimple(['COMPONENTE', 'ESTADO ENTREGA', 'OBSERVACIONES'], [
       ['Carrocería / pintura exterior', '—', ''],
       ['Parabrisas y cristales', '—', ''],
@@ -683,9 +704,12 @@ export async function GET(req: NextRequest) {
     // === FIRMAS DEL ACTA DE ENTREGA ===
     ensureSpace(140)
     doc.fillColor('#1e3a8a').fontSize(10).font('Helvetica-Bold')
-    doc.text('CONSTANCIA DE ENTREGA Y RECEPCIÓN DEL VEHÍCULO', 50, y, { width: ancho }); y += 18
+    doc.text('CONSTANCIA DE ENTREGA Y RECEPCIÓN DEL VEHÍCULO', 50, y, { width: ancho })
+    y += doc.heightOfString('CONSTANCIA DE ENTREGA Y RECEPCIÓN DEL VEHÍCULO', { width: ancho }) + 6
     doc.fillColor('#000').fontSize(8).font('Helvetica')
-    doc.text('Las partes declaran que el vehículo se entregó en el estado arriba descrito, junto con todos los ítems del inventario. Cualquier discrepancia deberá registrarse por escrito en el momento de la entrega.', 50, y, { width: ancho, align: 'justify' }); y += 24
+    const txtConstancia = 'Las partes declaran que el vehículo se entregó en el estado arriba descrito, junto con todos los ítems del inventario. Cualquier discrepancia deberá registrarse por escrito en el momento de la entrega.'
+    doc.text(txtConstancia, 50, y, { width: ancho, align: 'justify' })
+    y += doc.heightOfString(txtConstancia, { width: ancho, align: 'justify' }) + 8
 
     // Doble columna: Conductor / Propietario
     const colWFirma = Math.floor((ancho - 20) / 2)
