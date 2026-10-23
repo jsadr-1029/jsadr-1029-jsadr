@@ -5552,3 +5552,65 @@ Stage Summary:
 - ✅ Texto superpuesto corregido en tablas y sello
 - ✅ Altura dinámica en todas las tablas (tablaSimple + inventario)
 - ✅ Sello de seguridad sin 'continued: true'
+
+---
+Task ID: 58-texto-superpuesto-clausula8-clausula6
+Agent: Super Z (main)
+Task: Corregir texto superpuesto en el contrato (visto en imagen, específicamente en Cláusula 8). Revisar todo el contrato palabra por palabra y asegurar que quede bien ubicado sin afectar texto. Ampliar Cláusula 6 con prohibición de uso ilegal, contrabando y responsabilidad del arrendatario.
+
+Work Log:
+
+1. ANÁLISIS VISUAL DE LA IMAGEN (VLM):
+   - Identificado: superposición en CLÁUSULA 8 'ESTADO DEL VEHÍCULO'
+   - Causa raíz: la función clausula() usaba y += 14 fijo después del título,
+     sin calcular la altura real del título con doc.heightOfString()
+   - Cuando el título era más largo de una línea, PDFKit lo continuaba pero
+     no avanzaba y, por lo tanto, el contenido se dibujaba encima del título
+
+2. CORRECCIÓN APLICADA A TODOS LOS HELPERS:
+   - clausula(): ahora calcula titleH real con doc.heightOfString(titulo)
+     para títulos con wrapping (multi-línea)
+   - capitulo(): ahora calcula titleH real también
+   - Nueva función calcularAlturaTexto() con parámetros font y align
+   - tablaSimple(): cabecera con altura dinámica (puede tener wrapping)
+   - Tabla inventario: filas con altura dinámica (mín 22px)
+
+3. CORRECCIÓN EN OTROS LUGARES CON AVANCE FIJO:
+   - Encabezado del contrato: 4 textos ahora usan doc.heightOfString()
+     (CONTRATO DE ARRENDAMIENTO, Uso y administración, DOCUMENTO CONTRACTUAL,
+     Código documental CAV-001)
+   - Ciudad/Fecha de suscripción: ahora usa heightOfString (antes 25 fijo)
+   - Sección INVENTARIO FÍSICO DEL VEHÍCULO: título y subtítulo con altura real
+   - Sección ESTADO GENERAL DEL VEHÍCULO AL ENTREGAR: título con altura real
+   - Sección CONSTANCIA DE ENTREGA Y RECEPCIÓN: título y párrafo con altura real
+
+4. CLÁUSULA 6 AMPLIADA (DESTINACIÓN AUTORIZADA):
+   Texto anterior mantenido + nuevas prohibiciones:
+   - Queda expresamente prohibido emplear el vehículo para:
+     * Cualquier uso ilegal
+     * Transporte de contrabando
+     * Sustancias ilícitas
+     * Mercancías no declaradas
+     * Cualquier actividad que afecte o pueda generar conflicto
+       conforme al marco legal colombiano
+   - EL ARRENDATARIO asume ÚNICA y EXCLUSIVAMENTE la responsabilidad
+     por incumplimiento (civiles, administrativas y penales)
+   - Incumplimiento contractual grave
+   - Facultad al arrendador para ejercer mecanismos contractuales y legales
+   - Terminación INMEDIATA del contrato
+   - Restitución INMEDIATA del vehículo
+   - Sin perjuicio de demás acciones legales aplicables
+
+VERIFICACIÓN POST-DEPLOY:
+- GET /api/vehiculos/seed-tecnomecanica-dlw357?key=...: success=true
+- TypeScript compila sin errores
+- Deploy completado
+
+Stage Summary:
+- ✅ GitHub: commit 6852694 en origin/main
+- ✅ Vercel: deploy completado
+- ✅ Texto superpuesto corregido en clausula 8 (causa raíz identificada via VLM)
+- ✅ Revisión completa de TODO el contrato para evitar superposición
+- ✅ Todos los helpers (clausula, capitulo, tablaSimple) usan heightOfString()
+- ✅ Cláusula 6 ampliada con prohibición uso ilegal y contrabando
+- ✅ Responsabilidad única del arrendatario + terminación inmediata
