@@ -5479,3 +5479,76 @@ Stage Summary:
 - ✅ Datos del arrendador fijos (Cl 92 44A 34, 3235949510)
 - ✅ Cláusula 7 ampliada con 6 subcláusulas (renovación, otro sí, preaviso, multa)
 - ✅ Fechas del contrato: 24/10/2026 → 23/01/2027
+
+---
+Task ID: 57-clausula6-texto-superpuesto
+Agent: Super Z (main)
+Task: Reorganizar la cláusula 6 del contrato con el nuevo texto de destinación autorizada. Adicional, organizar el contrato porque hay texto remontado uno encima de otro afectando la presentación del documento.
+
+Work Log:
+
+1. CLÁUSULA 6 ACTUALIZADA (DESTINACIÓN AUTORIZADA):
+   Texto nuevo reemplaza al anterior:
+   'EL ARRENDATARIO se obliga a destinar el vehículo exclusivamente
+   para uso personal y particular, conforme a su naturaleza y a las
+   disposiciones legales vigentes.
+   
+   En consecuencia, queda prohibido utilizarlo para actividades
+   comerciales, transporte remunerado de pasajeros o mercancías, o
+   cualquier otra finalidad diferente de la aquí autorizada, salvo
+   autorización previa, expresa y escrita de EL ARRENDADOR, siempre
+   que el uso autorizado sea legalmente procedente.
+   
+   El incumplimiento de esta obligación constituirá incumplimiento
+   contractual y facultará a EL ARRENDADOR para ejercer los mecanismos
+   contractuales y legales que correspondan.'
+
+2. CORRECCIÓN TEXTO SUPERPUESTO EN EL PDF:
+   Causa raíz identificada:
+   - La función tablaSimple usaba altura FIJA de 14px por fila
+   - Cuando el texto de una celda (URL, hash, descripción larga) no
+     cabía en 14px, PDFKit lo continuaba en la siguiente línea pero
+     sin avanzar y, por lo tanto, la siguiente fila se dibujaba encima
+   - Lo mismo ocurría en la tabla de inventario (fila 22-26px fija)
+   - El sello de seguridad usaba 'continued: true' que causaba
+     superposición cuando el texto excedía el ancho disponible
+   
+   Soluciones aplicadas:
+   
+   a) Nueva función calcularAlturaTexto(texto, maxWidth, fontSize):
+      - Usa doc.heightOfString() de PDFKit para medir altura real
+      - Retorna max(alturaCalculada + 6, 14) — mínimo 14px
+   
+   b) tablaSimple reescrita:
+      - Header ampliado a 16px (antes 14px)
+      - Para cada fila, calcula la altura máxima entre todas las celdas
+      - rowH = max(16, max(calcularAlturaTexto(celda_i) for i in cols))
+      - ensureSpace(rowH + 4) antes de dibujar la fila
+      - Ya no se superponen textos largos
+   
+   c) Tabla de inventario:
+      - Header ampliado a 24px (antes 22px)
+      - Filas con altura dinámica (mín 22px)
+      - Usa calcularAlturaTexto() igual que tablaSimple
+      - Filas vacías para diligenciar a mano ahora son 22px (antes 20px)
+   
+   d) Sello de seguridad:
+      - Eliminado el uso de 'continued: true' en todas las llamadas
+      - Cada dato del sello ahora en su propia línea con posición y fija
+      - Estado de firmas: cada uno en su propia línea
+        (antes: 'Firma conductor: X    Firma propietario: Y' en una línea)
+        (ahora: dos líneas separadas con posición y fija)
+      - Esto elimina la superposición cuando los textos son largos
+
+VERIFICACIÓN POST-DEPLOY:
+- GET /api/vehiculos/seed-tecnomecanica-dlw357?key=...: success=true
+- TypeScript compila sin errores
+- Deploy completado
+
+Stage Summary:
+- ✅ GitHub: commit 592243d en origin/main
+- ✅ Vercel: deploy completado
+- ✅ Cláusula 6 reorganizada con texto de destinación autorizada
+- ✅ Texto superpuesto corregido en tablas y sello
+- ✅ Altura dinámica en todas las tablas (tablaSimple + inventario)
+- ✅ Sello de seguridad sin 'continued: true'
