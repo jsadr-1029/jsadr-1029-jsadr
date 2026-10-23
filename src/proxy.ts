@@ -230,7 +230,11 @@ export async function proxy(req: NextRequest) {
   const isApiPath = pathname.startsWith('/api/')
 
   // === 1.4. CSRF CHECK — Validar Origin en mutaciones ===
-  if (isApiPath && !isCSRFSafe(req)) {
+  // Excepción: los endpoints públicos (que usan token en body/query, no cookies)
+  // no requieren validación CSRF porque no hay sesión que secuestrar.
+  // Esto es necesario porque algunos clientes de correo móvil no envían Origin/Referer
+  // al abrir enlaces externos, lo que bloquearía la firma electrónica.
+  if (isApiPath && !isPublicEndpoint(pathname) && !isCSRFSafe(req)) {
     return NextResponse.json(
       { success: false, error: 'Origin no permitido (CSRF check)', code: 'CSRF_DENIED' },
       { status: 403 }
