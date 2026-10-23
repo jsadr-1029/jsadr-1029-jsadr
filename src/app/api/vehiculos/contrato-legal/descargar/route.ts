@@ -84,19 +84,28 @@ export async function GET(req: NextRequest) {
         })
       : []
 
-    // === Sanity check de cédula del propietario ===
-    // La cédula correcta de Johan Sebastian Alvarez Del Rio es 1214731649 (10 dígitos).
-    // Algunos registros antiguos pueden tener 12147316499 (11 dígitos = cédula del conductor Sebastian).
-    // Forzamos el valor correcto al renderizar el PDF.
+    // === Sanity check de cédula y nombre del propietario ===
+    // El propietario correcto es Johan Sebastian Alvarez Del Rio, CC 1214731649 (10 dígitos).
+    // Algunos registros antiguos pueden tener:
+    //   - cédula errada 12147316499 (11 dígitos = cédula del conductor Sebastian)
+    //   - nombre "Jsadr Arrendamientos SAS" u otras variantes comerciales
+    // Forzamos SIEMPRE los valores correctos al renderizar el PDF.
+    const NOMBRE_PROPIETARIO_CORRECTO = 'Johan Sebastian Alvarez Del Rio'
+    const CEDULA_PROPIETARIO_CORRECTA = '1214731649'
+
     let propCedulaFinal = (documento.propietarioCedula || '').trim()
-    if (propCedulaFinal !== '1214731649') {
-      // Si viene la cédula errada (12147316499) o cualquier otra distinta, corregir
-      console.warn(`[contrato-legal/descargar] Cédula propietario incorrecta en DB: "${documento.propietarioCedula}". Forzando a 1214731649.`)
-      propCedulaFinal = '1214731649'
+    if (propCedulaFinal !== CEDULA_PROPIETARIO_CORRECTA) {
+      console.warn(`[contrato-legal/descargar] Cédula propietario incorrecta en DB: "${documento.propietarioCedula}". Forzando a ${CEDULA_PROPIETARIO_CORRECTA}.`)
+      propCedulaFinal = CEDULA_PROPIETARIO_CORRECTA
     }
-    let propNombreFinal = (documento.propietarioNombre || '').trim()
-    if (!propNombreFinal || propNombreFinal.toLowerCase() === 'sebastian') {
-      propNombreFinal = 'Johan Sebastian Alvarez Del Rio'
+
+    // Nombre: forzar el correcto SIEMPRE. La razón: aunque venga "Sebastian",
+    // "Jsadr Arrendamientos SAS", o cualquier otro valor comercial, debe
+    // mostrarse el nombre real de la persona natural arrendadora.
+    let propNombreRaw = (documento.propietarioNombre || '').trim()
+    let propNombreFinal = NOMBRE_PROPIETARIO_CORRECTO
+    if (propNombreRaw !== NOMBRE_PROPIETARIO_CORRECTO) {
+      console.warn(`[contrato-legal/descargar] Nombre propietario en DB: "${propNombreRaw}". Forzando a "${NOMBRE_PROPIETARIO_CORRECTO}".`)
     }
 
     // === Cuenta de pago obligatoria ===
@@ -129,31 +138,53 @@ export async function GET(req: NextRequest) {
     const buffers: Buffer[] = []
     doc.on('data', b => buffers.push(b))
     const ancho = doc.page.width - 100
+    const PAGE_HEIGHT = doc.page.height
+    const MARGIN_BOTTOM = 50 // margen inferior reservado (footer)
+    const MARGIN_TOP = 50
     let y = 50
+
+    // === Helpers de paginación ===
+    // ensureSpace(needed): si no hay 'needed' px disponibles antes del margen
+    // inferior, salta a una nueva página. Solo cuando es estrictamente necesario,
+    // para evitar hojas en blanco por saltos prematuros.
+    function ensureSpace(needed: number) {
+      const available = PAGE_HEIGHT - MARGIN_BOTTOM - y
+      if (available < needed) {
+        doc.addPage()
+        y = MARGIN_TOP
+      }
+    }
 
     // Helpers
     function tablaSimple(titulos: string[], filas: (string | null)[][], colWidths: number[]) {
-      if (y > doc.page.height - 80) { doc.addPage(); y = 50 }
+      // Cabecera (14 px) + filas (14 px c/u) + padding (10 px)
+      const totalNeeded = 14 + filas.length * 14 + 10
+      ensureSpace(Math.min(totalNeeded, 80))
       let x = 50
       doc.fillColor('#1e3a8a')
       for (let i = 0; i < titulos.length; i++) { doc.rect(x, y, colWidths[i], 14).fill('#1e3a8a'); doc.fillColor('#fff').fontSize(7).font('Helvetica-Bold'); doc.text(titulos[i], x + 2, y + 4, { width: colWidths[i] - 4 }); x += colWidths[i] }
       y += 14
       for (const fila of filas) {
         x = 50
-        if (y > doc.page.height - 40) { doc.addPage(); y = 50 }
+        ensureSpace(28) // una fila + margen
         for (let i = 0; i < fila.length; i++) { doc.rect(x, y, colWidths[i], 14).stroke('#ccc'); doc.fillColor('#000').fontSize(7).font('Helvetica'); doc.text(fila[i] || '—', x + 2, y + 4, { width: colWidths[i] - 4 }); x += colWidths[i] }
         y += 14
       }
       y += 10
     }
     function clausula(titulo: string, contenido: string) {
-      if (y > doc.page.height - 80) { doc.addPage(); y = 50 }
+      // Calcular altura real del contenido
+      const titleH = titulo ? 14 : 0
+      const contentH = doc.heightOfString(contenido, { width: ancho, align: 'justify' })
+      const needed = titleH + contentH + 12
+      ensureSpace(Math.min(needed, 100))
       if (titulo) { doc.fillColor('#1e3a8a').fontSize(10).font('Helvetica-Bold'); doc.text(titulo, 50, y, { width: ancho }); y += 14 }
-      doc.fillColor('#000').fontSize(8).font('Helvetica'); doc.text(contenido, 50, y, { width: ancho, align: 'justify' }); y += doc.heightOfString(contenido, { width: ancho, align: 'justify' }) + 8
+      doc.fillColor('#000').fontSize(8).font('Helvetica'); doc.text(contenido, 50, y, { width: ancho, align: 'justify' }); y += contentH + 8
     }
     function capitulo(titulo: string) {
-      if (y > doc.page.height - 80) { doc.addPage(); y = 50 }
-      y += 10; doc.fillColor('#1e3a8a').fontSize(12).font('Helvetica-Bold'); doc.text(titulo, 50, y, { width: ancho }); y += 20
+      // Un capítulo necesita: padding superior (8) + título (20) = 28 px mínimo
+      ensureSpace(50)
+      y += 8; doc.fillColor('#1e3a8a').fontSize(12).font('Helvetica-Bold'); doc.text(titulo, 50, y, { width: ancho }); y += 22
     }
 
     // === ENCABEZADO ===
@@ -373,12 +404,12 @@ export async function GET(req: NextRequest) {
     capitulo('CAPÍTULO XII. ACEPTACIÓN Y FIRMA ELECTRÓNICA')
     clausula('', `Las partes manifiestan que:\n1. Han leído y comprendido el contenido del contrato.\n2. Han tenido oportunidad de solicitar aclaraciones.\n3. Los espacios relativos a las condiciones económicas y esenciales han sido diligenciados.\n4. Los anexos relacionados corresponden a los documentos que efectivamente se incorporan, incluyendo el inventario físico del vehículo.\n5. Firman electrónicamente de forma libre, voluntaria y consciente, sin perjuicio de los derechos y controles previstos por la ley.\n6. Aceptan que la firma electrónica aquí contenida produce los mismos efectos jurídicos que la firma manuscrita, conforme a la Ley 527 de 1999 y el Decreto 1074 de 2015.`)
 
-    if (y > doc.page.height - 60) { doc.addPage(); y = 50 }
+    ensureSpace(60)
     doc.fillColor('#000').fontSize(9).font('Helvetica-Bold')
     doc.text(`Ciudad: Medellín    Fecha de suscripción: ${fmtFechaCorta(new Date())}`, 50, y, { width: ancho }); y += 25
 
     // === FIRMA ELECTRÓNICA DEL CONDUCTOR ===
-    if (y > doc.page.height - 280) { doc.addPage(); y = 50 }
+    ensureSpace(280) // banner + 3 fotos + firma + tabla verificación
     doc.fillColor('#fff').rect(50, y, ancho, 18).fill('#1e3a8a')
     doc.fillColor('#fff').fontSize(10).font('Helvetica-Bold'); doc.text('FIRMA ELECTRÓNICA — EL ARRENDATARIO (CONDUCTOR)', 55, y + 4); y += 22
 
@@ -424,7 +455,7 @@ export async function GET(req: NextRequest) {
     y += 8
 
     // === FIRMA ELECTRÓNICA DEL PROPIETARIO ===
-    if (y > doc.page.height - 280) { doc.addPage(); y = 50 }
+    ensureSpace(280)
     doc.fillColor('#fff').rect(50, y, ancho, 18).fill('#1e3a8a')
     doc.fillColor('#fff').fontSize(10).font('Helvetica-Bold'); doc.text('FIRMA ELECTRÓNICA — EL ARRENDADOR (PROPIETARIO)', 55, y + 4); y += 22
 
@@ -484,7 +515,7 @@ export async function GET(req: NextRequest) {
     ], [200, ancho - 200])
 
     // === INVENTARIO DETALLADO ===
-    if (y > doc.page.height - 80) { doc.addPage(); y = 50 }
+    ensureSpace(80)
     doc.fillColor('#1e3a8a').fontSize(11).font('Helvetica-Bold')
     doc.text('INVENTARIO FÍSICO DEL VEHÍCULO', 50, y, { width: ancho }); y += 18
     doc.fillColor('#666').fontSize(8).font('Helvetica-Oblique')
@@ -493,7 +524,7 @@ export async function GET(req: NextRequest) {
     // Cabecera del inventario con columnas: N° / Item / Descripción / Cant. / Estado Entrega / Estado Devolución / Obs.
     const invColW = [25, 110, 150, 35, 65, 65, ancho - 460]
     const invHeaders = ['#', 'ÍTEM', 'DESCRIPCIÓN', 'CANT.', 'ESTADO ENTREGA', 'ESTADO DEVOLUCIÓN', 'OBSERVACIONES']
-    if (y > doc.page.height - 50) { doc.addPage(); y = 50 }
+    ensureSpace(50)
     let xi = 50
     doc.fillColor('#1e3a8a')
     for (let i = 0; i < invHeaders.length; i++) {
@@ -508,7 +539,7 @@ export async function GET(req: NextRequest) {
       // Si no hay inventario cargado, mostrar filas en blanco para diligenciar a mano
       const filasVacias = 10
       for (let r = 0; r < filasVacias; r++) {
-        if (y > doc.page.height - 30) { doc.addPage(); y = 50 }
+        ensureSpace(30)
         xi = 50
         for (let i = 0; i < invHeaders.length; i++) {
           doc.rect(xi, y, invColW[i], 20).stroke('#999')
@@ -524,7 +555,7 @@ export async function GET(req: NextRequest) {
     } else {
       // Filas reales con el inventario del vehículo
       for (const it of d.inventario) {
-        if (y > doc.page.height - 30) { doc.addPage(); y = 50 }
+        ensureSpace(30)
         xi = 50
         const rowH = 26
         const cells = [
@@ -548,7 +579,7 @@ export async function GET(req: NextRequest) {
     y += 10
 
     // Estado general del vehículo (exterior, interior, llantas, etc.)
-    if (y > doc.page.height - 180) { doc.addPage(); y = 50 }
+    ensureSpace(180)
     doc.fillColor('#1e3a8a').fontSize(10).font('Helvetica-Bold')
     doc.text('ESTADO GENERAL DEL VEHÍCULO AL ENTREGAR', 50, y, { width: ancho }); y += 16
     tablaSimple(['COMPONENTE', 'ESTADO ENTREGA', 'OBSERVACIONES'], [
@@ -571,7 +602,7 @@ export async function GET(req: NextRequest) {
     y += 8
 
     // === FIRMAS DEL ACTA DE ENTREGA ===
-    if (y > doc.page.height - 140) { doc.addPage(); y = 50 }
+    ensureSpace(140)
     doc.fillColor('#1e3a8a').fontSize(10).font('Helvetica-Bold')
     doc.text('CONSTANCIA DE ENTREGA Y RECEPCIÓN DEL VEHÍCULO', 50, y, { width: ancho }); y += 18
     doc.fillColor('#000').fontSize(8).font('Helvetica')
@@ -594,7 +625,7 @@ export async function GET(req: NextRequest) {
     y += 80
 
     // === SECCIÓN DE DEVOLUCIÓN (a diligenciar al finalizar) ===
-    if (y > doc.page.height - 120) { doc.addPage(); y = 50 }
+    ensureSpace(120)
     doc.fillColor('#fff').rect(50, y, ancho, 18).fill('#6b7280')
     doc.fillColor('#fff').fontSize(10).font('Helvetica-Bold'); doc.text('ACTA DE DEVOLUCIÓN (a diligenciar al finalizar el contrato)', 55, y + 4); y += 22
     tablaSimple(['DATO', 'INFORMACIÓN'], [

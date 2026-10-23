@@ -69,16 +69,20 @@ export async function POST(
     const propietarioToken = crypto.randomBytes(32).toString('hex')
     const tokenExpira = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) // 7 días
 
-    // Datos del propietario (valores por defecto del propietario real:
-    // Johan Sebastian Alvarez Del Rio, CC 1214731649 - 10 dígitos).
-    // Sanity check: si propietarioCedula viene mal del body (12147316499 u otro),
-    // se corrige automáticamente al valor correcto.
-    const propNombre = (!propietarioNombre || propietarioNombre.toLowerCase() === 'sebastian')
-      ? 'Johan Sebastian Alvarez Del Rio'
-      : propietarioNombre
-    const propCedula = (!propietarioCedula || propietarioCedula.trim() !== '1214731649')
-      ? '1214731649'
-      : propietarioCedula.trim()
+    // Datos del propietario (persona natural, NO empresa).
+    // Propietario real: Johan Sebastian Alvarez Del Rio, CC 1214731649.
+    // Sanity check estricto: si propietarioNombre viene del body con cualquier
+    // valor distinto al correcto (incluyendo "Jsadr Arrendamientos SAS",
+    // "Sebastian", vacío, etc.), se fuerza al valor correcto.
+    const NOMBRE_PROP_CORRECTO = 'Johan Sebastian Alvarez Del Rio'
+    const CEDULA_PROP_CORRECTA = '1214731649'
+
+    const propNombre = (typeof propietarioNombre === 'string' && propietarioNombre.trim() === NOMBRE_PROP_CORRECTO)
+      ? propietarioNombre.trim()
+      : NOMBRE_PROP_CORRECTO
+    const propCedula = (typeof propietarioCedula === 'string' && propietarioCedula.trim() === CEDULA_PROP_CORRECTA)
+      ? propietarioCedula.trim()
+      : CEDULA_PROP_CORRECTA
     const propTelefono = propietarioTelefono || '3235949510'
     const propEmail = propietarioEmail || 'jsadr23@outlook.com'
     const propDireccion = propietarioDireccion || 'Cl 92 44a 34'
