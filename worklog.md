@@ -5183,3 +5183,68 @@ Stage Summary:
 - ✅ Cédula siempre 1214731649, nombre siempre 'Johan Sebastian Alvarez Del Rio'
 - ✅ Hojas en blanco eliminadas (paginación precisa con ensureSpace)
 - ✅ TypeScript compila sin errores
+
+---
+Task ID: 53-tecnomecanica-DLW357
+Agent: Super Z (main)
+Task: Subir la información de la tecnomecánica del vehículo DLW357 con fotos y todos los datos del certificado, para que se muestre en la sección de documentación del módulo Gestión de Vehículos.
+
+Work Log:
+
+DATOS DEL CERTIFICADO TECNOMECÁNICA (DLW357):
+- Certificado N° 186227880
+- Entidad expedidora: C.D.A. Ciudad Bonita S.A.S. (NIT 900198494)
+- Número de acreditación: 10-OIN-078-001
+- Fecha emisión: 19/12/2025
+- Fecha vencimiento: 19/12/2026
+- Autoridad: Ministerio de Transporte de Colombia
+- Sistema: RUNT
+
+DATOS DEL VEHÍCULO (según certificado):
+- Placa: DLW357
+- Marca: Ford / Línea: Fiesta / Modelo: 2012
+- Clase: Automóvil / Servicio: Particular
+- Color: Blanco Oxford / Cilindraje: 1.597 c.c.
+- Combustible: Gasolina
+- Motor: CM133391 / Chasis: CM133391
+- VIN: 3FADP4BJ0CM133391
+- Propietario registrado en certificado: Humberto J. Guerrero G.
+
+FOTOS SUBIDAS:
+- /public/vehiculos/documentos/tecnomecanica-dlw357-frente.jpg (98 KB)
+- /public/vehiculos/documentos/tecnomecanica-dlw357-reverso.jpg (148 KB)
+- Servidas como archivos estáticos en https://jsadr.com.co/vehiculos/documentos/...
+
+CAMBIOS EN EL CÓDIGO:
+1. Esquema Prisma: agregado campo archivosExtra (String? JSON) en DocumentoVehiculo
+   - Permite almacenar múltiples URLs de fotos adicionales por documento
+   - Soporta reverso, detalles, etc., además de la foto principal
+2. API /api/vehiculos/vehiculos/[id]/documentos (POST): acepta archivosExtra array
+3. API /api/vehiculos/seed-tecnomecanica-dlw357 (POST/GET): endpoint temporal
+   que crea el registro completo con todas las fotos y datos del certificado
+4. Proxy (src/proxy.ts): marcado el endpoint seed como público
+5. UI FichaTecnicaVehiculo.tsx:
+   - Lista documentos: galería de miniaturas (foto principal + extras)
+   - Sección expandible 'Ver detalles del certificado' con todas las notas
+   - Modal agregar documento: permite subir N fotos adicionales con preview
+
+EJECUCIÓN EN PRODUCCIÓN (Neon DB):
+- Script scripts/seed-tecnomecanica-neon.cjs
+- ALTER TABLE DocumentoVehiculo ADD COLUMN archivosExtra TEXT
+- INSERT del documento TECNOMECANICA con todos los datos
+- UPDATE del vehículo DLW357: VIN corregido a 3FADP4BJ0CM133391
+
+VERIFICACIÓN POST-DEPLOY:
+- GET /api/vehiculos/seed-tecnomecanica-dlw357?key=SEED_TECNOMECANICA_2026
+  → success=true, documentoId=2467dc78-3e91-45fe-8b6d-346076395b7a
+- GET /vehiculos/documentos/tecnomecanica-dlw357-frente.jpg → HTTP 200
+- GET /vehiculos/documentos/tecnomecanica-dlw357-reverso.jpg → HTTP 200
+- Vehículo DLW357 (id cmvhlbz420001mg9u9w8sp358) actualizado correctamente
+
+Stage Summary:
+- ✅ GitHub: commit b65236a en origin/main
+- ✅ Neon DB: columna archivosExtra agregada + documento creado + vehículo actualizado
+- ✅ Vercel: deploy automático completado
+- ✅ Fotos accesibles públicamente en /vehiculos/documentos/
+- ✅ UI mejorada con soporte para múltiples fotos por documento
+- ✅ Tecnomecánica visible en módulo Gestión de Vehículos → Ficha técnica → Documentos
