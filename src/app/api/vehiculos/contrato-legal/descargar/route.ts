@@ -65,8 +65,24 @@ export async function GET(req: NextRequest) {
 
     const documento = await db.contratoDocumentoVehiculo.findFirst({
       where: { OR: [{ conductorToken: token }, { propietarioToken: token }] },
+      include: {
+        contratoVehiculo: {
+          select: {
+            vehiculoId: true,
+          },
+        },
+      },
     })
     if (!documento) return NextResponse.json({ success: false, error: 'Token inválido' }, { status: 404 })
+
+    // === Cargar inventario completo del vehículo ===
+    const vehiculoId = documento.contratoVehiculo?.vehiculoId
+    const inventarioItems = vehiculoId
+      ? await db.inventarioVehiculo.findMany({
+          where: { vehiculoId },
+          orderBy: [{ createdAt: 'asc' }],
+        })
+      : []
 
     const d = {
       numeroContrato: documento.numeroContrato,
@@ -74,8 +90,16 @@ export async function GET(req: NextRequest) {
       propietario: { nombre: documento.propietarioNombre, cedula: documento.propietarioCedula, telefono: documento.propietarioTelefono, email: documento.propietarioEmail, direccion: documento.propietarioDireccion },
       conductor: { nombre: documento.conductorNombre, cedula: documento.conductorCedula, telefono: documento.conductorTelefono, email: documento.conductorEmail, direccion: documento.conductorDireccion, licencia: documento.conductorLicencia, licenciaCat: documento.conductorLicenciaCat },
       terminos: { modalidadPago: documento.modalidadPago, tarifa: documento.tarifa, diasGracia: documento.diasGracia, multaDiaria: documento.multaDiaria, deposito: documento.deposito, fechaInicio: documento.fechaInicio, fechaFin: documento.fechaFin, descripcionVehiculo: documento.descripcionVehiculo },
-      firmaConductor: { fotoCedulaFrente: documento.conductorFotoCedulaFrente, fotoCedulaReverso: documento.conductorFotoCedulaReverso, fotoSelfie: documento.conductorFotoSelfie, firmaManuscrita: documento.conductorFirmaManuscrita, otpValidado: documento.conductorOtpValidado, fechaFirma: documento.conductorFechaFirma, ip: documento.conductorIp },
-      firmaPropietario: { fotoCedulaFrente: documento.propietarioFotoCedulaFrente, fotoCedulaReverso: documento.propietarioFotoCedulaReverso, fotoSelfie: documento.propietarioFotoSelfie, firmaManuscrita: documento.propietarioFirmaManuscrita, otpValidado: documento.propietarioOtpValidado, fechaFirma: documento.propietarioFechaFirma, ip: documento.propietarioIp },
+      firmaConductor: { fotoCedulaFrente: documento.conductorFotoCedulaFrente, fotoCedulaReverso: documento.conductorFotoCedulaReverso, fotoSelfie: documento.conductorFotoSelfie, firmaManuscrita: documento.conductorFirmaManuscrita, otpValidado: documento.conductorOtpValidado, otpHash: documento.conductorOtpHash, fechaFirma: documento.conductorFechaFirma, ip: documento.conductorIp, userAgent: documento.conductorUserAgent },
+      firmaPropietario: { fotoCedulaFrente: documento.propietarioFotoCedulaFrente, fotoCedulaReverso: documento.propietarioFotoCedulaReverso, fotoSelfie: documento.propietarioFotoSelfie, firmaManuscrita: documento.propietarioFirmaManuscrita, otpValidado: documento.propietarioOtpValidado, otpHash: documento.propietarioOtpHash, fechaFirma: documento.propietarioFechaFirma, ip: documento.propietarioIp, userAgent: documento.propietarioUserAgent },
+      inventario: inventarioItems.map((it, idx) => ({
+        n: idx + 1,
+        nombre: it.nombre,
+        descripcion: it.descripcion || '',
+        cantidad: it.cantidad,
+        estado: it.estado,
+        notas: it.notas || '',
+      })),
     }
 
     const doc = new PDFDocument({ size: 'LETTER', margins: { top: 50, bottom: 50, left: 50, right: 50 } })
@@ -309,44 +333,241 @@ export async function GET(req: NextRequest) {
 
     clausula('CLÁUSULA 42. LEGISLACIÓN Y SOLUCIÓN DE CONTROVERSIAS', `El contrato se rige por las leyes de la República de Colombia. Las partes procurarán resolver de buena fe las diferencias. Si no alcanzan un acuerdo, podrán acudir a los mecanismos de conciliación cuando procedan o a la autoridad judicial competente.`)
 
-    // ============ CAPÍTULO XII — FIRMAS ============
-    capitulo('CAPÍTULO XII. ACEPTACIÓN Y FIRMA')
-    clausula('', `Las partes manifiestan que:\n1. Han leído y comprendido el contenido del contrato.\n2. Han tenido oportunidad de solicitar aclaraciones.\n3. Los espacios relativos a las condiciones económicas y esenciales han sido diligenciados.\n4. Los anexos relacionados corresponden a los documentos que efectivamente se incorporan.\n5. Firman libremente, sin perjuicio de los derechos y controles previstos por la ley.`)
+    // ============ CAPÍTULO XII — FIRMAS ELECTRÓNICAS ============
+    capitulo('CAPÍTULO XII. ACEPTACIÓN Y FIRMA ELECTRÓNICA')
+    clausula('', `Las partes manifiestan que:\n1. Han leído y comprendido el contenido del contrato.\n2. Han tenido oportunidad de solicitar aclaraciones.\n3. Los espacios relativos a las condiciones económicas y esenciales han sido diligenciados.\n4. Los anexos relacionados corresponden a los documentos que efectivamente se incorporan, incluyendo el inventario físico del vehículo.\n5. Firman electrónicamente de forma libre, voluntaria y consciente, sin perjuicio de los derechos y controles previstos por la ley.\n6. Aceptan que la firma electrónica aquí contenida produce los mismos efectos jurídicos que la firma manuscrita, conforme a la Ley 527 de 1999 y el Decreto 1074 de 2015.`)
 
     if (y > doc.page.height - 60) { doc.addPage(); y = 50 }
     doc.fillColor('#000').fontSize(9).font('Helvetica-Bold')
-    doc.text(`Ciudad: Medellín    Fecha: ${fmtFechaCorta(new Date())}`, 50, y, { width: ancho }); y += 25
+    doc.text(`Ciudad: Medellín    Fecha de suscripción: ${fmtFechaCorta(new Date())}`, 50, y, { width: ancho }); y += 25
 
-    // === FIRMA CONDUCTOR ===
-    if (y > doc.page.height - 200) { doc.addPage(); y = 50 }
-    doc.fillColor('#1e3a8a').fontSize(10).font('Helvetica-Bold'); doc.text('EL ARRENDATARIO (CONDUCTOR)', 50, y); y += 18
-    const h1 = Math.max(await addImage(doc, d.firmaConductor.fotoCedulaFrente, 50, y, 150, 100), await addImage(doc, d.firmaConductor.fotoCedulaReverso, 210, y, 150, 100), await addImage(doc, d.firmaConductor.fotoSelfie, 370, y, 150, 100))
-    if (h1 > 0) y += h1 + 8
-    const h2 = await addImage(doc, d.firmaConductor.firmaManuscrita, 50, y, 250, 80)
-    if (h2 > 0) y += h2 + 5
-    doc.fillColor('#666').fontSize(7).font('Helvetica')
-    doc.text(`Nombre: ${d.conductor.nombre}    CC: ${d.conductor.cedula}    Fecha: ${d.firmaConductor.fechaFirma ? fmtFechaCorta(d.firmaConductor.fechaFirma) : '—'}`, 50, y); y += 10
-    doc.text(`IP: ${d.firmaConductor.ip || '—'}    OTP: ${d.firmaConductor.otpValidado ? 'Sí' : 'No'}`, 50, y); y += 20
+    // === FIRMA ELECTRÓNICA DEL CONDUCTOR ===
+    if (y > doc.page.height - 280) { doc.addPage(); y = 50 }
+    doc.fillColor('#fff').rect(50, y, ancho, 18).fill('#1e3a8a')
+    doc.fillColor('#fff').fontSize(10).font('Helvetica-Bold'); doc.text('FIRMA ELECTRÓNICA — EL ARRENDATARIO (CONDUCTOR)', 55, y + 4); y += 22
 
-    // === FIRMA PROPIETARIO ===
-    if (y > doc.page.height - 200) { doc.addPage(); y = 50 }
-    doc.fillColor('#1e3a8a').fontSize(10).font('Helvetica-Bold'); doc.text('EL ARRENDADOR (PROPIETARIO)', 50, y); y += 18
-    const h3 = Math.max(await addImage(doc, d.firmaPropietario.fotoCedulaFrente, 50, y, 150, 100), await addImage(doc, d.firmaPropietario.fotoCedulaReverso, 210, y, 150, 100), await addImage(doc, d.firmaPropietario.fotoSelfie, 370, y, 150, 100))
-    if (h3 > 0) y += h3 + 8
-    const h4 = await addImage(doc, d.firmaPropietario.firmaManuscrita, 50, y, 250, 80)
-    if (h4 > 0) y += h4 + 5
-    doc.fillColor('#666').fontSize(7).font('Helvetica')
-    doc.text(`Nombre: ${d.propietario.nombre}    Doc: ${d.propietario.cedula}    Fecha: ${d.firmaPropietario.fechaFirma ? fmtFechaCorta(d.firmaPropietario.fechaFirma) : '—'}`, 50, y); y += 10
-    doc.text(`IP: ${d.firmaPropietario.ip || '—'}    OTP: ${d.firmaPropietario.otpValidado ? 'Sí' : 'No'}`, 50, y); y += 20
+    // Documentos de identidad y selfie
+    doc.fillColor('#1e3a8a').fontSize(8).font('Helvetica-Bold'); doc.text('Documentos de verificación:', 50, y); y += 12
+    const colW = Math.floor((ancho - 20) / 3)
+    const labels = ['Cédula (frente)', 'Cédula (reverso)', 'Selfie con cédula']
+    const imgs = [d.firmaConductor.fotoCedulaFrente, d.firmaConductor.fotoCedulaReverso, d.firmaConductor.fotoSelfie]
+    let imgBlockH = 0
+    for (let i = 0; i < 3; i++) {
+      const x = 50 + i * (colW + 10)
+      doc.fillColor('#000').fontSize(7).font('Helvetica-Bold'); doc.text(labels[i], x, y, { width: colW })
+      const h = await addImage(doc, imgs[i], x, y + 10, colW, 90)
+      doc.fillColor('#999').fontSize(6).font('Helvetica'); doc.rect(x, y + 10, colW, 90).stroke('#ccc')
+      if (h > imgBlockH) imgBlockH = h
+    }
+    y += 10 + 90 + 14
 
-    // === ANEXOS ===
-    capitulo('ANEXO 1. ACTA DE ENTREGA, INVENTARIO Y DEVOLUCIÓN')
+    // Firma manuscrita
+    doc.fillColor('#1e3a8a').fontSize(8).font('Helvetica-Bold'); doc.text('Firma manuscrita digitalizada:', 50, y); y += 12
+    const fh = await addImage(doc, d.firmaConductor.firmaManuscrita, 50, y, 280, 70)
+    if (fh === 0) {
+      doc.rect(50, y, 280, 70).stroke('#999')
+      doc.fillColor('#999').fontSize(8).font('Helvetica-Oblique'); doc.text('[Firma no registrada]', 60, y + 30, { width: 260, align: 'center' })
+    }
+    // Línea de firma
+    doc.moveTo(50, y + 75).lineTo(330, y + 75).stroke('#000')
+    y += 80
+
+    // Datos de verificación electrónica
+    doc.fillColor('#1e3a8a').fontSize(8).font('Helvetica-Bold'); doc.text('Datos de verificación de la firma electrónica:', 50, y); y += 12
+    const otpConductor = d.firmaConductor.otpHash ? d.firmaConductor.otpHash.substring(0, 16) + '...' : '—'
+    tablaSimple(['CAMPO', 'VALOR'], [
+      ['Nombre completo del firmante', d.conductor.nombre],
+      ['Documento de identidad', `${d.conductor.cedula} (C.C.)`],
+      ['Fecha y hora de firma', d.firmaConductor.fechaFirma ? `${fmtFechaCorta(d.firmaConductor.fechaFirma)} ${new Date(d.firmaConductor.fechaFirma).toLocaleTimeString('es-CO')}` : '—'],
+      ['Dirección IP de origen', d.firmaConductor.ip || '—'],
+      ['Dispositivo / User-Agent', d.firmaConductor.userAgent || '—'],
+      ['Validación OTP por correo', d.firmaConductor.otpValidado ? 'VERIFICADA' : 'No verificada'],
+      ['Hash OTP (verificación)', otpConductor],
+      ['Método de firma', 'Firma electrónica con OTP + biometría (cédula y selfie)'],
+    ], [200, ancho - 200])
+    y += 8
+
+    // === FIRMA ELECTRÓNICA DEL PROPIETARIO ===
+    if (y > doc.page.height - 280) { doc.addPage(); y = 50 }
+    doc.fillColor('#fff').rect(50, y, ancho, 18).fill('#1e3a8a')
+    doc.fillColor('#fff').fontSize(10).font('Helvetica-Bold'); doc.text('FIRMA ELECTRÓNICA — EL ARRENDADOR (PROPIETARIO)', 55, y + 4); y += 22
+
+    doc.fillColor('#1e3a8a').fontSize(8).font('Helvetica-Bold'); doc.text('Documentos de verificación:', 50, y); y += 12
+    const labelsP = ['Cédula (frente)', 'Cédula (reverso)', 'Selfie con cédula']
+    const imgsP = [d.firmaPropietario.fotoCedulaFrente, d.firmaPropietario.fotoCedulaReverso, d.firmaPropietario.fotoSelfie]
+    let imgBlockHP = 0
+    for (let i = 0; i < 3; i++) {
+      const x = 50 + i * (colW + 10)
+      doc.fillColor('#000').fontSize(7).font('Helvetica-Bold'); doc.text(labelsP[i], x, y, { width: colW })
+      const h = await addImage(doc, imgsP[i], x, y + 10, colW, 90)
+      doc.fillColor('#999').fontSize(6).font('Helvetica'); doc.rect(x, y + 10, colW, 90).stroke('#ccc')
+      if (h > imgBlockHP) imgBlockHP = h
+    }
+    y += 10 + 90 + 14
+
+    doc.fillColor('#1e3a8a').fontSize(8).font('Helvetica-Bold'); doc.text('Firma manuscrita digitalizada:', 50, y); y += 12
+    const fhp = await addImage(doc, d.firmaPropietario.firmaManuscrita, 50, y, 280, 70)
+    if (fhp === 0) {
+      doc.rect(50, y, 280, 70).stroke('#999')
+      doc.fillColor('#999').fontSize(8).font('Helvetica-Oblique'); doc.text('[Firma no registrada]', 60, y + 30, { width: 260, align: 'center' })
+    }
+    doc.moveTo(50, y + 75).lineTo(330, y + 75).stroke('#000')
+    y += 80
+
+    doc.fillColor('#1e3a8a').fontSize(8).font('Helvetica-Bold'); doc.text('Datos de verificación de la firma electrónica:', 50, y); y += 12
+    const otpPropietario = d.firmaPropietario.otpHash ? d.firmaPropietario.otpHash.substring(0, 16) + '...' : '—'
+    tablaSimple(['CAMPO', 'VALOR'], [
+      ['Nombre completo del firmante', d.propietario.nombre],
+      ['Documento de identidad', `${d.propietario.cedula} (C.C.)`],
+      ['Fecha y hora de firma', d.firmaPropietario.fechaFirma ? `${fmtFechaCorta(d.firmaPropietario.fechaFirma)} ${new Date(d.firmaPropietario.fechaFirma).toLocaleTimeString('es-CO')}` : '—'],
+      ['Dirección IP de origen', d.firmaPropietario.ip || '—'],
+      ['Dispositivo / User-Agent', d.firmaPropietario.userAgent || '—'],
+      ['Validación OTP por correo', d.firmaPropietario.otpValidado ? 'VERIFICADA' : 'No verificada'],
+      ['Hash OTP (verificación)', otpPropietario],
+      ['Método de firma', 'Firma electrónica con OTP + biometría (cédula y selfie)'],
+    ], [200, ancho - 200])
+    y += 8
+
+    // === ANEXO 1: ACTA DE ENTREGA + INVENTARIO COMPLETO ===
+    capitulo('ANEXO 1. ACTA DE ENTREGA, INVENTARIO COMPLETO Y DEVOLUCIÓN')
+
+    clausula('', `El presente anexo contiene el inventario físico completo del vehículo objeto del contrato, registrando el estado de cada elemento al momento de la entrega. Sirve como constancia irrefutable de los bienes que se entregan a EL ARRENDATARIO y contra los cuales se verificará la devolución al finalizar el contrato.`)
+
+    tablaSimple(['DATO DEL VEHÍCULO', 'INFORMACIÓN'], [
+      ['Fecha y hora de entrega', fmtFechaCorta(d.terminos.fechaInicio)],
+      ['Kilometraje inicial', `${(d.vehiculo.kilometraje || 0).toLocaleString('es-CO')} km`],
+      ['Marca', d.vehiculo.marca],
+      ['Línea / Modelo', d.vehiculo.modelo],
+      ['Año', String(d.vehiculo.anio || '—')],
+      ['Placa', d.vehiculo.placa],
+      ['Color', d.vehiculo.color || '—'],
+      ['Número de VIN / chasis', d.vehiculo.vin || '—'],
+      ['Número de motor', d.vehiculo.motor || '—'],
+      ['Combustible inicial', '— (registrar al entregar)'],
+      ['Nivel de combustible', '— (registrar al entregar)'],
+    ], [200, ancho - 200])
+
+    // === INVENTARIO DETALLADO ===
+    if (y > doc.page.height - 80) { doc.addPage(); y = 50 }
+    doc.fillColor('#1e3a8a').fontSize(11).font('Helvetica-Bold')
+    doc.text('INVENTARIO FÍSICO DEL VEHÍCULO', 50, y, { width: ancho }); y += 18
+    doc.fillColor('#666').fontSize(8).font('Helvetica-Oblique')
+    doc.text(`Total de ítems registrados: ${d.inventario.length}`, 50, y, { width: ancho }); y += 12
+
+    // Cabecera del inventario con columnas: N° / Item / Descripción / Cant. / Estado Entrega / Estado Devolución / Obs.
+    const invColW = [25, 110, 150, 35, 65, 65, ancho - 460]
+    const invHeaders = ['#', 'ÍTEM', 'DESCRIPCIÓN', 'CANT.', 'ESTADO ENTREGA', 'ESTADO DEVOLUCIÓN', 'OBSERVACIONES']
+    if (y > doc.page.height - 50) { doc.addPage(); y = 50 }
+    let xi = 50
+    doc.fillColor('#1e3a8a')
+    for (let i = 0; i < invHeaders.length; i++) {
+      doc.rect(xi, y, invColW[i], 22).fill('#1e3a8a')
+      doc.fillColor('#fff').fontSize(7).font('Helvetica-Bold')
+      doc.text(invHeaders[i], xi + 2, y + 7, { width: invColW[i] - 4, align: 'center' })
+      xi += invColW[i]
+    }
+    y += 22
+
+    if (d.inventario.length === 0) {
+      // Si no hay inventario cargado, mostrar filas en blanco para diligenciar a mano
+      const filasVacias = 10
+      for (let r = 0; r < filasVacias; r++) {
+        if (y > doc.page.height - 30) { doc.addPage(); y = 50 }
+        xi = 50
+        for (let i = 0; i < invHeaders.length; i++) {
+          doc.rect(xi, y, invColW[i], 20).stroke('#999')
+          doc.fillColor('#ccc').fontSize(7).font('Helvetica')
+          const txt = i === 0 ? String(r + 1) : ''
+          doc.text(txt, xi + 2, y + 7, { width: invColW[i] - 4, align: 'center' })
+          xi += invColW[i]
+        }
+        y += 20
+      }
+      doc.fillColor('#999').fontSize(7).font('Helvetica-Oblique')
+      doc.text('(Inventario sin registrar en sistema. Diligenciar manualmente al momento de la entrega.)', 50, y); y += 14
+    } else {
+      // Filas reales con el inventario del vehículo
+      for (const it of d.inventario) {
+        if (y > doc.page.height - 30) { doc.addPage(); y = 50 }
+        xi = 50
+        const rowH = 26
+        const cells = [
+          String(it.n),
+          it.nombre,
+          it.descripcion || '—',
+          String(it.cantidad),
+          it.estado || 'BUENO',
+          '', // estado devolución (vacío para diligenciar al devolver)
+          it.notas || '',
+        ]
+        for (let i = 0; i < cells.length; i++) {
+          doc.rect(xi, y, invColW[i], rowH).stroke('#bbb')
+          doc.fillColor('#000').fontSize(7).font(i === 0 || i === 3 ? 'Helvetica-Bold' : 'Helvetica')
+          doc.text(cells[i], xi + 2, y + 5, { width: invColW[i] - 4, align: (i === 0 || i === 3) ? 'center' : 'left' })
+          xi += invColW[i]
+        }
+        y += rowH
+      }
+    }
+    y += 10
+
+    // Estado general del vehículo (exterior, interior, llantas, etc.)
+    if (y > doc.page.height - 180) { doc.addPage(); y = 50 }
+    doc.fillColor('#1e3a8a').fontSize(10).font('Helvetica-Bold')
+    doc.text('ESTADO GENERAL DEL VEHÍCULO AL ENTREGAR', 50, y, { width: ancho }); y += 16
+    tablaSimple(['COMPONENTE', 'ESTADO ENTREGA', 'OBSERVACIONES'], [
+      ['Carrocería / pintura exterior', '—', ''],
+      ['Parabrisas y cristales', '—', ''],
+      ['Espejos retrovisores', '—', ''],
+      ['Llantas (estado y profundidad)', '—', ''],
+      ['Llanta de repuesto', '—', ''],
+      ['Gato y herramientas', '—', ''],
+      ['Interior / tapicería', '—', ''],
+      ['Tablero e instrumentos', '—', ''],
+      ['Aire acondicionado', '—', ''],
+      ['Sistema de audio', '—', ''],
+      ['Cinturones de seguridad', '—', ''],
+      ['Airbags (testigo)', '—', ''],
+      ['Luces (altas/bajas/direccionales)', '—', ''],
+      ['Frenos', '—', ''],
+      ['Documentos del vehículo (SOAT, tecnomecánica)', '—', ''],
+    ], [180, 110, ancho - 290])
+    y += 8
+
+    // === FIRMAS DEL ACTA DE ENTREGA ===
+    if (y > doc.page.height - 140) { doc.addPage(); y = 50 }
+    doc.fillColor('#1e3a8a').fontSize(10).font('Helvetica-Bold')
+    doc.text('CONSTANCIA DE ENTREGA Y RECEPCIÓN DEL VEHÍCULO', 50, y, { width: ancho }); y += 18
+    doc.fillColor('#000').fontSize(8).font('Helvetica')
+    doc.text('Las partes declaran que el vehículo se entregó en el estado arriba descrito, junto con todos los ítems del inventario. Cualquier discrepancia deberá registrarse por escrito en el momento de la entrega.', 50, y, { width: ancho, align: 'justify' }); y += 24
+
+    // Doble columna: Conductor / Propietario
+    const colWFirma = Math.floor((ancho - 20) / 2)
+    // Conductor
+    doc.rect(50, y, colWFirma, 70).stroke('#999')
+    doc.fillColor('#666').fontSize(7).font('Helvetica-Bold'); doc.text('EL ARRENDATARIO (recibe)', 55, y + 5, { width: colWFirma - 10 })
+    doc.moveTo(60, y + 50).lineTo(50 + colWFirma - 10, y + 50).stroke('#000')
+    doc.fillColor('#000').fontSize(7).font('Helvetica'); doc.text(`Nombre: ${d.conductor.nombre}`, 60, y + 54, { width: colWFirma - 20 })
+    doc.text(`CC: ${d.conductor.cedula}`, 60, y + 62, { width: colWFirma - 20 })
+    // Propietario
+    doc.rect(50 + colWFirma + 10, y, colWFirma, 70).stroke('#999')
+    doc.fillColor('#666').fontSize(7).font('Helvetica-Bold'); doc.text('EL ARRENDADOR (entrega)', 55 + colWFirma + 10, y + 5, { width: colWFirma - 10 })
+    doc.moveTo(60 + colWFirma + 10, y + 50).lineTo(50 + colWFirma * 2, y + 50).stroke('#000')
+    doc.fillColor('#000').fontSize(7).font('Helvetica'); doc.text(`Nombre: ${d.propietario.nombre}`, 60 + colWFirma + 10, y + 54, { width: colWFirma - 20 })
+    doc.text(`CC: ${d.propietario.cedula}`, 60 + colWFirma + 10, y + 62, { width: colWFirma - 20 })
+    y += 80
+
+    // === SECCIÓN DE DEVOLUCIÓN (a diligenciar al finalizar) ===
+    if (y > doc.page.height - 120) { doc.addPage(); y = 50 }
+    doc.fillColor('#fff').rect(50, y, ancho, 18).fill('#6b7280')
+    doc.fillColor('#fff').fontSize(10).font('Helvetica-Bold'); doc.text('ACTA DE DEVOLUCIÓN (a diligenciar al finalizar el contrato)', 55, y + 4); y += 22
     tablaSimple(['DATO', 'INFORMACIÓN'], [
-      ['Fecha y hora', fmtFechaCorta(d.terminos.fechaInicio)],
-      ['Kilometraje', `${(d.vehiculo.kilometraje || 0).toLocaleString('es-CO')} km`],
-      ['Marca', d.vehiculo.marca], ['Modelo', d.vehiculo.modelo],
-      ['Placa', d.vehiculo.placa], ['Color', d.vehiculo.color || '—'],
-      ['VIN', d.vehiculo.vin || '—'], ['Motor', d.vehiculo.motor || '—'],
+      ['Fecha y hora de devolución', '____ / ____ / ________'],
+      ['Kilometraje final', '________________ km'],
+      ['Nivel de combustible', '—'],
+      ['Estado general', '—'],
+      ['Ítems faltantes / dañados', '—'],
+      ['Observaciones', '—'],
     ], [200, ancho - 200])
 
     capitulo('ANEXO 2. REGISTRO DE CONDUCTORES AUTORIZADOS')
