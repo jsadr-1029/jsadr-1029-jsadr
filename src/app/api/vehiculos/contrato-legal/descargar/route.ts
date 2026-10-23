@@ -11,6 +11,10 @@ import PDFDocument from 'pdfkit'
 import { createCanvas, loadImage } from 'canvas'
 import QRCode from 'qrcode'
 import crypto from 'crypto'
+import https from 'https'
+import http from 'http'
+import fs from 'fs'
+import path from 'path'
 
 function fmtCOP(v: number | null | undefined): string {
   if (!v) return '$0'
@@ -29,6 +33,7 @@ function fmtFecha(f: Date | string | null | undefined): string {
 
 async function getImage(source: string | null | undefined): Promise<Buffer | null> {
   if (!source) return null
+  // base64 data URL
   if (source.startsWith('data:')) {
     try {
       const base64Data = source.split(',')[1]
@@ -46,6 +51,70 @@ async function getImage(source: string | null | undefined): Promise<Buffer | nul
         return canvas.toBuffer('image/jpeg', { quality: 0.5 })
       } catch { return null }
     } catch { return null }
+  }
+  // Ruta relativa (/vehiculos/documentos/...) → leer de filesystem o descargar de producción
+  if (source.startsWith('/') && !source.startsWith('//')) {
+    try {
+      const localPath = path.join(process.cwd(), 'public', source)
+      if (fs.existsSync(localPath)) {
+        const buf = fs.readFileSync(localPath)
+        if (buf.length > 200000) {
+          try {
+            const img = await loadImage(buf)
+            const maxDim = 500
+            let w = img.width, h = img.height
+            if (w > maxDim) { h = Math.round(h * maxDim / w); w = maxDim }
+            const canvas = createCanvas(w, h)
+            const ctx = canvas.getContext('2d')
+            ctx.drawImage(img, 0, 0, w, h)
+            return canvas.toBuffer('image/jpeg', { quality: 0.6 })
+          } catch { return null }
+        }
+        return buf
+      }
+    } catch {}
+    // Descargar desde producción
+    const prodUrl = `https://jsadr.com.co${source}`
+    try {
+      return await new Promise<Buffer | null>((resolve) => {
+        const req = https.get(prodUrl, { timeout: 8000 }, (res) => {
+          if (res.statusCode !== 200) { resolve(null); return }
+          const chunks: Buffer[] = []
+          let totalSize = 0
+          res.on('data', c => {
+            totalSize += c.length
+            if (totalSize > 200000) { resolve(null); req.destroy(); return }
+            chunks.push(c)
+          })
+          res.on('end', () => resolve(Buffer.concat(chunks)))
+          res.on('error', () => resolve(null))
+        })
+        req.on('error', () => resolve(null))
+        req.on('timeout', () => { req.destroy(); resolve(null) })
+      })
+    } catch { return null }
+  }
+  // URL externa http/https
+  if (source.startsWith('http')) {
+    return new Promise((resolve) => {
+      try {
+        const lib = source.startsWith('https') ? https : http
+        const req = lib.get(source, { timeout: 8000 }, (res) => {
+          if (res.statusCode !== 200) { resolve(null); return }
+          const chunks: Buffer[] = []
+          let totalSize = 0
+          res.on('data', c => {
+            totalSize += c.length
+            if (totalSize > 200000) { resolve(null); req.destroy(); return }
+            chunks.push(c)
+          })
+          res.on('end', () => resolve(Buffer.concat(chunks)))
+          res.on('error', () => resolve(null))
+        })
+        req.on('error', () => resolve(null))
+        req.on('timeout', () => { req.destroy(); resolve(null) })
+      } catch { resolve(null) }
+    })
   }
   return null
 }
@@ -72,13 +141,30 @@ export async function GET(req: NextRequest) {
         contratoVehiculo: {
           select: {
             vehiculoId: true,
+            vehiculo: {
+              select: {
+                id: true,
+                placa: true,
+                marca: true,
+                modelo: true,
+                anio: true,
+                color: true,
+                kilometraje: true,
+                vin: true,
+                motor: true,
+                fotoUrl: true,
+                documentos: {
+                  orderBy: { createdAt: 'asc' },
+                },
+              },
+            },
           },
         },
       },
     })
     if (!documento) return NextResponse.json({ success: false, error: 'Token inválido' }, { status: 404 })
 
-    // === Cargar inventario completo del vehículo ===
+    // === Cargar inventario y documentos del vehículo ===
     const vehiculoId = documento.contratoVehiculo?.vehiculoId
     const inventarioItems = vehiculoId
       ? await db.inventarioVehiculo.findMany({
@@ -86,6 +172,8 @@ export async function GET(req: NextRequest) {
           orderBy: [{ createdAt: 'asc' }],
         })
       : []
+    const documentosVehiculo = documento.contratoVehiculo?.vehiculo?.documentos || []
+    const fotoVehiculo = documento.contratoVehiculo?.vehiculo?.fotoUrl || null
 
     // === Sanity check de datos del propietario ===
     // El propietario predeterminado es Johan Sebastian Alvarez Del Rio, CC 1214731649.
@@ -566,7 +654,8 @@ export async function GET(req: NextRequest) {
       ['Fecha y hora de firma', d.firmaConductor.fechaFirma ? `${fmtFechaCorta(d.firmaConductor.fechaFirma)} ${new Date(d.firmaConductor.fechaFirma).toLocaleTimeString('es-CO')}` : '—'],
       ['Dirección IP de origen', d.firmaConductor.ip || '—'],
       ['Dispositivo / User-Agent', d.firmaConductor.userAgent || '—'],
-      ['Validación OTP por correo', d.firmaConductor.otpValidado ? 'VERIFICADA' : 'No verificada'],
+      ['Correo electrónico validado', d.conductor.email || '—'],
+      ['Validación OTP por correo', d.firmaConductor.otpValidado ? `VERIFICADA (OTP enviada a ${d.conductor.email || 'correo del conductor'})` : 'No verificada'],
       ['Hash OTP (verificación)', otpConductor],
       ['Método de firma', 'Firma electrónica con OTP + biometría (cédula y selfie)'],
     ], [200, ancho - 200])
@@ -607,7 +696,8 @@ export async function GET(req: NextRequest) {
       ['Fecha y hora de firma', d.firmaPropietario.fechaFirma ? `${fmtFechaCorta(d.firmaPropietario.fechaFirma)} ${new Date(d.firmaPropietario.fechaFirma).toLocaleTimeString('es-CO')}` : '—'],
       ['Dirección IP de origen', d.firmaPropietario.ip || '—'],
       ['Dispositivo / User-Agent', d.firmaPropietario.userAgent || '—'],
-      ['Validación OTP por correo', d.firmaPropietario.otpValidado ? 'VERIFICADA' : 'No verificada'],
+      ['Correo electrónico validado', d.propietario.email || '—'],
+      ['Validación OTP por correo', d.firmaPropietario.otpValidado ? `VERIFICADA (OTP enviada a ${d.propietario.email || 'correo del propietario'})` : 'No verificada'],
       ['Hash OTP (verificación)', otpPropietario],
       ['Método de firma', 'Firma electrónica con OTP + biometría (cédula y selfie)'],
     ], [200, ancho - 200])
@@ -705,6 +795,80 @@ export async function GET(req: NextRequest) {
     }
     y += 10
 
+    // === FOTOS DEL VEHÍCULO Y DOCUMENTOS ===
+    // Adjuntar foto principal del vehículo y fotos de los documentos (SOAT, tecnomecánica, etc.)
+    // para que estén disponibles cuando se descargue el contrato completo.
+    const todasLasFotosVehiculo: { titulo: string; url: string }[] = []
+    if (fotoVehiculo) {
+      todasLasFotosVehiculo.push({ titulo: 'Foto del vehículo', url: fotoVehiculo })
+    }
+    for (const doc of documentosVehiculo) {
+      if (doc.archivoUrl) {
+        todasLasFotosVehiculo.push({
+          titulo: `${doc.tipo} - ${doc.numero || 'Sin número'}`,
+          url: doc.archivoUrl,
+        })
+      }
+      if (doc.archivosExtra) {
+        try {
+          const extras: string[] = JSON.parse(doc.archivosExtra)
+          for (let ei = 0; ei < extras.length; ei++) {
+            todasLasFotosVehiculo.push({
+              titulo: `${doc.tipo} - ${doc.numero || 'Sin número'} (adicional ${ei + 1})`,
+              url: extras[ei],
+            })
+          }
+        } catch {}
+      }
+    }
+
+    if (todasLasFotosVehiculo.length > 0) {
+      ensureSpace(60)
+      doc.fillColor('#1e3a8a').fontSize(10).font('Helvetica-Bold')
+      doc.text('FOTOGRAFÍAS DEL VEHÍCULO Y DOCUMENTOS ADJUNTOS', 50, y, { width: ancho })
+      y += doc.heightOfString('FOTOGRAFÍAS DEL VEHÍCULO Y DOCUMENTOS ADJUNTOS', { width: ancho }) + 6
+      doc.fillColor('#666').fontSize(8).font('Helvetica-Oblique')
+      const txtFotosInfo = `Total de fotografías adjuntas: ${todasLasFotosVehiculo.length} (foto del vehículo + fotos de documentos SOAT, tecnomecánica, etc.)`
+      doc.text(txtFotosInfo, 50, y, { width: ancho })
+      y += doc.heightOfString(txtFotosInfo, { width: ancho }) + 8
+
+      // Galería de fotos: 2 fotos por fila
+      const fotoW = Math.min(240, (ancho - 30) / 2)
+      const fotoH = 160
+      const gap = 10
+      let colIdx = 0
+      for (let i = 0; i < todasLasFotosVehiculo.length; i++) {
+        const foto = todasLasFotosVehiculo[i]
+        if (colIdx === 0) {
+          ensureSpace(fotoH + 30)
+        }
+        const x = 50 + colIdx * (fotoW + gap)
+        // Etiqueta de la foto
+        doc.fillColor('#1e3a8a').fontSize(7).font('Helvetica-Bold')
+        const label = `${i + 1}. ${foto.titulo}`
+        doc.text(label, x, y, { width: fotoW })
+        // Imagen
+        const imgY = y + 12
+        const imgH = await addImage(doc, foto.url, x, imgY, fotoW, fotoH)
+        if (imgH > 0) {
+          doc.rect(x, imgY, fotoW, fotoH).stroke('#1e3a8a')
+        } else {
+          doc.rect(x, imgY, fotoW, fotoH).stroke('#fbbf24')
+          doc.fillColor('#92400e').fontSize(8).font('Helvetica-Oblique')
+          doc.text('[Foto no disponible]', x + 10, imgY + fotoH / 2 - 5, { width: fotoW - 20, align: 'center' })
+        }
+        colIdx++
+        if (colIdx >= 2) {
+          colIdx = 0
+          y += fotoH + 25
+        }
+      }
+      if (colIdx > 0) {
+        y += fotoH + 25
+      }
+      y += 8
+    }
+
     // Estado general del vehículo (exterior, interior, llantas, etc.)
     ensureSpace(180)
     doc.fillColor('#1e3a8a').fontSize(10).font('Helvetica-Bold')
@@ -756,17 +920,54 @@ export async function GET(req: NextRequest) {
     y += 80
 
     // === SECCIÓN DE DEVOLUCIÓN (a diligenciar al finalizar) ===
-    ensureSpace(120)
+    ensureSpace(220)
     doc.fillColor('#fff').rect(50, y, ancho, 18).fill('#6b7280')
     doc.fillColor('#fff').fontSize(10).font('Helvetica-Bold'); doc.text('ACTA DE DEVOLUCIÓN (a diligenciar al finalizar el contrato)', 55, y + 4); y += 22
     tablaSimple(['DATO', 'INFORMACIÓN'], [
-      ['Fecha y hora de devolución', '____ / ____ / ________'],
+      ['Fecha y hora de devolución', '____ / ____ / ________   hora: ____:____'],
       ['Kilometraje final', '________________ km'],
-      ['Nivel de combustible', '—'],
-      ['Estado general', '—'],
+      ['Nivel de combustible', '¼  ½  ¾  Lleno  (marque con X)'],
+      ['Estado general del vehículo', '—'],
       ['Ítems faltantes / dañados', '—'],
       ['Observaciones', '—'],
     ], [200, ancho - 200])
+
+    // === Espacios de firma para el acta de devolución ===
+    ensureSpace(150)
+    doc.fillColor('#000').fontSize(9).font('Helvetica-Bold')
+    doc.text('CONSTANCIA DE DEVOLUCIÓN Y RECEPCIÓN DEL VEHÍCULO', 50, y, { width: ancho })
+    y += doc.heightOfString('CONSTANCIA DE DEVOLUCIÓN Y RECEPCIÓN DEL VEHÍCULO', { width: ancho }) + 8
+    doc.fillColor('#000').fontSize(8).font('Helvetica')
+    const txtDevolucion = 'Las partes declaran que el vehículo se devolvió en el estado arriba descrito, junto con todos los ítems del inventario. Cualquier discrepancia o novedad deberá registrarse por escrito en el momento de la devolución.'
+    doc.text(txtDevolucion, 50, y, { width: ancho, align: 'justify' })
+    y += doc.heightOfString(txtDevolucion, { width: ancho, align: 'justify' }) + 18
+
+    // Doble columna: Conductor (entrega) / Propietario (recibe)
+    const colWFirmaDev = Math.floor((ancho - 20) / 2)
+    const filaDevY = y
+    // Conductor
+    doc.rect(50, y, colWFirmaDev, 90).stroke('#999')
+    doc.fillColor('#666').fontSize(7).font('Helvetica-Bold')
+    doc.text('ENTREGA — EL ARRENDATARIO (CONDUCTOR)', 55, y + 5, { width: colWFirmaDev - 10 })
+    // Línea de firma
+    doc.moveTo(60, y + 60).lineTo(50 + colWFirmaDev - 10, y + 60).stroke('#000')
+    doc.fillColor('#000').fontSize(7).font('Helvetica')
+    doc.text(`Firma:`, 60, y + 64, { width: colWFirmaDev - 20, continued: false })
+    doc.text(`Nombre: ${d.conductor.nombre}`, 60, y + 72, { width: colWFirmaDev - 20 })
+    doc.text(`C.C.: ${d.conductor.cedula}`, 60, y + 80, { width: colWFirmaDev - 20 })
+
+    // Propietario
+    const propX = 50 + colWFirmaDev + 10
+    doc.rect(propX, y, colWFirmaDev, 90).stroke('#999')
+    doc.fillColor('#666').fontSize(7).font('Helvetica-Bold')
+    doc.text('RECIBE — EL ARRENDADOR (PROPIETARIO)', propX + 5, y + 5, { width: colWFirmaDev - 10 })
+    doc.moveTo(propX + 10, y + 60).lineTo(propX + colWFirmaDev - 10, y + 60).stroke('#000')
+    doc.fillColor('#000').fontSize(7).font('Helvetica')
+    doc.text(`Firma:`, propX + 10, y + 64, { width: colWFirmaDev - 20 })
+    doc.text(`Nombre: ${d.propietario.nombre}`, propX + 10, y + 72, { width: colWFirmaDev - 20 })
+    doc.text(`C.C.: ${d.propietario.cedula}`, propX + 10, y + 80, { width: colWFirmaDev - 20 })
+
+    y = filaDevY + 100
 
     capitulo('ANEXO 2. REGISTRO DE CONDUCTORES AUTORIZADOS')
     tablaSimple(['N°', 'NOMBRE', 'DOCUMENTO', 'LICENCIA', 'CAT'], [
@@ -911,13 +1112,29 @@ export async function GET(req: NextRequest) {
       clausula('', `⚠️ Error generando sello de seguridad. Hash de verificación: ${hashFirma}`)
     }
 
-    // Footer
+    // Footer legal con numeración de páginas — estilo documento legal
     try {
       const range = doc.bufferedPageRange()
+      const totalPaginas = range.count
+      const fechaGeneracion = new Date().toLocaleDateString('es-CO', { year: 'numeric', month: 'long', day: 'numeric' })
       for (let i = range.start; i < range.start + range.count; i++) {
         doc.switchToPage(i)
-        doc.fillColor('#999').fontSize(7).font('Helvetica')
-        doc.text(`Contrato ${d.numeroContrato} - Placa ${d.vehiculo.placa} - Página ${i - range.start + 1} de ${range.count}`, 50, doc.page.height - 25, { align: 'center', width: ancho })
+        const numPagina = i - range.start + 1
+        // Línea separadora del footer
+        doc.moveTo(50, doc.page.height - 40).lineTo(doc.page.width - 50, doc.page.height - 40).strokeColor('#1e3a8a').lineWidth(0.5).stroke()
+        // Lado izquierdo: identificación del documento
+        doc.fillColor('#1e3a8a').fontSize(7).font('Helvetica-Bold')
+        doc.text(`CONTRATO ${d.numeroContrato}`, 50, doc.page.height - 35, { width: 250, align: 'left' })
+        doc.fillColor('#666').fontSize(6).font('Helvetica')
+        doc.text(`Vehículo placa ${d.vehiculo.placa} · CAV-001 v2.0`, 50, doc.page.height - 27, { width: 250, align: 'left' })
+        // Centro: sello de autenticidad (resumen)
+        doc.fillColor('#92400e').fontSize(6).font('Helvetica-Oblique')
+        doc.text('Documento legal firmado electrónicamente · Ley 527 de 1999', 50, doc.page.height - 19, { width: ancho, align: 'center' })
+        // Lado derecho: paginación "Página X de Y" (formato documento legal)
+        doc.fillColor('#1e3a8a').fontSize(8).font('Helvetica-Bold')
+        doc.text(`Página ${numPagina} de ${totalPaginas}`, doc.page.width - 200, doc.page.height - 35, { width: 150, align: 'right' })
+        doc.fillColor('#666').fontSize(6).font('Helvetica')
+        doc.text(`Generado: ${fechaGeneracion}`, doc.page.width - 200, doc.page.height - 27, { width: 150, align: 'right' })
       }
     } catch (e) {
       console.error('[contrato-legal/descargar] Error en footer:', e)
