@@ -240,6 +240,7 @@ export async function GET(req: NextRequest) {
         cantidad: it.cantidad,
         estado: it.estado,
         notas: it.notas || '',
+        fotoUrl: it.fotoUrl || null,
       })),
     }
 
@@ -892,6 +893,56 @@ export async function GET(req: NextRequest) {
       ['Documentos del vehículo (SOAT, tecnomecánica)', '—', ''],
     ], [180, 110, ancho - 290])
     y += 8
+
+    // === FOTOGRAFÍAS DE LOS ITEMS DEL INVENTARIO ===
+    // Adjuntar las fotos de cada item del inventario (llaves, herramientas, accesorios, etc.)
+    const itemsConFoto = d.inventario.filter((it: any) => it.fotoUrl)
+    if (itemsConFoto.length > 0) {
+      ensureSpace(60)
+      doc.fillColor('#1e3a8a').fontSize(10).font('Helvetica-Bold')
+      doc.text('FOTOGRAFÍAS DE LOS ITEMS DEL INVENTARIO', 50, y, { width: ancho })
+      y += doc.heightOfString('FOTOGRAFÍAS DE LOS ITEMS DEL INVENTARIO', { width: ancho }) + 6
+      doc.fillColor('#666').fontSize(8).font('Helvetica-Oblique')
+      const txtFotosItems = `Total de fotografías de inventario: ${itemsConFoto.length} (llaves, herramientas, accesorios, etc.)`
+      doc.text(txtFotosItems, 50, y, { width: ancho })
+      y += doc.heightOfString(txtFotosItems, { width: ancho }) + 8
+
+      // Galería de fotos: 2 fotos por fila
+      const fotoItemW = Math.min(240, (ancho - 30) / 2)
+      const fotoItemH = 160
+      const gapItem = 10
+      let colItemIdx = 0
+      for (let i = 0; i < itemsConFoto.length; i++) {
+        const item = itemsConFoto[i]
+        if (colItemIdx === 0) {
+          ensureSpace(fotoItemH + 30)
+        }
+        const x = 50 + colItemIdx * (fotoItemW + gapItem)
+        // Etiqueta de la foto (nombre del item + cantidad + estado)
+        doc.fillColor('#1e3a8a').fontSize(7).font('Helvetica-Bold')
+        const label = `${item.n}. ${item.nombre} (x${item.cantidad}) - ${item.estado}`
+        doc.text(label, x, y, { width: fotoItemW })
+        // Imagen
+        const imgY = y + 12
+        const imgH = await addImage(doc, item.fotoUrl, x, imgY, fotoItemW, fotoItemH)
+        if (imgH > 0) {
+          doc.rect(x, imgY, fotoItemW, fotoItemH).stroke('#1e3a8a')
+        } else {
+          doc.rect(x, imgY, fotoItemW, fotoItemH).stroke('#fbbf24')
+          doc.fillColor('#92400e').fontSize(8).font('Helvetica-Oblique')
+          doc.text('[Foto no disponible]', x + 10, imgY + fotoItemH / 2 - 5, { width: fotoItemW - 20, align: 'center' })
+        }
+        colItemIdx++
+        if (colItemIdx >= 2) {
+          colItemIdx = 0
+          y += fotoItemH + 25
+        }
+      }
+      if (colItemIdx > 0) {
+        y += fotoItemH + 25
+      }
+      y += 8
+    }
 
     // === FIRMAS DEL ACTA DE ENTREGA ===
     ensureSpace(140)
