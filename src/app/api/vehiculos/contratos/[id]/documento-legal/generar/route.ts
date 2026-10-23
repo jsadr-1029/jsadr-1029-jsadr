@@ -70,11 +70,11 @@ export async function POST(
     const tokenExpira = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) // 7 días
 
     // Datos del propietario (puede venir del body o usar valores por defecto)
-    const propNombre = propietarioNombre || 'Jsadr Arrendamientos SAS'
-    const propCedula = propietarioCedula || '901234567-8'
-    const propTelefono = propietarioTelefono || ''
-    const propEmail = propietarioEmail || 'jsa@jsadr.com.co'
-    const propDireccion = propietarioDireccion || ''
+    const propNombre = propietarioNombre || 'Johan Sebastian Alvarez Del Rio'
+    const propCedula = propietarioCedula || '1214731649'
+    const propTelefono = propietarioTelefono || '3235949510'
+    const propEmail = propietarioEmail || 'jsadr23@outlook.com'
+    const propDireccion = propietarioDireccion || 'Cl 92 44a 34'
 
     // Crear documento legal
     const documento = await db.contratoDocumentoVehiculo.create({

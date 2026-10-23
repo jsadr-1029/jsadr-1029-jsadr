@@ -1,10 +1,13 @@
 // =====================================================
 // /api/vehiculos/contrato-legal/descargar?token=XXX
-// Genera el PDF completo del contrato legal con todas las firmas
+// Genera el PDF completo del contrato legal CAV-001 v2.0
+// con todas las cláusulas en el orden exacto de la plantilla
+// y los datos del propietario Johan Sebastian Alvarez Del Rio
 // =====================================================
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import PDFDocument from 'pdfkit'
+import { createCanvas, loadImage } from 'canvas'
 
 function fmtCOP(v: number | null | undefined): string {
   if (!v) return '$0'
@@ -15,17 +18,43 @@ function fmtFechaCorta(f: Date | string | null | undefined): string {
   const d = typeof f === 'string' ? new Date(f) : f
   return `${String(d.getDate()).padStart(2, '0')} / ${String(d.getMonth() + 1).padStart(2, '0')} / ${d.getFullYear()}`
 }
-function getImage(source: string | null | undefined): Buffer | null {
+function fmtFecha(f: Date | string | null | undefined): string {
+  if (!f) return '—'
+  const d = typeof f === 'string' ? new Date(f) : f
+  return d.toLocaleDateString('es-CO', { year: 'numeric', month: 'long', day: 'numeric' })
+}
+
+async function getImage(source: string | null | undefined): Promise<Buffer | null> {
   if (!source) return null
   if (source.startsWith('data:')) {
-    try { return Buffer.from(source.split(',')[1], 'base64') } catch { return null }
+    try {
+      const base64Data = source.split(',')[1]
+      if (!base64Data) return null
+      const originalBuf = Buffer.from(base64Data, 'base64')
+      if (originalBuf.length <= 80000) return originalBuf
+      try {
+        const img = await loadImage(originalBuf)
+        const maxDim = 400
+        let w = img.width, h = img.height
+        if (w > maxDim) { h = Math.round(h * maxDim / w); w = maxDim }
+        const canvas = createCanvas(w, h)
+        const ctx = canvas.getContext('2d')
+        ctx.drawImage(img, 0, 0, w, h)
+        return canvas.toBuffer('image/jpeg', { quality: 0.5 })
+      } catch { return null }
+    } catch { return null }
   }
   return null
 }
-function addImage(doc: any, source: string | null | undefined, x: number, y: number, maxW: number, maxH: number): number {
-  const buf = getImage(source)
-  if (!buf) return 0
-  try { doc.image(buf, x, y, { fit: [maxW, maxH], align: 'center' }); return maxH + 5 } catch { return 0 }
+
+async function addImage(doc: any, source: string | null | undefined, x: number, y: number, maxW: number, maxH: number): Promise<number> {
+  if (!source) return 0
+  try {
+    const buf = await getImage(source)
+    if (!buf || buf.length === 0) return 0
+    doc.image(buf, x, y, { fit: [maxW, maxH], align: 'center' })
+    return maxH + 5
+  } catch { return 0 }
 }
 
 export async function GET(req: NextRequest) {
@@ -45,8 +74,8 @@ export async function GET(req: NextRequest) {
       propietario: { nombre: documento.propietarioNombre, cedula: documento.propietarioCedula, telefono: documento.propietarioTelefono, email: documento.propietarioEmail, direccion: documento.propietarioDireccion },
       conductor: { nombre: documento.conductorNombre, cedula: documento.conductorCedula, telefono: documento.conductorTelefono, email: documento.conductorEmail, direccion: documento.conductorDireccion, licencia: documento.conductorLicencia, licenciaCat: documento.conductorLicenciaCat },
       terminos: { modalidadPago: documento.modalidadPago, tarifa: documento.tarifa, diasGracia: documento.diasGracia, multaDiaria: documento.multaDiaria, deposito: documento.deposito, fechaInicio: documento.fechaInicio, fechaFin: documento.fechaFin, descripcionVehiculo: documento.descripcionVehiculo },
-      firmaConductor: { fotoCedulaFrente: documento.conductorFotoCedulaFrente, fotoCedulaReverso: documento.conductorFotoCedulaReverso, fotoSelfie: documento.conductorFotoSelfie, firmaManuscrita: documento.conductorFirmaManuscrita, otpValidado: documento.conductorOtpValidado, fechaFirma: documento.conductorFechaFirma, ip: documento.conductorIp, userAgent: documento.conductorUserAgent },
-      firmaPropietario: { fotoCedulaFrente: documento.propietarioFotoCedulaFrente, fotoCedulaReverso: documento.propietarioFotoCedulaReverso, fotoSelfie: documento.propietarioFotoSelfie, firmaManuscrita: documento.propietarioFirmaManuscrita, otpValidado: documento.propietarioOtpValidado, fechaFirma: documento.propietarioFechaFirma, ip: documento.propietarioIp, userAgent: documento.propietarioUserAgent },
+      firmaConductor: { fotoCedulaFrente: documento.conductorFotoCedulaFrente, fotoCedulaReverso: documento.conductorFotoCedulaReverso, fotoSelfie: documento.conductorFotoSelfie, firmaManuscrita: documento.conductorFirmaManuscrita, otpValidado: documento.conductorOtpValidado, fechaFirma: documento.conductorFechaFirma, ip: documento.conductorIp },
+      firmaPropietario: { fotoCedulaFrente: documento.propietarioFotoCedulaFrente, fotoCedulaReverso: documento.propietarioFotoCedulaReverso, fotoSelfie: documento.propietarioFotoSelfie, firmaManuscrita: documento.propietarioFirmaManuscrita, otpValidado: documento.propietarioOtpValidado, fechaFirma: documento.propietarioFechaFirma, ip: documento.propietarioIp },
     }
 
     const doc = new PDFDocument({ size: 'LETTER', margins: { top: 50, bottom: 50, left: 50, right: 50 } })
@@ -55,7 +84,7 @@ export async function GET(req: NextRequest) {
     const ancho = doc.page.width - 100
     let y = 50
 
-    // Funciones helper
+    // Helpers
     function tablaSimple(titulos: string[], filas: (string | null)[][], colWidths: number[]) {
       if (y > doc.page.height - 80) { doc.addPage(); y = 50 }
       let x = 50
@@ -80,130 +109,263 @@ export async function GET(req: NextRequest) {
       y += 10; doc.fillColor('#1e3a8a').fontSize(12).font('Helvetica-Bold'); doc.text(titulo, 50, y, { width: ancho }); y += 20
     }
 
-    // ENCABEZADO
+    // === ENCABEZADO ===
     doc.fillColor('#1e3a8a').fontSize(16).font('Helvetica-Bold')
     doc.text('CONTRATO DE ARRENDAMIENTO DE VEHÍCULO AUTOMOTOR', 50, y, { align: 'center', width: ancho }); y += 20
     doc.fontSize(10).font('Helvetica'); doc.text('Uso, administración, obligaciones, garantías, control y restitución', 50, y, { align: 'center', width: ancho }); y += 15
     doc.fillColor('#666').fontSize(9); doc.text('DOCUMENTO CONTRACTUAL PRIVADO', 50, y, { align: 'center', width: ancho }); y += 12
-    doc.text(`Código: CAV-001  |  Versión: 2.0  |  Lugar: Medellín  |  Fecha: ${fmtFechaCorta(new Date())}`, 50, y, { align: 'center', width: ancho }); y += 20
+    doc.text(`Código documental: CAV-001  |  Versión: 2.0  |  Lugar: Medellín  |  Fecha: ${fmtFechaCorta(new Date())}`, 50, y, { align: 'center', width: ancho }); y += 20
 
-    // TABLA IDENTIFICACIÓN
-    tablaSimple(['CAMPO', 'INFO', 'CAMPO', 'INFO'], [
-      ['Contrato', d.numeroContrato, 'Placa', d.vehiculo.placa],
-      ['Arrendador', d.propietario.nombre, 'Arrendatario', d.conductor.nombre],
-      ['Inicio', fmtFechaCorta(d.terminos.fechaInicio), 'Terminación', d.terminos.fechaFin ? fmtFechaCorta(d.terminos.fechaFin) : 'Indefinida'],
-      ['Canon', fmtCOP(d.terminos.tarifa), 'Periodicidad', d.terminos.modalidadPago],
-    ], [80, 215, 80, 215])
+    // === TABLA IDENTIFICACIÓN ===
+    tablaSimple(['IDENTIFICACIÓN DEL CONTRATO', 'INFORMACIÓN'], [
+      ['Número de contrato', d.numeroContrato],
+      ['Placa del vehículo', d.vehiculo.placa],
+      ['Arrendador', d.propietario.nombre],
+      ['Arrendatario', d.conductor.nombre],
+      ['Fecha de inicio', fmtFechaCorta(d.terminos.fechaInicio)],
+      ['Fecha de terminación pactada', d.terminos.fechaFin ? fmtFechaCorta(d.terminos.fechaFin) : 'Indefinida'],
+      ['Valor del canon', fmtCOP(d.terminos.tarifa)],
+      ['Periodicidad de pago', d.terminos.modalidadPago],
+    ], [200, ancho - 200])
 
-    // CAPÍTULOS I-XII
+    clausula('', `Entre las personas identificadas en este documento se celebra el presente contrato de arrendamiento de vehículo automotor, que se regirá por sus cláusulas, las disposiciones civiles y comerciales colombianas que resulten aplicables, las normas de tránsito pertinentes y las demás disposiciones legales vigentes que correspondan a la operación concreta.\n\nLas partes manifiestan que han tenido oportunidad de conocer las condiciones del contrato y que los espacios que deban determinar obligaciones económicas o condiciones esenciales serán diligenciados antes de su firma.`)
+
+    // ============ CAPÍTULO I ============
     capitulo('CAPÍTULO I. IDENTIFICACIÓN Y CAPACIDAD DE LAS PARTES')
-    clausula('CLÁUSULA 1. ARRENDADOR', `EL ARRENDADOR: ${d.propietario.nombre}, identificado con ${d.propietario.cedula}, domicilio ${d.propietario.direccion || '—'}, teléfono ${d.propietario.telefono || '—'}, email ${d.propietario.email || '—'}. Actúa como propietario inscrito del vehículo.`)
-    clausula('CLÁUSULA 2. ARRENDATARIO', `EL ARRENDATARIO: ${d.conductor.nombre}, identificado con CC ${d.conductor.cedula}, residencia ${d.conductor.direccion || '—'}, teléfono ${d.conductor.telefono}, email ${d.conductor.email || '—'}. Licencia ${d.conductor.licenciaCat || '—'} ${d.conductor.licencia || ''}.`)
-    clausula('CLÁUSULA 3. DECLARACIONES PREVIAS', 'Las partes declaran que los datos son veraces, comprenden la naturaleza temporal del arrendamiento, el contrato no transfiere propiedad, y las modificaciones deben documentarse verificablemente.')
 
+    clausula('CLÁUSULA 1. IDENTIFICACIÓN DEL ARRENDADOR', `EL ARRENDADOR es la persona que entrega el vehículo en arrendamiento y adquiere los derechos y obligaciones que le corresponden conforme a este contrato.`)
+    tablaSimple(['CAMPO', 'INFORMACIÓN'], [
+      ['Primer apellido', 'Alvarez'],
+      ['Segundo apellido', 'Del Rio'],
+      ['Primer nombre', 'Johan'],
+      ['Segundo nombre', 'Sebastian'],
+      ['Tipo de documento', 'Cédula de ciudadanía'],
+      ['Número de identificación', d.propietario.cedula],
+      ['Dirección de residencia', d.propietario.direccion || '—'],
+      ['Teléfono celular', d.propietario.telefono || '—'],
+      ['Correo electrónico', d.propietario.email || '—'],
+      ['Calidad en la que actúa', 'Propietario inscrito del vehículo'],
+    ], [200, ancho - 200])
+    clausula('', `EL ARRENDADOR declara que cuenta con las facultades necesarias para celebrar el presente contrato y que no conoce impedimentos jurídicos que hagan ilícita o imposible la entrega del vehículo bajo las condiciones aquí pactadas.`)
+
+    clausula('CLÁUSULA 2. IDENTIFICACIÓN DEL ARRENDATARIO', `EL ARRENDATARIO es la persona que recibe temporalmente el vehículo y asume las obligaciones que le correspondan conforme al contrato.`)
+    tablaSimple(['CAMPO', 'INFORMACIÓN'], [
+      ['Nombre completo', d.conductor.nombre],
+      ['Tipo de documento', 'Cédula de ciudadanía'],
+      ['Número de identificación', d.conductor.cedula],
+      ['Dirección de residencia', d.conductor.direccion || '—'],
+      ['Teléfono celular principal', d.conductor.telefono],
+      ['Correo electrónico', d.conductor.email || '—'],
+      ['Número de licencia', d.conductor.licencia || '—'],
+      ['Categoría', d.conductor.licenciaCat || '—'],
+    ], [200, ancho - 200])
+
+    clausula('CLÁUSULA 3. DECLARACIONES PREVIAS', `Las partes declaran que:\n1. Los datos suministrados para celebrar el contrato son veraces.\n2. Comprenden la naturaleza temporal del arrendamiento.\n3. El contrato no transfiere la propiedad del vehículo.\n4. Las obligaciones económicas deben quedar determinadas o ser objetivamente determinables.\n5. Las obligaciones contractuales no pueden desconocer normas imperativas ni derechos de terceros.\n6. Los documentos que se incorporen como anexos deberán corresponder a la operación real.\n7. Las modificaciones de las condiciones esenciales deberán documentarse de manera verificable.`)
+
+    // ============ CAPÍTULO II ============
     capitulo('CAPÍTULO II. OBJETO, IDENTIFICACIÓN Y DESTINACIÓN DEL VEHÍCULO')
-    clausula('CLÁUSULA 4. VEHÍCULO', `Marca: ${d.vehiculo.marca}, Modelo: ${d.vehiculo.modelo}, Año: ${d.vehiculo.anio}, Placa: ${d.vehiculo.placa}, Color: ${d.vehiculo.color}, Motor: ${d.vehiculo.motor || '—'}, VIN: ${d.vehiculo.vin || '—'}, Km: ${(d.vehiculo.kilometraje || 0).toLocaleString('es-CO')}.`)
-    clausula('CLÁUSULA 5. OBJETO', 'EL ARRENDADOR concede el uso temporal del vehículo. EL ARRENDATARIO no adquiere propiedad ni facultad para venderlo, gravarlo o subarrendarlo.')
-    clausula('CLÁUSULA 6. DESTINACIÓN', 'Uso particular y comercial autorizado. EL ARRENDATARIO no podrá modificar la destinación sin autorización.')
-    clausula('CLÁUSULA 7. PLAZO', `Inicio: ${fmtFechaCorta(d.terminos.fechaInicio)}. Terminación: ${d.terminos.fechaFin ? fmtFechaCorta(d.terminos.fechaFin) : 'Indefinida'}.`)
-    clausula('CLÁUSULA 8. ESTADO', 'El estado se documenta en el Anexo 1. Acta de entrega e inventario.')
 
+    clausula('CLÁUSULA 4. IDENTIFICACIÓN DEL VEHÍCULO', `El vehículo objeto del contrato se identifica de la siguiente manera:`)
+    tablaSimple(['CARACTERÍSTICA', 'INFORMACIÓN'], [
+      ['Marca', d.vehiculo.marca],
+      ['Línea', d.vehiculo.modelo],
+      ['Modelo / año', String(d.vehiculo.anio || '—')],
+      ['Placa', d.vehiculo.placa],
+      ['Color', d.vehiculo.color || '—'],
+      ['Número de motor', d.vehiculo.motor || '—'],
+      ['Número de chasis o VIN', d.vehiculo.vin || '—'],
+      ['Kilometraje inicial', `${(d.vehiculo.kilometraje || 0).toLocaleString('es-CO')} km`],
+    ], [200, ancho - 200])
+
+    clausula('CLÁUSULA 5. OBJETO', `EL ARRENDADOR concede a EL ARRENDATARIO el uso temporal del vehículo individualizado en la cláusula anterior, a cambio del canon acordado y bajo las condiciones establecidas en este documento.\n\nEL ARRENDATARIO recibe el derecho de uso dentro de los límites pactados, sin adquirir la propiedad del vehículo ni facultad para venderlo, gravarlo, subarrendarlo, cederlo o disponer de él como dueño.\n\nLa entrega del vehículo se acreditará mediante el acta de entrega correspondiente.`)
+
+    clausula('CLÁUSULA 6. DESTINACIÓN AUTORIZADA', `Las partes acuerdan que el vehículo será utilizado para uso particular y actividad comercial autorizada.\n\nEL ARRENDATARIO no podrá modificar la destinación pactada sin autorización previa y verificable de EL ARRENDADOR.`)
+
+    clausula('CLÁUSULA 7. PLAZO Y ENTREGA MATERIAL', `La entrega se realizará en las siguientes condiciones:`)
+    tablaSimple(['CONDICIÓN', 'INFORMACIÓN'], [
+      ['Fecha de inicio', fmtFechaCorta(d.terminos.fechaInicio)],
+      ['Fecha de terminación pactada', d.terminos.fechaFin ? fmtFechaCorta(d.terminos.fechaFin) : 'Indefinida'],
+      ['Lugar de entrega', 'Medellín, Colombia'],
+    ], [200, ancho - 200])
+
+    clausula('CLÁUSULA 8. ESTADO DEL VEHÍCULO', `El estado del vehículo al momento de la entrega se documentará en el Anexo 1. Acta de entrega e inventario. El anexo incluirá: kilometraje, nivel de combustible, estado exterior e interior, accesorios, llaves, documentos, daños preexistentes y fotografías.`)
+
+    // ============ CAPÍTULO III ============
     capitulo('CAPÍTULO III. PRECIO, PAGOS Y GARANTÍAS')
-    clausula('CLÁUSULA 9. CANON', `Valor: ${fmtCOP(d.terminos.tarifa)}. Periodicidad: ${d.terminos.modalidadPago}. Días de gracia: ${d.terminos.diasGracia}. Multa: ${fmtCOP(d.terminos.multaDiaria)}/día.`)
-    clausula('CLÁUSULA 10. REGISTRO DE PAGOS', 'Las partes conservarán comprobantes. EL ARRENDADOR entregará constancia.')
-    clausula('CLÁUSULA 11. MORA', 'EL ARRENDATARIO debe pagar en fecha. El retraso generará la multa pactada.')
-    clausula('CLÁUSULA 12. DEPÓSITO', `Valor: ${fmtCOP(d.terminos.deposito)}. Devolución: 30 días tras restitución.`)
 
+    clausula('CLÁUSULA 9. CANON DE ARRENDAMIENTO', `El canon será el que las partes determinan en el siguiente cuadro:`)
+    tablaSimple(['CONCEPTO', 'CONDICIÓN PACTADA'], [
+      ['Valor del canon', fmtCOP(d.terminos.tarifa)],
+      ['Periodicidad', d.terminos.modalidadPago],
+      ['Día de pago', 'Sábado de cada semana'],
+      ['Medio de pago', 'Consignación bancaria / Transferencia'],
+      ['Titular receptor del pago', d.propietario.nombre],
+    ], [200, ancho - 200])
+
+    clausula('CLÁUSULA 10. REGISTRO DE PAGOS', `Las partes conservarán los comprobantes de pago y los registros de las obligaciones causadas. EL ARRENDADOR entregará constancia de los pagos recibidos cuando corresponda.`)
+
+    clausula('CLÁUSULA 11. MORA', `EL ARRENDATARIO deberá pagar el canon y los demás conceptos válidamente pactados en las fechas acordadas. Cuando se produzca un retraso, EL ARRENDADOR podrá enviar un requerimiento escrito. Si se pactan intereses moratorios, se aplicarán únicamente cuando legalmente procedan y dentro de los límites legales vigentes.`)
+
+    clausula('CLÁUSULA 12. DEPÓSITO DE GARANTÍA', `Las partes podrán acordar un depósito destinado a respaldar obligaciones contractuales válidas.`)
+    tablaSimple(['CONCEPTO', 'INFORMACIÓN'], [
+      ['Valor del depósito', fmtCOP(d.terminos.deposito)],
+      ['Finalidad pactada', 'Respaldar obligaciones contractuales'],
+      ['Plazo para devolución del saldo', '30 días después de la restitución'],
+    ], [200, ancho - 200])
+
+    // ============ CAPÍTULO IV ============
     capitulo('CAPÍTULO IV. OBLIGACIONES Y RESTRICCIONES')
-    clausula('CLÁUSULA 13. OBLIGACIONES ARRENDADOR', '1. Entregar vehículo. 2. Informar defectos. 3. Cumplir mantenimiento. 4. Recibir pagos. 5. Gestionar reclamaciones.')
-    clausula('CLÁUSULA 14. OBLIGACIONES ARRENDATARIO', '1. Pagar canon. 2. Usar para destinación autorizada. 3. Mantener habilitaciones. 4. Custodiar vehículo. 5. Cumplir tránsito. 6. Informar accidentes. 7. No subarrendar.')
-    clausula('CLÁUSULA 15. CONDUCTORES AUTORIZADOS', 'Solo personas autorizadas por EL ARRENDADOR.')
-    clausula('CLÁUSULA 16. PROHIBICIONES', 'No subarrendar, no ilícitos, no alcohol, no alterar sistemas.')
 
+    clausula('CLÁUSULA 13. OBLIGACIONES DE EL ARRENDADOR', `EL ARRENDADOR se obliga a:\n1. Entregar el vehículo en las condiciones documentadas.\n2. Informar los defectos relevantes de los que tenga conocimiento.\n3. Entregar los documentos y elementos acordados.\n4. Cumplir las obligaciones de mantenimiento que le correspondan.\n5. Facilitar la información pertinente sobre las coberturas de seguro.\n6. Recibir y registrar los pagos efectuados.\n7. Comunicar de forma verificable los requerimientos contractuales.\n8. Respetar los derechos de EL ARRENDATARIO y abstenerse de realizar actos de recuperación por vías de hecho.\n9. Gestionar de buena fe las reclamaciones relacionadas con el vehículo.\n10. Realizar la liquidación del depósito y de las obligaciones finales.`)
+
+    clausula('CLÁUSULA 14. OBLIGACIONES DE EL ARRENDATARIO', `EL ARRENDATARIO se obliga a:\n1. Pagar oportunamente el canon y los demás conceptos que le correspondan.\n2. Utilizar el vehículo únicamente para la destinación autorizada.\n3. Mantener las habilitaciones legales necesarias para conducirlo.\n4. Permitir su conducción exclusivamente a personas autorizadas.\n5. Custodiar razonablemente el vehículo, las llaves, los documentos y los accesorios.\n6. Cumplir las normas de tránsito y estacionamiento.\n7. Asumir los gastos que expresamente le correspondan.\n8. Informar inmediatamente accidentes, daños graves, hurtos, inmovilizaciones y requerimientos de autoridad.\n9. Conservar y entregar los soportes pertinentes de incidentes.\n10. No subarrendar, ceder ni entregar el vehículo a terceros sin autorización escrita.\n11. Facilitar inspecciones razonables previamente coordinadas.\n12. Informar oportunamente fallas que puedan afectar la seguridad.\n13. Restituir el vehículo al finalizar el contrato.\n14. Colaborar de buena fe con la identificación del conductor y las gestiones legítimas relacionadas con comparendos o fotodetecciones.\n15. Responder por las obligaciones y perjuicios que legalmente le sean atribuibles.\n16. Comunicar cambios relevantes en sus datos de contacto.\n17. Abstenerse de utilizar el vehículo para fines ilícitos.`)
+
+    clausula('CLÁUSULA 15. CONDUCTORES AUTORIZADOS', `Solo podrán conducir el vehículo las personas registradas en el Anexo 2 y autorizadas por escrito por EL ARRENDADOR, siempre que cumplan los requisitos legales y de aseguramiento aplicables.`)
+
+    clausula('CLÁUSULA 16. PROHIBICIONES EXPRESAS', `Salvo autorización escrita y legalmente procedente, EL ARRENDATARIO no podrá:\n1. Subarrendar, ceder o transferir la tenencia del vehículo.\n2. Utilizarlo para actividades ilícitas.\n3. Conducir bajo los efectos de alcohol o sustancias que afecten la capacidad de conducción.\n4. Permitir la conducción por personas no autorizadas.\n5. Alterar las placas, los números de identificación, el odómetro o los sistemas de seguridad.\n6. Realizar modificaciones permanentes.\n7. Utilizarlo en competencias, pruebas de velocidad o actividades de riesgo no autorizadas.\n8. Ocultar el vehículo o impedir injustificadamente su restitución.\n9. Retirar o manipular indebidamente dispositivos de seguridad o localización.\n10. Realizar actos que comprometan de manera evitable la seguridad del vehículo o una cobertura de seguro.`)
+
+    // ============ CAPÍTULO V ============
     capitulo('CAPÍTULO V. MANTENIMIENTO, GASTOS Y DAÑOS')
-    clausula('CLÁUSULA 17. DISTRIBUCIÓN DE GASTOS', 'Combustible, peajes, parqueaderos: Arrendatario. Mantenimiento, aceite, llantas: Arrendador.')
-    clausula('CLÁUSULA 18. MANTENIMIENTO Y FALLAS', 'Informar oportunamente. Sin aprobación para alto costo.')
-    clausula('CLÁUSULA 19. DAÑOS', 'Responsabilidad según estado inicial, final y pruebas.')
-    clausula('CLÁUSULA 20. COBROS SIN SOPORTE', 'Sin soporte no se puede exigir deuda.')
 
+    clausula('CLÁUSULA 17. DISTRIBUCIÓN DE GASTOS', 'Las partes deberán diligenciar el siguiente cuadro antes de la firma:')
+    tablaSimple(['CONCEPTO', 'RESPONSABLE'], [
+      ['Combustible', 'Arrendatario'],
+      ['Peajes', 'Arrendatario'],
+      ['Parqueaderos', 'Arrendatario'],
+      ['Lavado ordinario', 'Arrendatario'],
+      ['Mantenimiento preventivo', 'Arrendador'],
+      ['Aceite y filtros', 'Arrendador'],
+      ['Llantas por desgaste normal', 'Arrendador'],
+      ['Reparaciones por fallas preexistentes', 'Arrendador'],
+      ['Reparaciones por daño atribuible al arrendatario', 'Arrendatario'],
+      ['Grúa e inmovilización', 'Según causa'],
+    ], [280, ancho - 280])
+
+    clausula('CLÁUSULA 18. MANTENIMIENTO Y FALLAS MECÁNICAS', `EL ARRENDATARIO deberá informar oportunamente cualquier falla que pueda afectar la seguridad o el funcionamiento del vehículo. No podrá autorizar reparaciones de alto costo ni modificaciones sin aprobación previa y verificable de EL ARRENDADOR, salvo medidas urgentes razonables.`)
+
+    clausula('CLÁUSULA 19. DAÑOS Y DETERIORO', `La responsabilidad por daños se determinará teniendo en cuenta: el estado inicial documentado, el estado del vehículo al restituirse, las fotografías y demás pruebas, el diagnóstico técnico, la relación entre el daño y la conducta atribuida, y las reglas legales aplicables. EL ARRENDATARIO no será responsable automáticamente de todo deterioro ocurrido durante el arrendamiento.`)
+
+    clausula('CLÁUSULA 20. PROHIBICIÓN DE COBROS SIN SOPORTE', `Ninguna parte podrá exigir como deuda definitiva un valor arbitrario o carente de fundamento. Las reclamaciones económicas deberán identificar el concepto, su causa, la fecha, el cálculo y los soportes disponibles.`)
+
+    // ============ CAPÍTULO VI ============
     capitulo('CAPÍTULO VI. SEGUROS, ACCIDENTES E INMOVILIZACIÓN')
-    clausula('CLÁUSULA 21. SEGUROS', 'Verificar SOAT, tecnomecánica y póliza. Compatibilidad con uso.')
-    clausula('CLÁUSULA 22. ACCIDENTES', 'Priorizar vida, informar autoridades, notificar arrendador, conservar pruebas.')
-    clausula('CLÁUSULA 23. INMOVILIZACIÓN', 'Informar autoridad, motivo, lugar, comparendo y gastos.')
 
+    clausula('CLÁUSULA 21. VERIFICACIÓN DE SEGUROS', `Antes de entregar el vehículo, las partes registrarán la información disponible sobre SOAT, revisión técnico-mecánica y póliza voluntaria. Las partes deberán verificar que el uso real del vehículo sea compatible con las condiciones de la póliza.`)
+
+    clausula('CLÁUSULA 22. ACCIDENTES, HURTO Y EMERGENCIAS', `Ante un accidente, hurto, daño grave o emergencia, EL ARRENDATARIO deberá:\n1. Priorizar la vida y la integridad de las personas.\n2. Informar a las autoridades cuando corresponda.\n3. Notificar inmediatamente a EL ARRENDADOR.\n4. Contactar a la aseguradora cuando proceda.\n5. Conservar fotografías, informes, datos de terceros y demás pruebas.\n6. No ocultar información relevante.\n7. Cooperar razonablemente con las reclamaciones y trámites pertinentes.`)
+
+    clausula('CLÁUSULA 23. INMOVILIZACIÓN', `Si el vehículo es inmovilizado o retenido por una autoridad, EL ARRENDATARIO deberá informar inmediatamente: autoridad que intervino, motivo conocido, lugar donde quedó el vehículo, número del comparendo o expediente, y gastos y documentos generados.`)
+
+    // ============ CAPÍTULO VII ============
     capitulo('CAPÍTULO VII. COMPARENDOS Y FOTODETECCIONES')
-    clausula('CLÁUSULA 24. COLABORACIÓN', 'Responder solicitudes en 2 días hábiles.')
-    clausula('CLÁUSULA 25. PROCEDIMIENTO FOTODETECCIONES', 'Identificar, recopilar pruebas, actuar ante autoridad.')
-    clausula('CLÁUSULA 26. ALCANCE JURÍDICO', 'No transfiere automáticamente sanciones. Ley 769/2002, Ley 1843/2017, Sentencia C-038/2020.')
-    clausula('CLÁUSULA 27. INCUMPLIMIENTO DE COLABORACIÓN', 'Si incumple y causa perjuicio, se reclama.')
 
-    capitulo('CAPÍTULO VIII. INSPECCIÓN, LOCALIZACIÓN Y DATOS')
-    clausula('CLÁUSULA 28. INSPECCIÓN', 'Inspecciones razonables y coordinadas.')
-    clausula('CLÁUSULA 29. LOCALIZACIÓN', 'GPS informado. Uso legítimo.')
-    clausula('CLÁUSULA 30. DATOS PERSONALES', 'Ley 1581 de 2012. Finalidades legítimas.')
+    clausula('CLÁUSULA 24. DEBER DE INFORMACIÓN Y COLABORACIÓN', `Cuando EL ARRENDADOR reciba una notificación relacionada con una posible infracción ocurrida durante el período de arrendamiento, podrá solicitar a EL ARRENDATARIO la información razonablemente necesaria para establecer quién tenía el vehículo y quién lo conducía. EL ARRENDATARIO deberá responder dentro de los dos (2) días hábiles siguientes.`)
 
+    clausula('CLÁUSULA 25. PROCEDIMIENTO DOCUMENTAL PARA FOTODETECCIONES', `EL ARRENDADOR podrá: identificar la actuación, recopilar pruebas (contrato, acta, registro de conductores, comprobantes), solicitar información al arrendatario, actuar ante la autoridad (solicitar información, aportar documentos, informar identidad del conductor, solicitar correcciones) y dar seguimiento conservando copias de radicaciones y decisiones.`)
+
+    clausula('CLÁUSULA 26. ALCANCE JURÍDICO DE LAS FOTODETECCIONES', `Las partes reconocen que: el contrato no transfiere automáticamente una fotodetección ni una sanción; la autoridad competente debe determinar la actuación conforme a la ley; la responsabilidad se determina según la ley y las circunstancias probadas. Aplican la Ley 769 de 2002, la Ley 1843 de 2017 y la Sentencia C-038 de 2020.`)
+
+    clausula('CLÁUSULA 27. INCUMPLIMIENTO DEL DEBER DE COLABORACIÓN', `Si EL ARRENDATARIO incumple injustificadamente su obligación de suministrar información o colaborar y ello ocasiona un perjuicio directo, cierto y jurídicamente atribuible, EL ARRENDADOR podrá reclamar la reparación que legalmente proceda. No se trasladarán contractualmente sanciones personales ni responsabilidades exclusivas de otra persona.`)
+
+    // ============ CAPÍTULO VIII ============
+    capitulo('CAPÍTULO VIII. INSPECCIÓN, LOCALIZACIÓN Y DATOS PERSONALES')
+
+    clausula('CLÁUSULA 28. INSPECCIÓN DEL VEHÍCULO', `EL ARRENDADOR podrá solicitar inspecciones razonables y previamente coordinadas para verificar el estado, mantenimiento y cumplimiento de las condiciones pactadas. Las inspecciones deberán realizarse de forma proporcionada, sin afectar injustificadamente el uso autorizado.`)
+
+    clausula('CLÁUSULA 29. DISPOSITIVOS DE LOCALIZACIÓN', `Si el vehículo cuenta con GPS u otro dispositivo de localización, deberá informarse a EL ARRENDATARIO sobre su existencia, finalidad y condiciones relevantes. La información se utilizará para finalidades legítimas relacionadas con la seguridad, administración y protección del vehículo. No se autoriza el acceso ilícito a dispositivos personales ni la interceptación de comunicaciones privadas.`)
+
+    clausula('CLÁUSULA 30. TRATAMIENTO DE DATOS PERSONALES', `Las partes tratarán los datos personales para finalidades legítimas: celebración y ejecución del contrato, identificación de las partes, registro de pagos, administración del vehículo, atención de incidentes, gestión de cobros, cumplimiento de deberes legales y defensa de derechos. Se cumple la Ley 1581 de 2012.`)
+
+    // ============ CAPÍTULO IX ============
     capitulo('CAPÍTULO IX. TERMINACIÓN Y RESTITUCIÓN')
-    clausula('CLÁUSULA 31. CAUSALES', 'Vencimiento, mutuo acuerdo, incumplimiento, pérdida total.')
-    clausula('CLÁUSULA 32. PREAVISO', 'Según modalidad y legislación.')
-    clausula('CLÁUSULA 33. RESTITUCIÓN', 'Devolver con llaves, documentos y accesorios. Acta de devolución.')
-    clausula('CLÁUSULA 34. LIQUIDACIÓN', 'Cánones, gastos, daños, depósito y saldo.')
 
+    clausula('CLÁUSULA 31. CAUSALES DE TERMINACIÓN', `El contrato podrá terminar por:\n1. Vencimiento del plazo pactado.\n2. Mutuo acuerdo escrito.\n3. Incumplimiento contractual que permita la terminación conforme al contrato y a la ley.\n4. Imposibilidad jurídica o material de continuar el arrendamiento.\n5. Pérdida total del vehículo.\n6. Las demás causas legalmente procedentes.`)
+
+    clausula('CLÁUSULA 32. AVISOS DE TERMINACIÓN Y PREAVISO', `Cuando se requiera aviso previo, se aplicará el término que corresponda según la modalidad contractual, las condiciones válidamente pactadas y la legislación aplicable.`)
+
+    clausula('CLÁUSULA 33. PROCEDIMIENTO DE RESTITUCIÓN', `Al finalizar el contrato, EL ARRENDATARIO deberá restituir el vehículo con sus llaves, documentos y accesorios. Las partes deberán elaborar el acta de devolución registrando: fecha, kilometraje final, nivel de combustible, estado, accesorios, daños, fotografías y observaciones.`)
+
+    clausula('CLÁUSULA 34. LIQUIDACIÓN FINAL', `Una vez restituido el vehículo, se elaborará una liquidación con: cánones vencidos, pagos anticipados, gastos pendientes, daños atribuibles, depósito recibido, deducciones justificadas y saldo a favor de cada parte.`)
+
+    // ============ CAPÍTULO X ============
     capitulo('CAPÍTULO X. INCUMPLIMIENTO, RECLAMACIONES Y COBRO')
-    clausula('CLÁUSULA 35. REQUERIMIENTO', 'Identificar obligación, describir hechos, conservar soportes.')
-    clausula('CLÁUSULA 36. PERJUICIOS', 'Acreditar presupuestos legales.')
-    clausula('CLÁUSULA 37. CLÁUSULA PENAL', `Mora: ${fmtCOP(d.terminos.multaDiaria)} por cada día de retraso.`)
-    clausula('CLÁUSULA 38. COBRO', 'Mecanismos legales. Requisitos de ejecución.')
 
+    clausula('CLÁUSULA 35. REQUERIMIENTO POR INCUMPLIMIENTO', `La parte que considere que existe incumplimiento deberá identificar la obligación afectada, describir los hechos y conservar los soportes pertinentes. Cuando corresponda, deberá enviar un requerimiento que permita acreditar el contenido y la recepción.`)
+
+    clausula('CLÁUSULA 36. PERJUICIOS', `La parte afectada podrá reclamar los perjuicios que legalmente procedan cuando se acrediten los presupuestos exigidos por la ley. Los valores reclamados deberán estar relacionados con el incumplimiento y sustentados mediante pruebas idóneas.`)
+
+    clausula('CLÁUSULA 37. CLÁUSULA PENAL', `Las partes acuerdan como cláusula penal: en caso de mora en el pago del canon, se cobrará ${fmtCOP(d.terminos.multaDiaria)} por cada día de retraso, sin perjuicio de los perjuicios adicionales que legalmente procedan.`)
+
+    clausula('CLÁUSULA 38. COBRO DE OBLIGACIONES', `Las partes podrán utilizar los mecanismos legales de cobro que correspondan. Para exigir ejecutivamente una obligación deberán cumplirse los requisitos legales aplicables. Las partes podrán acudir a conciliación o a las autoridades judiciales competentes.`)
+
+    // ============ CAPÍTULO XI ============
     capitulo('CAPÍTULO XI. COMUNICACIONES Y DISPOSICIONES FINALES')
-    clausula('CLÁUSULA 39. NOTIFICACIONES', 'Datos del capítulo identificación.')
-    clausula('CLÁUSULA 40. MODIFICACIONES', 'Por escrito con aceptación.')
-    clausula('CLÁUSULA 41. INTEGRIDAD', 'Disposiciones separables.')
-    clausula('CLÁUSULA 42. LEGISLACIÓN', 'Leyes de Colombia. Conciliación o autoridad judicial.')
 
-    // CAPÍTULO XII — FIRMAS
+    clausula('CLÁUSULA 39. NOTIFICACIONES CONTRACTUALES', `Para las comunicaciones contractuales se utilizarán los datos suministrados en el capítulo de identificación. Las partes deberán conservar evidencia de las comunicaciones relevantes. Cada parte deberá informar oportunamente los cambios en sus datos de contacto.`)
+
+    clausula('CLÁUSULA 40. MODIFICACIONES', `Las modificaciones del canon, plazo, destinación, distribución de gastos, conductores autorizados y demás condiciones esenciales deberán constar por escrito y contar con la aceptación de las partes.`)
+
+    clausula('CLÁUSULA 41. INTEGRIDAD Y SEPARABILIDAD', `El contrato y sus anexos contienen los acuerdos documentados entre las partes. Si una disposición resulta ineficaz o inaplicable, las restantes conservarán sus efectos. Ninguna disposición se interpretará como renuncia a derechos irrenunciables.`)
+
+    clausula('CLÁUSULA 42. LEGISLACIÓN Y SOLUCIÓN DE CONTROVERSIAS', `El contrato se rige por las leyes de la República de Colombia. Las partes procurarán resolver de buena fe las diferencias. Si no alcanzan un acuerdo, podrán acudir a los mecanismos de conciliación cuando procedan o a la autoridad judicial competente.`)
+
+    // ============ CAPÍTULO XII — FIRMAS ============
     capitulo('CAPÍTULO XII. ACEPTACIÓN Y FIRMA')
-    clausula('', 'Las partes manifiestan que han leído y comprendido el contrato, y firman libremente, sin perjuicio de los derechos previstos por la ley.')
+    clausula('', `Las partes manifiestan que:\n1. Han leído y comprendido el contenido del contrato.\n2. Han tenido oportunidad de solicitar aclaraciones.\n3. Los espacios relativos a las condiciones económicas y esenciales han sido diligenciados.\n4. Los anexos relacionados corresponden a los documentos que efectivamente se incorporan.\n5. Firman libremente, sin perjuicio de los derechos y controles previstos por la ley.`)
 
     if (y > doc.page.height - 60) { doc.addPage(); y = 50 }
     doc.fillColor('#000').fontSize(9).font('Helvetica-Bold')
     doc.text(`Ciudad: Medellín    Fecha: ${fmtFechaCorta(new Date())}`, 50, y, { width: ancho }); y += 25
 
-    // FIRMA CONDUCTOR
+    // === FIRMA CONDUCTOR ===
     if (y > doc.page.height - 200) { doc.addPage(); y = 50 }
     doc.fillColor('#1e3a8a').fontSize(10).font('Helvetica-Bold'); doc.text('EL ARRENDATARIO (CONDUCTOR)', 50, y); y += 18
-    const h1 = Math.max(addImage(doc, d.firmaConductor.fotoCedulaFrente, 50, y, 150, 100), addImage(doc, d.firmaConductor.fotoCedulaReverso, 210, y, 150, 100), addImage(doc, d.firmaConductor.fotoSelfie, 370, y, 150, 100))
+    const h1 = Math.max(await addImage(doc, d.firmaConductor.fotoCedulaFrente, 50, y, 150, 100), await addImage(doc, d.firmaConductor.fotoCedulaReverso, 210, y, 150, 100), await addImage(doc, d.firmaConductor.fotoSelfie, 370, y, 150, 100))
     if (h1 > 0) y += h1 + 8
-    const h2 = addImage(doc, d.firmaConductor.firmaManuscrita, 50, y, 250, 80)
+    const h2 = await addImage(doc, d.firmaConductor.firmaManuscrita, 50, y, 250, 80)
     if (h2 > 0) y += h2 + 5
     doc.fillColor('#666').fontSize(7).font('Helvetica')
     doc.text(`Nombre: ${d.conductor.nombre}    CC: ${d.conductor.cedula}    Fecha: ${d.firmaConductor.fechaFirma ? fmtFechaCorta(d.firmaConductor.fechaFirma) : '—'}`, 50, y); y += 10
     doc.text(`IP: ${d.firmaConductor.ip || '—'}    OTP: ${d.firmaConductor.otpValidado ? 'Sí' : 'No'}`, 50, y); y += 20
 
-    // FIRMA PROPIETARIO
+    // === FIRMA PROPIETARIO ===
     if (y > doc.page.height - 200) { doc.addPage(); y = 50 }
     doc.fillColor('#1e3a8a').fontSize(10).font('Helvetica-Bold'); doc.text('EL ARRENDADOR (PROPIETARIO)', 50, y); y += 18
-    const h3 = Math.max(addImage(doc, d.firmaPropietario.fotoCedulaFrente, 50, y, 150, 100), addImage(doc, d.firmaPropietario.fotoCedulaReverso, 210, y, 150, 100), addImage(doc, d.firmaPropietario.fotoSelfie, 370, y, 150, 100))
+    const h3 = Math.max(await addImage(doc, d.firmaPropietario.fotoCedulaFrente, 50, y, 150, 100), await addImage(doc, d.firmaPropietario.fotoCedulaReverso, 210, y, 150, 100), await addImage(doc, d.firmaPropietario.fotoSelfie, 370, y, 150, 100))
     if (h3 > 0) y += h3 + 8
-    const h4 = addImage(doc, d.firmaPropietario.firmaManuscrita, 50, y, 250, 80)
+    const h4 = await addImage(doc, d.firmaPropietario.firmaManuscrita, 50, y, 250, 80)
     if (h4 > 0) y += h4 + 5
     doc.fillColor('#666').fontSize(7).font('Helvetica')
     doc.text(`Nombre: ${d.propietario.nombre}    Doc: ${d.propietario.cedula}    Fecha: ${d.firmaPropietario.fechaFirma ? fmtFechaCorta(d.firmaPropietario.fechaFirma) : '—'}`, 50, y); y += 10
     doc.text(`IP: ${d.firmaPropietario.ip || '—'}    OTP: ${d.firmaPropietario.otpValidado ? 'Sí' : 'No'}`, 50, y); y += 20
 
-    // ANEXOS
+    // === ANEXOS ===
     capitulo('ANEXO 1. ACTA DE ENTREGA, INVENTARIO Y DEVOLUCIÓN')
-    tablaSimple(['DATO', 'INFORMACIÓN'], [['Fecha', fmtFechaCorta(d.terminos.fechaInicio)], ['Kilometraje', `${(d.vehiculo.kilometraje || 0).toLocaleString('es-CO')} km`], ['Marca', d.vehiculo.marca], ['Modelo', d.vehiculo.modelo], ['Placa', d.vehiculo.placa], ['Color', d.vehiculo.color || '—'], ['VIN', d.vehiculo.vin || '—'], ['Motor', d.vehiculo.motor || '—']], [180, ancho - 180])
+    tablaSimple(['DATO', 'INFORMACIÓN'], [
+      ['Fecha y hora', fmtFechaCorta(d.terminos.fechaInicio)],
+      ['Kilometraje', `${(d.vehiculo.kilometraje || 0).toLocaleString('es-CO')} km`],
+      ['Marca', d.vehiculo.marca], ['Modelo', d.vehiculo.modelo],
+      ['Placa', d.vehiculo.placa], ['Color', d.vehiculo.color || '—'],
+      ['VIN', d.vehiculo.vin || '—'], ['Motor', d.vehiculo.motor || '—'],
+    ], [200, ancho - 200])
 
     capitulo('ANEXO 2. REGISTRO DE CONDUCTORES AUTORIZADOS')
-    tablaSimple(['N°', 'NOMBRE', 'DOCUMENTO', 'LICENCIA', 'CAT'], [['1', d.conductor.nombre, d.conductor.cedula, d.conductor.licencia || '—', d.conductor.licenciaCat || '—']], [30, 150, 100, 120, 100])
+    tablaSimple(['N°', 'NOMBRE', 'DOCUMENTO', 'LICENCIA', 'CAT'], [
+      ['1', d.conductor.nombre, d.conductor.cedula, d.conductor.licencia || '—', d.conductor.licenciaCat || '—'],
+    ], [30, 150, 100, 120, 100])
 
     capitulo('ANEXO 3. REGISTRO DE PAGOS E INCIDENCIAS')
     clausula('', `Canon: ${fmtCOP(d.terminos.tarifa)} / ${d.terminos.modalidadPago}. Multa: ${fmtCOP(d.terminos.multaDiaria)}/día. Depósito: ${fmtCOP(d.terminos.deposito)}.`)
 
     capitulo('ANEXO 4. CONTROL DE VENCIMIENTO Y TERMINACIÓN')
-    tablaSimple(['CONTROL', 'INFORMACIÓN'], [['Inicio', fmtFechaCorta(d.terminos.fechaInicio)], ['Terminación', d.terminos.fechaFin ? fmtFechaCorta(d.terminos.fechaFin) : 'Indefinida'], ['Modalidad', d.terminos.modalidadPago], ['Estado', 'Pendiente']], [180, ancho - 180])
+    tablaSimple(['CONTROL', 'INFORMACIÓN'], [
+      ['Fecha de inicio', fmtFechaCorta(d.terminos.fechaInicio)],
+      ['Fecha pactada de terminación', d.terminos.fechaFin ? fmtFechaCorta(d.terminos.fechaFin) : 'Indefinida'],
+      ['Modalidad contractual', d.terminos.modalidadPago],
+      ['Estado de liquidación', 'Pendiente'],
+    ], [200, ancho - 200])
 
-    // Footer — FIX: usar range.start para evitar switchToPage out of bounds
+    // Footer
     try {
       const range = doc.bufferedPageRange()
       for (let i = range.start; i < range.start + range.count; i++) {
