@@ -5248,3 +5248,81 @@ Stage Summary:
 - ✅ Fotos accesibles públicamente en /vehiculos/documentos/
 - ✅ UI mejorada con soporte para múltiples fotos por documento
 - ✅ Tecnomecánica visible en módulo Gestión de Vehículos → Ficha técnica → Documentos
+
+---
+Task ID: 54-soat-DLW357-UI-fotos
+Agent: Super Z (main)
+Task: Habilitar la visualizacion de las fotos de tecnomecánica (que no se veian) y cargar el SOAT del vehiculo DLW357 con foto y todos los datos.
+
+Work Log:
+
+PROBLEMA 1 - Fotos de tecnomecánica no se veian:
+- Las URLs /vehiculos/documentos/tecnomecanica-dlw357-{frente,reverso}.jpg
+  SI estaban bien guardadas en la DB Neon
+- El problema: las miniaturas en la UI eran muy pequenas (64x64) y dificiles de ver
+- Solucion: galeria de fotos redisenada
+  * Miniaturas de 96x96 px (50% mas grandes)
+  * Etiqueta overlay 'Frente'/'Reverso'/'Foto N' en cada foto
+  * Borde azul + zoom en hover
+  * Layout horizontal debajo de los datos del documento
+  * Separador con borde punteado entre datos y galeria
+
+SOAT DLW357 CARGADO EN NEON:
+- Aseguradora: AXA Colpatria Seguros S.A.
+- Numero de poliza: 3495589400 (mismo numero de formulario)
+- Codigo aseguradora: 1306, sucursal: 26, clave productor: 57790405, tarifa: 552
+- Fecha de expedicion: 30/12/2025
+- Fecha de inicio de vigencia: 05/01/2026
+- Fecha de vencimiento: 04/01/2027 (VIGENTE, ~440 dias para vencer)
+- Tomador: Guerrero Guerrero, Humberto Jose (CC 1037673099, Guarne)
+- Telefono: 3162289526
+
+VEHICULO SEGUN SOAT:
+- Placa: DLW357, Marca: Ford, Linea: Fiesta, Modelo: 2012
+- Clase: Automovil, Tipo: Autos familiares, Servicio: Particular
+- Cilindraje: 1.597 c.c., Capacidad: 5 pasajeros
+- Motor: CM133391, Chasis: CM133391, VIN: CM133391000000000
+
+VALORES DEL SOAT:
+- Prima SOAT: $442.500
+- Contribucion FOSYGA: $230.100
+- Tasa RUNT: $2.400
+- Total pagado: $675.000
+
+COBERTURAS DOCUMENTADAS (en notas):
+1. Gastos medicos, quirurgicos, farmaceuticos y hospitalarios
+2. Gastos de transporte y movilizacion de victimas (hasta 8,77 UVT)
+3. Indemnizacion por incapacidad permanente (hasta 180 SMLDV)
+4. Indemnizacion por muerte de la victima (hasta 750 SMLDV)
+5. Gastos funerarios
+
+PROCEDIMIENTO EN CASO DE ACCIDENTE (en notas):
+7 pasos detallados: atender emergencia → identificar vehiculo y poliza →
+recopilar documentos → gestionar atencion medica → evaluar indemnizacion →
+presentar reclamacion → hacer seguimiento
+
+EXCLUSIONES DOCUMENTADAS:
+- Danos al propio vehiculo
+- Danos materiales a otros automoviles
+- Danos a inmuebles
+- Perdida de ingresos durante recuperacion
+- Perjuicios que excedan limites legales
+
+FOTO DEL SOAT:
+- /public/vehiculos/documentos/soat-dlw357.jpg (215 KB)
+- Servida en https://jsadr.com.co/vehiculos/documentos/soat-dlw357.jpg
+- HTTP 200 verificado
+
+DOCUMENTOS DEL VEHICULO DLW357 (estado actual):
+1. SOAT - AXA Colpatria - Poliza 3495589400 - Vence 04/01/2027
+   Foto: /vehiculos/documentos/soat-dlw357.jpg
+2. TECNOMECANICA - C.D.A. Ciudad Bonita - Cert 186227880 - Vence 19/12/2026
+   Fotos: frente + reverso
+
+Stage Summary:
+- ✅ GitHub: commit 806dc83 en origin/main
+- ✅ Neon DB: SOAT creado con todos los datos + foto
+- ✅ Vercel: deploy completado (HTTP 200 en todas las fotos)
+- ✅ UI mejorada: galeria de fotos mas grande y visible
+- ✅ Ambos documentos (SOAT + tecnomecánica) visibles con fotos
+- ✅ Script scripts/seed-soat-neon.cjs persistido para futuras referencias
