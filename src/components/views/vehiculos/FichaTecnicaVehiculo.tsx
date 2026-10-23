@@ -64,7 +64,7 @@ export function FichaTecnicaVehiculo({ vehiculoId, onClose }: { vehiculoId: stri
   })
   const [docForm, setDocForm] = useState<any>({
     tipo: 'SOAT', numero: '', fechaEmision: '', fechaVencimiento: '',
-    entidadEmisora: '', archivoUrl: '', notas: '',
+    entidadEmisora: '', archivoUrl: '', archivosExtra: [], notas: '',
   })
 
   const cargar = async () => {
@@ -135,11 +135,46 @@ export function FichaTecnicaVehiculo({ vehiculoId, onClose }: { vehiculoId: stri
         // Imagen: comprimir
         const base64 = await comprimirImagen(file)
         setDocForm(prev => ({ ...prev, archivoUrl: base64 }))
-        toast({ title: 'Foto cargada', description: 'Documento listo' })
+        toast({ title: 'Foto principal cargada', description: 'Documento listo' })
       }
     } catch (err: any) {
       toast({ title: 'Error al cargar archivo', description: err.message, variant: 'destructive' })
     }
+    // Reset input para poder subir el mismo archivo dos veces
+    e.target.value = ''
+  }
+
+  // Subir fotos adicionales (reverso, detalles, etc.)
+  const handleDocExtraUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    try {
+      let url: string
+      if (file.type === 'application/pdf') {
+        const reader = new FileReader()
+        url = await new Promise<string>((resolve) => {
+          reader.onload = (ev) => resolve(ev.target?.result as string)
+          reader.readAsDataURL(file)
+        })
+      } else {
+        url = await comprimirImagen(file)
+      }
+      setDocForm(prev => ({
+        ...prev,
+        archivosExtra: [...(prev.archivosExtra || []), url],
+      }))
+      toast({ title: `Foto adicional ${docForm.archivosExtra?.length ? docForm.archivosExtra.length + 1 : 1} cargada` })
+    } catch (err: any) {
+      toast({ title: 'Error al cargar archivo adicional', description: err.message, variant: 'destructive' })
+    }
+    e.target.value = ''
+  }
+
+  const removeExtraFile = (idx: number) => {
+    setDocForm(prev => ({
+      ...prev,
+      archivosExtra: (prev.archivosExtra || []).filter((_: any, i: number) => i !== idx),
+    }))
   }
 
   const guardarItem = async () => {
@@ -179,12 +214,15 @@ export function FichaTecnicaVehiculo({ vehiculoId, onClose }: { vehiculoId: stri
     }
     const r = await apiFetch(`/api/vehiculos/vehiculos/${vehiculoId}/documentos`, {
       method: 'POST',
-      body: JSON.stringify(docForm),
+      body: JSON.stringify({
+        ...docForm,
+        archivosExtra: docForm.archivosExtra || [],
+      }),
     })
     if (r.success) {
       toast({ title: 'Documento agregado' })
       setDocModal(false)
-      setDocForm({ tipo: 'SOAT', numero: '', fechaEmision: '', fechaVencimiento: '', entidadEmisora: '', archivoUrl: '', notas: '' })
+      setDocForm({ tipo: 'SOAT', numero: '', fechaEmision: '', fechaVencimiento: '', entidadEmisora: '', archivoUrl: '', archivosExtra: [], notas: '' })
       cargar()
     } else {
       toast({ title: 'Error', description: r.error, variant: 'destructive' })
@@ -372,7 +410,17 @@ export function FichaTecnicaVehiculo({ vehiculoId, onClose }: { vehiculoId: stri
             </CardContent></Card>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-              {data.documentos.map((d: any) => (
+              {data.documentos.map((d: any) => {
+                // Parsear archivosExtra (JSON string con URLs adicionales)
+                let archivosExtra: string[] = []
+                try {
+                  if (d.archivosExtra) archivosExtra = JSON.parse(d.archivosExtra)
+                } catch {}
+                const todasLasFotos = [
+                  ...(d.archivoUrl ? [d.archivoUrl] : []),
+                  ...archivosExtra,
+                ]
+                return (
                 <Card key={d.id}><CardContent className="p-3">
                   <div className="flex justify-between items-start">
                     <div className="flex-1">
@@ -395,17 +443,43 @@ export function FichaTecnicaVehiculo({ vehiculoId, onClose }: { vehiculoId: stri
                             : `${d.diasParaVencer} días para vencer`}
                         </div>
                       )}
+                      {d.notas && (
+                        <details className="mt-2 group">
+                          <summary className="text-xs text-blue-700 cursor-pointer hover:underline select-none">
+                            Ver detalles del certificado
+                          </summary>
+                          <pre className="text-[10px] text-muted-foreground mt-1 whitespace-pre-wrap font-sans bg-muted/30 p-2 rounded">
+{d.notas}
+                          </pre>
+                        </details>
+                      )}
                     </div>
-                    {d.archivoUrl && (
-                      <a href={d.archivoUrl} target="_blank" rel="noopener noreferrer">
-                        <Button size="sm" variant="outline">
-                          <FileCheck className="w-3 h-3" />
-                        </Button>
-                      </a>
+                    {todasLasFotos.length > 0 && (
+                      <div className="flex flex-col gap-1 ml-2">
+                        {todasLasFotos.map((url: string, idx: number) => (
+                          <a key={idx} href={url} target="_blank" rel="noopener noreferrer" title={`Abrir foto ${idx + 1}`}>
+                            {url.startsWith('data:image') || url.startsWith('http') || url.startsWith('/') ? (
+                              <img
+                                src={url}
+                                alt={`Foto ${idx + 1}`}
+                                className="w-16 h-16 object-cover rounded border hover:scale-105 transition-transform cursor-pointer"
+                              />
+                            ) : url.startsWith('data:application/pdf') ? (
+                              <Button size="sm" variant="outline" className="w-16 h-16 flex flex-col items-center justify-center p-0">
+                                <FileCheck className="w-4 h-4" />
+                                <span className="text-[9px]">PDF {idx + 1}</span>
+                              </Button>
+                            ) : (
+                              <Button size="sm" variant="outline"><FileCheck className="w-3 h-3" /></Button>
+                            )}
+                          </a>
+                        ))}
+                      </div>
                     )}
                   </div>
                 </CardContent></Card>
-              ))}
+                )
+              })}
             </div>
           )}
         </TabsContent>
@@ -667,7 +741,7 @@ export function FichaTecnicaVehiculo({ vehiculoId, onClose }: { vehiculoId: stri
                 placeholder="Aseguradora, taller autorizado..." />
             </div>
             <div className="col-span-2">
-              <Label>Archivo del documento (foto o PDF)</Label>
+              <Label>Foto principal del documento (frente)</Label>
               <p className="text-xs text-muted-foreground mb-2">
                 Toma una foto del documento (SOAT, tecnomecánica, etc.) o sube un PDF.
               </p>
@@ -691,6 +765,52 @@ export function FichaTecnicaVehiculo({ vehiculoId, onClose }: { vehiculoId: stri
               {docForm.archivoUrl && docForm.archivoUrl.startsWith('data:application/pdf') && (
                 <div className="mt-2 p-2 bg-blue-50 rounded text-xs text-blue-800 flex items-center gap-1">
                   <FileCheck className="w-3 h-3" /> PDF cargado correctamente
+                </div>
+              )}
+            </div>
+            <div className="col-span-2">
+              <Label>Fotos adicionales (reverso, detalles, etc.)</Label>
+              <p className="text-xs text-muted-foreground mb-2">
+                Adjunta fotos extra del mismo documento. Por ejemplo: reverso de la tecnomecánica,
+                detalles específicos, etc.
+              </p>
+              <div className="flex items-center gap-2 flex-wrap">
+                <input
+                  type="file"
+                  accept="image/*,application/pdf"
+                  capture="environment"
+                  onChange={handleDocExtraUpload}
+                  className="hidden"
+                  id="file-doc-extra"
+                />
+                <Button type="button" variant="outline" size="sm" onClick={() => document.getElementById('file-doc-extra')?.click()}>
+                  <Upload className="w-4 h-4 mr-1" /> Agregar foto adicional
+                </Button>
+                {(docForm.archivosExtra?.length || 0) > 0 && (
+                  <span className="text-xs text-green-700 font-medium">
+                    {docForm.archivosExtra.length} foto(s) adicional(es)
+                  </span>
+                )}
+              </div>
+              {(docForm.archivosExtra?.length || 0) > 0 && (
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {docForm.archivosExtra.map((url: string, idx: number) => (
+                    <div key={idx} className="relative">
+                      {url.startsWith('data:image') ? (
+                        <img src={url} alt={`Extra ${idx + 1}`} className="w-20 h-20 object-cover border rounded" />
+                      ) : (
+                        <div className="w-20 h-20 flex items-center justify-center bg-blue-50 rounded border">
+                          <FileCheck className="w-5 h-5 text-blue-600" />
+                        </div>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => removeExtraFile(idx)}
+                        className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full w-4 h-4 flex items-center justify-center text-[10px] hover:bg-red-600"
+                        title="Quitar"
+                      >×</button>
+                    </div>
+                  ))}
                 </div>
               )}
             </div>

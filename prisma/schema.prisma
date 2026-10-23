@@ -2491,12 +2491,13 @@ model InventarioVehiculo {
 model DocumentoVehiculo {
   id              String   @id @default(cuid())
   vehiculoId      String
-  tipo            String   // SOAT | TECNOMECANICA | TARJETA_PROPIEDAD | SEGURO | CONTRATO | OTRO
+  tipo            String   // SOAT | TECNOMECANICA | TARJETA_PROPIEDAD | SEGURO | POLIZA_TODO_RIESGO | CONTRATO | OTRO
   numero          String?  // número de póliza / certificado
   fechaEmision    DateTime?
   fechaVencimiento DateTime?
-  entidadEmisora  String?  // aseguradora, taller autorizado, etc.
-  archivoUrl      String?  // foto o PDF del documento
+  entidadEmisora  String?  // aseguradora, taller autorizado, CDA, etc.
+  archivoUrl      String?  // foto o PDF principal del documento (base64 o URL pública)
+  archivosExtra   String?  // JSON con URLs adicionales (fotos reverso, detalles, etc.) — múltiples archivos
   estado          String   @default("VIGENTE") // VIGENTE | POR_VENCER | VENCIDO
   notas           String?
   creadoPor       String?

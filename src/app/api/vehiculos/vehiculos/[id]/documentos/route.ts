@@ -53,11 +53,18 @@ export async function POST(
     const body = await req.json()
     const {
       tipo, numero, fechaEmision, fechaVencimiento,
-      entidadEmisora, archivoUrl, estado, notas,
+      entidadEmisora, archivoUrl, archivosExtra, estado, notas,
     } = body
 
     if (!tipo) {
       return NextResponse.json({ success: false, error: 'tipo es obligatorio' }, { status: 400 })
+    }
+
+    // archivosExtra: array de URLs (base64 o públicas) con fotos adicionales del documento
+    // (ej. frente y reverso de tecnomecánica). Se serializa como JSON string.
+    let archivosExtraJson: string | null = null
+    if (Array.isArray(archivosExtra) && archivosExtra.length > 0) {
+      archivosExtraJson = JSON.stringify(archivosExtra.filter(u => typeof u === 'string' && u.length > 0))
     }
 
     const doc = await db.documentoVehiculo.create({
@@ -69,6 +76,7 @@ export async function POST(
         fechaVencimiento: fechaVencimiento ? new Date(fechaVencimiento) : null,
         entidadEmisora,
         archivoUrl,
+        archivosExtra: archivosExtraJson,
         estado: estado || 'VIGENTE',
         notas,
         creadoPor: user.id,
