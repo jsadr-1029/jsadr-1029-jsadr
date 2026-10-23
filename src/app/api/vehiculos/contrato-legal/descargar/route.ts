@@ -84,12 +84,35 @@ export async function GET(req: NextRequest) {
         })
       : []
 
+    // === Sanity check de cédula del propietario ===
+    // La cédula correcta de Johan Sebastian Alvarez Del Rio es 1214731649 (10 dígitos).
+    // Algunos registros antiguos pueden tener 12147316499 (11 dígitos = cédula del conductor Sebastian).
+    // Forzamos el valor correcto al renderizar el PDF.
+    let propCedulaFinal = (documento.propietarioCedula || '').trim()
+    if (propCedulaFinal !== '1214731649') {
+      // Si viene la cédula errada (12147316499) o cualquier otra distinta, corregir
+      console.warn(`[contrato-legal/descargar] Cédula propietario incorrecta en DB: "${documento.propietarioCedula}". Forzando a 1214731649.`)
+      propCedulaFinal = '1214731649'
+    }
+    let propNombreFinal = (documento.propietarioNombre || '').trim()
+    if (!propNombreFinal || propNombreFinal.toLowerCase() === 'sebastian') {
+      propNombreFinal = 'Johan Sebastian Alvarez Del Rio'
+    }
+
+    // === Cuenta de pago obligatoria ===
+    const CUENTA_PAGO_BANCO = 'Bancolombia'
+    const CUENTA_PAGO_TIPO = 'Cuenta de Ahorros'
+    const CUENTA_PAGO_NUMERO = '42061620839'
+    const CUENTA_PAGO_TITULAR = propNombreFinal
+    const CUENTA_PAGO_TITULAR_CC = propCedulaFinal
+
     const d = {
       numeroContrato: documento.numeroContrato,
       vehiculo: { placa: documento.vehiculoPlaca, marca: documento.vehiculoMarca, modelo: documento.vehiculoModelo, anio: documento.vehiculoAnio, color: documento.vehiculoColor, kilometraje: documento.vehiculoKilometraje, vin: documento.vehiculoVin, motor: documento.vehiculoMotor },
-      propietario: { nombre: documento.propietarioNombre, cedula: documento.propietarioCedula, telefono: documento.propietarioTelefono, email: documento.propietarioEmail, direccion: documento.propietarioDireccion },
+      propietario: { nombre: propNombreFinal, cedula: propCedulaFinal, telefono: documento.propietarioTelefono, email: documento.propietarioEmail, direccion: documento.propietarioDireccion },
       conductor: { nombre: documento.conductorNombre, cedula: documento.conductorCedula, telefono: documento.conductorTelefono, email: documento.conductorEmail, direccion: documento.conductorDireccion, licencia: documento.conductorLicencia, licenciaCat: documento.conductorLicenciaCat },
       terminos: { modalidadPago: documento.modalidadPago, tarifa: documento.tarifa, diasGracia: documento.diasGracia, multaDiaria: documento.multaDiaria, deposito: documento.deposito, fechaInicio: documento.fechaInicio, fechaFin: documento.fechaFin, descripcionVehiculo: documento.descripcionVehiculo },
+      cuentaPago: { banco: CUENTA_PAGO_BANCO, tipo: CUENTA_PAGO_TIPO, numero: CUENTA_PAGO_NUMERO, titular: CUENTA_PAGO_TITULAR, titularCedula: CUENTA_PAGO_TITULAR_CC },
       firmaConductor: { fotoCedulaFrente: documento.conductorFotoCedulaFrente, fotoCedulaReverso: documento.conductorFotoCedulaReverso, fotoSelfie: documento.conductorFotoSelfie, firmaManuscrita: documento.conductorFirmaManuscrita, otpValidado: documento.conductorOtpValidado, otpHash: documento.conductorOtpHash, fechaFirma: documento.conductorFechaFirma, ip: documento.conductorIp, userAgent: documento.conductorUserAgent },
       firmaPropietario: { fotoCedulaFrente: documento.propietarioFotoCedulaFrente, fotoCedulaReverso: documento.propietarioFotoCedulaReverso, fotoSelfie: documento.propietarioFotoSelfie, firmaManuscrita: documento.propietarioFirmaManuscrita, otpValidado: documento.propietarioOtpValidado, otpHash: documento.propietarioOtpHash, fechaFirma: documento.propietarioFechaFirma, ip: documento.propietarioIp, userAgent: documento.propietarioUserAgent },
       inventario: inventarioItems.map((it, idx) => ({
@@ -223,10 +246,23 @@ export async function GET(req: NextRequest) {
       ['Periodicidad', d.terminos.modalidadPago],
       ['Día de pago', 'Sábado de cada semana'],
       ['Medio de pago', 'Consignación bancaria / Transferencia'],
-      ['Titular receptor del pago', d.propietario.nombre],
+      ['Banco receptor', d.cuentaPago.banco],
+      ['Tipo de cuenta', d.cuentaPago.tipo],
+      ['Número de cuenta', d.cuentaPago.numero],
+      ['Titular de la cuenta', d.cuentaPago.titular],
+      ['C.C. del titular', d.cuentaPago.titularCedula],
     ], [200, ancho - 200])
 
-    clausula('CLÁUSULA 10. REGISTRO DE PAGOS', `Las partes conservarán los comprobantes de pago y los registros de las obligaciones causadas. EL ARRENDADOR entregará constancia de los pagos recibidos cuando corresponda.`)
+    clausula('CLÁUSULA 10. CUENTA DE PAGO Y REGISTRO DE PAGOS', `Todos los pagos derivados del presente contrato, incluyendo el canon de arrendamiento, el depósito de garantía, los valores por concepto de mora y cualquier otra obligación económica a cargo de EL ARRENDATARIO, deberán realizarse EXCLUSIVAMENTE a la siguiente cuenta bancaria, titularidad de EL ARRENDADOR:`)
+    tablaSimple(['DATO DE LA CUENTA', 'INFORMACIÓN'], [
+      ['Banco', d.cuentaPago.banco],
+      ['Tipo de cuenta', d.cuentaPago.tipo],
+      ['Número de cuenta', d.cuentaPago.numero],
+      ['Titular de la cuenta', d.cuentaPago.titular],
+      ['Cédula de ciudadanía del titular', d.cuentaPago.titularCedula],
+      ['Concepto de la transferencia', `${d.numeroContrato} - Canon arrendamiento`],
+    ], [200, ancho - 200])
+    clausula('', `EL ARRENDATARIO deberá conservar el comprobante de cada pago (captura, recibo o soporte de transferencia) y enviarlo al correo electrónico de EL ARRENDADOR o subirlo al sistema de gestión. No se considerará válido un pago efectuado por un medio distinto al aquí pactado (efectivo en mano, terceros, cuentas distintas) salvo autorización escrita y previa de EL ARRENDADOR.\n\nLas partes conservarán los comprobantes de pago y los registros de las obligaciones causadas. EL ARRENDADOR entregará constancia de los pagos recibidos cuando corresponda.`)
 
     clausula('CLÁUSULA 11. MORA', `EL ARRENDATARIO deberá pagar el canon y los demás conceptos válidamente pactados en las fechas acordadas. Cuando se produzca un retraso, EL ARRENDADOR podrá enviar un requerimiento escrito. Si se pactan intereses moratorios, se aplicarán únicamente cuando legalmente procedan y dentro de los límites legales vigentes.`)
 
@@ -577,6 +613,15 @@ export async function GET(req: NextRequest) {
 
     capitulo('ANEXO 3. REGISTRO DE PAGOS E INCIDENCIAS')
     clausula('', `Canon: ${fmtCOP(d.terminos.tarifa)} / ${d.terminos.modalidadPago}. Multa: ${fmtCOP(d.terminos.multaDiaria)}/día. Depósito: ${fmtCOP(d.terminos.deposito)}.`)
+    tablaSimple(['CUENTA DE PAGO OBLIGATORIA', 'INFORMACIÓN'], [
+      ['Banco', d.cuentaPago.banco],
+      ['Tipo de cuenta', d.cuentaPago.tipo],
+      ['Número de cuenta', d.cuentaPago.numero],
+      ['Titular', d.cuentaPago.titular],
+      ['C.C. del titular', d.cuentaPago.titularCedula],
+      ['Concepto de la transferencia', `${d.numeroContrato} - Canon arrendamiento`],
+      ['Recordatorio', 'Pagos solo de lunes a sábado (no domingos). Vence el sábado de cada semana.'],
+    ], [200, ancho - 200])
 
     capitulo('ANEXO 4. CONTROL DE VENCIMIENTO Y TERMINACIÓN')
     tablaSimple(['CONTROL', 'INFORMACIÓN'], [
