@@ -244,12 +244,12 @@ export async function GET(req: NextRequest) {
       })),
     }
 
-    const doc = new PDFDocument({ size: 'LETTER', margins: { top: 50, bottom: 50, left: 50, right: 50 } })
+    const doc = new PDFDocument({ size: 'LETTER', margins: { top: 50, bottom: 60, left: 50, right: 50 } })
     const buffers: Buffer[] = []
     doc.on('data', b => buffers.push(b))
     const ancho = doc.page.width - 100
     const PAGE_HEIGHT = doc.page.height
-    const MARGIN_BOTTOM = 50 // margen inferior reservado (footer)
+    const MARGIN_BOTTOM = 60 // margen inferior reservado (footer con numeración)
     const MARGIN_TOP = 50
     let y = 50
 
@@ -1172,36 +1172,59 @@ export async function GET(req: NextRequest) {
       clausula('', `⚠️ Error generando sello de seguridad. Hash de verificación: ${hashFirma}`)
     }
 
-    // Footer legal con numeración de páginas — estilo documento legal
-    // Se dibuja en CADA página al final del documento usando bufferedPageRange.
-    // PDFKit permite volver a una página anterior con switchToPage y agregar contenido.
+    // === Dibujar footer legal en CADA página ===
+    // Estrategia: recorrer todas las páginas con switchToPage y dibujar el footer.
+    // PDFKit permite agregar contenido a páginas anteriores con esta técnica.
     try {
       const range = doc.bufferedPageRange()
       const totalPaginas = range.count
       const fechaGeneracion = new Date().toLocaleDateString('es-CO', { year: 'numeric', month: 'long', day: 'numeric' })
+
       for (let i = range.start; i < range.start + range.count; i++) {
         doc.switchToPage(i)
         const numPagina = i - range.start + 1
         const pageH = doc.page.height
         const pageW = doc.page.width
-        // Línea separadora del footer (azul)
-        doc.save()
-        doc.moveTo(50, pageH - 40).lineTo(pageW - 50, pageH - 40).strokeColor('#1e3a8a').lineWidth(0.5).stroke()
-        doc.restore()
-        // Lado izquierdo: identificación del documento
-        doc.fillColor('#1e3a8a').fontSize(7).font('Helvetica-Bold')
-        doc.text(`CONTRATO ${d.numeroContrato}`, 50, pageH - 35, { width: 250, align: 'left' })
-        doc.fillColor('#666').fontSize(6).font('Helvetica')
-        doc.text(`Vehículo placa ${d.vehiculo.placa} · CAV-001 v2.0`, 50, pageH - 27, { width: 250, align: 'left' })
-        // Centro: sello de autenticidad (resumen)
-        doc.fillColor('#92400e').fontSize(6).font('Helvetica-Oblique')
-        doc.text('Documento legal firmado electrónicamente · Ley 527 de 1999', 50, pageH - 19, { width: pageW - 100, align: 'center' })
-        // Lado derecho: paginación "Página X de Y" (formato documento legal)
-        doc.fillColor('#1e3a8a').fontSize(9).font('Helvetica-Bold')
-        doc.text(`Página ${numPagina} de ${totalPaginas}`, pageW - 200, pageH - 35, { width: 150, align: 'right' })
-        doc.fillColor('#666').fontSize(6).font('Helvetica')
-        doc.text(`Generado: ${fechaGeneracion}`, pageW - 200, pageH - 27, { width: 150, align: 'right' })
+
+        // === Línea separadora del footer (azul, gruesa) ===
+        doc.moveTo(50, pageH - 40)
+        doc.lineTo(pageW - 50, pageH - 40)
+        doc.strokeColor('#1e3a8a')
+        doc.lineWidth(1)
+        doc.stroke()
+
+        // === Lado izquierdo: identificación del contrato ===
+        doc.fillColor('#1e3a8a')
+        doc.fontSize(8)
+        doc.font('Helvetica-Bold')
+        doc.text(`CONTRATO ${d.numeroContrato}`, 50, pageH - 33, { width: 280, align: 'left' })
+
+        doc.fillColor('#666666')
+        doc.fontSize(7)
+        doc.font('Helvetica')
+        doc.text(`Vehículo placa ${d.vehiculo.placa} · CAV-001 v2.0`, 50, pageH - 22, { width: 280, align: 'left' })
+
+        // === Centro: nota legal ===
+        doc.fillColor('#92400e')
+        doc.fontSize(7)
+        doc.font('Helvetica-Oblique')
+        doc.text('Documento legal firmado electrónicamente · Ley 527 de 1999', 50, pageH - 22, { width: pageW - 100, align: 'center' })
+
+        // === Lado derecho: NUMERACIÓN DE PÁGINA (formato documento legal) ===
+        doc.fillColor('#1e3a8a')
+        doc.fontSize(11)
+        doc.font('Helvetica-Bold')
+        doc.text(`Página ${numPagina} de ${totalPaginas}`, pageW - 200, pageH - 33, { width: 150, align: 'right' })
+
+        doc.fillColor('#666666')
+        doc.fontSize(7)
+        doc.font('Helvetica')
+        doc.text(`Generado: ${fechaGeneracion}`, pageW - 200, pageH - 22, { width: 150, align: 'right' })
       }
+
+      // Volver a la última página para que el doc.end() funcione correctamente
+      const lastRange = doc.bufferedPageRange()
+      doc.switchToPage(lastRange.start + lastRange.count - 1)
     } catch (e) {
       console.error('[contrato-legal/descargar] Error en footer:', e)
     }
