@@ -230,17 +230,45 @@ export async function GET(req: NextRequest) {
       }
       doc.fillColor('#000').fontSize(8).font('Helvetica')
       const contentH = doc.heightOfString(contenido, { width: ancho, align: 'justify' })
-      const needed = titleH + contentH + 12
-      // Si el contenido es muy grande, asegurar al menos el título + primera parte
-      ensureSpace(Math.min(needed, 100))
+
+      // === Garantizar que el TÍTULO completo + primera línea del contenido quepan ===
+      // Si solo se asegura 'min(needed, 100)', el contenido puede empezar en una página
+      // y continuar en otra, pero el cálculo de y puede dejar texto superpuesto.
+      // Solución: asegurar al menos titleH + 20 (1 línea) en la página actual.
+      ensureSpace(titleH + 20)
+
+      // Dibujar el título (completo en una página)
       if (titulo) {
         doc.fillColor('#1e3a8a').fontSize(10).font('Helvetica-Bold')
         doc.text(titulo, 50, y, { width: ancho })
         y += titleH
       }
+
+      // === Dibujar el contenido paginando si es necesario ===
+      // Si el contenido no cabe completo en la página actual, paginarlo por bloques.
       doc.fillColor('#000').fontSize(8).font('Helvetica')
-      doc.text(contenido, 50, y, { width: ancho, align: 'justify' })
-      y += contentH + 8
+      const disponibleAntes = PAGE_HEIGHT - MARGIN_BOTTOM - y
+      if (contentH <= disponibleAntes) {
+        // Caso simple: cabe todo en la página actual
+        doc.text(contenido, 50, y, { width: ancho, align: 'justify' })
+        y += contentH + 8
+      } else {
+        // El contenido NO cabe completo en la página actual.
+        // Dividir por párrafos (\n\n) y dibujar uno por uno paginando.
+        const parrafos = contenido.split('\n\n')
+        for (const parrafo of parrafos) {
+          const parrafoH = doc.heightOfString(parrafo, { width: ancho, align: 'justify' })
+          // Si el párrafo NO cabe en la página actual, saltar a nueva página
+          if (y + parrafoH > PAGE_HEIGHT - MARGIN_BOTTOM) {
+            doc.addPage()
+            y = MARGIN_TOP
+          }
+          doc.fillColor('#000').fontSize(8).font('Helvetica')
+          doc.text(parrafo, 50, y, { width: ancho, align: 'justify' })
+          y += parrafoH + 4
+        }
+        y += 4
+      }
     }
 
     function capitulo(titulo: string) {
