@@ -177,19 +177,46 @@ export async function GET(req: NextRequest) {
     }
 
     // Helpers
+    // Calcula la altura necesaria para una celda de texto con wrapping
+    function calcularAlturaTexto(texto: string, maxWidth: number, fontSize: number): number {
+      if (!texto) return 14
+      doc.fontSize(fontSize).font('Helvetica')
+      const h = doc.heightOfString(texto, { width: maxWidth })
+      return Math.max(h + 6, 14) // mínimo 14px
+    }
+
     function tablaSimple(titulos: string[], filas: (string | null)[][], colWidths: number[]) {
-      // Cabecera (14 px) + filas (14 px c/u) + padding (10 px)
-      const totalNeeded = 14 + filas.length * 14 + 10
-      ensureSpace(Math.min(totalNeeded, 80))
+      // Calcular altura de la cabecera
+      const headerH = 16
+      // Primero asegurar espacio para la cabecera + primera fila
+      ensureSpace(headerH + 20)
       let x = 50
       doc.fillColor('#1e3a8a')
-      for (let i = 0; i < titulos.length; i++) { doc.rect(x, y, colWidths[i], 14).fill('#1e3a8a'); doc.fillColor('#fff').fontSize(7).font('Helvetica-Bold'); doc.text(titulos[i], x + 2, y + 4, { width: colWidths[i] - 4 }); x += colWidths[i] }
-      y += 14
+      for (let i = 0; i < titulos.length; i++) {
+        doc.rect(x, y, colWidths[i], headerH).fill('#1e3a8a')
+        doc.fillColor('#fff').fontSize(7).font('Helvetica-Bold')
+        doc.text(titulos[i], x + 2, y + 4, { width: colWidths[i] - 4 })
+        x += colWidths[i]
+      }
+      y += headerH
       for (const fila of filas) {
         x = 50
-        ensureSpace(28) // una fila + margen
-        for (let i = 0; i < fila.length; i++) { doc.rect(x, y, colWidths[i], 14).stroke('#ccc'); doc.fillColor('#000').fontSize(7).font('Helvetica'); doc.text(fila[i] || '—', x + 2, y + 4, { width: colWidths[i] - 4 }); x += colWidths[i] }
-        y += 14
+        // Calcular altura dinámica de la fila basada en el contenido más alto
+        let rowH = 16 // altura mínima
+        for (let i = 0; i < fila.length; i++) {
+          const cellText = fila[i] || '—'
+          const cellH = calcularAlturaTexto(cellText, colWidths[i] - 4, 7)
+          if (cellH > rowH) rowH = cellH
+        }
+        ensureSpace(rowH + 4)
+        for (let i = 0; i < fila.length; i++) {
+          const cellText = fila[i] || '—'
+          doc.rect(x, y, colWidths[i], rowH).stroke('#ccc')
+          doc.fillColor('#000').fontSize(7).font('Helvetica')
+          doc.text(cellText, x + 2, y + 4, { width: colWidths[i] - 4 })
+          x += colWidths[i]
+        }
+        y += rowH
       }
       y += 10
     }
@@ -199,13 +226,22 @@ export async function GET(req: NextRequest) {
       const contentH = doc.heightOfString(contenido, { width: ancho, align: 'justify' })
       const needed = titleH + contentH + 12
       ensureSpace(Math.min(needed, 100))
-      if (titulo) { doc.fillColor('#1e3a8a').fontSize(10).font('Helvetica-Bold'); doc.text(titulo, 50, y, { width: ancho }); y += 14 }
-      doc.fillColor('#000').fontSize(8).font('Helvetica'); doc.text(contenido, 50, y, { width: ancho, align: 'justify' }); y += contentH + 8
+      if (titulo) {
+        doc.fillColor('#1e3a8a').fontSize(10).font('Helvetica-Bold')
+        doc.text(titulo, 50, y, { width: ancho })
+        y += 14
+      }
+      doc.fillColor('#000').fontSize(8).font('Helvetica')
+      doc.text(contenido, 50, y, { width: ancho, align: 'justify' })
+      y += contentH + 8
     }
     function capitulo(titulo: string) {
       // Un capítulo necesita: padding superior (8) + título (20) = 28 px mínimo
       ensureSpace(50)
-      y += 8; doc.fillColor('#1e3a8a').fontSize(12).font('Helvetica-Bold'); doc.text(titulo, 50, y, { width: ancho }); y += 22
+      y += 8
+      doc.fillColor('#1e3a8a').fontSize(12).font('Helvetica-Bold')
+      doc.text(titulo, 50, y, { width: ancho })
+      y += 22
     }
 
     // === ENCABEZADO ===
@@ -278,7 +314,7 @@ export async function GET(req: NextRequest) {
 
     clausula('CLÁUSULA 5. OBJETO', `EL ARRENDADOR concede a EL ARRENDATARIO el uso temporal del vehículo individualizado en la cláusula anterior, a cambio del canon acordado y bajo las condiciones establecidas en este documento.\n\nEL ARRENDATARIO recibe el derecho de uso dentro de los límites pactados, sin adquirir la propiedad del vehículo ni facultad para venderlo, gravarlo, subarrendarlo, cederlo o disponer de él como dueño.\n\nLa entrega del vehículo se acreditará mediante el acta de entrega correspondiente.`)
 
-    clausula('CLÁUSULA 6. DESTINACIÓN AUTORIZADA', `Las partes acuerdan que el vehículo será utilizado para uso particular y actividad comercial autorizada.\n\nEL ARRENDATARIO no podrá modificar la destinación pactada sin autorización previa y verificable de EL ARRENDADOR.`)
+    clausula('CLÁUSULA 6. DESTINACIÓN AUTORIZADA', `EL ARRENDATARIO se obliga a destinar el vehículo exclusivamente para uso personal y particular, conforme a su naturaleza y a las disposiciones legales vigentes.\n\nEn consecuencia, queda prohibido utilizarlo para actividades comerciales, transporte remunerado de pasajeros o mercancías, o cualquier otra finalidad diferente de la aquí autorizada, salvo autorización previa, expresa y escrita de EL ARRENDADOR, siempre que el uso autorizado sea legalmente procedente.\n\nEl incumplimiento de esta obligación constituirá incumplimiento contractual y facultará a EL ARRENDADOR para ejercer los mecanismos contractuales y legales que correspondan.`)
 
     clausula('CLÁUSULA 7. PLAZO, ENTREGA MATERIAL, RENOVACIÓN Y ABANDONO', `El plazo del presente contrato, las condiciones de entrega, renovación y abandono se regulan de la siguiente manera:`)
     tablaSimple(['CONDICIÓN', 'INFORMACIÓN'], [
@@ -561,16 +597,17 @@ export async function GET(req: NextRequest) {
     // Cabecera del inventario con columnas: N° / Item / Descripción / Cant. / Estado Entrega / Estado Devolución / Obs.
     const invColW = [25, 110, 150, 35, 65, 65, ancho - 460]
     const invHeaders = ['#', 'ÍTEM', 'DESCRIPCIÓN', 'CANT.', 'ESTADO ENTREGA', 'ESTADO DEVOLUCIÓN', 'OBSERVACIONES']
-    ensureSpace(50)
+    const invHeaderH = 24
+    ensureSpace(invHeaderH + 30)
     let xi = 50
     doc.fillColor('#1e3a8a')
     for (let i = 0; i < invHeaders.length; i++) {
-      doc.rect(xi, y, invColW[i], 22).fill('#1e3a8a')
+      doc.rect(xi, y, invColW[i], invHeaderH).fill('#1e3a8a')
       doc.fillColor('#fff').fontSize(7).font('Helvetica-Bold')
       doc.text(invHeaders[i], xi + 2, y + 7, { width: invColW[i] - 4, align: 'center' })
       xi += invColW[i]
     }
-    y += 22
+    y += invHeaderH
 
     if (d.inventario.length === 0) {
       // Si no hay inventario cargado, mostrar filas en blanco para diligenciar a mano
@@ -579,22 +616,19 @@ export async function GET(req: NextRequest) {
         ensureSpace(30)
         xi = 50
         for (let i = 0; i < invHeaders.length; i++) {
-          doc.rect(xi, y, invColW[i], 20).stroke('#999')
+          doc.rect(xi, y, invColW[i], 22).stroke('#999')
           doc.fillColor('#ccc').fontSize(7).font('Helvetica')
           const txt = i === 0 ? String(r + 1) : ''
           doc.text(txt, xi + 2, y + 7, { width: invColW[i] - 4, align: 'center' })
           xi += invColW[i]
         }
-        y += 20
+        y += 22
       }
       doc.fillColor('#999').fontSize(7).font('Helvetica-Oblique')
       doc.text('(Inventario sin registrar en sistema. Diligenciar manualmente al momento de la entrega.)', 50, y); y += 14
     } else {
-      // Filas reales con el inventario del vehículo
+      // Filas reales con el inventario del vehículo — altura dinámica
       for (const it of d.inventario) {
-        ensureSpace(30)
-        xi = 50
-        const rowH = 26
         const cells = [
           String(it.n),
           it.nombre,
@@ -604,6 +638,14 @@ export async function GET(req: NextRequest) {
           '', // estado devolución (vacío para diligenciar al devolver)
           it.notas || '',
         ]
+        // Calcular altura máxima entre todas las celdas
+        let rowH = 22 // mínimo
+        for (let i = 0; i < cells.length; i++) {
+          const cellH = calcularAlturaTexto(cells[i], invColW[i] - 4, 7)
+          if (cellH > rowH) rowH = cellH
+        }
+        ensureSpace(rowH + 4)
+        xi = 50
         for (let i = 0; i < cells.length; i++) {
           doc.rect(xi, y, invColW[i], rowH).stroke('#bbb')
           doc.fillColor('#000').fontSize(7).font(i === 0 || i === 3 ? 'Helvetica-Bold' : 'Helvetica')
@@ -788,29 +830,24 @@ export async function GET(req: NextRequest) {
       doc.fillColor('#78350f').fontSize(9).font('Helvetica-Bold')
       doc.text('CONTRATO DE ARRENDAMIENTO DE VEHÍCULO AUTOMOTOR', selloX + 180, selloY + 35, { width: selloW - 200 })
 
-      // Datos del sello
+      // Datos del sello — sin continued para evitar superposición
       doc.fillColor('#1f2937').fontSize(8).font('Helvetica')
       doc.text(`Contrato N°: ${d.numeroContrato}`, selloX + 180, selloY + 55, { width: selloW - 200 })
       doc.text(`Placa: ${d.vehiculo.placa}  ·  Fecha: ${fmtFechaCorta(new Date())}`, selloX + 180, selloY + 70, { width: selloW - 200 })
-      doc.text(`Hash de verificación:`, selloX + 180, selloY + 90, { width: selloW - 200, continued: true })
-      doc.font('Helvetica-Bold').fillColor('#1e3a8a').text(`  ${hashCorto}`, { width: selloW - 200 })
+      doc.text(`Hash: ${hashCorto}`, selloX + 180, selloY + 85, { width: selloW - 200 })
 
-      // Estado de firmas
-      doc.fillColor('#1f2937').font('Helvetica')
-      const firmanteConductor = d.firmaConductor.otpValidado ? '✓ VERIFICADA' : 'PENDIENTE'
-      const firmantePropietario = d.firmaPropietario.otpValidado ? '✓ VERIFICADA' : 'PENDIENTE'
-      const colorConductor = d.firmaConductor.otpValidado ? '#16a34a' : '#dc2626'
-      const colorPropietario = d.firmaPropietario.otpValidado ? '#16a34a' : '#dc2626'
-      doc.text(`Firma conductor: `, selloX + 180, selloY + 110, { width: selloW - 200, continued: true })
-      doc.fillColor(colorConductor).font('Helvetica-Bold').text(firmanteConductor, { width: selloW - 200, continued: true })
-      doc.fillColor('#1f2937').font('Helvetica').text(`    Firma propietario: `, { width: selloW - 200, continued: true })
-      doc.fillColor(colorPropietario).font('Helvetica-Bold').text(firmantePropietario, { width: selloW - 200 })
+      // Estado de firmas (cada uno en su propia línea)
+      const firmanteConductor = d.firmaConductor.otpValidado ? '✓ VERIFICADA' : '✗ PENDIENTE'
+      const firmantePropietario = d.firmaPropietario.otpValidado ? '✓ VERIFICADA' : '✗ PENDIENTE'
+      doc.fillColor('#1f2937').font('Helvetica').fontSize(8)
+      doc.text(`Firma conductor: ${firmanteConductor}`, selloX + 180, selloY + 105, { width: selloW - 200 })
+      doc.text(`Firma propietario: ${firmantePropietario}`, selloX + 180, selloY + 120, { width: selloW - 200 })
 
       // URL de verificación
       doc.fillColor('#1e3a8a').fontSize(8).font('Helvetica-Oblique')
       doc.text(`Escanee el código QR o visite:`, selloX + 180, selloY + 140, { width: selloW - 200 })
       doc.font('Helvetica-Bold').fillColor('#1e3a8a')
-      doc.text(`https://jsadr.com.co/verificar-contrato?hash=${hashCorto}`, selloX + 180, selloY + 155, { width: selloW - 200 })
+      doc.text(`jsadr.com.co/verificar-contrato`, selloX + 180, selloY + 155, { width: selloW - 200 })
 
       // Aviso legal
       doc.fillColor('#78350f').fontSize(7).font('Helvetica-Oblique')
