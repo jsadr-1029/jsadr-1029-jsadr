@@ -92,6 +92,7 @@ function isPublicEndpoint(pathname: string): boolean {
     pathname === '/api/solicitudes-web' || // POST público: cliente envía solicitud de crédito desde el portal (token va en body, no en header)
     pathname === '/api/firma' || // GET/POST público: firma electrónica del cliente (token va en query/body)
     pathname.startsWith('/api/firma/certificado') || // GET público: certificado de firma electrónica
+    pathname === '/verificar-contrato' || // GET público: verificación de autenticidad de contratos (por hash)
     pathname.startsWith('/api/solicitudes-web/cliente/') // GET público: solicitudes web por cliente (token va en query ?token=)
   )
 }

@@ -3,11 +3,14 @@
 // Genera el PDF completo del contrato legal CAV-001 v2.0
 // con todas las cláusulas en el orden exacto de la plantilla
 // y los datos del propietario Johan Sebastian Alvarez Del Rio
+// Incluye sello de seguridad y código QR de autenticidad
 // =====================================================
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import PDFDocument from 'pdfkit'
 import { createCanvas, loadImage } from 'canvas'
+import QRCode from 'qrcode'
+import crypto from 'crypto'
 
 function fmtCOP(v: number | null | undefined): string {
   if (!v) return '$0'
@@ -84,14 +87,18 @@ export async function GET(req: NextRequest) {
         })
       : []
 
-    // === Sanity check de cédula y nombre del propietario ===
-    // El propietario correcto es Johan Sebastian Alvarez Del Rio, CC 1214731649 (10 dígitos).
-    // Algunos registros antiguos pueden tener:
-    //   - cédula errada 12147316499 (11 dígitos = cédula del conductor Sebastian)
-    //   - nombre "Jsadr Arrendamientos SAS" u otras variantes comerciales
-    // Forzamos SIEMPRE los valores correctos al renderizar el PDF.
+    // === Sanity check de datos del propietario ===
+    // El propietario predeterminado es Johan Sebastian Alvarez Del Rio, CC 1214731649.
+    // Dirección: Cl 92 44A 34, Teléfono: 3235949510, Email: jsadr23@outlook.com
+    // Estos datos son SIEMPRE los mismos para el arrendador Johan Sebastian Alvarez Del Rio.
+    // Para un propietario distinto (excepción), el sistema deberá preguntar
+    // si se cargan los datos predefinidos o si se usan los datos de un nuevo titular.
+    // Por ahora, forzamos los valores del titular por defecto (CC 1214731649).
     const NOMBRE_PROPIETARIO_CORRECTO = 'Johan Sebastian Alvarez Del Rio'
     const CEDULA_PROPIETARIO_CORRECTA = '1214731649'
+    const DIRECCION_PROPIETARIO_CORRECTA = 'Cl 92 44A 34'
+    const TELEFONO_PROPIETARIO_CORRECTO = '3235949510'
+    const EMAIL_PROPIETARIO_CORRECTO = 'jsadr23@outlook.com'
 
     let propCedulaFinal = (documento.propietarioCedula || '').trim()
     if (propCedulaFinal !== CEDULA_PROPIETARIO_CORRECTA) {
@@ -108,6 +115,20 @@ export async function GET(req: NextRequest) {
       console.warn(`[contrato-legal/descargar] Nombre propietario en DB: "${propNombreRaw}". Forzando a "${NOMBRE_PROPIETARIO_CORRECTO}".`)
     }
 
+    // Dirección y teléfono: también se fuerzan a los valores correctos del titular
+    let propDireccionFinal = DIRECCION_PROPIETARIO_CORRECTA
+    let propTelefonoFinal = TELEFONO_PROPIETARIO_CORRECTO
+    let propEmailFinal = EMAIL_PROPIETARIO_CORRECTO
+    if ((documento.propietarioDireccion || '').trim() !== DIRECCION_PROPIETARIO_CORRECTA) {
+      console.warn(`[contrato-legal/descargar] Dirección propietario en DB: "${documento.propietarioDireccion}". Forzando a "${DIRECCION_PROPIETARIO_CORRECTA}".`)
+    }
+    if ((documento.propietarioTelefono || '').trim() !== TELEFONO_PROPIETARIO_CORRECTO) {
+      console.warn(`[contrato-legal/descargar] Teléfono propietario en DB: "${documento.propietarioTelefono}". Forzando a "${TELEFONO_PROPIETARIO_CORRECTO}".`)
+    }
+    if ((documento.propietarioEmail || '').trim() !== EMAIL_PROPIETARIO_CORRECTO) {
+      console.warn(`[contrato-legal/descargar] Email propietario en DB: "${documento.propietarioEmail}". Forzando a "${EMAIL_PROPIETARIO_CORRECTO}".`)
+    }
+
     // === Cuenta de pago obligatoria ===
     const CUENTA_PAGO_BANCO = 'Bancolombia'
     const CUENTA_PAGO_TIPO = 'Cuenta de Ahorros'
@@ -118,9 +139,9 @@ export async function GET(req: NextRequest) {
     const d = {
       numeroContrato: documento.numeroContrato,
       vehiculo: { placa: documento.vehiculoPlaca, marca: documento.vehiculoMarca, modelo: documento.vehiculoModelo, anio: documento.vehiculoAnio, color: documento.vehiculoColor, kilometraje: documento.vehiculoKilometraje, vin: documento.vehiculoVin, motor: documento.vehiculoMotor },
-      propietario: { nombre: propNombreFinal, cedula: propCedulaFinal, telefono: documento.propietarioTelefono, email: documento.propietarioEmail, direccion: documento.propietarioDireccion },
+      propietario: { nombre: propNombreFinal, cedula: propCedulaFinal, telefono: propTelefonoFinal, email: propEmailFinal, direccion: propDireccionFinal },
       conductor: { nombre: documento.conductorNombre, cedula: documento.conductorCedula, telefono: documento.conductorTelefono, email: documento.conductorEmail, direccion: documento.conductorDireccion, licencia: documento.conductorLicencia, licenciaCat: documento.conductorLicenciaCat },
-      terminos: { modalidadPago: documento.modalidadPago, tarifa: documento.tarifa, diasGracia: documento.diasGracia, multaDiaria: documento.multaDiaria, deposito: documento.deposito, fechaInicio: documento.fechaInicio, fechaFin: documento.fechaFin, descripcionVehiculo: documento.descripcionVehiculo },
+      terminos: { modalidadPago: documento.modalidadPago, tarifa: documento.tarifa, diasGracia: documento.diasGracia, multaDiaria: documento.multaDiaria, deposito: documento.deposito, fechaInicio: documento.fechaInicio, fechaFin: documento.fechaFin, descripcionVehiculo: documento.descripcionVehiculo, tarifaSemanal: documento.tarifa },
       cuentaPago: { banco: CUENTA_PAGO_BANCO, tipo: CUENTA_PAGO_TIPO, numero: CUENTA_PAGO_NUMERO, titular: CUENTA_PAGO_TITULAR, titularCedula: CUENTA_PAGO_TITULAR_CC },
       firmaConductor: { fotoCedulaFrente: documento.conductorFotoCedulaFrente, fotoCedulaReverso: documento.conductorFotoCedulaReverso, fotoSelfie: documento.conductorFotoSelfie, firmaManuscrita: documento.conductorFirmaManuscrita, otpValidado: documento.conductorOtpValidado, otpHash: documento.conductorOtpHash, fechaFirma: documento.conductorFechaFirma, ip: documento.conductorIp, userAgent: documento.conductorUserAgent },
       firmaPropietario: { fotoCedulaFrente: documento.propietarioFotoCedulaFrente, fotoCedulaReverso: documento.propietarioFotoCedulaReverso, fotoSelfie: documento.propietarioFotoSelfie, firmaManuscrita: documento.propietarioFirmaManuscrita, otpValidado: documento.propietarioOtpValidado, otpHash: documento.propietarioOtpHash, fechaFirma: documento.propietarioFechaFirma, ip: documento.propietarioIp, userAgent: documento.propietarioUserAgent },
@@ -200,8 +221,8 @@ export async function GET(req: NextRequest) {
       ['Placa del vehículo', d.vehiculo.placa],
       ['Arrendador', d.propietario.nombre],
       ['Arrendatario', d.conductor.nombre],
-      ['Fecha de inicio', fmtFechaCorta(d.terminos.fechaInicio)],
-      ['Fecha de terminación pactada', d.terminos.fechaFin ? fmtFechaCorta(d.terminos.fechaFin) : 'Indefinida'],
+      ['Fecha de inicio', '24 / 10 / 2026'],
+      ['Fecha de terminación pactada', '23 / 01 / 2027'],
       ['Valor del canon', fmtCOP(d.terminos.tarifa)],
       ['Periodicidad de pago', d.terminos.modalidadPago],
     ], [200, ancho - 200])
@@ -219,9 +240,9 @@ export async function GET(req: NextRequest) {
       ['Segundo nombre', 'Sebastian'],
       ['Tipo de documento', 'Cédula de ciudadanía'],
       ['Número de identificación', d.propietario.cedula],
-      ['Dirección de residencia', d.propietario.direccion || '—'],
-      ['Teléfono celular', d.propietario.telefono || '—'],
-      ['Correo electrónico', d.propietario.email || '—'],
+      ['Dirección de residencia', d.propietario.direccion],
+      ['Teléfono celular', d.propietario.telefono],
+      ['Correo electrónico', d.propietario.email],
       ['Calidad en la que actúa', 'Propietario inscrito del vehículo'],
     ], [200, ancho - 200])
     clausula('', `EL ARRENDADOR declara que cuenta con las facultades necesarias para celebrar el presente contrato y que no conoce impedimentos jurídicos que hagan ilícita o imposible la entrega del vehículo bajo las condiciones aquí pactadas.`)
@@ -259,12 +280,28 @@ export async function GET(req: NextRequest) {
 
     clausula('CLÁUSULA 6. DESTINACIÓN AUTORIZADA', `Las partes acuerdan que el vehículo será utilizado para uso particular y actividad comercial autorizada.\n\nEL ARRENDATARIO no podrá modificar la destinación pactada sin autorización previa y verificable de EL ARRENDADOR.`)
 
-    clausula('CLÁUSULA 7. PLAZO Y ENTREGA MATERIAL', `La entrega se realizará en las siguientes condiciones:`)
+    clausula('CLÁUSULA 7. PLAZO, ENTREGA MATERIAL, RENOVACIÓN Y ABANDONO', `El plazo del presente contrato, las condiciones de entrega, renovación y abandono se regulan de la siguiente manera:`)
     tablaSimple(['CONDICIÓN', 'INFORMACIÓN'], [
-      ['Fecha de inicio', fmtFechaCorta(d.terminos.fechaInicio)],
-      ['Fecha de terminación pactada', d.terminos.fechaFin ? fmtFechaCorta(d.terminos.fechaFin) : 'Indefinida'],
+      ['Fecha de inicio', '24 / 10 / 2026'],
+      ['Fecha de terminación pactada', '23 / 01 / 2027'],
+      ['Duración del plazo inicial', 'Tres (3) meses'],
       ['Lugar de entrega', 'Medellín, Colombia'],
+      ['Modalidad de renovación', 'Automática por el mismo plazo si no hay notificación'],
+      ['Periodo de transición a Otro Sí', 'Al cumplirse un (1) año desde el inicio'],
+      ['Plazo del Otro Sí anual', 'Un (1) año'],
     ], [200, ancho - 200])
+
+    clausula('', `7.1. RENOVACIÓN AUTOMÁTICA. Si ninguna de las partes notifica a la otra su voluntad de dar por terminado el contrato al vencimiento del plazo inicial (23/01/2027) o de cualquiera de sus renovaciones, el contrato se entenderá renovado automáticamente por el mismo plazo inicialmente pactado, conforme al artículo 1622 del Código Civil colombiano (tácita reconducción).
+
+7.2. OTRO SÍ ANUAL. Al cumplirse un (1) año contado desde la fecha de inicio del contrato (24/10/2026), las partes suscribirán un OTRO SÍ que modificará únicamente el plazo, pasando de un plazo inicial de tres (3) meses a un plazo anual de un (1) año. Las demás condiciones del contrato (canon, modalidad de pago, obligaciones, etc.) se mantendrán sin variación salvo acuerdo expreso entre las partes.
+
+7.3. PREAVISO DE TERMINACIÓN. Conforme al artículo 1622 del Código Civil colombiano y la jurisprudencia de la Corte Suprema de Justicia, cualquiera de las partes que desee dar por terminado el contrato al vencimiento del plazo inicial o de cualquiera de sus renovaciones deberá notificar a la otra parte con una antelación mínima de treinta (30) días calendario a la fecha de vencimiento. La notificación deberá hacerse por escrito (correo electrónico, mensaje de texto o carta) a los datos de contacto registrados en la cláusula 1 y cláusula 2 del presente contrato. La recepción del preaviso deberá ser confirmada por la otra parte.
+
+7.4. ABANDONO DEL CONTRATO POR PARTE DEL ARRENDATARIO. Si EL ARRENDATARIO decide abandonar el contrato antes del vencimiento del plazo pactado, sin mediar causa imputable a EL ARRENDADOR, deberá pagar una multa correspondiente a UNA (1) SEMANA DE LIQUIDACIÓN del canon de arrendamiento vigente al momento del abandono. Esta multa no excluye las obligaciones económicas que EL ARRENDATARIO tenga pendientes (cánones vencidos, daños al vehículo, etc.) y deberá pagarse antes de la devolución del vehículo.
+
+7.5. CASOS DE TERMINACIÓN ANTICIPADA SIN MULTA. El preaviso de 30 días y la multa por abandono no aplicarán cuando la terminación se origine en: (i) incumplimiento grave de EL ARRENDADOR debidamente acreditado, (ii) pérdida total del vehículo por caso fortuito o fuerza mayor, (iii) muerte o incapacidad permanente de EL ARRENDATARIO, o (iv) acuerdo mutuo por escrito.
+
+7.6. ENTREGA MATERIAL. La entrega material del vehículo se realizará en Medellín, Colombia, el día 24/10/2026, fecha a partir de la cual se entenderá iniciado el plazo del contrato. La entrega se acreditará mediante el Acta de Entrega e Inventario (Anexo 1) firmada por ambas partes.`)
 
     clausula('CLÁUSULA 8. ESTADO DEL VEHÍCULO', `El estado del vehículo al momento de la entrega se documentará en el Anexo 1. Acta de entrega e inventario. El anexo incluirá: kilometraje, nivel de combustible, estado exterior e interior, accesorios, llaves, documentos, daños preexistentes y fotografías.`)
 
@@ -656,11 +693,134 @@ export async function GET(req: NextRequest) {
 
     capitulo('ANEXO 4. CONTROL DE VENCIMIENTO Y TERMINACIÓN')
     tablaSimple(['CONTROL', 'INFORMACIÓN'], [
-      ['Fecha de inicio', fmtFechaCorta(d.terminos.fechaInicio)],
-      ['Fecha pactada de terminación', d.terminos.fechaFin ? fmtFechaCorta(d.terminos.fechaFin) : 'Indefinida'],
-      ['Modalidad contractual', d.terminos.modalidadPago],
+      ['Fecha de inicio', '24 / 10 / 2026'],
+      ['Fecha pactada de terminación inicial', '23 / 01 / 2027'],
+      ['Duración del plazo inicial', 'Tres (3) meses'],
+      ['Renovación automática', 'Sí, por el mismo plazo si no hay preaviso de 30 días'],
+      ['Fecha estimada de Otro Sí anual', '24 / 10 / 2027 (al cumplirse 1 año)'],
+      ['Plazo del Otro Sí', 'Un (1) año'],
+      ['Multa por abandono anticipado', 'Una (1) semana de liquidación del canon'],
+      ['Modalidad contractual de pago', d.terminos.modalidadPago],
       ['Estado de liquidación', 'Pendiente'],
     ], [200, ancho - 200])
+
+    // ============ SELLO DE SEGURIDAD Y CÓDIGO QR DE AUTENTICIDAD ============
+    capitulo('SELLO DE SEGURIDAD Y CÓDIGO QR DE AUTENTICIDAD')
+
+    // Generar hash único del contrato (firma criptográfica)
+    const datosFirma = [
+      d.numeroContrato,
+      d.vehiculo.placa,
+      d.propietario.cedula,
+      d.conductor.cedula,
+      d.terminos.fechaInicio?.toISOString() || '',
+      d.terminos.fechaFin?.toISOString() || '',
+      d.terminos.tarifa?.toString() || '',
+      d.firmaConductor.otpHash || '',
+      d.firmaPropietario.otpHash || '',
+      d.firmaConductor.fechaFirma?.toISOString() || '',
+      d.firmaPropietario.fechaFirma?.toISOString() || '',
+    ].join('|')
+    const hashFirma = crypto.createHash('sha256').update(datosFirma).digest('hex').toUpperCase()
+    const hashCorto = hashFirma.substring(0, 16)
+    const fechaEmisionSello = new Date().toISOString()
+
+    clausula('', `El presente contrato cuenta con un sello de seguridad criptográfico que permite verificar su autenticidad. Cualquier modificación posterior al documento invalidará el hash de verificación.`)
+    tablaSimple(['DATO DE VERIFICACIÓN', 'VALOR'], [
+      ['Número de contrato', d.numeroContrato],
+      ['Hash de autenticidad (SHA-256)', hashFirma],
+      ['Hash corto de verificación', hashCorto],
+      ['Fecha de emisión del sello', fmtFechaCorta(new Date())],
+      ['Placa del vehículo', d.vehiculo.placa],
+      ['Cédula del arrendador', d.propietario.cedula],
+      ['Cédula del arrendatario', d.conductor.cedula],
+      ['Firma conductor (OTP)', d.firmaConductor.otpValidado ? 'VERIFICADA' : 'Pendiente'],
+      ['Firma propietario (OTP)', d.firmaPropietario.otpValidado ? 'VERIFICADA' : 'Pendiente'],
+      ['URL de verificación', `https://jsadr.com.co/verificar-contrato?hash=${hashCorto}`],
+    ], [200, ancho - 200])
+
+    // Generar el código QR con los datos de verificación
+    try {
+      ensureSpace(220)
+      const qrData = JSON.stringify({
+        contrato: d.numeroContrato,
+        placa: d.vehiculo.placa,
+        propietario: d.propietario.cedula,
+        conductor: d.conductor.cedula,
+        hash: hashCorto,
+        hashCompleto: hashFirma,
+        fechaEmision: fechaEmisionSello,
+        url: `https://jsadr.com.co/verificar-contrato?hash=${hashCorto}`,
+        firmas: {
+          conductor: d.firmaConductor.otpValidado,
+          propietario: d.firmaPropietario.otpValidado,
+        },
+      })
+      const qrBuffer = await QRCode.toBuffer(qrData, {
+        type: 'png',
+        margin: 1,
+        width: 200,
+        color: { dark: '#1e3a8a', light: '#ffffff' },
+      })
+
+      // === Sello visual con QR ===
+      ensureSpace(220)
+      const selloX = 50
+      const selloY = y
+      const selloW = ancho
+      const selloH = 200
+
+      // Fondo del sello
+      doc.save()
+      doc.rect(selloX, selloY, selloW, selloH).fill('#fef3c7').stroke('#d97706')
+      doc.lineWidth(2)
+      doc.rect(selloX + 5, selloY + 5, selloW - 10, selloH - 10).stroke('#d97706')
+      doc.restore()
+
+      // QR a la izquierda
+      doc.image(qrBuffer, selloX + 15, selloY + 25, { width: 150, height: 150 })
+
+      // Título del sello
+      doc.fillColor('#92400e').fontSize(14).font('Helvetica-Bold')
+      doc.text('🔒 SELLO DE AUTENTICIDAD', selloX + 180, selloY + 15, { width: selloW - 200 })
+
+      // Subtítulo
+      doc.fillColor('#78350f').fontSize(9).font('Helvetica-Bold')
+      doc.text('CONTRATO DE ARRENDAMIENTO DE VEHÍCULO AUTOMOTOR', selloX + 180, selloY + 35, { width: selloW - 200 })
+
+      // Datos del sello
+      doc.fillColor('#1f2937').fontSize(8).font('Helvetica')
+      doc.text(`Contrato N°: ${d.numeroContrato}`, selloX + 180, selloY + 55, { width: selloW - 200 })
+      doc.text(`Placa: ${d.vehiculo.placa}  ·  Fecha: ${fmtFechaCorta(new Date())}`, selloX + 180, selloY + 70, { width: selloW - 200 })
+      doc.text(`Hash de verificación:`, selloX + 180, selloY + 90, { width: selloW - 200, continued: true })
+      doc.font('Helvetica-Bold').fillColor('#1e3a8a').text(`  ${hashCorto}`, { width: selloW - 200 })
+
+      // Estado de firmas
+      doc.fillColor('#1f2937').font('Helvetica')
+      const firmanteConductor = d.firmaConductor.otpValidado ? '✓ VERIFICADA' : 'PENDIENTE'
+      const firmantePropietario = d.firmaPropietario.otpValidado ? '✓ VERIFICADA' : 'PENDIENTE'
+      const colorConductor = d.firmaConductor.otpValidado ? '#16a34a' : '#dc2626'
+      const colorPropietario = d.firmaPropietario.otpValidado ? '#16a34a' : '#dc2626'
+      doc.text(`Firma conductor: `, selloX + 180, selloY + 110, { width: selloW - 200, continued: true })
+      doc.fillColor(colorConductor).font('Helvetica-Bold').text(firmanteConductor, { width: selloW - 200, continued: true })
+      doc.fillColor('#1f2937').font('Helvetica').text(`    Firma propietario: `, { width: selloW - 200, continued: true })
+      doc.fillColor(colorPropietario).font('Helvetica-Bold').text(firmantePropietario, { width: selloW - 200 })
+
+      // URL de verificación
+      doc.fillColor('#1e3a8a').fontSize(8).font('Helvetica-Oblique')
+      doc.text(`Escanee el código QR o visite:`, selloX + 180, selloY + 140, { width: selloW - 200 })
+      doc.font('Helvetica-Bold').fillColor('#1e3a8a')
+      doc.text(`https://jsadr.com.co/verificar-contrato?hash=${hashCorto}`, selloX + 180, selloY + 155, { width: selloW - 200 })
+
+      // Aviso legal
+      doc.fillColor('#78350f').fontSize(7).font('Helvetica-Oblique')
+      doc.text('Documento generado electrónicamente. La modificación de este documento invalida el sello de autenticidad. Conforme a la Ley 527 de 1999 (mensajes de datos) y el Decreto 1074 de 2015.', selloX + 180, selloY + 175, { width: selloW - 200 })
+
+      y = selloY + selloH + 15
+    } catch (err) {
+      console.error('[contrato-legal/descargar] Error generando QR/sello:', err)
+      clausula('', `⚠️ Error generando sello de seguridad. Hash de verificación: ${hashFirma}`)
+    }
 
     // Footer
     try {
