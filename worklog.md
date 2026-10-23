@@ -5326,3 +5326,79 @@ Stage Summary:
 - ✅ UI mejorada: galeria de fotos mas grande y visible
 - ✅ Ambos documentos (SOAT + tecnomecánica) visibles con fotos
 - ✅ Script scripts/seed-soat-neon.cjs persistido para futuras referencias
+
+---
+Task ID: 55-fotos-inventario-pdf + editar-eliminar-docs
+Agent: Super Z (main)
+Task: Las fotos de los documentos (SOAT, tecnomecánica) deben cargarse en el PDF de inventario cuando se descarga, y debe haber opción para actualizar los documentos cuando se vencen.
+
+Work Log:
+
+CAMBIO 1 - FOTOS EN EL PDF DE INVENTARIO/ENTREGA:
+- Endpoint /api/vehiculos/vehiculos/[id]/pdf-entrega ampliado:
+  * Antes: solo incluía la foto principal (archivoUrl)
+  * Ahora: incluye TODAS las fotos (archivoUrl + archivosExtra)
+  * Galería en grid de 2 fotos por fila con etiquetas:
+    - 'Foto principal'
+    - 'Foto adicional 1'
+    - 'Foto adicional 2'
+    - ...
+  * Cada foto con marco visual:
+    - Borde gris si la imagen se cargó correctamente
+    - Marco naranja + '[Foto no disponible]' si falla la carga
+  * Pagina automáticamente según necesidad
+
+- Helper getImage ampliado para soportar URLs relativas:
+  * data:image/...;base64,... → lee directamente del base64
+  * /vehiculos/documentos/... → primero intenta filesystem local (public/),
+    si no existe descarga desde https://jsadr.com.co/ruta
+  * http/https → descarga directa
+  * Redimensiona automáticamente imágenes > 200KB
+
+CAMBIO 2 - EDITAR DOCUMENTOS EXISTENTES:
+- Nuevo endpoint PATCH /api/vehiculos/vehiculos/[id]/documentos/[docId]:
+  * Actualiza campos: numero, fechaEmision, fechaVencimiento,
+    entidadEmisora, archivoUrl, archivosExtra, estado, notas
+  * Solo actualiza campos presentes en el body (PATCH semántico)
+  * Registra auditoría (accion: ACTUALIZAR, datosNuevos)
+  * Requiere rol ADMIN o GESTOR
+- Nuevo endpoint DELETE /api/vehiculos/vehiculos/[id]/documentos/[docId]:
+  * Elimina documento con confirmación
+  * Registra auditoría (accion: ELIMINAR)
+  * Requiere rol ADMIN
+
+CAMBIO 3 - UI DE GESTIÓN DE DOCUMENTOS:
+- Cada tarjeta de documento en la lista ahora muestra:
+  * Badges visuales 'VENCIDO' (rojo) y 'POR_VENCER' (amarillo) además del estado
+  * Botón editar (icono lápiz) que abre modal de actualización
+  * Botón eliminar (icono basura, rojo) con confirmación
+- Modal 'Actualizar documento' (nuevo):
+  * Formulario completo con todos los campos del documento
+  * Selector de tipo, número, fechas, entidad emisora
+  * Selector de estado: VIGENTE / POR_VENCER / VENCIDO
+  * Botón 'Reemplazar foto principal' con preview
+  * Botón 'Agregar foto adicional' con miniaturas removibles
+  * Textarea grande para notas/detalles del certificado
+  * Mensaje guía: 'Usa este formulario cuando el documento
+    se haya vencido o reemplazado por uno nuevo'
+
+CASOS DE USO CUBIERTOS:
+1. 'El SOAT se venció, tengo el nuevo':
+   → Botón editar → cambiar número, fechas, subir foto nueva → guardar
+2. 'La tecnomecánica vence pronto':
+   → Botón editar → cambiar fechas y foto → guardar
+3. 'Este documento ya no aplica':
+   → Botón eliminar → confirmar → eliminado
+
+VERIFICACIÓN POST-DEPLOY:
+- GET /api/vehiculos/seed-tecnomecanica-dlw357?key=...: success=true
+- GET /vehiculos/documentos/soat-dlw357.jpg: HTTP 200
+- TypeScript compila sin errores
+
+Stage Summary:
+- ✅ GitHub: commit e5f2fb6 en origin/main
+- ✅ Vercel: deploy completado
+- ✅ PDF de inventario ahora embebe todas las fotos de los documentos
+- ✅ Endpoints PATCH + DELETE para documentos creados
+- ✅ UI con botones editar/eliminar en cada documento
+- ✅ Modal de edición completo con reemplazo de fotos
