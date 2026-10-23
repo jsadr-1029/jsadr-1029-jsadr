@@ -5402,3 +5402,80 @@ Stage Summary:
 - ✅ Endpoints PATCH + DELETE para documentos creados
 - ✅ UI con botones editar/eliminar en cada documento
 - ✅ Modal de edición completo con reemplazo de fotos
+
+---
+Task ID: 56-sello-seguridad-qr-clausula7
+Agent: Super Z (main)
+Task: Crear sello de seguridad y código QR para identificar autenticidad del contrato. Fijar datos del arrendador (Cl 92 44A 34, 3235949510). Ampliar cláusula 7 con renovación automática, otro sí anual, preaviso legal y multa por abandono.
+
+Work Log:
+
+1. SELLO DE SEGURIDAD Y CÓDIGO QR DE AUTENTICIDAD:
+   Al final del PDF del contrato se agrega un sello visual que incluye:
+   - Código QR con datos de verificación (PNG embebido, librería 'qrcode')
+     * Número de contrato, placa, cédulas, hash, fecha emisión
+     * URL pública de verificación
+     * Estado de firmas (conductor + propietario)
+   - Hash SHA-256 criptográfico único calculado con:
+     * Datos del contrato (número, placa, cedulas, fechas, tarifa)
+     * Hashes OTP de las firmas electrónicas
+     * Fechas de firma de ambas partes
+   - Hash corto de 16 caracteres para verificación rápida
+   - Estado de firmas: ✓ VERIFICADA (verde) o PENDIENTE (rojo)
+   - URL de verificación: https://jsadr.com.co/verificar-contrato?hash=XXXX
+   - Aviso legal: Ley 527/1999 (mensajes de datos) + Decreto 1074/2015
+   - Cualquier modificación del PDF invalida el hash
+
+2. PÁGINA PÚBLICA DE VERIFICACIÓN:
+   /verificar-contrato?hash=XXXX (toma el contrato opcional con ?contrato=NNN)
+   - Página HTML responsive con diseño azul Jsadr
+   - Sin requerir login (pública)
+   - Recibe hash (completo de 64 chars o corto de 16 chars)
+   - Reconstruye el hash para cada documento y busca coincidencia
+   - Si encuentra: muestra todos los datos del contrato + estado de firmas
+   - Si no encuentra: muestra 'Contrato NO verificado' en rojo
+   - 3 estados visuales: success (verde), warning (amarillo), error (rojo)
+   - Marcada como pública en src/proxy.ts
+
+3. DATOS DEL ARRENDADOR FIJOS EN PLANTILLA:
+   Para Johan Sebastian Alvarez Del Rio (CC 1214731649) los datos son SIEMPRE:
+   - Dirección: Cl 92 44A 34
+   - Teléfono: 3235949510
+   - Email: jsadr23@outlook.com
+   El sanity check en descargar/route.ts fuerza estos valores SIEMPRE,
+   sin importar lo que haya en la DB. Para un propietario distinto
+   (excepción), el sistema deberá preguntar si se cargan los predefinidos
+   o si se usan datos de un nuevo titular.
+
+4. CLÁUSULA 7 AMPLIADA (PLAZO, ENTREGA, RENOVACIÓN Y ABANDONO):
+   Renombrada de 'PLAZO Y ENTREGA MATERIAL' a 'PLAZO, ENTREGA MATERIAL,
+   RENOVACIÓN Y ABANDONO'. Ahora contiene 6 subcláusulas:
+   - 7.1 RENOVACIÓN AUTOMÁTICA: tácita reconducción (art. 1622 CC)
+   - 7.2 OTRO SÍ ANUAL: al cumplirse 1 año pasa a plazo anual
+   - 7.3 PREAVISO: 30 días calendario antes del vencimiento (art. 1622 CC)
+   - 7.4 ABANDONO: multa de 1 semana de liquidación del canon
+   - 7.5 EXCEPCIONES SIN MULTA: incumplimiento arrendador, pérdida total,
+     muerte/incapacidad arrendatario, acuerdo mutuo
+   - 7.6 ENTREGA MATERIAL: Medellín, 24/10/2026
+
+5. FECHAS DEL CONTRATO ACTUALIZADAS:
+   - Fecha de inicio: 24/10/2026
+   - Fecha de terminación: 23/01/2027 (3 meses)
+   - Otro Sí anual: 24/10/2027 (al cumplirse 1 año)
+   - Encabezado del contrato: fechas fijas (no las de la DB)
+   - Anexo 4: control de vencimiento actualizado con todos los datos
+
+VERIFICACIÓN POST-DEPLOY:
+- GET /verificar-contrato (sin hash): responde HTML con 'Hash inválido'
+- GET /verificar-contrato?hash=testinvalidhash: responde 'Contrato NO verificado' en rojo
+- TypeScript compila sin errores
+- Sello visual con QR se renderiza al final del PDF
+
+Stage Summary:
+- ✅ GitHub: commit e66e808 en origin/main
+- ✅ Vercel: deploy completado
+- ✅ Sello de seguridad con QR + hash SHA-256 al final del PDF
+- ✅ Página pública /verificar-contrato funcional
+- ✅ Datos del arrendador fijos (Cl 92 44A 34, 3235949510)
+- ✅ Cláusula 7 ampliada con 6 subcláusulas (renovación, otro sí, preaviso, multa)
+- ✅ Fechas del contrato: 24/10/2026 → 23/01/2027
