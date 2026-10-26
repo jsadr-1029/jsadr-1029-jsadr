@@ -555,16 +555,11 @@ export async function GET(req: NextRequest) {
 
     clausula('CLÁUSULA 23. INMOVILIZACIÓN', `Si el vehículo es inmovilizado o retenido por una autoridad, EL ARRENDATARIO deberá informar inmediatamente: autoridad que intervino, motivo conocido, lugar donde quedó el vehículo, número del comparendo o expediente, y gastos y documentos generados.`)
 
-    // ============ CAPÍTULO VII ============
-    capitulo('CAPÍTULO VII. COMPARENDOS Y FOTODETECCIONES')
-
-    clausula('CLÁUSULA 24. DEBER DE INFORMACIÓN Y COLABORACIÓN', `Cuando EL ARRENDADOR reciba una notificación relacionada con una posible infracción ocurrida durante el período de arrendamiento, podrá solicitar a EL ARRENDATARIO la información razonablemente necesaria para establecer quién tenía el vehículo y quién lo conducía. EL ARRENDATARIO deberá responder dentro de los dos (2) días hábiles siguientes.`)
-
-    clausula('CLÁUSULA 25. PROCEDIMIENTO DOCUMENTAL PARA FOTODETECCIONES', `EL ARRENDADOR podrá: identificar la actuación, recopilar pruebas (contrato, acta, registro de conductores, comprobantes), solicitar información al arrendatario, actuar ante la autoridad (solicitar información, aportar documentos, informar identidad del conductor, solicitar correcciones) y dar seguimiento conservando copias de radicaciones y decisiones.`)
-
-    clausula('CLÁUSULA 26. ALCANCE JURÍDICO DE LAS FOTODETECCIONES', `Las partes reconocen que: el contrato no transfiere automáticamente una fotodetección ni una sanción; la autoridad competente debe determinar la actuación conforme a la ley; la responsabilidad se determina según la ley y las circunstancias probadas. Aplican la Ley 769 de 2002, la Ley 1843 de 2017 y la Sentencia C-038 de 2020.`)
-
-    clausula('CLÁUSULA 27. INCUMPLIMIENTO DEL DEBER DE COLABORACIÓN', `Si EL ARRENDATARIO incumple injustificadamente su obligación de suministrar información o colaborar y ello ocasiona un perjuicio directo, cierto y jurídicamente atribuible, EL ARRENDADOR podrá reclamar la reparación que legalmente proceda. No se trasladarán contractualmente sanciones personales ni responsabilidades exclusivas de otra persona.`)
+    // ============ CAPÍTULO VII — ELIMINADO (pendiente nuevo contenido) ============
+    // [Marcador de posición: aquí se insertará el nuevo Capítulo VII cuando el
+    //  usuario proporcione el contenido actualizado. El capítulo anterior
+    //  (CLÁUSULAS 24-27 sobre comparendos y fotodetecciones) fue eliminado
+    //  según solicitud del usuario. El Capítulo VIII se mantiene intacto.]
 
     // ============ CAPÍTULO VIII ============
     capitulo('CAPÍTULO VIII. INSPECCIÓN, LOCALIZACIÓN Y DATOS PERSONALES')
