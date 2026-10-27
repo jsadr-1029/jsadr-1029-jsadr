@@ -253,6 +253,45 @@ export async function GET(req: NextRequest) {
     const MARGIN_TOP = 50
     let y = 50
 
+    // === MARCA DE AGUA "JSADR" ===
+    // Se dibuja en CADA página (incluida la primera y las nuevas creadas con addPage).
+    // Usa el evento 'pageAdded' para que se dibuje automáticamente cuando PDFKit
+    // crea una nueva página. Para la primera página, se llama manualmente después
+    // de registrar el evento.
+    // La marca es muy suave (opacidad 0.06) para NO afectar la visibilidad
+    // del contenido del documento.
+    function dibujarMarcaAgua() {
+      try {
+        const pageW = doc.page.width
+        const pageH = doc.page.height
+        doc.save()
+        // Opacidad muy baja para que no afecte la lectura del contenido
+        doc.fillColor('#1e3a8a')
+        doc.opacity(0.06)
+        doc.fontSize(72)
+        doc.font('Helvetica-Bold')
+        // Rotar 45 grados y centrar en la página
+        doc.rotate(45, { origin: [pageW / 2, pageH / 2] })
+        doc.text('JSADR', pageW / 2 - 100, pageH / 2 - 40, { width: 200, align: 'center' })
+        // Marca secundaria más pequeña en otra esquina
+        doc.fontSize(14)
+        doc.opacity(0.08)
+        doc.text('Documento legal · Jsadr', pageW / 2 - 100, pageH / 2 + 30, { width: 200, align: 'center' })
+        doc.restore()
+      } catch (e) {
+        console.error('[contrato-legal/descargar] Error dibujando marca de agua:', e)
+      }
+    }
+
+    // Dibujar marca de agua en cada nueva página automáticamente
+    doc.on('pageAdded', () => {
+      dibujarMarcaAgua()
+    })
+
+    // Dibujar marca de agua en la PRIMERA página (el evento pageAdded no se dispara
+    // para la primera página, así que la llamamos manualmente)
+    dibujarMarcaAgua()
+
     // === Helpers de paginación ===
     // ensureSpace(needed): si no hay 'needed' px disponibles antes del margen
     // inferior, salta a una nueva página. Solo cuando es estrictamente necesario,
