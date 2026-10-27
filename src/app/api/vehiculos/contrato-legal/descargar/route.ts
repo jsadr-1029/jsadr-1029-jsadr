@@ -254,26 +254,20 @@ export async function GET(req: NextRequest) {
     let y = 50
 
     // === MARCA DE AGUA "JSADR" ===
-    // Se dibuja en CADA página (incluida la primera y las nuevas creadas con addPage).
-    // Usa el evento 'pageAdded' para que se dibuje automáticamente cuando PDFKit
-    // crea una nueva página. Para la primera página, se llama manualmente después
-    // de registrar el evento.
-    // La marca es muy suave (opacidad 0.06) para NO afectar la visibilidad
-    // del contenido del documento.
+    // Se dibuja al FINAL en cada página usando switchToPage, NO con el evento
+    // pageAdded. Esto evita que la marca se dibuje en páginas que terminen
+    // siendo vacías (sin contenido), las cuales se eliminan al final.
     function dibujarMarcaAgua() {
       try {
         const pageW = doc.page.width
         const pageH = doc.page.height
         doc.save()
-        // Opacidad muy baja para que no afecte la lectura del contenido
         doc.fillColor('#1e3a8a')
         doc.opacity(0.06)
         doc.fontSize(72)
         doc.font('Helvetica-Bold')
-        // Rotar 45 grados y centrar en la página
         doc.rotate(45, { origin: [pageW / 2, pageH / 2] })
         doc.text('JSADR', pageW / 2 - 100, pageH / 2 - 40, { width: 200, align: 'center' })
-        // Marca secundaria más pequeña en otra esquina
         doc.fontSize(14)
         doc.opacity(0.08)
         doc.text('Documento legal · Jsadr', pageW / 2 - 100, pageH / 2 + 30, { width: 200, align: 'center' })
@@ -283,14 +277,18 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    // Dibujar marca de agua en cada nueva página automáticamente
-    doc.on('pageAdded', () => {
-      dibujarMarcaAgua()
-    })
-
-    // Dibujar marca de agua en la PRIMERA página (el evento pageAdded no se dispara
-    // para la primera página, así que la llamamos manualmente)
-    dibujarMarcaAgua()
+    // === Track de páginas con contenido ===
+    // Registramos qué páginas tienen contenido real (no solo marca de agua)
+    // para poder dibujar la marca de agua solo en esas páginas al final.
+    const paginasConContenido = new Set<number>()
+    function marcarPaginaConContenido() {
+      try {
+        const range = doc.bufferedPageRange()
+        paginasConContenido.add(range.start + range.count - 1)
+      } catch {}
+    }
+    // Marcar la primera página
+    marcarPaginaConContenido()
 
     // === Helpers de paginación ===
     // ensureSpace(needed): si no hay 'needed' px disponibles antes del margen
@@ -304,6 +302,7 @@ export async function GET(req: NextRequest) {
       if (available < needed) {
         doc.addPage()
         y = MARGIN_TOP
+        marcarPaginaConContenido()
       }
     }
 
@@ -393,6 +392,7 @@ export async function GET(req: NextRequest) {
           if (y + parrafoH > PAGE_HEIGHT - MARGIN_BOTTOM) {
             doc.addPage()
             y = MARGIN_TOP
+            marcarPaginaConContenido()
           }
           doc.fillColor('#000').fontSize(8).font('Helvetica')
           doc.text(parrafo, 50, y, { width: ancho, align: 'justify' })
@@ -913,7 +913,7 @@ export async function GET(req: NextRequest) {
     }
 
     // Estado general del vehículo (exterior, interior, llantas, etc.)
-    ensureSpace(180)
+    ensureSpace(40) // solo el título (la tabla maneja su propia paginación)
     doc.fillColor('#1e3a8a').fontSize(10).font('Helvetica-Bold')
     doc.text('ESTADO GENERAL DEL VEHÍCULO AL ENTREGAR', 50, y, { width: ancho })
     y += doc.heightOfString('ESTADO GENERAL DEL VEHÍCULO AL ENTREGAR', { width: ancho }) + 6
@@ -987,7 +987,7 @@ export async function GET(req: NextRequest) {
     }
 
     // === FIRMAS DEL ACTA DE ENTREGA ===
-    ensureSpace(140)
+    ensureSpace(110) // título + párrafo + 2 casillas de firma (80px)
     doc.fillColor('#1e3a8a').fontSize(10).font('Helvetica-Bold')
     doc.text('CONSTANCIA DE ENTREGA Y RECEPCIÓN DEL VEHÍCULO', 50, y, { width: ancho })
     y += doc.heightOfString('CONSTANCIA DE ENTREGA Y RECEPCIÓN DEL VEHÍCULO', { width: ancho }) + 6
@@ -1013,7 +1013,7 @@ export async function GET(req: NextRequest) {
     y += 80
 
     // === SECCIÓN DE DEVOLUCIÓN (a diligenciar al finalizar) ===
-    ensureSpace(220)
+    ensureSpace(40) // solo el banner (la tabla y firmas manejan su propia paginación)
     doc.fillColor('#fff').rect(50, y, ancho, 18).fill('#6b7280')
     doc.fillColor('#fff').fontSize(10).font('Helvetica-Bold'); doc.text('ACTA DE DEVOLUCIÓN (a diligenciar al finalizar el contrato)', 55, y + 4); y += 22
     tablaSimple(['DATO', 'INFORMACIÓN'], [
@@ -1026,7 +1026,7 @@ export async function GET(req: NextRequest) {
     ], [200, ancho - 200])
 
     // === Espacios de firma para el acta de devolución ===
-    ensureSpace(150)
+    ensureSpace(120) // título + párrafo + 2 casillas de firma (90px)
     doc.fillColor('#000').fontSize(9).font('Helvetica-Bold')
     doc.text('CONSTANCIA DE DEVOLUCIÓN Y RECEPCIÓN DEL VEHÍCULO', 50, y, { width: ancho })
     y += doc.heightOfString('CONSTANCIA DE DEVOLUCIÓN Y RECEPCIÓN DEL VEHÍCULO', { width: ancho }) + 8
@@ -1205,7 +1205,25 @@ export async function GET(req: NextRequest) {
       clausula('', `⚠️ Error generando sello de seguridad. Hash de verificación: ${hashFirma}`)
     }
 
-    // === Dibujar footer legal en CADA página ===
+    // === Dibujar MARCA DE AGUA en páginas con contenido ===
+    // Se dibuja DESPUÉS de todo el contenido, usando switchToPage para volver
+    // a cada página. Solo se dibuja en páginas que tienen contenido real.
+    try {
+      const range = doc.bufferedPageRange()
+      for (let i = range.start; i < range.start + range.count; i++) {
+        if (paginasConContenido.has(i)) {
+          doc.switchToPage(i)
+          dibujarMarcaAgua()
+        }
+      }
+      // Volver a la última página con contenido
+      const lastRange = doc.bufferedPageRange()
+      doc.switchToPage(lastRange.start + lastRange.count - 1)
+    } catch (e) {
+      console.error('[contrato-legal/descargar] Error dibujando marcas de agua:', e)
+    }
+
+    // === Dibujar footer legal en CADA página con contenido ===
     // Estrategia: recorrer todas las páginas con switchToPage y dibujar el footer.
     // PDFKit permite agregar contenido a páginas anteriores con esta técnica.
     try {
@@ -1214,6 +1232,7 @@ export async function GET(req: NextRequest) {
       const fechaGeneracion = new Date().toLocaleDateString('es-CO', { year: 'numeric', month: 'long', day: 'numeric' })
 
       for (let i = range.start; i < range.start + range.count; i++) {
+        if (!paginasConContenido.has(i)) continue  // Saltar páginas vacías
         doc.switchToPage(i)
         const numPagina = i - range.start + 1
         const pageH = doc.page.height
