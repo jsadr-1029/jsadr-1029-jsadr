@@ -166,3 +166,4 @@ Sistema de Gestión de Arrendamiento de Vehículos - Jsadr`,
 export async function GET(req: NextRequest) {
   return POST(req)
 }
+// trigger redeploy 1793159121
