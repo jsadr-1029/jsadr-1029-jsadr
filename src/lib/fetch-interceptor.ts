@@ -39,12 +39,13 @@ export function installFetchInterceptor() {
       return originalFetch.call(window, input, init)
     }
 
-    // No interceptar /api/firma — es un endpoint público que usa token en
-    // query/body (no JWT). La página /firma/[token] es accedida por clientes
-    // desde enlaces de correo, sin sesión admin. Si interceptamos, cualquier
-    // token JWT expirado en localStorage causaría refresh → clearAuth() →
-    // redirect a /login, impidiendo que el cliente firme.
-    if (url.includes('/api/firma')) {
+    // No interceptar /api/firma ni /api/vehiculos/contrato-legal — son endpoints
+    // públicos que usan token en query/body (no JWT). Las páginas
+    // /firma/[token] y /firma-contrato-vehiculo/[token] son accedidas por
+    // clientes desde enlaces de correo/WhatsApp, sin sesión admin.
+    // Si interceptamos, cualquier token JWT expirado en localStorage causaría
+    // refresh → clearAuth() → redirect a /login, impidiendo que el cliente firme.
+    if (url.includes('/api/firma') || url.includes('/api/vehiculos/contrato-legal/')) {
       return originalFetch.call(window, input, init)
     }
 
