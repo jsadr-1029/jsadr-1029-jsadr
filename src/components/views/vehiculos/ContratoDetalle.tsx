@@ -9,7 +9,7 @@ import { Badge } from '@/components/ui/badge'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog'
 import { useToast } from '@/hooks/use-toast'
-import { CreditCard, CheckCircle, XCircle, AlertTriangle, FileText, Zap, Download, PenTool } from 'lucide-react'
+import { CreditCard, CheckCircle, XCircle, AlertTriangle, FileText, Zap, Download, PenTool, Smartphone, Mail, Send } from 'lucide-react'
 import { apiFetch, formatCOP, formatDate, formatDateTime, EstadoBadge, ESTADOS_PAGO } from './helpers'
 import { useState } from 'react'
 
@@ -22,28 +22,158 @@ export function ContratoDetalle({ contrato, onChanged }: { contrato: any; onChan
   const [recalcMoraLoading, setRecalcMoraLoading] = useState(false)
   const [fotoComprobante, setFotoComprobante] = useState<string | null>(null)
   const [generandoContrato, setGenerandoContrato] = useState(false)
+  const [enviandoNotificacion, setEnviandoNotificacion] = useState(false)
+
+  // === Obtener o crear documento legal (no falla si ya existe) ===
+  const obtenerOcrearDocumentoLegal = async (): Promise<{ token: string; numeroContrato: string } | null> => {
+    // Primero verificar si ya existe un documento legal (GET)
+    const rGet = await apiFetch(`/api/vehiculos/contratos/${contrato.id}/documento-legal/generar`, {
+      method: 'GET',
+    })
+    if (rGet.success && rGet.data && Array.isArray(rGet.data) && rGet.data.length > 0) {
+      const doc = rGet.data[0]
+      const token = doc.conductorToken || doc.propietarioToken
+      if (token) return { token, numeroContrato: doc.numeroContrato }
+    }
+    // Si no existe, generar uno nuevo (POST)
+    const rPost = await apiFetch(`/api/vehiculos/contratos/${contrato.id}/documento-legal/generar`, {
+      method: 'POST',
+      body: JSON.stringify({}),
+    })
+    if (rPost.success) {
+      const link = rPost.data?.linkFirmaConductor || ''
+      const token = link.split('/').pop() || rPost.data?.conductorToken
+      if (token) return { token, numeroContrato: rPost.data?.numeroContrato || '' }
+    }
+    return null
+  }
 
   // === Generar contrato legal con firma electrónica ===
   const generarContratoLegal = async () => {
     setGenerandoContrato(true)
     try {
-      const r = await apiFetch(`/api/vehiculos/contratos/${contrato.id}/documento-legal/generar`, {
-        method: 'POST',
-        body: JSON.stringify({}),
-      })
-      if (r.success) {
+      const doc = await obtenerOcrearDocumentoLegal()
+      if (doc) {
         toast({
-          title: 'Contrato legal generado',
-          description: r.message || `Contrato ${r.data?.numeroContrato} creado. Link enviado al conductor.`,
+          title: 'Contrato legal listo',
+          description: `Contrato ${doc.numeroContrato}. Usa los botones de WhatsApp o Email para enviar el enlace al conductor.`,
         })
         onChanged?.()
       } else {
-        toast({ title: 'Error', description: r.error, variant: 'destructive' })
+        toast({ title: 'Error', description: 'No se pudo generar el contrato legal', variant: 'destructive' })
       }
     } catch (e: any) {
       toast({ title: 'Error', description: e.message, variant: 'destructive' })
     }
     setGenerandoContrato(false)
+  }
+
+  // === Enviar enlace de firma por WhatsApp al conductor ===
+  const enviarFirmaWhatsApp = async () => {
+    setEnviandoNotificacion(true)
+    try {
+      const doc = await obtenerOcrearDocumentoLegal()
+      if (!doc) {
+        toast({ title: 'Error', description: 'No se pudo obtener el enlace de firma', variant: 'destructive' })
+        setEnviandoNotificacion(false)
+        return
+      }
+      const linkFirma = `${window.location.origin}/firma-contrato-vehiculo/${doc.token}`
+      const telefono = conductor?.telefono || ''
+      const nombre = conductor?.nombre || ''
+      if (!telefono) {
+        toast({ title: 'Error', description: 'El conductor no tiene teléfono registrado', variant: 'destructive' })
+        setEnviandoNotificacion(false)
+        return
+      }
+
+      // Generar mensaje de WhatsApp
+      const mensaje = `🔐 *CONTRATO DE ARRENDAMIENTO DE VEHÍCULO - FIRMA ELECTRÓNICA*
+
+Hola *${nombre}*,
+
+Se ha generado un contrato de arrendamiento de vehículo a su nombre.
+
+📄 *Contrato:* ${doc.numeroContrato}
+🚗 *Vehículo:* ${vehiculo?.marca} ${vehiculo?.modelo} - Placa ${vehiculo?.placa}
+💰 *Tarifa:* ${formatCOP(contrato.tarifa)} / ${contrato.modalidadPago}
+📅 *Inicio:* ${formatDate(contrato.fechaInicio)}
+📅 *Fin:* ${formatDate(contrato.fechaFin) || 'Indefinido'}
+
+Para completar la firma electrónica del contrato, ingresa al siguiente enlace:
+${linkFirma}
+
+⏰ El enlace expira en 7 días.
+⚠️ No compartas este enlace con nadie.
+
+Saludos,
+Sistema de Gestión de Vehículos - Jsadr`
+
+      // Abrir WhatsApp con el mensaje pre-llenado
+      const telefonoLimpio = telefono.replace(/\D/g, '')
+      const waUrl = `https://wa.me/57${telefonoLimpio}?text=${encodeURIComponent(mensaje)}`
+      window.open(waUrl, '_blank')
+
+      toast({
+        title: 'WhatsApp abierto',
+        description: `Se abrió WhatsApp con el mensaje para ${nombre} (${telefono}). Presiona enviar para completar el envío.`,
+        duration: 8000,
+      })
+    } catch (e: any) {
+      toast({ title: 'Error', description: e.message, variant: 'destructive' })
+    }
+    setEnviandoNotificacion(false)
+  }
+
+  // === Enviar enlace de firma por Email al conductor ===
+  const enviarFirmaEmail = async () => {
+    setEnviandoNotificacion(true)
+    try {
+      const doc = await obtenerOcrearDocumentoLegal()
+      if (!doc) {
+        toast({ title: 'Error', description: 'No se pudo obtener el enlace de firma', variant: 'destructive' })
+        setEnviandoNotificacion(false)
+        return
+      }
+      const email = conductor?.email || ''
+      const nombre = conductor?.nombre || ''
+      if (!email) {
+        toast({ title: 'Error', description: 'El conductor no tiene email registrado', variant: 'destructive' })
+        setEnviandoNotificacion(false)
+        return
+      }
+
+      // Llamar al endpoint para enviar email
+      const r = await apiFetch(`/api/vehiculos/contratos/${contrato.id}/documento-legal/generar`, {
+        method: 'POST',
+        body: JSON.stringify({
+          reenviar: true,
+          canal: 'EMAIL',
+        }),
+      })
+
+      if (r.success || r.data) {
+        toast({
+          title: 'Email enviado',
+          description: `Se envió el enlace de firma al correo ${email}`,
+        })
+      } else {
+        // Si el endpoint no soporta reenvío, abrir mailto como fallback
+        const linkFirma = `${window.location.origin}/firma-contrato-vehiculo/${doc.token}`
+        const asunto = `Contrato de Arrendamiento ${doc.numeroContrato} - Firma Electrónica`
+        const cuerpo = `Estimado/a ${nombre},\n\nSe ha generado un contrato de arrendamiento de vehículo a su nombre.\n\nContrato: ${doc.numeroContrato}\nVehículo: ${vehiculo?.marca} ${vehiculo?.modelo} - Placa ${vehiculo?.placa}\n\nPara firmar electrónicamente, ingresa al siguiente enlace:\n${linkFirma}\n\nEl enlace expira en 7 días.\n\nSaludos,\nSistema de Gestión de Vehículos - Jsadr`
+        const mailtoUrl = `mailto:${email}?subject=${encodeURIComponent(asunto)}&body=${encodeURIComponent(cuerpo)}`
+        window.open(mailtoUrl, '_blank')
+        toast({
+          title: 'Email preparado',
+          description: `Se abrió tu cliente de correo para ${email}. Presiona enviar.`,
+          duration: 8000,
+        })
+      }
+    } catch (e: any) {
+      toast({ title: 'Error', description: e.message, variant: 'destructive' })
+    }
+    setEnviandoNotificacion(false)
   }
 
   // === Descargar PDF de entrega del vehículo ===
@@ -256,7 +386,15 @@ export function ContratoDetalle({ contrato, onChanged }: { contrato: any; onChan
         </Button>
         <Button onClick={generarContratoLegal} disabled={generandoContrato} size="sm" className="bg-gradient-to-r from-purple-500 to-indigo-600">
           <PenTool className="w-4 h-4 mr-1" />
-          {generandoContrato ? 'Generando...' : 'Firma electrónica contrato'}
+          {generandoContrato ? 'Generando...' : 'Generar contrato legal'}
+        </Button>
+        <Button onClick={enviarFirmaWhatsApp} disabled={enviandoNotificacion} size="sm" className="bg-green-600 hover:bg-green-700 text-white">
+          <Smartphone className="w-4 h-4 mr-1" />
+          {enviandoNotificacion ? 'Preparando...' : 'Enviar firma por WhatsApp'}
+        </Button>
+        <Button onClick={enviarFirmaEmail} disabled={enviandoNotificacion} size="sm" className="bg-blue-600 hover:bg-blue-700 text-white">
+          <Mail className="w-4 h-4 mr-1" />
+          {enviandoNotificacion ? 'Enviando...' : 'Enviar firma por Email'}
         </Button>
         <Button onClick={descargarContratoLegal} variant="outline" size="sm" className="border-blue-500 text-blue-700">
           <Download className="w-4 h-4 mr-1" /> Descargar contrato
