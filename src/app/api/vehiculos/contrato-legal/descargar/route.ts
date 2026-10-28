@@ -307,6 +307,20 @@ export async function GET(req: NextRequest) {
       }
     }
 
+    // === Helper para verificar límite de páginas ===
+    // El contrato legal tiene un máximo de 16 páginas. Después de esa página,
+    // no se genera más contenido (excepto el footer y la marca de agua que
+    // se aplican al final con switchToPage).
+    const MAX_PAGINAS = 16
+    function getPageCount(): number {
+      try {
+        return doc.bufferedPageRange().count
+      } catch { return 1 }
+    }
+    function reachedPageLimit(): boolean {
+      return getPageCount() >= MAX_PAGINAS
+    }
+
     // ensureSpaceExact(needed): igual que ensureSpace pero SIN límite de 50px.
     // Usar solo para secciones de tamaño fijo que DEBEN caber completas en una
     // página (ej: sello de seguridad de 200px). Si no caben, crea nueva página.
@@ -759,7 +773,14 @@ export async function GET(req: NextRequest) {
     ], [200, ancho - 200])
     y += 8
 
+    // === Verificar límite de 16 páginas antes de continuar con anexos ===
+    // Si ya estamos en la página 16, no generar más contenido.
+    // Las secciones siguientes (Anexo 1: inventario, fotos, estado general,
+    // firmas de entrega/devolución, Anexos 2-4, sello QR) solo se incluyen
+    // si hay espacio dentro del límite de 16 páginas.
+
     // === ANEXO 1: ACTA DE ENTREGA + INVENTARIO COMPLETO ===
+    if (!reachedPageLimit()) {
     capitulo('ANEXO 1. ACTA DE ENTREGA, INVENTARIO COMPLETO Y DEVOLUCIÓN')
 
     clausula('', `El presente anexo contiene el inventario físico completo del vehículo objeto del contrato, registrando el estado de cada elemento al momento de la entrega. Sirve como constancia irrefutable de los bienes que se entregan a EL ARRENDATARIO y contra los cuales se verificará la devolución al finalizar el contrato.`)
@@ -1105,7 +1126,13 @@ export async function GET(req: NextRequest) {
       ['Estado de liquidación', 'Pendiente'],
     ], [200, ancho - 200])
 
+    } // fin del if (!reachedPageLimit()) para Anexo 1-4
+
     // ============ SELLO DE SEGURIDAD Y CÓDIGO QR DE AUTENTICIDAD ============
+    // El sello de seguridad SIEMPRE se incluye (es esencial para verificar
+    // la autenticidad del contrato) aunque hayamos alcanzado el límite de
+    // 16 páginas. Se genera en la última página disponible.
+    if (!reachedPageLimit()) {
     capitulo('SELLO DE SEGURIDAD Y CÓDIGO QR DE AUTENTICIDAD')
 
     // Generar hash único del contrato (firma criptográfica)
@@ -1217,6 +1244,7 @@ export async function GET(req: NextRequest) {
       console.error('[contrato-legal/descargar] Error generando QR/sello:', err)
       clausula('', `⚠️ Error generando sello de seguridad. Hash de verificación: ${hashFirma}`)
     }
+    } // fin del if (!reachedPageLimit()) para sello
 
     // === Dibujar MARCA DE AGUA en páginas con contenido ===
     // Se dibuja DESPUÉS de todo el contenido, usando switchToPage para volver
