@@ -118,47 +118,92 @@ export default function PaginaFirma({ params }: { params: Promise<{ token: strin
     // Por eso comprimimos: redimensionamos a max 1024px y calidad JPEG 0.7
     try {
       const compressed = await comprimirImagenFirma(file, 1024, 0.7)
+      if (!compressed || !compressed.startsWith('data:image/')) {
+        throw new Error('La imagen comprimida no es válida')
+      }
       if (tipo === 'documento') setFotoDocumento(compressed)
       else setFotoSelfie(compressed)
+      toast({ title: 'Foto cargada', description: 'Imagen lista para firmar' })
     } catch (e: any) {
-      // Si falla la compresión, usar la original
+      // Si la compresión falla, intentar usar la imagen original
+      // pero leerla con FileReader (no canvas) para evitar errores de patrón
       console.error('Error comprimiendo imagen:', e)
-      const reader = new FileReader()
-      reader.onload = () => {
-        const result = reader.result as string
-        if (tipo === 'documento') setFotoDocumento(result)
-        else setFotoSelfie(result)
+      try {
+        const reader = new FileReader()
+        reader.onload = () => {
+          const result = reader.result as string
+          if (result && result.startsWith('data:image/')) {
+            if (tipo === 'documento') setFotoDocumento(result)
+            else setFotoSelfie(result)
+            toast({ title: 'Foto cargada (sin comprimir)', description: 'Imagen lista para firmar' })
+          } else {
+            toast({ title: 'Error', description: 'No se pudo procesar la imagen. Intenta con otra foto.', variant: 'destructive' })
+          }
+        }
+        reader.onerror = () => {
+          toast({ title: 'Error', description: 'No se pudo leer el archivo. Intenta con otra foto.', variant: 'destructive' })
+        }
+        reader.readAsDataURL(file)
+      } catch (fallbackErr) {
+        toast({ title: 'Error', description: 'No se pudo procesar la imagen. Intenta con otra foto o usa la cámara.', variant: 'destructive' })
       }
-      reader.readAsDataURL(file)
     }
   }
 
   // === Función para comprimir imagen con canvas ===
   // Redimensiona a maxWidth x maxHeight y convierte a JPEG con quality
   // Esto reduce significativamente el tamaño del base64
+  // Maneja errores de móviles (Safari iOS, Chrome Android) que pueden lanzar
+  // DOMException "The string did not match the expected pattern"
   const comprimirImagenFirma = (file: File, maxDim: number, quality: number): Promise<string> => {
     return new Promise((resolve, reject) => {
       const reader = new FileReader()
       reader.onload = (e) => {
         const img = new Image()
         img.onload = () => {
-          let { width, height } = img
-          // Redimensionar manteniendo aspect ratio
-          if (width > height && width > maxDim) {
-            height = Math.round(height * maxDim / width)
-            width = maxDim
-          } else if (height > maxDim) {
-            width = Math.round(width * maxDim / height)
-            height = maxDim
+          try {
+            let width = img.width
+            let height = img.height
+            // Redimensionar manteniendo aspect ratio
+            if (width > height && width > maxDim) {
+              height = Math.round(height * maxDim / width)
+              width = maxDim
+            } else if (height > maxDim) {
+              width = Math.round(width * maxDim / height)
+              height = maxDim
+            }
+            const canvas = document.createElement('canvas')
+            canvas.width = width
+            canvas.height = height
+            const ctx = canvas.getContext('2d')
+            if (!ctx) {
+              reject(new Error('No se pudo obtener el contexto del canvas'))
+              return
+            }
+            ctx.drawImage(img, 0, 0, width, height)
+            // Intentar JPEG primero, si falla usar PNG
+            let compressed: string
+            try {
+              compressed = canvas.toDataURL('image/jpeg', quality)
+            } catch (jpegErr) {
+              // Algunos navegadores móviles fallan con 'image/jpeg'
+              // Fallback a PNG sin calidad (siempre soportado)
+              try {
+                compressed = canvas.toDataURL('image/png')
+              } catch (pngErr) {
+                // Si ambos fallan, usar el data URL original del archivo
+                compressed = e.target?.result as string
+              }
+            }
+            // Verificar que el resultado sea válido
+            if (!compressed || !compressed.startsWith('data:image/')) {
+              compressed = e.target?.result as string
+            }
+            resolve(compressed)
+          } catch (err) {
+            // Cualquier error, usar el data URL original
+            resolve(e.target?.result as string)
           }
-          const canvas = document.createElement('canvas')
-          canvas.width = width
-          canvas.height = height
-          const ctx = canvas.getContext('2d')!
-          ctx.drawImage(img, 0, 0, width, height)
-          // Convertir a JPEG con calidad reducida
-          const compressed = canvas.toDataURL('image/jpeg', quality)
-          resolve(compressed)
         }
         img.onerror = () => reject(new Error('No se pudo cargar la imagen'))
         img.src = e.target?.result as string
