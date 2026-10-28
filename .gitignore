@@ -108,3 +108,4 @@ scripts/reset-admin-clave-acceso.js
 scripts/_*.js
 scripts/_*.cjs
 scripts/_*.ts
+scripts/fix-smtp-535.js

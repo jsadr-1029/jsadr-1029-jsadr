@@ -292,12 +292,25 @@ export async function GET(req: NextRequest) {
 
     // === Helpers de paginación ===
     // ensureSpace(needed): si no hay 'needed' px disponibles antes del margen
-    // inferior, salta a una nueva página. Solo cuando es estrictamente necesario,
-    // para evitar hojas en blanco por saltos prematuros.
-    // IMPORTANTE: needed debe ser la altura REAL que se va a dibujar inmediatamente
-    // después, no una sobreestimación. Si se sobreestima, se pueden generar páginas
-    // casi vacías o con saltos prematuros.
+    // inferior, salta a una nueva página. Solo cuando es estrictamente necesario.
+    // IMPORTANTE: para evitar páginas vacías, el valor máximo efectivo se limita
+    // a 50px. Si necesitas más espacio, la sección debe manejar su propia
+    // paginación internamente (como tablaSimple y clausula ya lo hacen).
     function ensureSpace(needed: number) {
+      // Limitar el valor a 50px máximo para evitar saltos prematuros
+      const effectiveNeeded = Math.min(needed, 50)
+      const available = PAGE_HEIGHT - MARGIN_BOTTOM - y
+      if (available < effectiveNeeded) {
+        doc.addPage()
+        y = MARGIN_TOP
+        marcarPaginaConContenido()
+      }
+    }
+
+    // ensureSpaceExact(needed): igual que ensureSpace pero SIN límite de 50px.
+    // Usar solo para secciones de tamaño fijo que DEBEN caber completas en una
+    // página (ej: sello de seguridad de 200px). Si no caben, crea nueva página.
+    function ensureSpaceExact(needed: number) {
       const available = PAGE_HEIGHT - MARGIN_BOTTOM - y
       if (available < needed) {
         doc.addPage()
@@ -987,7 +1000,7 @@ export async function GET(req: NextRequest) {
     }
 
     // === FIRMAS DEL ACTA DE ENTREGA ===
-    ensureSpace(110) // título + párrafo + 2 casillas de firma (80px)
+    ensureSpaceExact(110) // título + párrafo + 2 casillas de firma (80px)
     doc.fillColor('#1e3a8a').fontSize(10).font('Helvetica-Bold')
     doc.text('CONSTANCIA DE ENTREGA Y RECEPCIÓN DEL VEHÍCULO', 50, y, { width: ancho })
     y += doc.heightOfString('CONSTANCIA DE ENTREGA Y RECEPCIÓN DEL VEHÍCULO', { width: ancho }) + 6
@@ -1026,7 +1039,7 @@ export async function GET(req: NextRequest) {
     ], [200, ancho - 200])
 
     // === Espacios de firma para el acta de devolución ===
-    ensureSpace(120) // título + párrafo + 2 casillas de firma (90px)
+    ensureSpaceExact(120) // título + párrafo + 2 casillas de firma (90px)
     doc.fillColor('#000').fontSize(9).font('Helvetica-Bold')
     doc.text('CONSTANCIA DE DEVOLUCIÓN Y RECEPCIÓN DEL VEHÍCULO', 50, y, { width: ancho })
     y += doc.heightOfString('CONSTANCIA DE DEVOLUCIÓN Y RECEPCIÓN DEL VEHÍCULO', { width: ancho }) + 8
@@ -1152,7 +1165,7 @@ export async function GET(req: NextRequest) {
 
       // === Sello visual con QR ===
       // Asegurar espacio para el sello completo (200px de alto + padding)
-      ensureSpace(220)
+      ensureSpaceExact(220)
       const selloX = 50
       const selloY = y
       const selloW = ancho
