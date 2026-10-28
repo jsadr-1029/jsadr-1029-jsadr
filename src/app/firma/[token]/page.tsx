@@ -318,7 +318,21 @@ export default function PaginaFirma({ params }: { params: Promise<{ token: strin
           fotoSelfie,
         }),
       })
-      const json = await res.json()
+      // Manejar respuestas no-JSON (ej: 413 Request Entity Too Large)
+      const text = await res.text()
+      let json: any
+      try {
+        json = JSON.parse(text)
+      } catch {
+        // Si no es JSON, es un error de tamaño o servidor
+        if (res.status === 413) {
+          toast({ title: 'Error', description: 'Las fotos son demasiado grandes. Intenta con imágenes de menor calidad.', variant: 'destructive' })
+        } else {
+          toast({ title: 'Error', description: `Error del servidor (${res.status}). Intenta nuevamente.`, variant: 'destructive' })
+        }
+        setSubiendoFotos(false)
+        return
+      }
       if (json.success) {
         toast({
           title: 'Fotos guardadas',
@@ -410,7 +424,13 @@ export default function PaginaFirma({ params }: { params: Promise<{ token: strin
           canal: canalOtp,
         }),
       })
-      const json = await res.json()
+      const text = await res.text()
+      let json: any
+      try { json = JSON.parse(text) } catch {
+        toast({ title: 'Error del servidor', description: `Código ${res.status}. Intenta nuevamente.`, variant: 'destructive' })
+        setEnviandoOtp(false)
+        return
+      }
       if (json.success) {
         setOtpEnviado(true)
         toast({
@@ -446,7 +466,13 @@ export default function PaginaFirma({ params }: { params: Promise<{ token: strin
           otpIngresado,
         }),
       })
-      const jsonValidar = await resValidar.json()
+      const textValidar = await resValidar.text()
+      let jsonValidar: any
+      try { jsonValidar = JSON.parse(textValidar) } catch {
+        toast({ title: 'Error del servidor', description: `Código ${resValidar.status}. Intenta nuevamente.`, variant: 'destructive' })
+        setValidandoOtp(false)
+        return
+      }
       if (!jsonValidar.success) {
         toast({ title: 'Código incorrecto', description: jsonValidar.error, variant: 'destructive' })
         setValidandoOtp(false)
@@ -464,7 +490,14 @@ export default function PaginaFirma({ params }: { params: Promise<{ token: strin
           imagenFirma: firmaDibujada,
         }),
       })
-      const jsonGuardar = await resGuardar.json()
+      const textGuardar = await resGuardar.text()
+      let jsonGuardar: any
+      try { jsonGuardar = JSON.parse(textGuardar) } catch {
+        toast({ title: 'Error del servidor', description: `Código ${resGuardar.status}. Intenta nuevamente.`, variant: 'destructive' })
+        setGuardandoFirma(false)
+        setValidandoOtp(false)
+        return
+      }
       if (jsonGuardar.success) {
         toast({
           title: '¡Firma completada!',
