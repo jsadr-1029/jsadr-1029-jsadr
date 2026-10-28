@@ -100,24 +100,72 @@ export default function PaginaFirma({ params }: { params: Promise<{ token: strin
   }
 
   // === Manejo de archivos de fotos ===
-  const manejarArchivo = (e: React.ChangeEvent<HTMLInputElement>, tipo: 'documento' | 'selfie') => {
+  const manejarArchivo = async (e: React.ChangeEvent<HTMLInputElement>, tipo: 'documento' | 'selfie') => {
     const file = e.target.files?.[0]
     if (!file) return
     if (!file.type.startsWith('image/')) {
       toast({ title: 'Error', description: 'El archivo debe ser una imagen', variant: 'destructive' })
       return
     }
-    if (file.size > 5 * 1024 * 1024) {
-      toast({ title: 'Error', description: 'La imagen no puede superar 5MB', variant: 'destructive' })
+    if (file.size > 10 * 1024 * 1024) {
+      toast({ title: 'Error', description: 'La imagen no puede superar 10MB', variant: 'destructive' })
       return
     }
-    const reader = new FileReader()
-    reader.onload = () => {
-      const result = reader.result as string
-      if (tipo === 'documento') setFotoDocumento(result)
-      else setFotoSelfie(result)
+
+    // === COMPRIMIR IMAGEN antes de enviar ===
+    // Vercel serverless tiene un límite de body de ~4.5MB.
+    // Dos fotos en base64 pueden superar ese límite.
+    // Por eso comprimimos: redimensionamos a max 1024px y calidad JPEG 0.7
+    try {
+      const compressed = await comprimirImagenFirma(file, 1024, 0.7)
+      if (tipo === 'documento') setFotoDocumento(compressed)
+      else setFotoSelfie(compressed)
+    } catch (e: any) {
+      // Si falla la compresión, usar la original
+      console.error('Error comprimiendo imagen:', e)
+      const reader = new FileReader()
+      reader.onload = () => {
+        const result = reader.result as string
+        if (tipo === 'documento') setFotoDocumento(result)
+        else setFotoSelfie(result)
+      }
+      reader.readAsDataURL(file)
     }
-    reader.readAsDataURL(file)
+  }
+
+  // === Función para comprimir imagen con canvas ===
+  // Redimensiona a maxWidth x maxHeight y convierte a JPEG con quality
+  // Esto reduce significativamente el tamaño del base64
+  const comprimirImagenFirma = (file: File, maxDim: number, quality: number): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader()
+      reader.onload = (e) => {
+        const img = new Image()
+        img.onload = () => {
+          let { width, height } = img
+          // Redimensionar manteniendo aspect ratio
+          if (width > height && width > maxDim) {
+            height = Math.round(height * maxDim / width)
+            width = maxDim
+          } else if (height > maxDim) {
+            width = Math.round(width * maxDim / height)
+            height = maxDim
+          }
+          const canvas = document.createElement('canvas')
+          canvas.width = width
+          canvas.height = height
+          const ctx = canvas.getContext('2d')!
+          ctx.drawImage(img, 0, 0, width, height)
+          // Convertir a JPEG con calidad reducida
+          const compressed = canvas.toDataURL('image/jpeg', quality)
+          resolve(compressed)
+        }
+        img.onerror = () => reject(new Error('No se pudo cargar la imagen'))
+        img.src = e.target?.result as string
+      }
+      reader.onerror = () => reject(new Error('No se pudo leer el archivo'))
+      reader.readAsDataURL(file)
+    })
   }
 
   const tomarFoto = async (tipo: 'documento' | 'selfie') => {
@@ -174,11 +222,23 @@ export default function PaginaFirma({ params }: { params: Promise<{ token: strin
 
       btnCapturar.onclick = () => {
         const canvas = document.createElement('canvas')
-        canvas.width = video.videoWidth
-        canvas.height = video.videoHeight
+        // Redimensionar para no exceder límite de Vercel (4.5MB)
+        let w = video.videoWidth
+        let h = video.videoHeight
+        const maxDim = 1024
+        if (w > h && w > maxDim) {
+          h = Math.round(h * maxDim / w)
+          w = maxDim
+        } else if (h > maxDim) {
+          w = Math.round(w * maxDim / h)
+          h = maxDim
+        }
+        canvas.width = w
+        canvas.height = h
         const ctx = canvas.getContext('2d')!
-        ctx.drawImage(video, 0, 0)
-        const dataUrl = canvas.toDataURL('image/jpeg', 0.8)
+        ctx.drawImage(video, 0, 0, w, h)
+        // Calidad 0.7 para reducir tamaño del base64
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.7)
         if (tipo === 'documento') setFotoDocumento(dataUrl)
         else setFotoSelfie(dataUrl)
         stream.getTracks().forEach((t) => t.stop())
