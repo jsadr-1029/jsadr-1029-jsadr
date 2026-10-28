@@ -224,15 +224,22 @@ export function getTasaMoraDiaria(prestamo: {
 }
 
 /**
- * @deprecated Usar getTasaMoraDiaria.
- * Mantenido por compatibilidad con código que aún referencia el nombre antiguo.
- * Internamente delega a getTasaMoraDiaria.
+ * Convierte la tasa de mora diaria a anual para mostrar en el estado de cuenta.
+ * La tasa de mora se almacena como DIARIA (ej: 1 = 1% diario).
+ * Para mostrarla como anual: tasaDiaria * 365 (o * 12 si es mensual).
+ * Sin embargo, la tasa de mora del 1% en este sistema es MENSUAL (no diaria),
+ * así que la conversión correcta es: tasaMoraDiaria * 12 = 12% anual.
+ *
+ * IMPORTANTE: el campo se llama tasaMoraDiaria pero el valor que guarda
+ * el sistema es la tasa MENSUAL de mora (ej: 1 = 1% mensual).
+ * Por eso la conversión a anual es multiplicar por 12, no por 365.
  */
 export function getTasaMoraAnual(prestamo: {
   tasaMoraPersonalizada?: number | null
   tasaMoraDiaria: number
 }): number {
-  return getTasaMoraDiaria(prestamo)
+  const tasaMensual = getTasaMoraDiaria(prestamo)
+  return Number.isFinite(tasaMensual) ? tasaMensual * 12 : 0
 }
 
 /**

@@ -252,8 +252,10 @@ export async function POST(req: NextRequest) {
       const nCuotas = parseInt(numeroCuotasPersonalizada)
       const cuota = parseFloat(montoCuotaPersonalizada)
       tasaAnualFinal = tasaMen * 12
-      // Default unificado: si no se especifica mora, usar la tasa de interés anual del préstamo
-      tasaMoraFinal = parseFloat(tasaMoraAnual || tasaAnualFinal.toString())
+      // tasaMoraAnual viene como valor MENSUAL (ej: 1 = 1% mensual)
+      // tasaMoraFinal se guarda como MENSUAL en tasaMoraDiaria
+      const tasaMoraMenPC = parseFloat(tasaMoraAnual || '0')
+      tasaMoraFinal = tasaMoraMenPC > 0 ? (tasaMoraMenPC <= 100 ? tasaMoraMenPC : tasaMoraMenPC / 12) : tasaMen
       plazoFinal = frecuencia === 'MENSUAL' ? nCuotas : Math.ceil(nCuotas / (frecuencia === 'QUINCENAL' ? 2 : 4))
       cuotaFinal = cuota
       nCuotasFinal = nCuotas
@@ -315,8 +317,9 @@ export async function POST(req: NextRequest) {
       const nCuotas = parseInt(numeroCuotasFija)
 
       tasaAnualFinal = tasaMen * 12
-      // Default unificado: si no se especifica mora, usar la tasa de interés anual del préstamo
-      tasaMoraFinal = parseFloat(tasaMoraAnual || tasaAnualFinal.toString())
+      // tasaMoraAnual viene como valor MENSUAL (ej: 1 = 1% mensual)
+      const tasaMoraMenTF = parseFloat(tasaMoraAnual || '0')
+      tasaMoraFinal = tasaMoraMenTF > 0 ? (tasaMoraMenTF <= 100 ? tasaMoraMenTF : tasaMoraMenTF / 12) : tasaMen
       // Calcular plazo en meses según la frecuencia
       if (frecuencia === 'MENSUAL') plazoFinal = nCuotas
       else if (frecuencia === 'QUINCENAL') plazoFinal = Math.max(1, Math.ceil(nCuotas / 2))
@@ -345,8 +348,16 @@ export async function POST(req: NextRequest) {
       nCuotasFinal = calculo.numeroCuotas
     } else {
       // Modalidad francés
-      tasaAnualFinal = parseFloat(tasaInteresAnual)
-      tasaMoraFinal = parseFloat(tasaMoraAnual || tasaInteresAnual)
+      // IMPORTANTE: si la tasa viene como mensual (ej: 20 = 20% mensual),
+      // convertir a anual (20 * 12 = 240%).
+      // El frontend puede enviar tasaInteresAnual como valor mensual si el
+      // admin configuró la tasa en términos mensuales. Detectamos esto:
+      // si tasaInteresAnual <= 100, asumimos que es mensual y multiplicamos por 12.
+      const tasaInput = parseFloat(tasaInteresAnual)
+      tasaAnualFinal = tasaInput <= 100 ? tasaInput * 12 : tasaInput
+      // Tasa de mora: si viene tasaMoraAnual y es <= 10, es mensual (1% mensual = 12% anual)
+      const tasaMoraInput = parseFloat(tasaMoraAnual || '0')
+      tasaMoraFinal = tasaMoraInput > 0 ? (tasaMoraInput <= 10 ? tasaMoraInput * 12 : tasaMoraInput) : tasaAnualFinal
       plazoFinal = parseInt(plazoMeses)
       calculo = calcularPrestamo({
         montoPrincipal: parseFloat(montoPrincipal),
@@ -449,6 +460,9 @@ export async function POST(req: NextRequest) {
           montoPrincipal: parseFloat(montoPrincipal),
           tasaInteresAnual: tasaAnualFinal,
           tasaInteresMensual: tasaAnualFinal / 12,
+          // tasaMoraDiaria: guardar como tasa MENSUAL de mora (ej: 1 = 1% mensual)
+          // El campo se llama tasaMoraDiaria pero el sistema lo interpreta como mensual.
+          // tasaMoraFinal ya está en formato mensual después de las correcciones anteriores
           tasaMoraDiaria: tasaMoraFinal,
           plazoMeses: plazoFinal,
           frecuencia,
