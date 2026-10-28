@@ -39,6 +39,15 @@ export function installFetchInterceptor() {
       return originalFetch.call(window, input, init)
     }
 
+    // No interceptar /api/firma — es un endpoint público que usa token en
+    // query/body (no JWT). La página /firma/[token] es accedida por clientes
+    // desde enlaces de correo, sin sesión admin. Si interceptamos, cualquier
+    // token JWT expirado en localStorage causaría refresh → clearAuth() →
+    // redirect a /login, impidiendo que el cliente firme.
+    if (url.includes('/api/firma')) {
+      return originalFetch.call(window, input, init)
+    }
+
     // FIX-LOGIN-LOOP: no interceptar llamadas del portal de cliente.
     // Estas llamadas usan el header `x-portal-token` y NO usan Authorization: Bearer.
     // Si las interceptamos, el intento de añadir Authorization con un token
