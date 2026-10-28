@@ -32,6 +32,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useToast } from '@/hooks/use-toast'
 import { formatearMoneda, formatearFecha, formatearFechaHora } from '@/lib/finanzas'
+import { abrirDocumentoAutenticado } from '@/lib/documentos-auth'
 import { Scale, Plus, Eye, Calendar, FileText, Bell, CheckCircle, Download, FileDown, FileText as FileWord } from 'lucide-react'
 import { BitacoraPanel } from '@/components/views/BitacoraPanel'
 import { PortalAbogadoView } from '@/components/views/PortalAbogadoView'
@@ -509,7 +510,7 @@ function DetalleCasoModal({
           <Button
             size="sm"
             variant="outline"
-            onClick={() => window.open(`/api/juridico/${caso.id}/exportar?formato=pdf`, '_blank')}
+            onClick={() => abrirDocumentoAutenticado(`/api/juridico/${caso.id}/exportar?formato=pdf`)}
           >
             <FileDown className="w-4 h-4 mr-2" />
             Exportar PDF
@@ -517,7 +518,7 @@ function DetalleCasoModal({
           <Button
             size="sm"
             variant="outline"
-            onClick={() => window.open(`/api/juridico/${caso.id}/exportar?formato=word`, '_blank')}
+            onClick={() => abrirDocumentoAutenticado(`/api/juridico/${caso.id}/exportar?formato=word`)}
           >
             <FileWord className="w-4 h-4 mr-2" />
             Exportar Word

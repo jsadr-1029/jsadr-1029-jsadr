@@ -48,6 +48,7 @@ import {
 } from '@/components/ui/alert-dialog'
 import { useToast } from '@/hooks/use-toast'
 import { formatearFecha, formatearFechaHora } from '@/lib/finanzas'
+import { abrirDocumentoAutenticado } from '@/lib/documentos-auth'
 import {
   GitBranch,
   Plus,
@@ -695,7 +696,7 @@ function BackupsPanel() {
   }
 
   const descargar = (b: Backup) => {
-    window.open(`/api/backups?descargar=${b.id}`, '_blank')
+    abrirDocumentoAutenticado(`/api/backups?descargar=${b.id}`)
   }
 
   const restaurar = async () => {
@@ -1139,7 +1140,7 @@ function FichaTecnicaPanel() {
       return
     }
     const param = codigo.match(/^[0-9a-f]{8,}$/i) ? 'prestamoId' : 'codigo'
-    window.open(`/api/ficha-tecnica?${param}=${encodeURIComponent(codigo)}`, '_blank')
+    abrirDocumentoAutenticado(`/api/ficha-tecnica?${param}=${encodeURIComponent(codigo)}`)
   }
 
   const descargarJSON = () => {

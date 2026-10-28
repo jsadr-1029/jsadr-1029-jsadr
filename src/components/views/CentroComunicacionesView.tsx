@@ -64,6 +64,7 @@ import {
 } from 'lucide-react'
 import { BotIcons } from '@/components/views/BotIcons'
 import { AsistenteIAPanel } from '@/components/views/AsistenteIAPanel'
+import { abrirDocumentoAutenticado } from '@/lib/documentos-auth'
 
 // === Tipos ===
 interface ConversacionListItem {
@@ -489,7 +490,7 @@ export function CentroComunicacionesView() {
   // === Descargar PDF (abre HTML imprimible en nueva pestaña) ===
   const descargarPdf = () => {
     if (!selectedId) return
-    window.open(`/api/chat/historial-pdf?conversacionId=${selectedId}`, '_blank')
+    abrirDocumentoAutenticado(`/api/chat/historial-pdf?conversacionId=${selectedId}`)
   }
 
   // === Cargar configuración ===

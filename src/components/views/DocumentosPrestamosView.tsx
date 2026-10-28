@@ -19,6 +19,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useToast } from '@/hooks/use-toast'
 import { formatearFechaHora, formatearMoneda } from '@/lib/finanzas'
+import { abrirDocumentoAutenticado } from '@/lib/documentos-auth'
 import {
   FolderOpen, Upload, Search, Trash2, Eye, FileImage,
   MessageSquare, User, CreditCard, Receipt, File, X, Download,
@@ -322,7 +323,7 @@ function GestorDocumentosTab() {
   }
 
   const descargarDocumento = (doc: Documento) => {
-    window.open(`/api/documentos/${doc.id}?accion=descargar`, '_blank')
+    abrirDocumentoAutenticado(`/api/documentos/${doc.id}?accion=descargar`)
   }
 
   return (
@@ -774,7 +775,7 @@ function FirmasElectronicasTab() {
   }
 
   const verCertificado = (firmaId: string) => {
-    window.open(`/api/firma/certificado?firmaId=${firmaId}`, '_blank')
+    abrirDocumentoAutenticado(`/api/firma/certificado?firmaId=${firmaId}`)
   }
 
   return (

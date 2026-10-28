@@ -33,6 +33,7 @@ import {
 } from '@/components/ui/table'
 import { useToast } from '@/hooks/use-toast'
 import { formatearMoneda, formatearFecha, calcularPrestamo, calcularPrestamoTasaFijaMensual, Frecuencia } from '@/lib/finanzas'
+import { abrirDocumentoAutenticado } from '@/lib/documentos-auth'
 import { calcularBloqueCorte, calcularFechaPrimerCorte, calcularDiasCausadosAntes, calcularValorDiasCausados, PeriodoCorte } from '@/lib/corte-fechas'
 import { FileText, Plus, Search, Eye, Check, X, ArrowRight, RefreshCw, PenTool, Shield, Trash2, Calendar, Scissors, Sparkles, Inbox, ChevronRight } from 'lucide-react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -1311,7 +1312,7 @@ ${linkFirmaCodeudor}
                           size="sm"
                           variant="ghost"
                           className="text-purple-600 hover:text-purple-700"
-                          onClick={() => window.open(`/api/estado-cuenta?cedula=${encodeURIComponent(p.cliente.cedula)}&prestamoId=${p.id}`, '_blank', 'noopener,noreferrer')}
+                          onClick={() => abrirDocumentoAutenticado(`/api/estado-cuenta?cedula=${encodeURIComponent(p.cliente.cedula)}&prestamoId=${p.id}`)}
                           title="Estado de cuenta"
                         >
                           <FileText className="w-4 h-4" />
@@ -1321,7 +1322,7 @@ ${linkFirmaCodeudor}
                           size="sm"
                           variant="ghost"
                           className={p.firmaId ? "text-blue-600 hover:text-blue-700" : "text-muted-foreground opacity-40"}
-                          onClick={() => p.firmaId && window.open(`/api/firma/certificado?firmaId=${p.firmaId}`, '_blank', 'noopener,noreferrer')}
+                          onClick={() => p.firmaId && abrirDocumentoAutenticado(`/api/firma/certificado?firmaId=${p.firmaId}`)}
                           title={p.firmaId ? "Ver Certificado de Firma Electrónica" : "Sin firma electrónica"}
                           disabled={!p.firmaId}
                         >

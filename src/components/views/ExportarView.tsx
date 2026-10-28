@@ -3,6 +3,7 @@
 import { PageHeader } from '@/components/ui-basics'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
+import { abrirDocumentoAutenticado } from '@/lib/documentos-auth'
 import {
   Database,
   FileJson,
@@ -18,7 +19,7 @@ import {
 
 export function ExportarView() {
   const descargar = (formato: 'json' | 'csv') => {
-    window.open(`/api/export?formato=${formato}`, '_blank')
+    abrirDocumentoAutenticado(`/api/export?formato=${formato}`)
   }
 
   const tarjetas = [
