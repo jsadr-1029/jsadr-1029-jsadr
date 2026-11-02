@@ -290,48 +290,47 @@ export function CodigosQRPanel({ onChanged }: { onChanged?: () => void }) {
                 Sube la imagen del código QR (Nequi, Daviplata, Bancolombia, etc.)
               </p>
 
-              {/* Botón para subir imagen */}
-              <div className="flex items-center gap-2 flex-wrap">
+              {/* Área de subida de imagen */}
+              <div
+                className="border-2 border-dashed border-gray-300 rounded-lg p-4 text-center cursor-pointer hover:border-blue-500 hover:bg-blue-50/30 transition-colors"
+                onClick={() => !subiendoImagen && document.getElementById('file-qr-imagen')?.click()}
+              >
                 <input
                   type="file"
                   accept="image/*"
+                  capture="environment"
                   onChange={handleSubirImagen}
                   className="hidden"
                   id="file-qr-imagen"
                 />
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  disabled={subiendoImagen}
-                  onClick={() => document.getElementById('file-qr-imagen')?.click()}
-                >
-                  {subiendoImagen ? (
-                    <><Loader2 className="w-4 h-4 mr-1 animate-spin" /> Subiendo...</>
-                  ) : (
-                    <><Upload className="w-4 h-4 mr-1" /> Subir imagen QR</>
-                  )}
-                </Button>
-                {form.imagenUrl && <CheckCircle className="w-5 h-5 text-green-600" />}
-                {/* Input de URL como alternativa */}
-                <Input
-                  value={form.imagenUrl.startsWith('data:') ? '' : form.imagenUrl}
-                  onChange={e => setForm({ ...form, imagenUrl: e.target.value })}
-                  placeholder="o pega una URL de imagen..."
-                  className="flex-1"
-                />
+                {subiendoImagen ? (
+                  <div className="flex flex-col items-center gap-2 py-4">
+                    <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
+                    <p className="text-sm text-muted-foreground">Procesando imagen...</p>
+                  </div>
+                ) : form.imagenUrl ? (
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-center gap-2">
+                      <CheckCircle className="w-5 h-5 text-green-600" />
+                      <span className="text-sm font-medium text-green-700">Imagen cargada</span>
+                    </div>
+                    <img
+                      src={form.imagenUrl}
+                      alt="Preview QR"
+                      className="max-h-48 mx-auto object-contain rounded border"
+                    />
+                    <p className="text-xs text-blue-600 hover:underline">
+                      Click para cambiar la imagen
+                    </p>
+                  </div>
+                ) : (
+                  <div className="flex flex-col items-center gap-2 py-4">
+                    <Upload className="w-10 h-10 text-gray-400" />
+                    <p className="text-sm font-medium">Click para subir la imagen del QR</p>
+                    <p className="text-xs text-muted-foreground">o toma una foto del código QR</p>
+                  </div>
+                )}
               </div>
-
-              {/* Preview de la imagen */}
-              {form.imagenUrl && (
-                <div className="mt-3 p-2 bg-gray-50 rounded border flex items-center justify-center">
-                  <img
-                    src={form.imagenUrl}
-                    alt="Preview QR"
-                    className="max-h-48 object-contain"
-                  />
-                </div>
-              )}
             </div>
 
             <div className="col-span-2">
