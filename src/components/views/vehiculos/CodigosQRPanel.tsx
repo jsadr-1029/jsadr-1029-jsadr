@@ -10,7 +10,7 @@ import { Badge } from '@/components/ui/badge'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { useToast } from '@/hooks/use-toast'
-import { Plus, Trash2, QrCode, Download } from 'lucide-react'
+import { Plus, Trash2, QrCode, Download, Upload, CheckCircle, Loader2 } from 'lucide-react'
 import { apiFetch, formatCOP } from './helpers'
 
 const TIPOS_PAGO_QR = ['NEQUI', 'DAVIPLATA', 'BANCOLOMBIA_QR', 'PSE', 'OTRO']
@@ -31,6 +31,7 @@ export function CodigosQRPanel({ onChanged }: { onChanged?: () => void }) {
   const [loading, setLoading] = useState(true)
   const [filtroContrato, setFiltroContrato] = useState('')
   const [modalOpen, setModalOpen] = useState(false)
+  const [subiendoImagen, setSubiendoImagen] = useState(false)
   const [form, setForm] = useState<any>({
     contratoId: '', cuentaPagoId: '', titulo: '', descripcion: '',
     imagenUrl: '', montoFijo: '', tipoPago: 'NEQUI',
@@ -59,9 +60,77 @@ export function CodigosQRPanel({ onChanged }: { onChanged?: () => void }) {
     setModalOpen(true)
   }
 
+  // === Comprimir imagen ===
+  const comprimirImagen = (file: File, maxDim: number = 1024, quality: number = 0.8): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader()
+      reader.onload = (e) => {
+        const img = new Image()
+        img.onload = () => {
+          try {
+            let w = img.width, h = img.height
+            if (w > h && w > maxDim) { h = Math.round(h * maxDim / w); w = maxDim }
+            else if (h > maxDim) { w = Math.round(w * maxDim / h); h = maxDim }
+            const canvas = document.createElement('canvas')
+            canvas.width = w
+            canvas.height = h
+            const ctx = canvas.getContext('2d')
+            if (!ctx) { reject(new Error('Canvas error')); return }
+            ctx.drawImage(img, 0, 0, w, h)
+            let result: string
+            try {
+              result = canvas.toDataURL('image/jpeg', quality)
+            } catch {
+              try { result = canvas.toDataURL('image/png') }
+              catch { result = e.target?.result as string }
+            }
+            if (!result || !result.startsWith('data:image/')) {
+              result = e.target?.result as string
+            }
+            resolve(result)
+          } catch (err) {
+            resolve(e.target?.result as string)
+          }
+        }
+        img.onerror = () => reject(new Error('No se pudo cargar la imagen'))
+        img.src = e.target?.result as string
+      }
+      reader.onerror = () => reject(new Error('No se pudo leer el archivo'))
+      reader.readAsDataURL(file)
+    })
+  }
+
+  // === Subir imagen del QR ===
+  const handleSubirImagen = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    if (!file.type.startsWith('image/')) {
+      toast({ title: 'Error', description: 'El archivo debe ser una imagen', variant: 'destructive' })
+      return
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      toast({ title: 'Error', description: 'La imagen no puede superar 10MB', variant: 'destructive' })
+      return
+    }
+    setSubiendoImagen(true)
+    try {
+      const compressed = await comprimirImagen(file, 1024, 0.8)
+      if (!compressed || !compressed.startsWith('data:image/')) {
+        throw new Error('La imagen procesada no es válida')
+      }
+      setForm(prev => ({ ...prev, imagenUrl: compressed }))
+      toast({ title: 'Imagen cargada', description: 'Imagen del QR lista' })
+    } catch (err: any) {
+      console.error('Error procesando imagen:', err)
+      toast({ title: 'Error', description: 'No se pudo procesar la imagen. Intenta con otra.', variant: 'destructive' })
+    }
+    setSubiendoImagen(false)
+    e.target.value = ''
+  }
+
   const guardar = async () => {
     if (!form.contratoId || !form.titulo || !form.imagenUrl) {
-      toast({ title: 'Faltan campos', description: 'Contrato, título e imagen URL son obligatorios', variant: 'destructive' })
+      toast({ title: 'Faltan campos', description: 'Contrato, título e imagen del QR son obligatorios', variant: 'destructive' })
       return
     }
     const r = await apiFetch('/api/vehiculos/codigos-qr', {
@@ -213,14 +282,58 @@ export function CodigosQRPanel({ onChanged }: { onChanged?: () => void }) {
               <Input type="number" value={form.montoFijo} onChange={e => setForm({ ...form, montoFijo: e.target.value })}
                 placeholder="Si el QR tiene un monto predefinido" />
             </div>
+
+            {/* === SECCIÓN DE SUBIDA DE IMAGEN QR === */}
             <div className="col-span-2">
-              <Label>URL de la imagen del QR *</Label>
-              <Input value={form.imagenUrl} onChange={e => setForm({ ...form, imagenUrl: e.target.value })}
-                placeholder="https://... (URL de la imagen QR)" />
-              <p className="text-xs text-muted-foreground mt-1">
-                Sube la imagen del QR (Nequi/Daviplata/Bancolombia generan el QR automáticamente)
+              <Label>Imagen del código QR *</Label>
+              <p className="text-xs text-muted-foreground mb-2">
+                Sube la imagen del código QR (Nequi, Daviplata, Bancolombia, etc.)
               </p>
+
+              {/* Botón para subir imagen */}
+              <div className="flex items-center gap-2 flex-wrap">
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={handleSubirImagen}
+                  className="hidden"
+                  id="file-qr-imagen"
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={subiendoImagen}
+                  onClick={() => document.getElementById('file-qr-imagen')?.click()}
+                >
+                  {subiendoImagen ? (
+                    <><Loader2 className="w-4 h-4 mr-1 animate-spin" /> Subiendo...</>
+                  ) : (
+                    <><Upload className="w-4 h-4 mr-1" /> Subir imagen QR</>
+                  )}
+                </Button>
+                {form.imagenUrl && <CheckCircle className="w-5 h-5 text-green-600" />}
+                {/* Input de URL como alternativa */}
+                <Input
+                  value={form.imagenUrl.startsWith('data:') ? '' : form.imagenUrl}
+                  onChange={e => setForm({ ...form, imagenUrl: e.target.value })}
+                  placeholder="o pega una URL de imagen..."
+                  className="flex-1"
+                />
+              </div>
+
+              {/* Preview de la imagen */}
+              {form.imagenUrl && (
+                <div className="mt-3 p-2 bg-gray-50 rounded border flex items-center justify-center">
+                  <img
+                    src={form.imagenUrl}
+                    alt="Preview QR"
+                    className="max-h-48 object-contain"
+                  />
+                </div>
+              )}
             </div>
+
             <div className="col-span-2">
               <Label>Descripción / Instrucciones</Label>
               <Textarea value={form.descripcion} onChange={e => setForm({ ...form, descripcion: e.target.value })}
