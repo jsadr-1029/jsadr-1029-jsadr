@@ -5,48 +5,38 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Textarea } from '@/components/ui/textarea'
-import { Badge } from '@/components/ui/badge'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { useToast } from '@/hooks/use-toast'
-import { Plus, Trash2, QrCode, Download, Upload, CheckCircle, Loader2 } from 'lucide-react'
+import { Plus, Trash2, QrCode, Upload, CheckCircle, Loader2, Building, CreditCard, User } from 'lucide-react'
 import { apiFetch, formatCOP } from './helpers'
-
-const TIPOS_PAGO_QR = ['NEQUI', 'DAVIPLATA', 'BANCOLOMBIA_QR', 'PSE', 'OTRO']
-
-const COLORES_TIPO_QR: Record<string, string> = {
-  NEQUI: 'bg-pink-100 text-pink-800 border-pink-300',
-  DAVIPLATA: 'bg-orange-100 text-orange-800 border-orange-300',
-  BANCOLOMBIA_QR: 'bg-yellow-100 text-yellow-800 border-yellow-300',
-  PSE: 'bg-green-100 text-green-800 border-green-300',
-  OTRO: 'bg-gray-100 text-gray-800 border-gray-300',
-}
 
 export function CodigosQRPanel({ onChanged }: { onChanged?: () => void }) {
   const { toast } = useToast()
   const [codigos, setCodigos] = useState<any[]>([])
   const [contratos, setContratos] = useState<any[]>([])
-  const [cuentas, setCuentas] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [filtroContrato, setFiltroContrato] = useState('')
   const [modalOpen, setModalOpen] = useState(false)
   const [subiendoImagen, setSubiendoImagen] = useState(false)
+
+  // Formulario simplificado: banco, numero cuenta, titular, imagen QR, contrato
   const [form, setForm] = useState<any>({
-    contratoId: '', cuentaPagoId: '', titulo: '', descripcion: '',
-    imagenUrl: '', montoFijo: '', tipoPago: 'NEQUI',
+    contratoId: '',
+    banco: '',
+    numeroCuenta: '',
+    titular: '',
+    imagenUrl: '',
   })
 
   const cargar = async () => {
     setLoading(true)
-    const [rq, rct, rc] = await Promise.all([
+    const [rq, rct] = await Promise.all([
       apiFetch('/api/vehiculos/codigos-qr' + (filtroContrato ? `?contratoId=${filtroContrato}` : '')),
       apiFetch('/api/vehiculos/contratos'),
-      apiFetch('/api/vehiculos/cuentas-pago'),
     ])
     if (rq.success) setCodigos(rq.data || [])
     if (rct.success) setContratos(rct.data || [])
-    if (rc.success) setCuentas(rc.data || [])
     setLoading(false)
   }
 
@@ -54,8 +44,11 @@ export function CodigosQRPanel({ onChanged }: { onChanged?: () => void }) {
 
   const abrirCrear = () => {
     setForm({
-      contratoId: '', cuentaPagoId: '', titulo: '', descripcion: '',
-      imagenUrl: '', montoFijo: '', tipoPago: 'NEQUI',
+      contratoId: '',
+      banco: '',
+      numeroCuenta: '',
+      titular: '',
+      imagenUrl: '',
     })
     setModalOpen(true)
   }
@@ -78,19 +71,11 @@ export function CodigosQRPanel({ onChanged }: { onChanged?: () => void }) {
             if (!ctx) { reject(new Error('Canvas error')); return }
             ctx.drawImage(img, 0, 0, w, h)
             let result: string
-            try {
-              result = canvas.toDataURL('image/jpeg', quality)
-            } catch {
-              try { result = canvas.toDataURL('image/png') }
-              catch { result = e.target?.result as string }
-            }
-            if (!result || !result.startsWith('data:image/')) {
-              result = e.target?.result as string
-            }
+            try { result = canvas.toDataURL('image/jpeg', quality) }
+            catch { try { result = canvas.toDataURL('image/png') } catch { result = e.target?.result as string } }
+            if (!result || !result.startsWith('data:image/')) { result = e.target?.result as string }
             resolve(result)
-          } catch (err) {
-            resolve(e.target?.result as string)
-          }
+          } catch { resolve(e.target?.result as string) }
         }
         img.onerror = () => reject(new Error('No se pudo cargar la imagen'))
         img.src = e.target?.result as string
@@ -118,10 +103,9 @@ export function CodigosQRPanel({ onChanged }: { onChanged?: () => void }) {
       if (!compressed || !compressed.startsWith('data:image/')) {
         throw new Error('La imagen procesada no es válida')
       }
-      setForm(prev => ({ ...prev, imagenUrl: compressed }))
+      setForm((prev: any) => ({ ...prev, imagenUrl: compressed }))
       toast({ title: 'Imagen cargada', description: 'Imagen del QR lista' })
-    } catch (err: any) {
-      console.error('Error procesando imagen:', err)
+    } catch {
       toast({ title: 'Error', description: 'No se pudo procesar la imagen. Intenta con otra.', variant: 'destructive' })
     }
     setSubiendoImagen(false)
@@ -129,16 +113,27 @@ export function CodigosQRPanel({ onChanged }: { onChanged?: () => void }) {
   }
 
   const guardar = async () => {
-    if (!form.contratoId || !form.titulo || !form.imagenUrl) {
-      toast({ title: 'Faltan campos', description: 'Contrato, título e imagen del QR son obligatorios', variant: 'destructive' })
+    if (!form.contratoId || !form.banco || !form.numeroCuenta || !form.titular || !form.imagenUrl) {
+      toast({ title: 'Faltan campos', description: 'Todos los campos son obligatorios', variant: 'destructive' })
       return
     }
+    // Construir título automáticamente: "Banco - Titular"
+    const titulo = `${form.banco} - ${form.titular}`
     const r = await apiFetch('/api/vehiculos/codigos-qr', {
       method: 'POST',
-      body: JSON.stringify(form),
+      body: JSON.stringify({
+        contratoId: form.contratoId,
+        titulo,
+        descripcion: `${form.banco} - Cuenta: ${form.numeroCuenta} - Titular: ${form.titular}`,
+        imagenUrl: form.imagenUrl,
+        tipoPago: form.banco.toUpperCase().includes('NEQUI') ? 'NEQUI'
+          : form.banco.toUpperCase().includes('DAVIPLATA') ? 'DAVIPLATA'
+          : form.banco.toUpperCase().includes('BANCOLOMBIA') ? 'BANCOLOMBIA_QR'
+          : 'OTRO',
+      }),
     })
     if (r.success) {
-      toast({ title: 'Código QR agregado' })
+      toast({ title: 'Código QR creado', description: `${titulo} asignado al contrato` })
       setModalOpen(false)
       cargar()
       onChanged?.()
@@ -158,8 +153,6 @@ export function CodigosQRPanel({ onChanged }: { onChanged?: () => void }) {
       toast({ title: 'Error', description: r.error, variant: 'destructive' })
     }
   }
-
-  const cuentasPorContrato = (contratoId: string) => cuentas.filter(c => c.contratoId === contratoId)
 
   return (
     <div className="space-y-4">
@@ -195,9 +188,6 @@ export function CodigosQRPanel({ onChanged }: { onChanged?: () => void }) {
                 <div className="flex justify-between items-start mb-2">
                   <div className="flex-1">
                     <div className="font-bold">{qr.titulo}</div>
-                    <Badge className={`text-xs mt-1 ${COLORES_TIPO_QR[qr.tipoPago] || COLORES_TIPO_QR.OTRO}`}>
-                      {qr.tipoPago}
-                    </Badge>
                   </div>
                   <Button size="sm" variant="outline" onClick={() => eliminar(qr)} className="text-red-600">
                     <Trash2 className="w-3 h-3" />
@@ -209,17 +199,9 @@ export function CodigosQRPanel({ onChanged }: { onChanged?: () => void }) {
                 {qr.descripcion && (
                   <div className="text-sm text-muted-foreground mb-2">{qr.descripcion}</div>
                 )}
-                {qr.montoFijo && (
-                  <div className="text-sm font-medium text-blue-700">Monto fijo: {formatCOP(qr.montoFijo)}</div>
-                )}
                 {qr.contrato && (
                   <div className="text-xs text-muted-foreground mt-2 pt-2 border-t">
                     {qr.contrato.numeroContrato} · {qr.contrato.conductor?.nombre}
-                  </div>
-                )}
-                {qr.cuentaPago && (
-                  <div className="text-xs text-muted-foreground mt-1">
-                    Cuenta: {qr.cuentaPago.banco} - {qr.cuentaPago.titularCuenta}
                   </div>
                 )}
               </CardContent>
@@ -228,18 +210,18 @@ export function CodigosQRPanel({ onChanged }: { onChanged?: () => void }) {
         </div>
       )}
 
+      {/* === MODAL: Nuevo código QR === */}
       <Dialog open={modalOpen} onOpenChange={setModalOpen}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Nuevo código QR de pago</DialogTitle>
           </DialogHeader>
-          <div className="grid grid-cols-2 gap-3">
-            <div className="col-span-2">
+          <div className="space-y-3">
+            {/* Contrato */}
+            <div>
               <Label>Contrato *</Label>
-              <Select value={form.contratoId} onValueChange={v => {
-                setForm({ ...form, contratoId: v, cuentaPagoId: '' })
-              }}>
-                <SelectTrigger><SelectValue placeholder="Seleccionar contrato" /></SelectTrigger>
+              <Select value={form.contratoId} onValueChange={v => setForm({ ...form, contratoId: v })}>
+                <SelectTrigger><SelectValue placeholder="Seleccionar contrato activo" /></SelectTrigger>
                 <SelectContent>
                   {contratos.filter(c => c.estado === 'ACTIVO').map(c => (
                     <SelectItem key={c.id} value={c.id}>
@@ -248,49 +230,59 @@ export function CodigosQRPanel({ onChanged }: { onChanged?: () => void }) {
                   ))}
                 </SelectContent>
               </Select>
-            </div>
-            <div className="col-span-2">
-              <Label>Cuenta de pago (opcional)</Label>
-              <Select value={form.cuentaPagoId || 'NINGUNA'} onValueChange={v => setForm({ ...form, cuentaPagoId: v === 'NINGUNA' ? '' : v })}>
-                <SelectTrigger><SelectValue placeholder="Sin cuenta vinculada" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="NINGUNA">— Sin cuenta vinculada —</SelectItem>
-                  {cuentasPorContrato(form.contratoId).map(c => (
-                    <SelectItem key={c.id} value={c.id}>
-                      {c.banco} - {c.titularCuenta} ({c.numeroCuenta})
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="col-span-2">
-              <Label>Título *</Label>
-              <Input value={form.titulo} onChange={e => setForm({ ...form, titulo: e.target.value })}
-                placeholder="ej: Pago Nequi, Pago Bancolombia QR" />
-            </div>
-            <div>
-              <Label>Tipo de pago</Label>
-              <Select value={form.tipoPago} onValueChange={v => setForm({ ...form, tipoPago: v })}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {TIPOS_PAGO_QR.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Label>Monto fijo (opcional)</Label>
-              <Input type="number" value={form.montoFijo} onChange={e => setForm({ ...form, montoFijo: e.target.value })}
-                placeholder="Si el QR tiene un monto predefinido" />
+              <p className="text-xs text-muted-foreground mt-1">
+                Selecciona el contrato al que se relacionará este código QR
+              </p>
             </div>
 
-            {/* === SECCIÓN DE SUBIDA DE IMAGEN QR === */}
-            <div className="col-span-2">
+            {/* Nombre del banco */}
+            <div>
+              <Label>Nombre del banco / Nequi / Daviplata *</Label>
+              <div className="relative">
+                <Building className="w-4 h-4 absolute left-3 top-3 text-muted-foreground" />
+                <Input
+                  className="pl-9"
+                  value={form.banco}
+                  onChange={e => setForm({ ...form, banco: e.target.value })}
+                  placeholder="ej: Nequi, Daviplata, Bancolombia..."
+                />
+              </div>
+            </div>
+
+            {/* Número de cuenta */}
+            <div>
+              <Label>Número de cuenta / Celular *</Label>
+              <div className="relative">
+                <CreditCard className="w-4 h-4 absolute left-3 top-3 text-muted-foreground" />
+                <Input
+                  className="pl-9"
+                  value={form.numeroCuenta}
+                  onChange={e => setForm({ ...form, numeroCuenta: e.target.value })}
+                  placeholder="ej: 3235949510 o 42061620839"
+                />
+              </div>
+            </div>
+
+            {/* Titular */}
+            <div>
+              <Label>Titular de la cuenta *</Label>
+              <div className="relative">
+                <User className="w-4 h-4 absolute left-3 top-3 text-muted-foreground" />
+                <Input
+                  className="pl-9"
+                  value={form.titular}
+                  onChange={e => setForm({ ...form, titular: e.target.value })}
+                  placeholder="ej: Johan Sebastian Alvarez Del Rio"
+                />
+              </div>
+            </div>
+
+            {/* Imagen del QR */}
+            <div>
               <Label>Imagen del código QR *</Label>
               <p className="text-xs text-muted-foreground mb-2">
-                Sube la imagen del código QR (Nequi, Daviplata, Bancolombia, etc.)
+                Sube la imagen o foto del código QR
               </p>
-
-              {/* Área de subida de imagen */}
               <div
                 className="border-2 border-dashed border-gray-300 rounded-lg p-4 text-center cursor-pointer hover:border-blue-500 hover:bg-blue-50/30 transition-colors"
                 onClick={() => !subiendoImagen && document.getElementById('file-qr-imagen')?.click()}
@@ -332,16 +324,10 @@ export function CodigosQRPanel({ onChanged }: { onChanged?: () => void }) {
                 )}
               </div>
             </div>
-
-            <div className="col-span-2">
-              <Label>Descripción / Instrucciones</Label>
-              <Textarea value={form.descripcion} onChange={e => setForm({ ...form, descripcion: e.target.value })}
-                rows={2} placeholder="ej: Escanea este QR con Nequi para pagar la cuota mensual" />
-            </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setModalOpen(false)}>Cancelar</Button>
-            <Button onClick={guardar}>Crear QR</Button>
+            <Button onClick={guardar} className="bg-green-600 hover:bg-green-700">Crear código QR</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
