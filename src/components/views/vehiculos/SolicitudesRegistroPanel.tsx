@@ -228,8 +228,8 @@ export function SolicitudesRegistroPanel({ onChanged }: { onChanged?: () => void
                   </div>
                 )}
 
-                {/* Acciones */}
-                {detalle.estado === 'COMPLETADA' && (
+                {/* Acciones — visibles cuando la solicitud tiene documentos cargados */}
+                {(detalle.estado === 'COMPLETADA' || detalle.estado === 'DOCUMENTOS' || detalle.estado === 'FIRMA' || detalle.estado === 'OTP' || detalle.estado === 'PENDIENTE') && detalle.fotoCedulaFrente && (
                   <div className="flex gap-2 pt-2 border-t">
                     <Button variant="outline" onClick={() => rechazar(detalle)} className="text-red-600">
                       <XCircle className="w-4 h-4 mr-1" /> Rechazar
