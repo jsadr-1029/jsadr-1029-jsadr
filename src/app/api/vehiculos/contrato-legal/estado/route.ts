@@ -66,6 +66,7 @@ export async function GET(req: NextRequest) {
           modalidadPago: documento.modalidadPago, tarifa: documento.tarifa,
           diasGracia: documento.diasGracia, multaDiaria: documento.multaDiaria,
           deposito: documento.deposito, fechaInicio: documento.fechaInicio,
+          fechaFin: documento.fechaFin,
           descripcionVehiculo: documento.descripcionVehiculo,
         },
         firmaActual: esConductor ? {
