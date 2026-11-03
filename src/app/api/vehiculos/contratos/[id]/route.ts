@@ -91,6 +91,12 @@ export async function PUT(
     if (body.fechaFin !== undefined) data.fechaFin = body.fechaFin ? new Date(body.fechaFin) : null
     if (body.fechaInicio !== undefined) data.fechaInicio = new Date(body.fechaInicio)
     if (body.fechaCancelacion !== undefined) data.fechaCancelacion = new Date(body.fechaCancelacion)
+    // === Renovación anticipada (campos opcionales editables desde UI) ===
+    if (body.renovacionAnticipada !== undefined) data.renovacionAnticipada = Boolean(body.renovacionAnticipada)
+    if (body.valorRenovacionAnticipada !== undefined) {
+      const v = parseFloat(body.valorRenovacionAnticipada)
+      data.valorRenovacionAnticipada = isNaN(v) ? null : v
+    }
     data.modificadoPor = user.id
 
     const actualizado = await db.contratoVehiculo.update({ where: { id }, data })

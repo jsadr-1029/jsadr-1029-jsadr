@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { useToast } from '@/hooks/use-toast'
-import { Plus, FileText, ChevronRight } from 'lucide-react'
+import { Plus, FileText, ChevronRight, Pencil } from 'lucide-react'
 import { apiFetch, formatCOP, formatDate, EstadoBadge, MODALIDADES_PAGO, ESTADOS_CONTRATO } from './helpers'
 import { ContratoDetalle } from './ContratoDetalle'
 
@@ -25,6 +25,17 @@ export function ContratosPanel({ onChanged }: { onChanged?: () => void }) {
   const [modalOpen, setModalOpen] = useState(false)
   const [detalleOpen, setDetalleOpen] = useState(false)
   const [contratoSeleccionado, setContratoSeleccionado] = useState<any>(null)
+  // === Modal de edición de contrato ===
+  const [editModalOpen, setEditModalOpen] = useState(false)
+  const [editandoContrato, setEditandoContrato] = useState<any>(null)
+  const [editForm, setEditForm] = useState<any>({
+    vehiculoId: '', conductorId: '', fechaInicio: '', fechaFin: '',
+    estado: 'ACTIVO', modalidadPago: 'MENSUAL', tarifa: '',
+    diasGracia: 0, multaDiaria: 0, deposito: 0,
+    renovacionAnticipada: false, valorRenovacionAnticipada: 9900,
+    contratoPdfUrl: '', motivoCancelacion: '',
+  })
+  const [guardandoEdicion, setGuardandoEdicion] = useState(false)
   const [form, setForm] = useState<any>({
     vehiculoId: '', conductorId: '', fechaInicio: new Date().toISOString().slice(0, 10),
     fechaFin: '', estado: 'ACTIVO', modalidadPago: 'MENSUAL', tarifa: '',
@@ -105,6 +116,75 @@ export function ContratosPanel({ onChanged }: { onChanged?: () => void }) {
     }
   }
 
+  // === Abrir modal de edición de contrato existente ===
+  const abrirEditar = (c: any) => {
+    // Precargar todos los campos del contrato en el form de edición
+    const toYMD = (d: any) => {
+      if (!d) return ''
+      try {
+        const dt = new Date(d)
+        return `${dt.getUTCFullYear()}-${String(dt.getUTCMonth() + 1).padStart(2, '0')}-${String(dt.getUTCDate()).padStart(2, '0')}`
+      } catch { return '' }
+    }
+    setEditandoContrato(c)
+    setEditForm({
+      vehiculoId: c.vehiculoId || c.vehiculo?.id || '',
+      conductorId: c.conductorId || c.conductor?.id || '',
+      fechaInicio: toYMD(c.fechaInicio),
+      fechaFin: toYMD(c.fechaFin),
+      estado: c.estado || 'ACTIVO',
+      modalidadPago: c.modalidadPago || 'MENSUAL',
+      tarifa: c.tarifa ?? '',
+      diasGracia: c.diasGracia ?? 0,
+      multaDiaria: c.multaDiaria ?? 0,
+      deposito: c.deposito ?? 0,
+      renovacionAnticipada: c.renovacionAnticipada ?? false,
+      valorRenovacionAnticipada: c.valorRenovacionAnticipada ?? 9900,
+      contratoPdfUrl: c.contratoPdfUrl || '',
+      motivoCancelacion: c.motivoCancelacion || '',
+    })
+    setEditModalOpen(true)
+  }
+
+  // === Guardar cambios del contrato editado ===
+  const guardarEdicion = async () => {
+    if (!editandoContrato) return
+    if (!editForm.tarifa) {
+      toast({ title: 'Falta tarifa', description: 'La tarifa es obligatoria', variant: 'destructive' })
+      return
+    }
+    setGuardandoEdicion(true)
+    const r = await apiFetch(`/api/vehiculos/contratos/${editandoContrato.id}`, {
+      method: 'PUT',
+      body: JSON.stringify({
+        estado: editForm.estado,
+        modalidadPago: editForm.modalidadPago,
+        tarifa: editForm.tarifa,
+        diasGracia: editForm.diasGracia,
+        multaDiaria: editForm.multaDiaria,
+        deposito: editForm.deposito,
+        fechaInicio: editForm.fechaInicio,
+        fechaFin: editForm.fechaFin || null,
+        renovacionAnticipada: editForm.renovacionAnticipada,
+        valorRenovacionAnticipada: editForm.valorRenovacionAnticipada,
+        contratoPdfUrl: editForm.contratoPdfUrl,
+      }),
+    })
+    if (r.success) {
+      toast({
+        title: 'Contrato actualizado ✓',
+        description: `Contrato ${editandoContrato.numeroContrato} guardado correctamente`,
+      })
+      setEditModalOpen(false)
+      setEditandoContrato(null)
+      cargar()
+      onChanged?.()
+    } else {
+      toast({ title: 'Error al guardar', description: r.error, variant: 'destructive' })
+    }
+    setGuardandoEdicion(false)
+  }
+
   return (
     <div className="space-y-4">
       <div className="flex gap-2 flex-wrap">
@@ -152,6 +232,9 @@ export function ContratosPanel({ onChanged }: { onChanged?: () => void }) {
                         Cancelar
                       </Button>
                     )}
+                    <Button size="sm" variant="outline" className="text-blue-600 border-blue-300 hover:bg-blue-50" onClick={() => abrirEditar(c)}>
+                      <Pencil className="w-3 h-3 mr-1" /> Editar
+                    </Button>
                     <ChevronRight className="w-4 h-4 text-muted-foreground" />
                   </div>
                 </div>
@@ -262,6 +345,101 @@ export function ContratosPanel({ onChanged }: { onChanged?: () => void }) {
           {contratoSeleccionado && <ContratoDetalle contrato={contratoSeleccionado} onChanged={cargar} />}
         </SheetContent>
       </Sheet>
+
+      {/* === MODAL: Editar contrato existente === */}
+      <Dialog open={editModalOpen} onOpenChange={setEditModalOpen}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Pencil className="w-5 h-5 text-blue-600" />
+              Editar contrato {editandoContrato?.numeroContrato}
+            </DialogTitle>
+          </DialogHeader>
+          {editandoContrato && (
+            <div className="space-y-4">
+              {/* Resumen del contrato */}
+              <div className="bg-gray-50 border rounded-lg p-3 text-sm grid grid-cols-2 gap-2">
+                <div><span className="text-muted-foreground">Vehículo:</span> <strong>{editandoContrato.vehiculo?.placa}</strong> ({editandoContrato.vehiculo?.marca} {editandoContrato.vehiculo?.modelo})</div>
+                <div><span className="text-muted-foreground">Conductor:</span> <strong>{editandoContrato.conductor?.nombre}</strong></div>
+                <div className="col-span-2"><span className="text-muted-foreground">Obligaciones:</span> <strong>{editandoContrato._count?.obligaciones || 0}</strong></div>
+              </div>
+
+              {/* Campos editables */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label>Fecha inicio *</Label>
+                  <Input type="date" value={editForm.fechaInicio} onChange={e => setEditForm({ ...editForm, fechaInicio: e.target.value })} />
+                </div>
+                <div>
+                  <Label>Fecha fin</Label>
+                  <Input type="date" value={editForm.fechaFin} onChange={e => setEditForm({ ...editForm, fechaFin: e.target.value })} placeholder="Vacío = indefinido" />
+                </div>
+                <div>
+                  <Label>Estado del contrato</Label>
+                  <Select value={editForm.estado} onValueChange={v => setEditForm({ ...editForm, estado: v })}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {ESTADOS_CONTRATO.map(e => <SelectItem key={e} value={e}>{e}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label>Modalidad de pago</Label>
+                  <Select value={editForm.modalidadPago} onValueChange={v => setEditForm({ ...editForm, modalidadPago: v })}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {MODALIDADES_PAGO.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label>Tarifa *</Label>
+                  <Input type="number" value={editForm.tarifa} onChange={e => setEditForm({ ...editForm, tarifa: e.target.value })} />
+                </div>
+                <div>
+                  <Label>Días de gracia</Label>
+                  <Input type="number" value={editForm.diasGracia} onChange={e => setEditForm({ ...editForm, diasGracia: e.target.value })} />
+                </div>
+                <div>
+                  <Label>Multa diaria (mora)</Label>
+                  <Input type="number" value={editForm.multaDiaria} onChange={e => setEditForm({ ...editForm, multaDiaria: e.target.value })} />
+                </div>
+                <div>
+                  <Label>Depósito</Label>
+                  <Input type="number" value={editForm.deposito} onChange={e => setEditForm({ ...editForm, deposito: e.target.value })} />
+                </div>
+                <div className="col-span-2 flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    id="edit-renov"
+                    checked={editForm.renovacionAnticipada}
+                    onChange={e => setEditForm({ ...editForm, renovacionAnticipada: e.target.checked })}
+                  />
+                  <Label htmlFor="edit-renov">Activar renovación anticipada (${editForm.valorRenovacionAnticipada})</Label>
+                </div>
+                <div className="col-span-2">
+                  <Label>URL del PDF del contrato (opcional)</Label>
+                  <Input type="text" value={editForm.contratoPdfUrl} onChange={e => setEditForm({ ...editForm, contratoPdfUrl: e.target.value })} placeholder="https://..." />
+                </div>
+              </div>
+
+              {/* Aviso importante */}
+              <div className="bg-amber-50 border border-amber-200 p-3 rounded text-sm text-amber-800">
+                <strong>⚠️ Importante:</strong> Los cambios en fechas y tarifa aquí actualizan el contrato pero <strong>no regeneran</strong>
+                las obligaciones ya creadas. Si necesitas regenerar las obligaciones PENDIENTES con las
+                nuevas fechas, usa el botón <strong>"Editar fechas"</strong> dentro del detalle del contrato
+                (con la opción "Regenerar obligaciones" activada).
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditModalOpen(false)} disabled={guardandoEdicion}>Cancelar</Button>
+            <Button onClick={guardarEdicion} disabled={guardandoEdicion} className="bg-blue-600 hover:bg-blue-700 text-white">
+              {guardandoEdicion ? 'Guardando...' : 'Guardar cambios'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
