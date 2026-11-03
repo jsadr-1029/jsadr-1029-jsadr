@@ -9,7 +9,7 @@ import { Badge } from '@/components/ui/badge'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog'
 import { useToast } from '@/hooks/use-toast'
-import { CreditCard, CheckCircle, XCircle, AlertTriangle, FileText, Zap, Download, PenTool, Smartphone, Mail, Link2, Send, Loader2, Copy } from 'lucide-react'
+import { CreditCard, CheckCircle, XCircle, AlertTriangle, FileText, Zap, Download, PenTool, Smartphone, Mail, Link2, Send, Loader2, Copy, CalendarCog } from 'lucide-react'
 import { apiFetch, formatCOP, formatDate, formatDateTime, EstadoBadge, ESTADOS_PAGO } from './helpers'
 import { useState, useEffect } from 'react'
 
@@ -30,6 +30,61 @@ export function ContratoDetalle({ contrato, onChanged }: { contrato: any; onChan
   const [enviando, setEnviando] = useState(false)
   const [vistaPreviaOpen, setVistaPreviaOpen] = useState(false)
   const [contratoToken, setContratoToken] = useState<string | null>(null)
+
+  // === Modal de edición de fechas del contrato legal ===
+  const [editFechasOpen, setEditFechasOpen] = useState(false)
+  const [editFechaInicio, setEditFechaInicio] = useState('')
+  const [editFechaFin, setEditFechaFin] = useState('')
+  const [editRegenerarOblig, setEditRegenerarOblig] = useState(true)
+  const [editFechasLoading, setEditFechasLoading] = useState(false)
+
+  // === Abrir modal de edición de fechas ===
+  const abrirEditarFechas = () => {
+    // Precargar fechas actuales del contrato (formato YYYY-MM-DD para input type=date)
+    const toYMD = (d: any) => {
+      if (!d) return ''
+      try {
+        const dt = new Date(d)
+        return `${dt.getUTCFullYear()}-${String(dt.getUTCMonth() + 1).padStart(2, '0')}-${String(dt.getUTCDate()).padStart(2, '0')}`
+      } catch { return '' }
+    }
+    setEditFechaInicio(toYMD(contrato.fechaInicio))
+    setEditFechaFin(toYMD(contrato.fechaFin))
+    setEditRegenerarOblig(true)
+    setEditFechasOpen(true)
+  }
+
+  // === Guardar fechas editadas ===
+  const guardarFechasEditadas = async () => {
+    if (!editFechaInicio) {
+      toast({ title: 'Falta fecha de inicio', variant: 'destructive' })
+      return
+    }
+    setEditFechasLoading(true)
+    try {
+      const r = await apiFetch(`/api/vehiculos/contratos/${contrato.id}/documento-legal/fechas`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          fechaInicio: editFechaInicio,
+          fechaFin: editFechaFin || null,
+          regenerarObligaciones: editRegenerarOblig,
+        }),
+      })
+      if (r.success) {
+        toast({
+          title: 'Fechas actualizadas ✓',
+          description: r.message || 'El contrato se actualizó correctamente.',
+        })
+        setEditFechasOpen(false)
+        onChanged?.()
+      } else {
+        toast({ title: 'Error al actualizar fechas', description: r.error, variant: 'destructive' })
+      }
+    } catch (e: any) {
+      toast({ title: 'Error', description: e.message, variant: 'destructive' })
+    }
+    setEditFechasLoading(false)
+  }
 
   // === Cargar documento legal existente ===
   const cargarDocLegal = async () => {
@@ -381,6 +436,11 @@ export function ContratoDetalle({ contrato, onChanged }: { contrato: any; onChan
               <Button onClick={verVistaPrevia} variant="outline" size="sm" className="border-green-500 text-green-700">
                 <FileText className="w-4 h-4 mr-1" /> Vista previa
               </Button>
+
+              {/* Editar fechas del contrato */}
+              <Button onClick={abrirEditarFechas} variant="outline" size="sm" className="border-amber-500 text-amber-700">
+                <CalendarCog className="w-4 h-4 mr-1" /> Editar fechas
+              </Button>
             </>
           )}
         </div>
@@ -573,6 +633,106 @@ export function ContratoDetalle({ contrato, onChanged }: { contrato: any; onChan
               <iframe src={`/api/vehiculos/contrato-legal/descargar?token=${contratoToken}`} className="w-full h-full border-0" title="Vista previa del contrato" />
             )}
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* === MODAL: Editar fechas del contrato legal === */}
+      <Dialog open={editFechasOpen} onOpenChange={setEditFechasOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <CalendarCog className="w-5 h-5 text-amber-600" />
+              Editar fechas del contrato
+            </DialogTitle>
+            <DialogDescription>
+              Corrige las fechas de inicio y terminación del contrato {contrato.numeroContrato}.
+              Estos cambios se reflejarán en la vista previa y en el PDF descargable.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-2">
+            {/* Resumen del contrato actual */}
+            <div className="bg-gray-50 border rounded-lg p-3 text-sm space-y-1">
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Contrato vehículo:</span>
+                <span className="font-medium">{contrato.numeroContrato}</span>
+              </div>
+              {docLegal && (
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Documento legal:</span>
+                  <span className="font-medium">{docLegal.numeroContrato}</span>
+                </div>
+              )}
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Modalidad:</span>
+                <span className="font-medium">{contrato.modalidadPago}</span>
+              </div>
+            </div>
+
+            {/* Fechas */}
+            <div className="space-y-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="edit-fecha-inicio">Fecha de inicio *</Label>
+                <Input
+                  id="edit-fecha-inicio"
+                  type="date"
+                  value={editFechaInicio}
+                  onChange={e => setEditFechaInicio(e.target.value)}
+                  className="w-full"
+                />
+                <p className="text-xs text-muted-foreground">Día en que inicia el arrendamiento.</p>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="edit-fecha-fin">Fecha de terminación pactada</Label>
+                <Input
+                  id="edit-fecha-fin"
+                  type="date"
+                  value={editFechaFin}
+                  onChange={e => setEditFechaFin(e.target.value)}
+                  className="w-full"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Déjalo vacío si el contrato es indefinido.
+                </p>
+              </div>
+            </div>
+
+            {/* Regenerar obligaciones */}
+            <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 space-y-2">
+              <label className="flex items-start gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={editRegenerarOblig}
+                  onChange={e => setEditRegenerarOblig(e.target.checked)}
+                  className="mt-1"
+                />
+                <div className="text-sm">
+                  <strong>Regenerar obligaciones PENDIENTES</strong>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Elimina y recrea las obligaciones que estén en estado PENDIENTE, usando la nueva
+                    fecha de inicio. Las obligaciones PAGADAS, VENCIDAS o PARCIALES <strong>se conservan</strong> sin cambios.
+                  </p>
+                </div>
+              </label>
+              <p className="text-xs text-amber-800">
+                ⚠️ Esta acción no se puede deshacer. Se registrará en auditoría con el usuario que la ejecuta.
+              </p>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditFechasOpen(false)} disabled={editFechasLoading}>
+              Cancelar
+            </Button>
+            <Button onClick={guardarFechasEditadas} disabled={editFechasLoading} className="bg-amber-600 hover:bg-amber-700 text-white">
+              {editFechasLoading ? (
+                <><Loader2 className="w-4 h-4 mr-1 animate-spin" /> Guardando...</>
+              ) : (
+                <><CalendarCog className="w-4 h-4 mr-1" /> Guardar fechas</>
+              )}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
