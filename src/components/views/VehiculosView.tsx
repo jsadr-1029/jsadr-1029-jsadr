@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { PageHeader } from '@/components/ui-basics'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Car, LayoutDashboard, Users, FileText, CreditCard, Wrench, Package, Receipt, ShieldAlert, BookUser, QrCode, Calendar, UserPlus, FolderOpen } from 'lucide-react'
+import { Car, LayoutDashboard, Users, FileText, CreditCard, Wrench, Package, Receipt, ShieldAlert, BookUser, Calendar, UserPlus, FolderOpen } from 'lucide-react'
 import { VehiculosDashboard } from './vehiculos/VehiculosDashboard'
 import { VehiculosPanel } from './vehiculos/VehiculosPanel'
 import { ConductoresPanel } from './vehiculos/ConductoresPanel'
@@ -15,7 +15,6 @@ import { GastosPanel } from './vehiculos/GastosPanel'
 import { AuditoriaPanel } from './vehiculos/AuditoriaPanel'
 import { ProveedoresPanel } from './vehiculos/ProveedoresPanel'
 import { CuentasPagoPanel } from './vehiculos/CuentasPagoPanel'
-import { CodigosQRPanel } from './vehiculos/CodigosQRPanel'
 import { ReservasPanel } from './vehiculos/ReservasPanel'
 import { SolicitudesRegistroPanel } from './vehiculos/SolicitudesRegistroPanel'
 import { DocumentosConductorPanel } from './vehiculos/DocumentosConductorPanel'
@@ -71,10 +70,6 @@ export function VehiculosView() {
             <CreditCard className="w-4 h-4" />
             <span className="text-xs">Cuentas Pago</span>
           </TabsTrigger>
-          <TabsTrigger value="codigos-qr" className="flex flex-col items-center gap-1 py-2">
-            <QrCode className="w-4 h-4" />
-            <span className="text-xs">Códigos QR</span>
-          </TabsTrigger>
           <TabsTrigger value="mantenimientos" className="flex flex-col items-center gap-1 py-2">
             <Wrench className="w-4 h-4" />
             <span className="text-xs">Mantenim.</span>
@@ -106,7 +101,6 @@ export function VehiculosView() {
         <TabsContent value="reservas"><ReservasPanel key={refreshKey} onChanged={refresh} /></TabsContent>
         <TabsContent value="pagos"><PagosPanel key={refreshKey} onChanged={refresh} /></TabsContent>
         <TabsContent value="cuentas-pago"><CuentasPagoPanel key={refreshKey} onChanged={refresh} /></TabsContent>
-        <TabsContent value="codigos-qr"><CodigosQRPanel key={refreshKey} onChanged={refresh} /></TabsContent>
         <TabsContent value="mantenimientos"><MantenimientosPanel key={refreshKey} onChanged={refresh} /></TabsContent>
         <TabsContent value="repuestos"><RepuestosPanel key={refreshKey} onChanged={refresh} /></TabsContent>
         <TabsContent value="gastos"><GastosPanel key={refreshKey} onChanged={refresh} /></TabsContent>
