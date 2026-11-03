@@ -3,11 +3,28 @@ import { db } from '@/lib/db'
 import { enviarEmail } from '@/lib/email'
 import { buildAbsoluteUrl } from '@/lib/url'
 
+// Helper: formatear fecha como "DD de MES de YYYY" en español
+// (ej: 31 de octubre de 2026). Lee la fecha en UTC para no sufrir
+// desplazamientos por zona horaria del servidor.
+function fmtFechaLarga(f: Date | string | null | undefined): string {
+  if (!f) return '—'
+  const d = typeof f === 'string' ? new Date(f) : f
+  const meses = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio',
+                 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre']
+  return `${d.getUTCDate()} de ${meses[d.getUTCMonth()]} de ${d.getUTCFullYear()}`
+}
+
 export async function POST(req: NextRequest) {
   try {
-    const documento = await db.contratoDocumentoVehiculo.findFirst({
-      where: { numeroContrato: 'CTR-20261028-000001' },
-    })
+    // Permitir especificar el numeroContrato vía query (?numeroContrato=CTR-XXXX)
+    // Si no se especifica, se usa el último documento creado.
+    const { searchParams } = new URL(req.url)
+    const numeroContratoQuery = searchParams.get('numeroContrato')
+
+    const documento = numeroContratoQuery
+      ? await db.contratoDocumentoVehiculo.findFirst({ where: { numeroContrato: numeroContratoQuery } })
+      : await db.contratoDocumentoVehiculo.findFirst({ orderBy: { createdAt: 'desc' } })
+
     if (!documento) {
       return NextResponse.json({ success: false, error: 'Documento no encontrado' }, { status: 404 })
     }
@@ -16,13 +33,16 @@ export async function POST(req: NextRequest) {
     const linkPropietario = buildAbsoluteUrl(`/firma-contrato-vehiculo/${documento.propietarioToken}`)
     const resultados: any = {}
 
+    const fechaInicioTxt = fmtFechaLarga(documento.fechaInicio)
+    const fechaFinTxt = fmtFechaLarga(documento.fechaFin)
+
     if (documento.conductorEmail) {
       try {
         await enviarEmail({
           to: documento.conductorEmail,
           subject: `Contrato de Arrendamiento ${documento.numeroContrato} - Vehiculo ${documento.vehiculoPlaca} - Firma Electronica`,
-          text: `Estimado/a ${documento.conductorNombre},\n\nSe ha generado un contrato de arrendamiento de vehiculo a su nombre.\n\nContrato: ${documento.numeroContrato}\nVehiculo: ${documento.vehiculoMarca} ${documento.vehiculoModelo} - Placa ${documento.vehiculoPlaca}\nModalidad: ${documento.modalidadPago} - $${documento.tarifa.toLocaleString('es-CO')}\nFecha de inicio: 24 de octubre de 2026\nFecha de terminacion: 23 de enero de 2027\nArrendador: ${documento.propietarioNombre} (CC ${documento.propietarioCedula})\n\nPara completar la firma electronica del contrato, ingresa al siguiente enlace:\n${linkConductor}\n\nEl enlace expira en 7 dias.\n\nSaludos,\nSistema de Gestion de Arrendamiento de Vehiculos - Jsadr`,
-          html: `<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:20px;"><h2 style="color:#1e3a8a;">Contrato de Arrendamiento de Vehiculo - Firma Electronica</h2><p>Estimado/a <strong>${documento.conductorNombre}</strong>,</p><div style="background:#f3f4f6;padding:15px;border-radius:8px;margin:15px 0;"><p style="margin:4px 0;"><strong>Contrato:</strong> ${documento.numeroContrato}</p><p style="margin:4px 0;"><strong>Vehiculo:</strong> ${documento.vehiculoMarca} ${documento.vehiculoModelo} - Placa ${documento.vehiculoPlaca}</p><p style="margin:4px 0;"><strong>Modalidad:</strong> ${documento.modalidadPago} - $${documento.tarifa.toLocaleString('es-CO')}</p><p style="margin:4px 0;"><strong>Inicio:</strong> 24 de octubre de 2026</p><p style="margin:4px 0;"><strong>Terminacion:</strong> 23 de enero de 2027</p><p style="margin:4px 0;"><strong>Arrendador:</strong> ${documento.propietarioNombre} (CC ${documento.propietarioCedula})</p></div><p>Para firmar electronicamente:</p><div style="text-align:center;margin:25px 0;"><a href="${linkConductor}" style="background:#1e3a8a;color:white;padding:12px 30px;text-decoration:none;border-radius:6px;font-weight:bold;display:inline-block;">Firmar Contrato</a></div><p style="color:#6b7280;font-size:12px;">El enlace expira en 7 dias.</p></div>`,
+          text: `Estimado/a ${documento.conductorNombre},\n\nSe ha generado un contrato de arrendamiento de vehiculo a su nombre.\n\nContrato: ${documento.numeroContrato}\nVehiculo: ${documento.vehiculoMarca} ${documento.vehiculoModelo} - Placa ${documento.vehiculoPlaca}\nModalidad: ${documento.modalidadPago} - $${documento.tarifa.toLocaleString('es-CO')}\nFecha de inicio: ${fechaInicioTxt}\nFecha de terminacion: ${fechaFinTxt}\nArrendador: ${documento.propietarioNombre} (CC ${documento.propietarioCedula})\n\nPara completar la firma electronica del contrato, ingresa al siguiente enlace:\n${linkConductor}\n\nEl enlace expira en 7 dias.\n\nSaludos,\nSistema de Gestion de Arrendamiento de Vehiculos - Jsadr`,
+          html: `<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:20px;"><h2 style="color:#1e3a8a;">Contrato de Arrendamiento de Vehiculo - Firma Electronica</h2><p>Estimado/a <strong>${documento.conductorNombre}</strong>,</p><div style="background:#f3f4f6;padding:15px;border-radius:8px;margin:15px 0;"><p style="margin:4px 0;"><strong>Contrato:</strong> ${documento.numeroContrato}</p><p style="margin:4px 0;"><strong>Vehiculo:</strong> ${documento.vehiculoMarca} ${documento.vehiculoModelo} - Placa ${documento.vehiculoPlaca}</p><p style="margin:4px 0;"><strong>Modalidad:</strong> ${documento.modalidadPago} - $${documento.tarifa.toLocaleString('es-CO')}</p><p style="margin:4px 0;"><strong>Inicio:</strong> ${fechaInicioTxt}</p><p style="margin:4px 0;"><strong>Terminacion:</strong> ${fechaFinTxt}</p><p style="margin:4px 0;"><strong>Arrendador:</strong> ${documento.propietarioNombre} (CC ${documento.propietarioCedula})</p></div><p>Para firmar electronicamente:</p><div style="text-align:center;margin:25px 0;"><a href="${linkConductor}" style="background:#1e3a8a;color:white;padding:12px 30px;text-decoration:none;border-radius:6px;font-weight:bold;display:inline-block;">Firmar Contrato</a></div><p style="color:#6b7280;font-size:12px;">El enlace expira en 7 dias.</p></div>`,
         })
         resultados.conductor = { success: true, email: documento.conductorEmail }
       } catch (e: any) {
