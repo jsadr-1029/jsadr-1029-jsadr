@@ -33,9 +33,10 @@ export function ContratosPanel({ onChanged }: { onChanged?: () => void }) {
     estado: 'ACTIVO', modalidadPago: 'MENSUAL', tarifa: '',
     diasGracia: 0, multaDiaria: 0, deposito: 0,
     renovacionAnticipada: false, valorRenovacionAnticipada: 9900,
-    contratoPdfUrl: '', motivoCancelacion: '',
+    contratoPdfUrl: '', motivoCancelacion: '', motivoEdicion: '',
   })
   const [guardandoEdicion, setGuardandoEdicion] = useState(false)
+  const [confirmarVehiculoConductor, setConfirmarVehiculoConductor] = useState(false)
   const [form, setForm] = useState<any>({
     vehiculoId: '', conductorId: '', fechaInicio: new Date().toISOString().slice(0, 10),
     fechaFin: '', estado: 'ACTIVO', modalidadPago: 'MENSUAL', tarifa: '',
@@ -142,7 +143,9 @@ export function ContratosPanel({ onChanged }: { onChanged?: () => void }) {
       valorRenovacionAnticipada: c.valorRenovacionAnticipada ?? 9900,
       contratoPdfUrl: c.contratoPdfUrl || '',
       motivoCancelacion: c.motivoCancelacion || '',
+      motivoEdicion: '', // siempre empieza vacío
     })
+    setConfirmarVehiculoConductor(false)
     setEditModalOpen(true)
   }
 
@@ -153,10 +156,27 @@ export function ContratosPanel({ onChanged }: { onChanged?: () => void }) {
       toast({ title: 'Falta tarifa', description: 'La tarifa es obligatoria', variant: 'destructive' })
       return
     }
+    if (!editForm.vehiculoId || !editForm.conductorId) {
+      toast({ title: 'Faltan campos', description: 'Vehículo y conductor son obligatorios', variant: 'destructive' })
+      return
+    }
+    // Si cambia vehículo o conductor, requerir confirmación previa
+    const cambioVeh = editForm.vehiculoId !== editandoContrato.vehiculoId && editandoContrato.vehiculoId
+    const cambioCon = editForm.conductorId !== editandoContrato.conductorId && editandoContrato.conductorId
+    if ((cambioVeh || cambioCon) && !confirmarVehiculoConductor) {
+      toast({
+        title: 'Confirma el cambio de vehículo/conductor',
+        description: 'Marca el checkbox "Entiendo que cambiar el vehículo/conductor puede afectar las obligaciones existentes" antes de guardar.',
+        variant: 'destructive',
+      })
+      return
+    }
     setGuardandoEdicion(true)
     const r = await apiFetch(`/api/vehiculos/contratos/${editandoContrato.id}`, {
       method: 'PUT',
       body: JSON.stringify({
+        vehiculoId: editForm.vehiculoId,
+        conductorId: editForm.conductorId,
         estado: editForm.estado,
         modalidadPago: editForm.modalidadPago,
         tarifa: editForm.tarifa,
@@ -168,6 +188,7 @@ export function ContratosPanel({ onChanged }: { onChanged?: () => void }) {
         renovacionAnticipada: editForm.renovacionAnticipada,
         valorRenovacionAnticipada: editForm.valorRenovacionAnticipada,
         contratoPdfUrl: editForm.contratoPdfUrl,
+        motivoEdicion: editForm.motivoEdicion || '',
       }),
     })
     if (r.success) {
@@ -359,13 +380,73 @@ export function ContratosPanel({ onChanged }: { onChanged?: () => void }) {
             <div className="space-y-4">
               {/* Resumen del contrato */}
               <div className="bg-gray-50 border rounded-lg p-3 text-sm grid grid-cols-2 gap-2">
-                <div><span className="text-muted-foreground">Vehículo:</span> <strong>{editandoContrato.vehiculo?.placa}</strong> ({editandoContrato.vehiculo?.marca} {editandoContrato.vehiculo?.modelo})</div>
-                <div><span className="text-muted-foreground">Conductor:</span> <strong>{editandoContrato.conductor?.nombre}</strong></div>
-                <div className="col-span-2"><span className="text-muted-foreground">Obligaciones:</span> <strong>{editandoContrato._count?.obligaciones || 0}</strong></div>
+                <div><span className="text-muted-foreground">Contrato:</span> <strong>{editandoContrato.numeroContrato}</strong></div>
+                <div><span className="text-muted-foreground">Obligaciones:</span> <strong>{editandoContrato._count?.obligaciones || 0}</strong></div>
+                <div><span className="text-muted-foreground">Vehículo actual:</span> <strong>{editandoContrato.vehiculo?.placa}</strong> ({editandoContrato.vehiculo?.marca} {editandoContrato.vehiculo?.modelo})</div>
+                <div><span className="text-muted-foreground">Conductor actual:</span> <strong>{editandoContrato.conductor?.nombre}</strong></div>
               </div>
 
               {/* Campos editables */}
               <div className="grid grid-cols-2 gap-3">
+                {/* === Vehículo y conductor === */}
+                <div className="col-span-2">
+                  <Label>Vehículo *</Label>
+                  <Select value={editForm.vehiculoId} onValueChange={v => setEditForm({ ...editForm, vehiculoId: v })}>
+                    <SelectTrigger><SelectValue placeholder="Seleccionar vehículo" /></SelectTrigger>
+                    <SelectContent>
+                      {vehiculos.map(v => {
+                        // Mostrar siempre el vehículo actual del contrato aunque esté asignado
+                        const esActual = v.id === editandoContrato.vehiculoId
+                        return (
+                          <SelectItem key={v.id} value={v.id} disabled={v.estado === 'ASIGNADO' && !esActual}>
+                            {v.placa} - {v.marca} {v.modelo}
+                            {v.estado === 'ASIGNADO' && !esActual ? ' (asignado)' : ''}
+                            {esActual ? ' (actual)' : ''}
+                          </SelectItem>
+                        )
+                      })}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="col-span-2">
+                  <Label>Conductor *</Label>
+                  <Select value={editForm.conductorId} onValueChange={v => setEditForm({ ...editForm, conductorId: v })}>
+                    <SelectTrigger><SelectValue placeholder="Seleccionar conductor" /></SelectTrigger>
+                    <SelectContent>
+                      {conductores.map(c => (
+                        <SelectItem key={c.id} value={c.id}>
+                          {c.nombre} - CC {c.cedula}
+                          {c.id === editandoContrato.conductorId ? ' (actual)' : ''}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* === Confirmación si cambia vehículo o conductor === */}
+                {((editForm.vehiculoId && editForm.vehiculoId !== editandoContrato.vehiculoId) ||
+                  (editForm.conductorId && editForm.conductorId !== editandoContrato.conductorId)) && (
+                  <div className="col-span-2 bg-red-50 border border-red-200 rounded-lg p-3 space-y-2">
+                    <div className="flex items-start gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        id="confirm-veh-con"
+                        checked={confirmarVehiculoConductor}
+                        onChange={e => setConfirmarVehiculoConductor(e.target.checked)}
+                        className="mt-1"
+                      />
+                      <label htmlFor="confirm-veh-con" className="text-sm text-red-800">
+                        <strong>Entiendo que cambiar el vehículo/conductor puede afectar las obligaciones existentes.</strong>
+                        <p className="text-xs text-red-700 mt-1">
+                          Las obligaciones ya creadas seguirán asociadas al vehículo/conductor anterior.
+                          Las nuevas obligaciones que se generen usarán el nuevo vehículo/conductor.
+                        </p>
+                      </label>
+                    </div>
+                  </div>
+                )}
+
+                {/* === Fechas y modalidad === */}
                 <div>
                   <Label>Fecha inicio *</Label>
                   <Input type="date" value={editForm.fechaInicio} onChange={e => setEditForm({ ...editForm, fechaInicio: e.target.value })} />
@@ -420,6 +501,20 @@ export function ContratosPanel({ onChanged }: { onChanged?: () => void }) {
                 <div className="col-span-2">
                   <Label>URL del PDF del contrato (opcional)</Label>
                   <Input type="text" value={editForm.contratoPdfUrl} onChange={e => setEditForm({ ...editForm, contratoPdfUrl: e.target.value })} placeholder="https://..." />
+                </div>
+
+                {/* === Motivo/Notas de la edición === */}
+                <div className="col-span-2">
+                  <Label>Motivo de la edición (notas internas) *</Label>
+                  <Textarea
+                    value={editForm.motivoEdicion}
+                    onChange={e => setEditForm({ ...editForm, motivoEdicion: e.target.value })}
+                    rows={3}
+                    placeholder="Describe por qué se está editando el contrato. Ej: Corrección de fechas pactadas, cambio de tarifa acordada, etc. Este motivo queda registrado en la auditoría."
+                  />
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Queda registrado en la auditoría del sistema con usuario, fecha y cambios realizados.
+                  </p>
                 </div>
               </div>
 
