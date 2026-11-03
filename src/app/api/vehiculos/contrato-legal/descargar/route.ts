@@ -458,8 +458,8 @@ export async function GET(req: NextRequest) {
       ['Placa del vehículo', d.vehiculo.placa],
       ['Arrendador', d.propietario.nombre],
       ['Arrendatario', d.conductor.nombre],
-      ['Fecha de inicio', '24 / 10 / 2026'],
-      ['Fecha de terminación pactada', '23 / 01 / 2027'],
+      ['Fecha de inicio', fmtFechaCorta(d.terminos.fechaInicio)],
+      ['Fecha de terminación pactada', d.terminos.fechaFin ? fmtFechaCorta(d.terminos.fechaFin) : 'Indefinida'],
       ['Valor del canon', fmtCOP(d.terminos.tarifa)],
       ['Periodicidad de pago', d.terminos.modalidadPago],
     ], [200, ancho - 200])
@@ -519,8 +519,8 @@ export async function GET(req: NextRequest) {
 
     clausula('CLÁUSULA 7. PLAZO, ENTREGA MATERIAL, RENOVACIÓN Y ABANDONO', `El plazo del presente contrato, las condiciones de entrega, renovación y abandono se regulan de la siguiente manera:`)
     tablaSimple(['CONDICIÓN', 'INFORMACIÓN'], [
-      ['Fecha de inicio', '24 / 10 / 2026'],
-      ['Fecha de terminación pactada', '23 / 01 / 2027'],
+      ['Fecha de inicio', fmtFechaCorta(d.terminos.fechaInicio)],
+      ['Fecha de terminación pactada', d.terminos.fechaFin ? fmtFechaCorta(d.terminos.fechaFin) : 'Indefinida'],
       ['Duración del plazo inicial', 'Tres (3) meses'],
       ['Lugar de entrega', 'Medellín, Colombia'],
       ['Modalidad de renovación', 'Automática por el mismo plazo si no hay notificación'],
@@ -528,9 +528,9 @@ export async function GET(req: NextRequest) {
       ['Plazo del Otro Sí anual', 'Un (1) año'],
     ], [200, ancho - 200])
 
-    clausula('', `7.1. RENOVACIÓN AUTOMÁTICA. Si ninguna de las partes notifica a la otra su voluntad de dar por terminado el contrato al vencimiento del plazo inicial (23/01/2027) o de cualquiera de sus renovaciones, el contrato se entenderá renovado automáticamente por el mismo plazo inicialmente pactado, conforme al artículo 1622 del Código Civil colombiano (tácita reconducción).
+    clausula('', `7.1. RENOVACIÓN AUTOMÁTICA. Si ninguna de las partes notifica a la otra su voluntad de dar por terminado el contrato al vencimiento del plazo inicial (${d.terminos.fechaFin ? fmtFechaCorta(d.terminos.fechaFin) : 'la fecha pactada'}) o de cualquiera de sus renovaciones, el contrato se entenderá renovado automáticamente por el mismo plazo inicialmente pactado, conforme al artículo 1622 del Código Civil colombiano (tácita reconducción).
 
-7.2. OTRO SÍ ANUAL. Al cumplirse un (1) año contado desde la fecha de inicio del contrato (24/10/2026), las partes suscribirán un OTRO SÍ que modificará únicamente el plazo, pasando de un plazo inicial de tres (3) meses a un plazo anual de un (1) año. Las demás condiciones del contrato (canon, modalidad de pago, obligaciones, etc.) se mantendrán sin variación salvo acuerdo expreso entre las partes.
+7.2. OTRO SÍ ANUAL. Al cumplirse un (1) año contado desde la fecha de inicio del contrato (${fmtFechaCorta(d.terminos.fechaInicio)}), las partes suscribirán un OTRO SÍ que modificará únicamente el plazo, pasando de un plazo inicial de tres (3) meses a un plazo anual de un (1) año. Las demás condiciones del contrato (canon, modalidad de pago, obligaciones, etc.) se mantendrán sin variación salvo acuerdo expreso entre las partes.
 
 7.3. PREAVISO DE TERMINACIÓN. Conforme al artículo 1622 del Código Civil colombiano y la jurisprudencia de la Corte Suprema de Justicia, cualquiera de las partes que desee dar por terminado el contrato al vencimiento del plazo inicial o de cualquiera de sus renovaciones deberá notificar a la otra parte con una antelación mínima de treinta (30) días calendario a la fecha de vencimiento. La notificación deberá hacerse por escrito (correo electrónico, mensaje de texto o carta) a los datos de contacto registrados en la cláusula 1 y cláusula 2 del presente contrato. La recepción del preaviso deberá ser confirmada por la otra parte.
 
@@ -538,7 +538,7 @@ export async function GET(req: NextRequest) {
 
 7.5. CASOS DE TERMINACIÓN ANTICIPADA SIN MULTA. El preaviso de 30 días y la multa por abandono no aplicarán cuando la terminación se origine en: (i) incumplimiento grave de EL ARRENDADOR debidamente acreditado, (ii) pérdida total del vehículo por caso fortuito o fuerza mayor, (iii) muerte o incapacidad permanente de EL ARRENDATARIO, o (iv) acuerdo mutuo por escrito.
 
-7.6. ENTREGA MATERIAL. La entrega material del vehículo se realizará en Medellín, Colombia, el día 24/10/2026, fecha a partir de la cual se entenderá iniciado el plazo del contrato. La entrega se acreditará mediante el Acta de Entrega e Inventario (Anexo 1) firmada por ambas partes.`)
+7.6. ENTREGA MATERIAL. La entrega material del vehículo se realizará en Medellín, Colombia, el día ${fmtFechaCorta(d.terminos.fechaInicio)}, fecha a partir de la cual se entenderá iniciado el plazo del contrato. La entrega se acreditará mediante el Acta de Entrega e Inventario (Anexo 1) firmada por ambas partes.`)
 
     clausula('CLÁUSULA 8. ESTADO DEL VEHÍCULO', `El estado del vehículo al momento de la entrega se documentará en el Anexo 1. Acta de entrega e inventario. El anexo incluirá: kilometraje, nivel de combustible, estado exterior e interior, accesorios, llaves, documentos, daños preexistentes y fotografías.`)
 
@@ -1115,11 +1115,10 @@ export async function GET(req: NextRequest) {
 
     capitulo('ANEXO 4. CONTROL DE VENCIMIENTO Y TERMINACIÓN')
     tablaSimple(['CONTROL', 'INFORMACIÓN'], [
-      ['Fecha de inicio', '24 / 10 / 2026'],
-      ['Fecha pactada de terminación inicial', '23 / 01 / 2027'],
+      ['Fecha de inicio', fmtFechaCorta(d.terminos.fechaInicio)],
+      ['Fecha pactada de terminación inicial', d.terminos.fechaFin ? fmtFechaCorta(d.terminos.fechaFin) : 'Indefinida'],
       ['Duración del plazo inicial', 'Tres (3) meses'],
       ['Renovación automática', 'Sí, por el mismo plazo si no hay preaviso de 30 días'],
-      ['Fecha estimada de Otro Sí anual', '24 / 10 / 2027 (al cumplirse 1 año)'],
       ['Plazo del Otro Sí', 'Un (1) año'],
       ['Multa por abandono anticipado', 'Una (1) semana de liquidación del canon'],
       ['Modalidad contractual de pago', d.terminos.modalidadPago],
