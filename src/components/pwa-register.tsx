@@ -19,72 +19,26 @@ export function PWARegister() {
   const [installed, setInstalled] = useState(false)
 
   useEffect(() => {
-    // Solo registrar SW en producción (evitar problemas con HMR en dev)
-    if (
-      typeof window === 'undefined' ||
-      !('serviceWorker' in navigator) ||
-      process.env.NODE_ENV !== 'production'
-    ) {
-      // En desarrollo, intentamos registrar igual para probar PWA, pero con manejo de errores
-      if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
-        navigator.serviceWorker
-          .register('/sw.js')
-          .then((reg) => {
-            reg.addEventListener('updatefound', () => {
-              const newWorker = reg.installing
-              if (!newWorker) return
-              newWorker.addEventListener('statechange', () => {
-                if (
-                  newWorker.state === 'installed' &&
-                  navigator.serviceWorker.controller
-                ) {
-                  setUpdateAvailable(true)
-                }
-              })
-            })
-          })
-          .catch((err) => {
-            console.warn('[PWA] SW registration failed:', err)
-          })
-      }
-      return
-    }
-
-    // Registro del Service Worker
-    navigator.serviceWorker
-      .register('/sw.js')
-      .then((reg) => {
-        // Detectar actualizaciones
-        reg.addEventListener('updatefound', () => {
-          const newWorker = reg.installing
-          if (!newWorker) return
-          newWorker.addEventListener('statechange', () => {
-            if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
-              setUpdateAvailable(true)
-            }
+    // === DESACTIVAR Service Worker ===
+    // El Service Worker estaba causando problemas de caché: servía versiones
+    // antiguas de la aplicación aunque el código ya se había actualizado en
+    // producción. Esto hacía que cambios como eliminar pestañas no se
+    // reflejaran para el usuario.
+    //
+    // Solución: desregistrar TODOS los service workers existentes para que
+    // el navegador deje de usar el caché del SW y siempre cargue la versión
+    // más reciente desde el servidor.
+    if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
+      navigator.serviceWorker.getRegistrations().then((registrations) => {
+        registrations.forEach((registration) => {
+          registration.unregister().then(() => {
+            console.log('[PWA] Service Worker desregistrado:', registration.scope)
           })
         })
+      }).catch(() => {})
+    }
 
-        // Verificar actualizaciones cada 60 minutos
-        setInterval(() => {
-          reg.update().catch(() => {})
-        }, 60 * 60 * 1000)
-      })
-      .catch((err) => {
-        console.warn('[PWA] SW registration failed:', err)
-      })
-
-    // Listener para mensajes del SW
-    navigator.serviceWorker.addEventListener('message', (event) => {
-      if (event.data?.type === 'BACKGROUND_SYNC') {
-        // Aquí se podría disparar un refetch de datos
-        console.log('[PWA] Background sync triggered')
-      }
-    })
-  }, [])
-
-  // Detectar online/offline
-  useEffect(() => {
+    // Detectar online/offline
     const updateOnlineStatus = () => setOffline(!navigator.onLine)
     updateOnlineStatus()
     window.addEventListener('online', updateOnlineStatus)
