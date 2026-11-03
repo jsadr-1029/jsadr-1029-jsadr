@@ -10,13 +10,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import {
   Car, LogOut, CreditCard, Calendar, Wrench, AlertTriangle, CheckCircle, Clock,
-  QrCode, Download, Star, Phone, Mail, User, MapPin, FileText, Wallet,
+  Download, Star, Phone, Mail, User, MapPin, FileText, Wallet,
   ChevronRight, Sparkles, Bell, TrendingUp, Settings, Plus, Upload,
   Sun, Moon,
 } from 'lucide-react'
 import { formatCOP, formatDate, EstadoBadge } from '@/components/views/vehiculos/helpers'
 
-type Tab = 'inicio' | 'perfil' | 'pagos' | 'reservas' | 'cuentas' | 'qr' | 'recibos'
+type Tab = 'inicio' | 'perfil' | 'pagos' | 'reservas' | 'cuentas' | 'recibos'
 
 export default function PortalConductorVehiculosPage() {
   const [token, setToken] = useState<string | null>(null)
@@ -56,7 +56,6 @@ export default function PortalConductorVehiculosPage() {
 
   // Datos
   const [cuentasPago, setCuentasPago] = useState<any[]>([])
-  const [codigosQR, setCodigosQR] = useState<any[]>([])
   const [recibos, setRecibos] = useState<any[]>([])
   const [semanas, setSemanas] = useState<any[]>([])
   const [recordatorio, setRecordatorio] = useState<string>('')
@@ -117,10 +116,9 @@ export default function PortalConductorVehiculosPage() {
     setLoadingData(true)
     try {
       const headers = { 'x-portal-token': token! }
-      const [resEstado, resCuentas, resQR, resRecibos, resSemanas, resReservas] = await Promise.all([
+      const [resEstado, resCuentas, resRecibos, resSemanas, resReservas] = await Promise.all([
         fetch('/api/vehiculos/portal-conductor/estado', { headers }),
         fetch('/api/vehiculos/portal-conductor/cuentas-pago', { headers }),
-        fetch('/api/vehiculos/portal-conductor/codigos-qr', { headers }),
         fetch('/api/vehiculos/portal-conductor/recibos', { headers }),
         fetch('/api/vehiculos/portal-conductor/semanas', { headers }),
         fetch('/api/vehiculos/portal-conductor/reservas', { headers }),
@@ -130,8 +128,6 @@ export default function PortalConductorVehiculosPage() {
       else if (r.error && r.error.includes('expirado')) { logout(); return }
       const rc = await resCuentas.json()
       if (rc.success) setCuentasPago(rc.data?.cuentas || [])
-      const rq = await resQR.json()
-      if (rq.success) setCodigosQR(rq.data || [])
       const rr = await resRecibos.json()
       if (rr.success) setRecibos(rr.data || [])
       const rs = await resSemanas.json()
@@ -507,7 +503,6 @@ export default function PortalConductorVehiculosPage() {
             { key: 'pagos', label: 'Pagos', icon: CreditCard },
             { key: 'reservas', label: 'Reservas', icon: Calendar },
             { key: 'cuentas', label: 'Cuentas', icon: Wallet },
-            { key: 'qr', label: 'QR', icon: QrCode },
             { key: 'recibos', label: 'Recibos', icon: Download },
           ].map(t => {
             const Icon = t.icon
@@ -1098,42 +1093,6 @@ export default function PortalConductorVehiculosPage() {
                   </CardContent>
                 </Card>
               ))
-            )}
-          </div>
-        )}
-
-        {/* ====== TAB: QR ====== */}
-        {tab === 'qr' && (
-          <div className="space-y-3">
-            <h2 className="text-lg font-bold flex items-center gap-2">
-              <QrCode className="w-5 h-5 text-purple-600" /> Códigos QR para pago
-            </h2>
-            <p className="text-xs text-muted-foreground">
-              Escanea estos QR con la app de tu banco o Nequi/Daviplata para pagar rápidamente.
-            </p>
-            {codigosQR.length === 0 ? (
-              <Card><CardContent className="py-8 text-center text-muted-foreground">
-                No hay códigos QR disponibles.
-              </CardContent></Card>
-            ) : (
-              <div className="grid grid-cols-2 gap-3">
-                {codigosQR.map((qr: any) => (
-                  <Card key={qr.id} className="border-0 shadow-md">
-                    <CardContent className="p-3 text-center">
-                      <div className="font-medium text-sm mb-2">{qr.titulo}</div>
-                      <div className="bg-white p-3 rounded-xl border-2 inline-block shadow-inner">
-                        <img src={qr.imagenUrl} alt={qr.titulo} className="w-32 h-32 object-contain" />
-                      </div>
-                      {qr.montoFijo && (
-                        <div className="mt-2 text-sm font-bold text-blue-700">{formatCOP(qr.montoFijo)}</div>
-                      )}
-                      {qr.descripcion && (
-                        <div className="mt-1 text-xs text-muted-foreground">{qr.descripcion}</div>
-                      )}
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
             )}
           </div>
         )}
