@@ -1335,7 +1335,20 @@ export async function GET(req: NextRequest) {
 
     return new NextResponse(new Uint8Array(pdfBuffer), {
       status: 200,
-      headers: { 'Content-Type': 'application/pdf', 'Content-Disposition': `attachment; filename="Contrato_${d.numeroContrato}.pdf"`, 'Cache-Control': 'no-store' },
+      headers: {
+        'Content-Type': 'application/pdf',
+        'Content-Disposition': `attachment; filename="Contrato_${d.numeroContrato}.pdf"`,
+        // Headers anti-caché agresivos para Vercel CDN y navegador
+        'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0',
+        'Pragma': 'no-cache',
+        'Expires': '0',
+        // Indicar a Vercel CDN que NO cachee esta respuesta
+        'CDN-Cache-Control': 'no-store',
+        'Vercel-CDN-Cache-Control': 'no-store',
+        'Surrogate-Control': 'no-store',
+        // Etiqueta única para forzar regeneración cada vez
+        'X-Content-Hash': `${d.numeroContrato}-${documento?.updatedAt?.getTime() || Date.now()}`,
+      },
     })
   } catch (error: any) {
     console.error('[contrato-legal/descargar] Error:', error)

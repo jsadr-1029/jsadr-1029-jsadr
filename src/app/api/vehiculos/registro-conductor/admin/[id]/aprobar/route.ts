@@ -7,6 +7,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireRole } from '@/lib/auth-guard'
 import { db } from '@/lib/db'
+import { parseCurrency } from '@/lib/parse-currency'
 
 function generarFechasVencimientoL_S(fechaInicio: Date, cantidadCuotas: number): Date[] {
   const fechas: Date[] = []
@@ -131,7 +132,7 @@ export async function POST(
       const numeroContrato = `CONTR-${fechaStr}-${String(contratosHoy + 1).padStart(3, '0')}`
 
       const fechaInicioDate = fechaInicio ? new Date(fechaInicio) : new Date()
-      const tarifaNum = parseFloat(tarifa)
+      const tarifaNum = parseCurrency(tarifa)
 
       // Crear contrato ACTIVO
       const contrato = await tx.contratoVehiculo.create({
@@ -145,8 +146,8 @@ export async function POST(
           modalidadPago,
           tarifa: tarifaNum,
           diasGracia: diasGracia ? parseInt(diasGracia) : 0,
-          multaDiaria: multaDiaria ? parseFloat(multaDiaria) : 0,
-          deposito: deposito ? parseFloat(deposito) : 0,
+          multaDiaria: multaDiaria ? parseCurrency(multaDiaria) : 0,
+          deposito: deposito ? parseCurrency(deposito) : 0,
           creadoPor: user.id,
         },
       })

@@ -6,6 +6,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { requireRole } from '@/lib/auth-guard'
 import { db } from '@/lib/db'
 import { getVehiculosPermitidos } from '@/lib/permisos'
+import { parseCurrency } from '@/lib/parse-currency'
 
 // GET — detalle completo del contrato (con obligaciones y pagos)
 export async function GET(
@@ -85,18 +86,23 @@ export async function PUT(
     for (const c of campos) {
       if (body[c] !== undefined) data[c] = body[c]
     }
-    if (body.tarifa !== undefined) data.tarifa = parseFloat(body.tarifa)
+    if (body.tarifa !== undefined) data.tarifa = parseCurrency(body.tarifa)
     if (body.diasGracia !== undefined) data.diasGracia = parseInt(body.diasGracia)
-    if (body.multaDiaria !== undefined) data.multaDiaria = parseFloat(body.multaDiaria)
-    if (body.deposito !== undefined) data.deposito = parseFloat(body.deposito)
+    if (body.multaDiaria !== undefined) data.multaDiaria = parseCurrency(body.multaDiaria)
+    if (body.deposito !== undefined) data.deposito = parseCurrency(body.deposito)
     if (body.fechaFin !== undefined) data.fechaFin = body.fechaFin ? new Date(body.fechaFin) : null
     if (body.fechaInicio !== undefined) data.fechaInicio = new Date(body.fechaInicio)
     if (body.fechaCancelacion !== undefined) data.fechaCancelacion = new Date(body.fechaCancelacion)
     // === Renovación anticipada (campos opcionales editables desde UI) ===
     if (body.renovacionAnticipada !== undefined) data.renovacionAnticipada = Boolean(body.renovacionAnticipada)
     if (body.valorRenovacionAnticipada !== undefined) {
-      const v = parseFloat(body.valorRenovacionAnticipada)
-      data.valorRenovacionAnticipada = isNaN(v) ? null : v
+      data.valorRenovacionAnticipada = parseCurrency(body.valorRenovacionAnticipada)
+      // Si era null en DB y viene como 0, mantenerlo como null para no romper el default
+      if (data.valorRenovacionAnticipada === 0 && body.valorRenovacionAnticipada === null) {
+        data.valorRenovacionAnticipada = null
+      } else if (data.valorRenovacionAnticipada === 0) {
+        data.valorRenovacionAnticipada = null
+      }
     }
 
     // === Cambio de vehículo/conductor (con validación de permisos) ===
@@ -214,8 +220,8 @@ export async function PUT(
 // Helper para detectar cambio de valorRenovacionAnticipada
 function cambosRenovValor(body: any, anterior: any): boolean {
   if (body.valorRenovacionAnticipada === undefined) return false
-  const newVal = parseFloat(body.valorRenovacionAnticipada)
-  if (isNaN(newVal)) return anterior.valorRenovacionAnticipada !== null
+  const newVal = parseCurrency(body.valorRenovacionAnticipada)
+  if (newVal === 0) return anterior.valorRenovacionAnticipada !== null
   return newVal !== anterior.valorRenovacionAnticipada
 }
 

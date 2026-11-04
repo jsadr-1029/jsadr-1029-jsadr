@@ -7,6 +7,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { requireRole } from '@/lib/auth-guard'
 import { db } from '@/lib/db'
 import { getVehiculosPermitidos } from '@/lib/permisos'
+import { parseCurrency } from '@/lib/parse-currency'
 
 // === Helper: generar fechas de vencimiento según modalidad ===
 // REGLA DE NEGOCIO: las liquidaciones son de LUNES a SÁBADO (excluye domingos)
@@ -212,12 +213,12 @@ export async function POST(req: NextRequest) {
         fechaFin: fechaFin ? new Date(fechaFin) : null,
         estado: estadoInicial,
         modalidadPago,
-        tarifa: parseFloat(tarifa),
+        tarifa: parseCurrency(tarifa),
         diasGracia: diasGracia ? parseInt(diasGracia) : 0,
-        multaDiaria: multaDiaria ? parseFloat(multaDiaria) : 0,
-        deposito: deposito ? parseFloat(deposito) : 0,
+        multaDiaria: multaDiaria ? parseCurrency(multaDiaria) : 0,
+        deposito: deposito ? parseCurrency(deposito) : 0,
         renovacionAnticipada: Boolean(renovacionAnticipada),
-        valorRenovacionAnticipada: valorRenovacionAnticipada ? parseFloat(valorRenovacionAnticipada) : null,
+        valorRenovacionAnticipada: valorRenovacionAnticipada ? parseCurrency(valorRenovacionAnticipada) : null,
         contratoPdfUrl,
         creadoPor: user.id,
       },

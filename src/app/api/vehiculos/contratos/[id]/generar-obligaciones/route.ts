@@ -6,6 +6,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireRole } from '@/lib/auth-guard'
 import { db } from '@/lib/db'
+import { parseCurrency } from '@/lib/parse-currency'
 
 // === Helper: generar fechas de vencimiento según modalidad ===
 // REGLA DE NEGOCIO: las liquidaciones son de LUNES a SÁBADO (excluye domingos)
@@ -80,7 +81,7 @@ export async function POST(
 
     // Contar obligaciones existentes para continuar numeración
     const existingCount = await db.obligacionVehiculo.count({ where: { contratoId: id } })
-    const tarifaFinal = tarifa ? parseFloat(tarifa) : contrato.tarifa
+    const tarifaFinal = tarifa ? parseCurrency(tarifa) : contrato.tarifa
     const modalidadFinal = modalidadPago || contrato.modalidadPago
 
     // Si hay fechas personalizadas, usarlas como punto de partida desde la última obligación
