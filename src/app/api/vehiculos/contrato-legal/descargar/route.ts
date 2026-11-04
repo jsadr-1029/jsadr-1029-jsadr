@@ -474,6 +474,8 @@ export async function GET(req: NextRequest) {
     y += doc.heightOfString(txtCodigo, { width: ancho, align: 'center' }) + 8
 
     // === TABLA IDENTIFICACIÓN ===
+    // Build tag para identificar qué versión de código está corriendo
+    // (debe aparecer 1793755800-v3-fechas-fix-v3 si Vercel desplegó el código nuevo)
     tablaSimple(['IDENTIFICACIÓN DEL CONTRATO', 'INFORMACIÓN'], [
       ['Número de contrato', d.numeroContrato],
       ['Placa del vehículo', d.vehiculo.placa],
@@ -483,6 +485,7 @@ export async function GET(req: NextRequest) {
       ['Fecha de terminación pactada', d.terminos.fechaFin ? fmtFechaCorta(d.terminos.fechaFin) : 'Indefinida'],
       ['Valor del canon', fmtCOP(d.terminos.tarifa)],
       ['Periodicidad de pago', d.terminos.modalidadPago],
+      ['Build tag', '1793755800-v3-fechas-fix-v3'],
     ], [200, ancho - 200])
 
     clausula('', `Entre las personas identificadas en este documento se celebra el presente contrato de arrendamiento de vehículo automotor, que se regirá por sus cláusulas, las disposiciones civiles y comerciales colombianas que resulten aplicables, las normas de tránsito pertinentes y las demás disposiciones legales vigentes que correspondan a la operación concreta.\n\nLas partes manifiestan que han tenido oportunidad de conocer las condiciones del contrato y que los espacios que deban determinar obligaciones económicas o condiciones esenciales serán diligenciados antes de su firma.`)
