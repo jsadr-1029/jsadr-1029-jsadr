@@ -54,7 +54,7 @@ const resGuardar = await fetch(`https://jsadr.com.co/api/portal/${CEDULA}/regula
     montoTotalAcordado: jsonPost.success ? jsonPost.data.escenario.total : 2000000,
     cuotasVencidasIncluidas: [1, 2],
     saldoRestante: 800000,
-    fechasPagosPosteriores: ['2026-10-09', '2026-10-24', '2026-11-08'],
+    fechasPagosPosteriores: ['2026-10-09', '2026-10-31', '2026-11-08'],
   }),
 });
 const jsonGuardar = await resGuardar.json();

@@ -2,8 +2,8 @@
 // FIX DE FECHAS — Contrato CTR-20261103-000001
 // -----------------------------------------------------
 // Problema reportado:
-//   - Fecha de inicio almacenada:  24/10/2026  → debe ser 31/10/2026
-//   - Fecha de terminación almacenada: 23/01/2027 → debe ser 30/01/2027
+//   - Fecha de inicio almacenada:  31/10/2026  → debe ser 31/10/2026
+//   - Fecha de terminación almacenada: 30/01/2027 → debe ser 30/01/2027
 //
 // El contrato se descarga desde "Gestión de Vehículos → Contratos → Vista previa",
 // que lee de la tabla ContratoDocumentoVehiculo (snapshot). Ese snapshot se creó

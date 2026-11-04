@@ -96,20 +96,20 @@ async function main() {
   }
   console.log('')
 
-  // 5) Buscar si hay algún otro contrato con fechas 24/10 o 23/01
-  console.log(`=== Otros documentos con fechas 24/10/2026 o 23/01/2027 (posibles duplicados con fechas erradas) ===`)
+  // 5) Buscar si hay algún otro contrato con fechas 31/10 o 30/01
+  console.log(`=== Otros documentos con fechas 31/10/2026 o 30/01/2027 (posibles duplicados con fechas erradas) ===`)
   const otrosConFechasErradas = await prisma.contratoDocumentoVehiculo.findMany({
     where: {
       OR: [
-        // Fecha de inicio cerca de 24/10/2026
-        { fechaInicio: { gte: new Date('2026-10-23T00:00:00Z'), lte: new Date('2026-10-25T23:59:59Z') } },
-        // Fecha de fin cerca de 23/01/2027
-        { fechaFin: { gte: new Date('2027-01-22T00:00:00Z'), lte: new Date('2027-01-24T23:59:59Z') } },
+        // Fecha de inicio cerca de 31/10/2026
+        { fechaInicio: { gte: new Date('2026-10-30T00:00:00Z'), lte: new Date('2026-11-01T23:59:59Z') } },
+        // Fecha de fin cerca de 30/01/2027
+        { fechaFin: { gte: new Date('2027-01-29T00:00:00Z'), lte: new Date('2027-01-31T23:59:59Z') } },
       ],
     },
     orderBy: { createdAt: 'asc' },
   })
-  console.log(`Total documentos con fechas 24/10 o 23/01: ${otrosConFechasErradas.length}`)
+  console.log(`Total documentos con fechas 31/10 o 30/01: ${otrosConFechasErradas.length}`)
   for (const d of otrosConFechasErradas) {
     console.log(`  - numeroContrato=${d.numeroContrato} · estado=${d.estado} · inicio=${fmt(d.fechaInicio)} · fin=${fmt(d.fechaFin)} · contrato=${d.contratoVehiculoId}`)
   }

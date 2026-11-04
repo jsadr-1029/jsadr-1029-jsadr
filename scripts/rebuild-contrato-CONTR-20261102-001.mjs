@@ -2,7 +2,7 @@
 // RECONSTRUCCIÓN COMPLETA del contrato CONTR-20261102-001
 // -----------------------------------------------------
 // El usuario reportó que la plantilla del PDF sigue mostrando
-// fechas erradas (24/10/2026 y 23/01/2027) a pesar de las
+// fechas erradas (31/10/2026 y 30/01/2027) a pesar de las
 // correcciones previas. Para garantizar que el problema se
 // resuelva de raíz, este script:
 //
