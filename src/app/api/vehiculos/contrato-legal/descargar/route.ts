@@ -23,18 +23,23 @@ function fmtCOP(v: number | null | undefined): string {
 function fmtFechaCorta(f: Date | string | null | undefined): string {
   if (!f) return '____ / ____ / ________'
   const d = typeof f === 'string' ? new Date(f) : f
-  // IMPORTANTE: usar métodos UTC para evitar desplazamientos por zona horaria
-  // del servidor. Las fechas del contrato se almacenan como "YYYY-MM-DDT00:00:00.000Z"
-  // (medianoche UTC) y deben mostrarse exactamente como se ingresaron.
-  return `${String(d.getUTCDate()).padStart(2, '0')} / ${String(d.getUTCMonth() + 1).padStart(2, '0')} / ${d.getUTCFullYear()}`
+  // IMPORTANTE: usar toISOString() para garantizar la fecha exacta sin importar
+  // la zona horaria del servidor (Vercel TZ=America/Bogota pudo estar afectando).
+  // toISOString() siempre devuelve la fecha en UTC (que es como se almacena en DB).
+  const iso = d.toISOString() // ej: "2026-10-31T00:00:00.000Z"
+  const [yyyy, mm, dd] = iso.split('T')[0].split('-')
+  return `${dd} / ${mm} / ${yyyy}`
 }
 function fmtFecha(f: Date | string | null | undefined): string {
   if (!f) return '—'
   const d = typeof f === 'string' ? new Date(f) : f
-  // Usar UTC para mantener la fecha ingresada por el usuario sin desplazamientos
+  // Usar toISOString() para mantener la fecha ingresada sin desplazamientos por TZ
+  const iso = d.toISOString()
+  const [yyyy, mm, dd] = iso.split('T')[0].split('-')
   const meses = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio',
                  'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre']
-  return `${d.getUTCDate()} de ${meses[d.getUTCMonth()]} de ${d.getUTCFullYear()}`
+  const mesNombre = meses[parseInt(mm, 10) - 1]
+  return `${parseInt(dd, 10)} de ${mesNombre} de ${yyyy}`
 }
 
 async function getImage(source: string | null | undefined): Promise<Buffer | null> {
