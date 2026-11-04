@@ -250,6 +250,16 @@ export async function GET(req: NextRequest) {
       })),
     }
 
+    // === DEBUG: Log de fechas reales leídas de la DB (para detectar si Vercel usa código viejo) ===
+    console.log('[contrato-legal/descargar] DEBUG fechas:', {
+      numeroContrato: documento.numeroContrato,
+      fechaInicio_DB: documento.fechaInicio?.toISOString(),
+      fechaFin_DB: documento.fechaFin?.toISOString(),
+      fechaInicio_formateada: fmtFechaCorta(documento.fechaInicio),
+      fechaFin_formateada: fmtFechaCorta(documento.fechaFin),
+      buildTag: '1793754000-fechas-fix-v2',
+    })
+
     const doc = new PDFDocument({ size: 'LETTER', margins: { top: 50, bottom: 60, left: 50, right: 50 } })
     const buffers: Buffer[] = []
     doc.on('data', b => buffers.push(b))
@@ -1355,4 +1365,6 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ success: false, error: error.message }, { status: 500 })
   }
 }
-// build trigger 1793680032
+// build trigger 1793754000 - force redeploy Vercel after fechas fix
+// FORZAR REBUILD: Vercel está sirviendo código viejo con fechas hardcodeadas
+// (24/10/2026 y 23/01/2027) en vez de leer de la DB que tiene 31/10/2026 y 30/01/2027.
